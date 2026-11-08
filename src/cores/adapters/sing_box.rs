@@ -66,7 +66,7 @@ impl CoreAdapter for SingBoxAdapter {
         let output = Command::new(executable)
             .arg("check").arg("-c").arg(config)
             .output().context("could not run sing-box config validation")?;
-        ensure!(output.status.success(), "sing-box rejected the generated configuration: {}", String::from_utf8_lossy(&output.stderr).trim());
+        ensure!(output.status.success(), "sing-box rejected the generated configuration (exit status {:?})", output.status.code());
         Ok(())
     }
 }
