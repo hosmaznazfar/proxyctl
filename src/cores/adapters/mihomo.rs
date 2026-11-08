@@ -23,9 +23,18 @@ impl CoreAdapter for MihomoAdapter {
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
         match validate_common(node) {
             Err(reason) => Compatibility::unsupported(reason),
-            Ok(()) => match tls_options(node) {
-                Ok(_) => Compatibility::supported(),
+            Ok(()) => match normalize_transport(node) {
+                Ok(transport)
+                    if matches!(&transport.kind, crate::domain::TransportKind::Grpc)
+                        && transport.service_name.as_deref().is_none_or(str::is_empty) =>
+                {
+                    Compatibility::unsupported("Mihomo requires an explicit gRPC service name")
+                }
                 Err(reason) => Compatibility::unsupported(reason),
+                _ => match tls_options(node) {
+                    Ok(_) => Compatibility::supported(),
+                    Err(reason) => Compatibility::unsupported(reason),
+                },
             },
         }
     }
@@ -71,6 +80,13 @@ impl CoreAdapter for MihomoAdapter {
                 ws.insert("headers".into(), json!(transport.headers));
             }
             proxy["ws-opts"] = serde_json::Value::Object(ws);
+        } else if matches!(transport.kind, crate::domain::TransportKind::Grpc) {
+            proxy["network"] = json!("grpc");
+            let mut grpc = serde_json::Map::new();
+            if let Some(service_name) = transport.service_name {
+                grpc.insert("grpc-service-name".into(), json!(service_name));
+            }
+            proxy["grpc-opts"] = serde_json::Value::Object(grpc);
         }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
