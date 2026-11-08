@@ -152,9 +152,10 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "alpn"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "alpn"],
-        Protocol::Trojan | Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "alpn", "fp"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "alpn", "fp"],
+        Protocol::Trojan => vec!["security", "tls", "sni", "alpn", "fp"],
+        Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn"],
         Protocol::Shadowsocks => Vec::new(),
     };
     reject_unknown_options(node, &supported)?;
@@ -170,6 +171,18 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         }
     }
     alpn_protocols(node)?;
+
+    if let Some(fingerprint) = option_string(node, "fp") {
+        const SUPPORTED_FINGERPRINTS: &[&str] = &[
+            "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random",
+        ];
+        if !SUPPORTED_FINGERPRINTS.contains(&fingerprint) {
+            return Err("TLS fingerprint is not supported; use a common browser fingerprint".into());
+        }
+        if matches!(node.protocol, Protocol::Hysteria2) {
+            return Err("TLS client fingerprints are not supported for Hysteria2".into());
+        }
+    }
 
     if option_string(node, "security").is_some() && option_string(node, "tls").is_some() {
         return Err(
@@ -218,6 +231,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             if alpn_protocols(node)?.is_some() {
                 return Err("ALPN was supplied while TLS is disabled".into());
             }
+            if option_string(node, "fp").is_some() {
+                return Err("TLS fingerprint was supplied while TLS is disabled".into());
+            }
             Ok(None)
         }
         "tls" | "true" | "1" => {
@@ -231,6 +247,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
                     "alpn".into(),
                     Value::Array(protocols.into_iter().map(Value::String).collect()),
                 );
+            }
+            if let Some(fingerprint) = option_string(node, "fp") {
+                tls.insert("fingerprint".into(), Value::String(fingerprint.into()));
             }
             Ok(Some(Value::Object(tls)))
         }
