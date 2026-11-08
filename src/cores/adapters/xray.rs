@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_common},
 };
 
 pub struct XrayAdapter;
@@ -61,6 +61,18 @@ impl CoreAdapter for XrayAdapter {
             Protocol::Hysteria2 => unreachable!("Hysteria2 rejected by compatibility"),
         };
         let mut outbound = json!({"protocol":protocol,"tag":"proxy","settings":settings,"streamSettings":{"network":"tcp"}});
+        let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
+        if matches!(transport.kind, crate::domain::TransportKind::WebSocket) {
+            outbound["streamSettings"]["network"] = json!("ws");
+            let mut ws = serde_json::Map::new();
+            if let Some(path) = transport.path {
+                ws.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                ws.insert("headers".into(), json!(transport.headers));
+            }
+            outbound["streamSettings"]["wsSettings"] = serde_json::Value::Object(ws);
+        }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             let mut tls_settings = serde_json::Map::new();
             tls_settings.insert("allowInsecure".into(), serde_json::Value::Bool(false));
