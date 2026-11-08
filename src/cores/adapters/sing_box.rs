@@ -1,7 +1,7 @@
 use std::{path::Path, process::Command};
 
 use anyhow::{Context, ensure};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::{
     cores::CoreId,
@@ -22,17 +22,12 @@ impl CoreAdapter for SingBoxAdapter {
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
         match validate_common(node) {
             Err(reason) => Compatibility::unsupported(reason),
-            Ok(()) if node.options.get("encryption").is_some_and(|v| v != "none") =>
-                Compatibility::unsupported("only VLESS encryption=none is currently mapped"),
-            Ok(()) if node.options.get("flow").is_some_and(|v| !v.is_empty() && v != "xtls-rprx-vision") =>
-                Compatibility::unsupported("unsupported VLESS flow"),
             Ok(()) => match tls_options(node) {
                 Ok(_) => Compatibility::supported(),
                 Err(reason) => Compatibility::unsupported(reason),
             },
         }
     }
-
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
         let compatibility = self.compatibility(node);
         ensure!(compatibility.is_supported(), "{}", compatibility.reason.unwrap_or_else(|| "node is incompatible".into()));
