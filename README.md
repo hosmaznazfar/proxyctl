@@ -80,12 +80,6 @@ The first published proxyctl release is required before an update can be downloa
 The following command groups are planned and are not available yet.
 
 ~~~sh
-# Initial managed-core installation and inventory
-proxyctl setup
-proxyctl setup --core sing-box
-proxyctl cores
-
-# One place to check/update the CLI and managed cores
 # Managed-core installation and updates (not implemented yet)
 proxyctl setup
 proxyctl setup --core sing-box
