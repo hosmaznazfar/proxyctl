@@ -73,6 +73,13 @@ impl CoreAdapter for SingBoxAdapter {
             if !transport.headers.is_empty() {
                 ws.insert("headers".into(), json!(transport.headers));
             }
+            if let Some(max_early_data) = transport.max_early_data {
+                ws.insert("max_early_data".into(), json!(max_early_data));
+                ws.insert(
+                    "early_data_header_name".into(),
+                    json!(transport.early_data_header_name.unwrap_or_else(|| "Sec-WebSocket-Protocol".into())),
+                );
+            }
             outbound["transport"] = serde_json::Value::Object(ws);
         } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
             let mut grpc = serde_json::Map::new();
