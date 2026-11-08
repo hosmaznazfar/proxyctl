@@ -108,9 +108,11 @@ Initial URL schemes:
 - Shadowsocks
 - Hysteria2
 
-Compatibility is not just a scheme lookup. Each core adapter must report whether it can represent the complete parsed node configuration, including relevant transport, TLS, Reality, flow, obfuscation, and other options.
+Compatibility is not just a scheme lookup. Each core adapter reports whether it can represent the complete parsed node configuration. The domain model retains ordered option entries, repeated URI query keys, and structured VMess JSON values. The legacy string map remains as a compatibility index for existing database records; new adapter code reads the complete option entries.
 
-Expected baseline: VLESS, VMess, Trojan, and Shadowsocks are supported by all three selected cores; Hysteria2 is supported by sing-box and Mihomo but not Xray. This is a starting expectation, not a substitute for verified, version-specific capability checks.
+**Adapter implementation status:** a shared `CoreAdapter` contract, initial sing-box/Xray/Mihomo serializers, and each core's config-validation invocation are present on the `feature/core-adapters` branch. The initial serializers intentionally cover a conservative subset: basic TCP outbounds, VLESS/VMess/Trojan/Shadowsocks, Hysteria2 for sing-box and Mihomo, and basic TLS/SNI. REALITY, WebSocket/gRPC/XHTTP, plugin/obfuscation settings, VMess non-TCP transports, and other unimplemented options are rejected explicitly. These are not yet the full protocol compatibility matrix and must not be advertised as complete.
+
+The current adapter subset is an implementation checkpoint, not a substitute for version-specific conformance tests against each installed core. The next work is expanding transports/security options, validating generated fixtures against the managed binaries, and recording version-specific capability coverage.
 
 If an option cannot be represented faithfully, the node/core combination is unsupported; proxyctl must not silently drop that option. Invalid input, unsupported configuration, connection failure, timeout, and missing measurement are distinct outcomes.
 
@@ -317,7 +319,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 3. Persistence: redb schema, migrations/versioning, repository layer, permissions, and database tests.
 4. Node management: import, add, list, show, remove, restore, and duplicate handling.
 5. Core management and unified updater: official-source metadata, pinned versions, checksum verification, setup, detection, and a single update workflow for the proxyctl CLI plus managed cores.
-6. Core adapters: configuration generation and validation for each core, with fixtures and compatibility tests.
+6. Core adapters: shared contract and conservative initial serializers are in progress; complete transport/security mapping, managed-binary validation fixtures, and version-specific compatibility tests remain.
 7. Benchmark engine: isolated process lifecycle, HTTP latency/download/upload measurement, three samples, cancellation, and persistence.
 8. Reports and sorting: latest/history/compare views and core-independent/core-specific sorting.
 9. Pruning: dry-run previews, compatible-core evaluation rules, soft deletion, and restore.
