@@ -81,6 +81,16 @@ impl CoreAdapter for SingBoxAdapter {
                 grpc.insert("service_name".into(), json!(service_name));
             }
             outbound["transport"] = serde_json::Value::Object(grpc);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Http2) {
+            let mut http = serde_json::Map::new();
+            http.insert("type".into(), json!("http"));
+            if let Some(path) = transport.path {
+                http.insert("path".into(), json!(path));
+            }
+            if !transport.hosts.is_empty() {
+                http.insert("host".into(), json!(transport.hosts));
+            }
+            outbound["transport"] = serde_json::Value::Object(http);
         }
         if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             if let Some(fingerprint) = tls.as_object_mut().and_then(|options| options.remove("fingerprint")) {
