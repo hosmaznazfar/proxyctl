@@ -212,7 +212,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         }
     }
     if node.protocol == Protocol::Vmess {
-        if option_string(node, "net").is_some_and(|value| !["tcp", "ws"].contains(&value)) {
+        if option_string(node, "net").is_some_and(|value| !["tcp", "ws", "grpc"].contains(&value)) {
             return Err("only VMess TCP, WebSocket, and gRPC transports are currently mapped".into());
         }
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
