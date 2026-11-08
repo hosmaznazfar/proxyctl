@@ -152,7 +152,7 @@ mod tests {
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=h2&host=one.example%2Ctwo.example&path=%2Fservice",
         )
         .unwrap();
-        for core in [CoreId::SingBox, CoreId::Xray] {
+        for core in [CoreId::SingBox, CoreId::Mihomo] {
             let generated = adapter(core).generate_config(&vless).unwrap();
             let document: Value = serde_json::from_slice(&generated.content).unwrap();
             let (network, hosts, path) = match core {
@@ -166,14 +166,18 @@ mod tests {
                     &document["outbounds"][0]["streamSettings"]["httpSettings"]["host"],
                     document["outbounds"][0]["streamSettings"]["httpSettings"]["path"].as_str(),
                 ),
-                CoreId::Mihomo => unreachable!(),
+                CoreId::Mihomo => (
+                    document["proxies"][0]["network"].as_str(),
+                    &document["proxies"][0]["h2-opts"]["host"],
+                    document["proxies"][0]["h2-opts"]["path"].as_str(),
+                ),
             };
-            assert_eq!(network, Some("http"), "{core}");
+            assert_eq!(network, Some(if core == CoreId::SingBox { "http" } else { "h2" }), "{core}");
             assert_eq!(hosts, &serde_json::json!(["one.example", "two.example"]), "{core}");
             assert_eq!(path, Some("/service"), "{core}");
         }
         assert_eq!(
-            adapter(CoreId::Mihomo).compatibility(&vless).status,
+            adapter(CoreId::Xray).compatibility(&vless).status,
             CompatibilityStatus::Unsupported
         );
 
@@ -181,7 +185,7 @@ mod tests {
             br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"h2","host":"cdn.example","path":"/vmess"}"#,
         );
         let vmess = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
-        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        for core in [CoreId::SingBox, CoreId::Mihomo] {
             assert!(adapter(core).compatibility(&vmess).is_supported(), "{core}");
             let _: Value = serde_json::from_slice(
                 &adapter(core).generate_config(&vmess).unwrap().content,
