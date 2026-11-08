@@ -13,7 +13,11 @@ fn raw_transport_alias_normalizes_to_tcp() {
         "tcp"
     );
 
-    let vmess = vmess_node_with_network("raw");
+    use base64::{Engine as _, engine::general_purpose};
+    let payload = general_purpose::STANDARD.encode(
+        br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"raw"}"#,
+    );
+    let vmess = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
     assert!(adapter(CoreId::SingBox).compatibility(&vmess).is_supported());
 }
 
