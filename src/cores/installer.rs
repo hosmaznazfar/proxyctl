@@ -1,7 +1,7 @@
 //! Shared core installation use case: resolve, verify, extract, validate, and install.
 use anyhow::{Context, ensure};
 use crate::{
-    cores::{CoreId, archive::extract_binary, paths::core_binary_path, releases},
+    cores::{CoreId, archive::extract_binary, paths::core_install_directory, releases},
     updates::{artifact::{download, verify_sha256}, installer::replace_executable, release::latest_release},
 };
 pub fn install_or_update(core: CoreId, check_only: bool) -> anyhow::Result<()> {
@@ -13,7 +13,7 @@ pub fn install_or_update(core: CoreId, check_only: bool) -> anyhow::Result<()> {
     let digest = asset.digest.as_deref().and_then(|value| value.strip_prefix("sha256:"))
         .context("official release asset has no SHA-256 digest; refusing installation")?;
     let version = releases::version_from_tag(&release.tag_name)?;
-    let destination = core_binary_path(core)?;
+    let destination = crate::cores::core_binary_path(core)?;
     if destination.is_file() {
         let current = current_version(core, &destination).unwrap_or_else(|_| "unknown".to_owned());
         if current == version { println!("{core}: already up to date ({current})."); return Ok(()); }
@@ -26,6 +26,7 @@ pub fn install_or_update(core: CoreId, check_only: bool) -> anyhow::Result<()> {
     let archive = download(&asset.browser_download_url)?;
     verify_sha256(&archive, digest).context("upstream archive failed SHA-256 verification")?;
     let binary = extract_binary(&archive, spec.format, core.executable_name())?;
+    let destination = core_install_directory(core)?.join(core.executable_name());
     replace_executable(&destination, &binary, version, core.version_argument())
         .with_context(|| format!("could not install verified {core} executable"))?;
     println!("{core}: installed version {version}.");
