@@ -9,7 +9,7 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::{Context, ensure};
+use anyhow::Context;
 
 use crate::database::default_database_path;
 
