@@ -20,8 +20,8 @@ pub fn replace_executable(
     expected_version: &str,
     version_argument: &str,
 ) -> anyhow::Result<()> {
-    let destination = fs::canonicalize(destination)
-        .context("could not resolve installed executable path")?;
+    let destination =
+        fs::canonicalize(destination).context("could not resolve installed executable path")?;
     let parent = destination
         .parent()
         .context("installed executable has no parent directory")?;
@@ -33,8 +33,10 @@ pub fn replace_executable(
             .create_new(true)
             .open(&staged)
             .with_context(|| format!("cannot stage executable beside {}", destination.display()))?;
-        file.write_all(bytes).context("could not write staged executable")?;
-        file.sync_all().context("could not sync staged executable")?;
+        file.write_all(bytes)
+            .context("could not write staged executable")?;
+        file.sync_all()
+            .context("could not sync staged executable")?;
         set_executable_permissions(&staged)?;
 
         let output = Command::new(&staged)
@@ -71,7 +73,10 @@ pub fn replace_executable(
 
 fn staged_path(parent: &Path) -> PathBuf {
     let sequence = STAGING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    parent.join(format!(".proxyctl-install-{}-{sequence}.tmp", std::process::id()))
+    parent.join(format!(
+        ".proxyctl-install-{}-{sequence}.tmp",
+        std::process::id()
+    ))
 }
 
 #[cfg(unix)]
