@@ -159,7 +159,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "alpn", "fp"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "alpn", "fp"],
         Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "alpn", "fp"],
         Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
@@ -179,15 +179,14 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
     alpn_protocols(node)?;
     let transport = normalize_transport(node)?;
-    if matches!(&transport.kind, TransportKind::Grpc)
-        && option_string(node, "mode").is_some_and(|value| value != "gun")
-    {
-        return Err("only the standard gRPC mode is currently mapped".into());
-    }
     if node.protocol == Protocol::Vmess
-        && option_string(node, "type").is_some_and(|value| value != "none")
+        && option_string(node, "type").is_some_and(|value| {
+            value != "none"
+                && !(matches!(&transport.kind, TransportKind::Grpc)
+                    && ["gun", "multi"].contains(&value))
+        })
     {
-        return Err("VMess TCP header modes are not implemented; only WebSocket and plain TCP are accepted".into());
+        return Err("VMess transport-specific header modes are not implemented for this network".into());
     }
     if !matches!(&transport.kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::XHttp) {
         return Err("transport is not implemented by this adapter batch".into());
