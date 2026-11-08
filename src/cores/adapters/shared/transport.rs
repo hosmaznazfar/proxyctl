@@ -24,18 +24,21 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         other => TransportKind::Unknown(other.to_owned()),
     };
 
-    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2) {
+    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade) {
         return Err(format!("transport '{network}' is not implemented by this adapter batch"));
     }
 
     let path = option_string(node, "path").map(str::to_owned);
     let mut headers = BTreeMap::new();
     let mut hosts = Vec::new();
+    let mut host = None;
     let source_host = option_string(node, "host").filter(|value| !value.is_empty());
     if matches!(&kind, TransportKind::WebSocket) {
         if let Some(host) = source_host {
             headers.insert("Host".to_owned(), host.to_owned());
         }
+    } else if matches!(&kind, TransportKind::HttpUpgrade) {
+        host = source_host.map(str::to_owned);
     } else if matches!(&kind, TransportKind::Http2) {
         if let Some(host) = source_host {
             hosts.extend(host.split(',').map(str::trim).filter(|host| !host.is_empty()).map(str::to_owned));
@@ -86,7 +89,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     if matches!(&kind, TransportKind::Grpc) && path.is_some() && node.protocol != Protocol::Vmess {
         return Err("gRPC URI service names must use the serviceName parameter".into());
     }
-    if !matches!(&kind, TransportKind::WebSocket) && !headers.is_empty() {
+    if !matches!(&kind, TransportKind::WebSocket | TransportKind::HttpUpgrade) && !headers.is_empty() {
         return Err("HTTP headers are only mapped for WebSocket in this adapter batch".into());
     }
 
@@ -95,6 +98,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         path,
         headers,
         hosts,
+        host,
         service_name,
         mode: None,
     })
