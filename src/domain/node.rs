@@ -115,7 +115,7 @@ impl ProxyNode {
                 .iter()
                 .map(|entry| (entry.key.as_str(), entry.value.to_string()))
                 .collect::<Vec<_>>();
-            entries.sort_unstable();
+            entries.sort_by(|left, right| left.0.cmp(right.0));
             for (key, value) in entries {
                 add_part(&mut hasher, key.as_bytes());
                 add_part(&mut hasher, value.as_bytes());
