@@ -4,6 +4,8 @@ mod shared;
 mod sing_box;
 mod xray;
 
+pub mod validation;
+
 use anyhow::Context;
 use serde_json::Value;
 use std::path::Path;
