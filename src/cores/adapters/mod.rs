@@ -37,3 +37,40 @@ pub(crate) fn json_config(value: Value) -> anyhow::Result<GeneratedConfig> {
         content: serde_json::to_vec_pretty(&value).context("could not serialize core config")?,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_proxy_url;
+
+    #[test]
+    fn all_adapters_generate_a_native_document_for_basic_vless() {
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let adapter = adapter(core);
+            assert!(adapter.compatibility(&node).is_supported(), "{core}");
+            let generated = adapter.generate_config(&node).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            assert!(document.is_object());
+        }
+    }
+
+    #[test]
+    fn adapters_reject_unmapped_options_instead_of_dropping_them() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fsocket",
+        ).unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let compatibility = adapter(core).compatibility(&node);
+            assert_eq!(compatibility.status, CompatibilityStatus::Unsupported);
+            assert!(compatibility.reason.unwrap().contains("option"));
+        }
+    }
+
+    #[test]
+    fn xray_explicitly_rejects_hysteria2() {
+        let node = parse_proxy_url("hysteria2://secret@example.com:443").unwrap();
+        let compatibility = adapter(CoreId::Xray).compatibility(&node);
+        assert_eq!(compatibility.status, CompatibilityStatus::Unsupported);
+    }
+}
