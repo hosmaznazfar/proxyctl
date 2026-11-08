@@ -44,9 +44,6 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     let mut host = None;
     let mut authority = None;
     let source_host = option_string(node, "host");
-    if source_host.is_some_and(str::is_empty) {
-        return Err("transport host must not be empty".into());
-    }
     if matches!(&kind, TransportKind::WebSocket) {
         if let Some(host) = source_host {
             headers.insert("Host".to_owned(), host.to_owned());
@@ -65,8 +62,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     } else if matches!(&kind, TransportKind::Http2) {
         if let Some(host) = source_host {
             let values = host.split(',').map(str::trim).collect::<Vec<_>>();
-            if values.is_empty()
-                || values.iter().any(|value| value.is_empty() || value.chars().any(char::is_control))
+            if values.iter().any(|value| value.is_empty() || value.chars().any(char::is_control))
             {
                 return Err("HTTP/2 host list is invalid".into());
             }
