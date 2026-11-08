@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn vmess_numeric_alter_id_is_preserved_and_validated() {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let valid = general_purpose::STANDARD.encode(
+        br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","aid":7}"#,
+    );
+    let node = parse_proxy_url(&format!("vmess://{valid}")).unwrap();
+    let generated = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let document: Value = serde_json::from_slice(&generated.content).unwrap();
+    assert_eq!(
+        document["outbounds"][0]["settings"]["vnext"][0]["users"][0]["alterId"],
+        7
+    );
+
+    let invalid = general_purpose::STANDARD.encode(
+        br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","aid":-1}"#,
+    );
+    let node = parse_proxy_url(&format!("vmess://{invalid}")).unwrap();
+    assert_eq!(
+        adapter(CoreId::Xray).compatibility(&node).status,
+        CompatibilityStatus::Invalid
+    );
+}
+
+#[test]
     fn all_adapters_generate_a_native_document_for_basic_vless() {
         let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
             .unwrap();
