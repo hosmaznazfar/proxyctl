@@ -368,6 +368,56 @@ mod tests {
     }
 
     #[test]
+    fn vmess_grpc_authority_and_multi_mode_are_xray_specific() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"grpc","type":"multi","host":"grpc.example","path":"proxy.Service","tls":"tls"}"#,
+        );
+        let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+
+        let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+        let document: Value = serde_json::from_slice(&xray.content).unwrap();
+        assert_eq!(
+            document["outbounds"][0]["streamSettings"]["grpcSettings"]["serviceName"],
+            "proxy.Service"
+        );
+        assert_eq!(
+            document["outbounds"][0]["streamSettings"]["grpcSettings"]["authority"],
+            "grpc.example"
+        );
+        assert_eq!(
+            document["outbounds"][0]["streamSettings"]["grpcSettings"]["multiMode"],
+            true
+        );
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+    }
+
+    #[test]
+    fn vless_grpc_multi_mode_is_not_silently_downgraded() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&serviceName=proxy.Service&authority=grpc.example&mode=multi",
+        )
+        .unwrap();
+        assert!(adapter(CoreId::Xray).compatibility(&node).is_supported());
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+    }
+
+    #[test]
     fn adapters_reject_unknown_transport_without_dropping_it() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
