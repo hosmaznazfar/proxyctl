@@ -15,6 +15,8 @@ redb = "4.5.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sha2 = "0.10.9"
+semver = "1.0.27"
+ureq = "3.1.4"
 thiserror = "2.0.21"
 tracing = "0.1.44"
 url = "2.5.8"
