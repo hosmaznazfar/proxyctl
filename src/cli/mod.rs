@@ -165,6 +165,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Command::Cores => unreachable!("core inventory is handled before opening the database"),
+        Command::Update { .. } => unreachable!("updates are handled before opening the database"),
     }
 
     Ok(())
