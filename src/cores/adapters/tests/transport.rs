@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn raw_transport_alias_normalizes_to_tcp() {
+    let vless = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=raw",
+    )
+    .unwrap();
+    let xray = adapter(CoreId::Xray).generate_config(&vless).unwrap();
+    let document: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(
+        document["outbounds"][0]["streamSettings"]["network"],
+        "tcp"
+    );
+
+    let vmess = vmess_node_with_network("raw");
+    assert!(adapter(CoreId::SingBox).compatibility(&vmess).is_supported());
+}
+
+#[test]
     fn adapters_map_grpc_service_names_with_core_specific_requirements() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&serviceName=proxy.Service&mode=gun&security=tls&sni=tls.example",
