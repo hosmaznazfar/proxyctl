@@ -32,7 +32,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     let mut headers = BTreeMap::new();
     let mut hosts = Vec::new();
     let mut host = None;
-    let source_host = option_string(node, "host").filter(|value| !value.is_empty());
+    let source_host = option_string(node, "host");
+    if source_host.is_some_and(str::is_empty) {
+        return Err("transport host must not be empty".into());
+    }
     if matches!(&kind, TransportKind::WebSocket) {
         if let Some(host) = source_host {
             headers.insert("Host".to_owned(), host.to_owned());
@@ -41,10 +44,13 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         host = source_host.map(str::to_owned);
     } else if matches!(&kind, TransportKind::Http2) {
         if let Some(host) = source_host {
-            hosts.extend(host.split(',').map(str::trim).filter(|host| !host.is_empty()).map(str::to_owned));
-            if hosts.is_empty() || hosts.iter().any(|host| host.chars().any(char::is_control)) {
+            let values = host.split(',').map(str::trim).collect::<Vec<_>>();
+            if values.is_empty()
+                || values.iter().any(|value| value.is_empty() || value.chars().any(char::is_control))
+            {
                 return Err("HTTP/2 host list is invalid".into());
             }
+            hosts.extend(values.into_iter().map(str::to_owned));
         }
     } else if source_host.is_some() {
         return Err("host is not supported for this transport".into());
@@ -95,6 +101,9 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         None
     };
 
+    if matches!(&kind, TransportKind::HttpUpgrade) && host.is_some() && headers.contains_key("Host") {
+        return Err("HTTP Upgrade host and Host header were both supplied".into());
+    }
     if matches!(&kind, TransportKind::Tcp) && (path.is_some() || host.is_some() || !headers.is_empty() || !hosts.is_empty()) {
         return Err("path or host/header was supplied for TCP transport".into());
     }
