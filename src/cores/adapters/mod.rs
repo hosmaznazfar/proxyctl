@@ -4,9 +4,9 @@ mod shared;
 mod sing_box;
 mod xray;
 
-use std::path::Path;
 use anyhow::Context;
 use serde_json::Value;
+use std::path::Path;
 
 use crate::{cores::CoreId, domain::ProxyNode};
 
@@ -45,7 +45,9 @@ mod tests {
 
     #[test]
     fn all_adapters_generate_a_native_document_for_basic_vless() {
-        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+        let node =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+                .unwrap();
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             let adapter = adapter(core);
             assert!(adapter.compatibility(&node).is_supported(), "{core}");
@@ -59,7 +61,8 @@ mod tests {
     fn adapters_reject_unmapped_options_instead_of_dropping_them() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fsocket",
-        ).unwrap();
+        )
+        .unwrap();
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             let compatibility = adapter(core).compatibility(&node);
             assert_eq!(compatibility.status, CompatibilityStatus::Unsupported);
@@ -73,7 +76,8 @@ mod tests {
         let compatibility = adapter(CoreId::Xray).compatibility(&node);
         assert_eq!(compatibility.status, CompatibilityStatus::Unsupported);
     }
-}    #[test]
+
+    #[test]
     fn basic_protocol_matrix_matches_the_initial_support_contract() {
         use base64::{Engine as _, engine::general_purpose};
 
@@ -82,7 +86,10 @@ mod tests {
         );
         let vmess_url = format!("vmess://{vmess_payload}");
         let cases: [(&str, bool); 5] = [
-            ("vless://11111111-1111-4111-8111-111111111111@example.com:443", true),
+            (
+                "vless://11111111-1111-4111-8111-111111111111@example.com:443",
+                true,
+            ),
             (vmess_url.as_str(), true),
             ("trojan://secret@example.com:443", true),
             ("ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388", true),
@@ -93,7 +100,12 @@ mod tests {
             for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
                 let expected = all_cores || core != CoreId::Xray;
                 let result = adapter(core).compatibility(&node);
-                assert_eq!(result.is_supported(), expected, "{core} / {}", node.protocol);
+                assert_eq!(
+                    result.is_supported(),
+                    expected,
+                    "{core} / {}",
+                    node.protocol
+                );
                 if expected {
                     let generated = adapter(core).generate_config(&node).unwrap();
                     let _: Value = serde_json::from_slice(&generated.content).unwrap();
@@ -106,14 +118,15 @@ mod tests {
     fn adapters_reject_repeated_or_ambiguous_options() {
         let repeated = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?sni=a.example&sni=b.example&security=tls",
-        ).unwrap();
+        )
+        .unwrap();
         let ambiguous = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&tls=tls",
-        ).unwrap();
+        )
+        .unwrap();
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             assert!(!adapter(core).compatibility(&repeated).is_supported());
             assert!(!adapter(core).compatibility(&ambiguous).is_supported());
         }
     }
-
-
+}
