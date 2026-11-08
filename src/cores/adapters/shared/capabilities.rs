@@ -93,6 +93,12 @@ fn capabilities(core: CoreId) -> &'static CoreCapabilities {
 
 fn compatibility_failure(reason: String) -> Compatibility {
     let normalized = reason.to_ascii_lowercase();
+    if normalized.starts_with("option '") && normalized.contains("is not supported") {
+        return Compatibility::unsupported(reason);
+    }
+    if normalized.starts_with("transport '") && normalized.contains("is not supported") {
+        return Compatibility::unsupported(reason);
+    }
     let invalid_markers = [
         "invalid", "fingerprint is not supported", "must be", "must not", "conflict", "ambiguous", "repeated",
         "empty", "missing", "malformed", "control characters", "was supplied while",
