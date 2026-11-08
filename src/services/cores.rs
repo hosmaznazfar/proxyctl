@@ -1,5 +1,5 @@
 //! Managed-core setup, update, and inventory use cases.
-use crate::cores::{core_binary_path, installer, CoreId};
+use crate::cores::{CoreId, core_binary_path, installer};
 
 #[derive(Debug)]
 pub struct CoreStatus {

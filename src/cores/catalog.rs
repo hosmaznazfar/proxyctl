@@ -1,16 +1,26 @@
 //! Stable identity and upstream metadata for supported proxy cores.
-use std::{fmt, str::FromStr};
 use anyhow::Context;
+use std::{fmt, str::FromStr};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum CoreId { SingBox, Xray, Mihomo }
+pub enum CoreId {
+    SingBox,
+    Xray,
+    Mihomo,
+}
 
 impl CoreId {
     pub const ALL: [Self; 3] = [Self::SingBox, Self::Xray, Self::Mihomo];
     pub const fn as_str(self) -> &'static str {
-        match self { Self::SingBox => "sing-box", Self::Xray => "xray", Self::Mihomo => "mihomo" }
+        match self {
+            Self::SingBox => "sing-box",
+            Self::Xray => "xray",
+            Self::Mihomo => "mihomo",
+        }
     }
-    pub const fn executable_name(self) -> &'static str { self.as_str() }
+    pub const fn executable_name(self) -> &'static str {
+        self.as_str()
+    }
     pub const fn release_api(self) -> &'static str {
         match self {
             Self::SingBox => "https://api.github.com/repos/SagerNet/sing-box/releases/latest",
@@ -19,17 +29,24 @@ impl CoreId {
         }
     }
     pub const fn version_argument(self) -> &'static str {
-        match self { Self::SingBox | Self::Xray => "version", Self::Mihomo => "-v" }
+        match self {
+            Self::SingBox | Self::Xray => "version",
+            Self::Mihomo => "-v",
+        }
     }
 }
 impl fmt::Display for CoreId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.as_str()) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 impl FromStr for CoreId {
     type Err = anyhow::Error;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let normalized = value.trim().to_ascii_lowercase();
-        Self::ALL.into_iter().find(|core| core.as_str() == normalized)
+        Self::ALL
+            .into_iter()
+            .find(|core| core.as_str() == normalized)
             .with_context(|| format!("unknown core '{value}'; expected sing-box, xray, or mihomo"))
     }
 }

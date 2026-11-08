@@ -2,9 +2,7 @@
 use anyhow::{Context, ensure};
 
 use crate::{
-    cores::{
-        archive::extract_binary, core_binary_path, core_install_directory, releases, CoreId,
-    },
+    cores::{CoreId, archive::extract_binary, core_binary_path, core_install_directory, releases},
     updates::{
         artifact::{download, verify_sha256},
         installer::replace_executable,
@@ -56,8 +54,14 @@ pub fn current_version(core: CoreId, path: &std::path::Path) -> anyhow::Result<S
         .arg(core.version_argument())
         .output()
         .with_context(|| format!("could not query installed {core} version"))?;
-    ensure!(output.status.success(), "installed {core} version command failed");
+    ensure!(
+        output.status.success(),
+        "installed {core} version command failed"
+    );
     let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    ensure!(!text.is_empty(), "installed {core} returned an empty version");
+    ensure!(
+        !text.is_empty(),
+        "installed {core} returned an empty version"
+    );
     Ok(text)
 }
