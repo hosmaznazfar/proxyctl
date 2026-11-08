@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_for_core},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options, validate_for_core},
 };
 
 pub struct SingBoxAdapter;
