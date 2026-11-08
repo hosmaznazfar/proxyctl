@@ -35,7 +35,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 
 ## Safety contract
 
-- The parser retains repeated URI query parameters and structured VMess values.
+- The parser retains repeated URI query parameters and structured VMess values. The source transport alias `raw` is normalized to TCP without changing the preserved original URL.
 - The adapter checks every retained option against its explicit supported-option set.
 - ALPN accepts comma-separated URI values, repeated URI `alpn` keys, and VMess JSON string arrays; values are normalized into an ordered list.
 - Repeated ALPN keys are intentional multi-value input. Other repeated keys remain unsupported because their semantics are ambiguous.
