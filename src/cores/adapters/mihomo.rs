@@ -45,7 +45,6 @@ impl CoreAdapter for MihomoAdapter {
             }
         }
         json_config(json!({
-            "mixed-port": 0,
             "allow-lan": false,
             "mode": "rule",
             "proxies": [proxy],
