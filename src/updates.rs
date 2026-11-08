@@ -51,12 +51,6 @@ pub fn update_application(check_only: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("proxyctl update available: {} -> {}.", current, latest);
-    if check_only {
-        println!("Check only: no files were downloaded or changed.");
-        return Ok(());
-    }
-
     let asset = release
         .assets
         .iter()
@@ -72,6 +66,13 @@ pub fn update_application(check_only: bool) -> anyhow::Result<()> {
         .iter()
         .find(|asset| asset.name == "SHA256SUMS")
         .context("official release is missing SHA256SUMS; refusing to install an unverifiable binary")?;
+
+    println!("proxyctl update available: {} -> {}.", current, latest);
+    if check_only {
+        println!("Compatible asset and checksum manifest are available.");
+        println!("Check only: no files were downloaded or changed.");
+        return Ok(());
+    }
 
     let checksum_text = download_text(&sums.browser_download_url)?;
     let expected = checksum_for_asset(&checksum_text, &asset_name)?;
