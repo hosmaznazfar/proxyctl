@@ -73,4 +73,32 @@ mod tests {
         let compatibility = adapter(CoreId::Xray).compatibility(&node);
         assert_eq!(compatibility.status, CompatibilityStatus::Unsupported);
     }
-}
+}    #[test]
+    fn basic_protocol_matrix_matches_the_initial_support_contract() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let vmess_payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","ps":"vmess"}"#,
+        );
+        let cases = [
+            ("vless://11111111-1111-4111-8111-111111111111@example.com:443", true),
+            (&format!("vmess://{vmess_payload}"), true),
+            ("trojan://secret@example.com:443", true),
+            ("ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388", true),
+            ("hysteria2://secret@example.com:443", false),
+        ];
+        for (url, all_cores) in cases {
+            let node = parse_proxy_url(url).unwrap();
+            for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+                let expected = all_cores || core != CoreId::Xray;
+                let result = adapter(core).compatibility(&node);
+                assert_eq!(result.is_supported(), expected, "{core} / {}", node.protocol);
+                if expected {
+                    let generated = adapter(core).generate_config(&node).unwrap();
+                    let _: Value = serde_json::from_slice(&generated.content).unwrap();
+                }
+            }
+        }
+    }
+
+
