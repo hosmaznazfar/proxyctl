@@ -110,9 +110,15 @@ impl ProxyNode {
                 add_part(&mut hasher, value.as_bytes());
             }
         } else {
-            for entry in &self.option_entries {
-                add_part(&mut hasher, entry.key.as_bytes());
-                add_part(&mut hasher, entry.value.to_string().as_bytes());
+            let mut entries = self
+                .option_entries
+                .iter()
+                .map(|entry| (entry.key.as_str(), entry.value.to_string()))
+                .collect::<Vec<_>>();
+            entries.sort_unstable();
+            for (key, value) in entries {
+                add_part(&mut hasher, key.as_bytes());
+                add_part(&mut hasher, value.as_bytes());
             }
         }
 
@@ -182,6 +188,26 @@ mod tests {
             OptionEntry { key: "alpn".into(), value: Value::String("h2".into()) },
         ]);
         assert_ne!(first.fingerprint(), second.fingerprint());
+    }
+
+    #[test]
+    fn fingerprint_ignores_query_option_order_but_keeps_duplicates() {
+        let base = node_with_name("one");
+        let first = base.clone().with_option_entries(vec![
+            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
+            OptionEntry { key: "b".into(), value: Value::String("2".into()) },
+        ]);
+        let reordered = base.clone().with_option_entries(vec![
+            OptionEntry { key: "b".into(), value: Value::String("2".into()) },
+            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
+        ]);
+        let duplicated = base.with_option_entries(vec![
+            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
+            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
+            OptionEntry { key: "b".into(), value: Value::String("2".into()) },
+        ]);
+        assert_eq!(first.fingerprint(), reordered.fingerprint());
+        assert_ne!(first.fingerprint(), duplicated.fingerprint());
     }
 
     #[test]
