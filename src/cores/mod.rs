@@ -81,9 +81,21 @@ pub fn managed_cores_directory() -> anyhow::Result<PathBuf> {
     let data_directory = database_path
         .parent()
         .context("proxyctl database path has no parent directory")?;
+    std::fs::create_dir_all(data_directory).with_context(|| {
+        format!(
+            "could not create proxyctl data directory {}",
+            data_directory.display()
+        )
+    })?;
+    set_private_directory_permissions(data_directory)?;
+
     let directory = data_directory.join("cores");
-    std::fs::create_dir_all(&directory)
-        .with_context(|| format!("could not create managed core directory {}", directory.display()))?;
+    std::fs::create_dir_all(&directory).with_context(|| {
+        format!(
+            "could not create managed core directory {}",
+            directory.display()
+        )
+    })?;
     set_private_directory_permissions(&directory)?;
     Ok(directory)
 }
