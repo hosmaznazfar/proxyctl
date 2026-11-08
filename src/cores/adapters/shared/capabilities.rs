@@ -135,7 +135,7 @@ pub(crate) fn validate_for_core(
         return Err(compatibility_failure(format!("{core} does not support the imported certificate SHA-256 pin")));
     }
 
-    let transport = normalize_transport(node)?;
+    let transport = normalize_transport(node).map_err(compatibility_failure)?;
     if matches!(&transport.kind, TransportKind::XHttp)
         && node.protocol == Protocol::Vmess
         && core != CoreId::Xray
