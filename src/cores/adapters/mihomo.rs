@@ -57,7 +57,7 @@ impl CoreAdapter for MihomoAdapter {
         let output = Command::new(executable)
             .arg("-t").arg("-f").arg(config)
             .output().context("could not run Mihomo config validation")?;
-        ensure!(output.status.success(), "Mihomo rejected the generated configuration: {}", String::from_utf8_lossy(&output.stderr).trim());
+        ensure!(output.status.success(), "Mihomo rejected the generated configuration (exit status {:?})", output.status.code());
         Ok(())
     }
 }
