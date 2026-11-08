@@ -103,6 +103,21 @@ impl CoreAdapter for MihomoAdapter {
                 http.insert("host".into(), json!(transport.hosts));
             }
             proxy["h2-opts"] = serde_json::Value::Object(http);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::HttpUpgrade) {
+            proxy["network"] = json!("ws");
+            let mut upgrade = serde_json::Map::new();
+            upgrade.insert("v2ray-http-upgrade".into(), json!(true));
+            if let Some(path) = transport.path {
+                upgrade.insert("path".into(), json!(path));
+            }
+            let mut headers = transport.headers;
+            if let Some(host) = transport.host {
+                headers.insert("Host".into(), host);
+            }
+            if !headers.is_empty() {
+                upgrade.insert("headers".into(), json!(headers));
+            }
+            proxy["ws-opts"] = serde_json::Value::Object(upgrade);
         }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
