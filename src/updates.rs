@@ -42,9 +42,16 @@ pub fn update_application(check_only: bool) -> anyhow::Result<()> {
         "GitHub returned a draft or prerelease; refusing to update"
     );
 
-    let latest_text = release.tag_name.strip_prefix('v').unwrap_or(&release.tag_name);
-    let latest = Version::parse(latest_text)
-        .with_context(|| format!("official release tag '{}' is not a semantic version", release.tag_name))?;
+    let latest_text = release
+        .tag_name
+        .strip_prefix('v')
+        .unwrap_or(&release.tag_name);
+    let latest = Version::parse(latest_text).with_context(|| {
+        format!(
+            "official release tag '{}' is not a semantic version",
+            release.tag_name
+        )
+    })?;
     let asset_name = platform_asset_name()?;
     if latest <= current {
         println!("proxyctl is up to date ({}).", current);
@@ -78,7 +85,10 @@ pub fn update_application(check_only: bool) -> anyhow::Result<()> {
     let expected = checksum_for_asset(&checksum_text, &asset_name)?;
     let bytes = download_bytes(&asset.browser_download_url)?;
     let actual = format!("{:x}", Sha256::digest(&bytes));
-    ensure!(actual.eq_ignore_ascii_case(&expected), "SHA-256 verification failed for {asset_name}");
+    ensure!(
+        actual.eq_ignore_ascii_case(&expected),
+        "SHA-256 verification failed for {asset_name}"
+    );
 
     if let Err(error) = replace_current_executable(&bytes, &latest) {
         eprintln!(
@@ -164,7 +174,9 @@ fn replace_current_executable(bytes: &[u8], version: &Version) -> anyhow::Result
         env::current_exe().context("could not locate the running proxyctl executable")?;
     let executable = fs::canonicalize(&executable)
         .context("could not resolve the installed proxyctl executable path")?;
-    let parent = executable.parent().context("installed executable has no parent directory")?;
+    let parent = executable
+        .parent()
+        .context("installed executable has no parent directory")?;
     let staged = staged_path(parent);
 
     let result = (|| {
@@ -178,23 +190,32 @@ fn replace_current_executable(bytes: &[u8], version: &Version) -> anyhow::Result
                     executable.display()
                 )
             })?;
-        file.write_all(bytes).context("could not write staged proxyctl executable")?;
-        file.sync_all().context("could not sync staged proxyctl executable")?;
+        file.write_all(bytes)
+            .context("could not write staged proxyctl executable")?;
+        file.sync_all()
+            .context("could not sync staged proxyctl executable")?;
         set_executable_permissions(&staged)?;
 
         let output = Command::new(&staged)
             .arg("--version")
             .output()
             .context("could not validate staged proxyctl executable")?;
-        ensure!(output.status.success(), "staged proxyctl executable failed its --version check");
+        ensure!(
+            output.status.success(),
+            "staged proxyctl executable failed its --version check"
+        );
         let version_output = String::from_utf8_lossy(&output.stdout);
         ensure!(
             version_output.contains(&version.to_string()),
             "staged executable version does not match release {version}"
         );
 
-        fs::rename(&staged, &executable)
-            .with_context(|| format!("could not safely replace {}; the existing executable was preserved", executable.display()))?;
+        fs::rename(&staged, &executable).with_context(|| {
+            format!(
+                "could not safely replace {}; the existing executable was preserved",
+                executable.display()
+            )
+        })?;
         if let Ok(directory) = OpenOptions::new().read(true).open(parent) {
             let _ = directory.sync_all();
         }
