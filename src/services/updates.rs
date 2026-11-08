@@ -1,1 +1,3 @@
-//! Update use cases.\n\npub use crate::updates::update_application;\n
+//! Update use cases.
+
+pub use crate::updates::update_application;
