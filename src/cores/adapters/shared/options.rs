@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::domain::ProxyNode;
+use crate::domain::{Protocol, ProxyNode};
 
 pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a str> {
     node.option(key)
@@ -18,8 +18,7 @@ pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a st
         })
 }
 
-/// Collect ALPN identifiers from URI query values or structured VMess arrays.
-fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), String> {
+pub(crate) fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), String> {
     let keys = if node.option_entries.is_empty() {
         node.options.keys().map(String::as_str).collect::<Vec<_>>()
     } else {
@@ -36,7 +35,7 @@ fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), St
     Ok(())
 }
 
-fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
+pub(crate) fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
     const STRING_OPTIONS: &[&str] = &[
         "security", "sni", "encryption", "flow", "type", "host", "path", "serviceName",
         "service_name", "authority", "mode", "net", "scy", "ed", "eh", "maxEarlyData",
