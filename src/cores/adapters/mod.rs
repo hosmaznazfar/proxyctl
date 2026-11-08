@@ -134,6 +134,78 @@ mod tests {
     }
 
     #[test]
+    fn adapters_map_repeated_and_comma_separated_alpn_values() {
+        let repeated = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&alpn=h2&alpn=http%2F1.1",
+        )
+        .unwrap();
+        let comma_separated = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&alpn=h2%2Chttp%2F1.1",
+        )
+        .unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            for node in [&repeated, &comma_separated] {
+                let generated = adapter(core).generate_config(node).unwrap();
+                let document: Value = serde_json::from_slice(&generated.content).unwrap();
+                let alpn = match core {
+                    CoreId::SingBox => &document["outbounds"][0]["tls"]["alpn"],
+                    CoreId::Xray => {
+                        &document["outbounds"][0]["streamSettings"]["tlsSettings"]["alpn"]
+                    }
+                    CoreId::Mihomo => &document["proxies"][0]["alpn"],
+                };
+                assert_eq!(alpn, &serde_json::json!(["h2", "http/1.1"]), "{core}");
+            }
+        }
+    }
+
+    #[test]
+    fn adapters_map_structured_vmess_alpn_arrays() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","tls":"tls","alpn":["h2","http/1.1"]}"#,
+        );
+        let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = adapter(core).generate_config(&node).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let alpn = match core {
+                CoreId::SingBox => &document["outbounds"][0]["tls"]["alpn"],
+                CoreId::Xray => {
+                    &document["outbounds"][0]["streamSettings"]["tlsSettings"]["alpn"]
+                }
+                CoreId::Mihomo => &document["proxies"][0]["alpn"],
+            };
+            assert_eq!(alpn, &serde_json::json!(["h2", "http/1.1"]), "{core}");
+        }
+    }
+
+    #[test]
+    fn adapters_reject_alpn_without_tls_and_malformed_alpn() {
+        let no_tls = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?alpn=h2",
+        )
+        .unwrap();
+        let empty_entry = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&alpn=h2%2C%2Chttp%2F1.1",
+        )
+        .unwrap();
+        let duplicate_entry = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&alpn=h2&alpn=h2",
+        )
+        .unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            assert!(!adapter(core).compatibility(&no_tls).is_supported());
+            assert!(!adapter(core).compatibility(&empty_entry).is_supported());
+            assert!(!adapter(core).compatibility(&duplicate_entry).is_supported());
+        }
+    }
+
+    #[test]
     fn adapters_reject_repeated_or_ambiguous_options() {
         let repeated = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?sni=a.example&sni=b.example&security=tls",
