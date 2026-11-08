@@ -89,6 +89,19 @@ impl CoreAdapter for XrayAdapter {
                 http.insert("host".into(), json!(transport.hosts));
             }
             outbound["streamSettings"]["httpSettings"] = serde_json::Value::Object(http);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::HttpUpgrade) {
+            outbound["streamSettings"]["network"] = json!("httpupgrade");
+            let mut upgrade = serde_json::Map::new();
+            if let Some(host) = transport.host {
+                upgrade.insert("host".into(), json!(host));
+            }
+            if let Some(path) = transport.path {
+                upgrade.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                upgrade.insert("headers".into(), json!(transport.headers));
+            }
+            outbound["streamSettings"]["httpupgradeSettings"] = serde_json::Value::Object(upgrade);
         }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             let mut tls_settings = serde_json::Map::new();
