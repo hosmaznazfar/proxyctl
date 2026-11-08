@@ -175,7 +175,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
         Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
         Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
-        Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
+        Protocol::Hysteria2 => vec!["security", "tls", "sni", "insecure", "allowInsecure", "pinSHA256", "pcs", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
     };
     reject_unknown_options(node, &supported)?;
@@ -265,6 +265,13 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
     let default_tls = matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2);
     let insecure = insecure_option(node)?;
     let verify_peer_cert_by_name = option_string(node, "vcn");
+    let certificate_pin = option_string(node, "pcs").or_else(|| option_string(node, "pinSHA256"));
+    if option_string(node, "pcs").is_some()
+        && option_string(node, "pinSHA256").is_some()
+        && option_string(node, "pcs") != option_string(node, "pinSHA256")
+    {
+        return Err("certificate pin options conflict".into());
+    }
     let security = option_string(node, "security")
         .or_else(|| option_string(node, "tls"))
         .unwrap_or(if default_tls { "tls" } else { "none" })
@@ -283,7 +290,7 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             if option_string(node, "fp").is_some() {
                 return Err("TLS fingerprint was supplied while TLS is disabled".into());
             }
-            if option_string(node, "pcs").is_some() {
+            if certificate_pin.is_some() {
                 return Err("certificate pin was supplied while TLS is disabled".into());
             }
             if insecure {
@@ -318,7 +325,7 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             if let Some(fingerprint) = option_string(node, "fp") {
                 tls.insert("fingerprint".into(), Value::String(fingerprint.into()));
             }
-            if let Some(pin) = option_string(node, "pcs") {
+            if let Some(pin) = certificate_pin {
                 let normalized = pin.replace(':', "");
                 if normalized.len() != 64 || !normalized.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                     return Err("certificate SHA-256 pin must contain exactly 64 hexadecimal digits".into());
