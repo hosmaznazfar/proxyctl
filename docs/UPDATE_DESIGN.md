@@ -96,3 +96,18 @@ The command reports each target independently: installed version, latest stable 
 The proxyctl repository should publish release assets from a version tag (for example, v0.1.0) through GitHub Actions. The workflow should validate the tag/version relationship, build each supported target, package binaries with unambiguous OS/architecture names, generate a SHA-256 manifest after packaging, attach assets and manifest to the GitHub Release, and avoid publishing when required build or test jobs fail.
 
 Tests cover platform/asset selection, stable-versus-prerelease selection, checksum parsing and mismatch, missing verification material, archive path traversal, interrupted downloads, failed version checks, staging cleanup, atomic replacement behavior, self-update fallback, and independent per-component failures. Network-dependent integration tests are opt-in; ordinary CI uses fixtures and fake download/process interfaces.
+
+## 9. Implementation boundaries
+
+The Rust implementation keeps policy and mechanisms separate:
+
+| Module | Single responsibility |
+|---|---|
+| `updates/application.rs` | Proxyctl-specific release policy and self-update use case |
+| `updates/release.rs` | GitHub Releases metadata model and retrieval |
+| `updates/platform.rs` | Platform/architecture detection and application asset naming |
+| `updates/artifact.rs` | Bounded downloads, trusted-host validation, checksum parsing and verification |
+| `updates/installer.rs` | Staging, executable validation, permissions, and replacement |
+| `updates/mod.rs` | Module boundary and public update entry point |
+
+Core-specific release resolution and archive extraction must be implemented as separate adapters. They may use the shared artifact and installer services, but must not duplicate HTTP, checksum, staging, or replacement code. The CLI only dispatches use cases; it does not implement update policy. Keep individual modules narrowly scoped and split them when a new responsibility is introduced.
