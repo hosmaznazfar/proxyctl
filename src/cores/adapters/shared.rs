@@ -160,8 +160,8 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
 
     let supported = match node.protocol {
         Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "alpn", "fp"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "mode", "alpn", "fp"],
-        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "alpn", "fp"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "alpn", "fp"],
+        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
     };
