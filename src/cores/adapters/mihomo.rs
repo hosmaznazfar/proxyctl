@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_common},
 };
 
 pub struct MihomoAdapter;
@@ -60,6 +60,18 @@ impl CoreAdapter for MihomoAdapter {
                 json!({"name":name,"type":"hysteria2","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()})
             }
         };
+        let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
+        if matches!(transport.kind, crate::domain::TransportKind::WebSocket) {
+            proxy["network"] = json!("ws");
+            let mut ws = serde_json::Map::new();
+            if let Some(path) = transport.path {
+                ws.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                ws.insert("headers".into(), json!(transport.headers));
+            }
+            proxy["ws-opts"] = serde_json::Value::Object(ws);
+        }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
             if let Some(sni) = tls.get("server_name") {
