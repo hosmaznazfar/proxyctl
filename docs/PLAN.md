@@ -40,9 +40,15 @@ Initial cores: sing-box, Xray, and Mihomo. Proxyctl orchestrates official core b
 
 ### 3.1 Managed core binaries
 
-The setup command installs supported core binaries under the proxyctl-owned data directory. It must not replace, stop, or reconfigure another proxy application.
+**Implementation status:** the first managed-core installer and inventory are implemented for Linux x86_64.
 
-Core versions must be selected deliberately and recorded. Downloads must come from official release sources and be checked against trusted checksums/signatures when published. Failed verification stops installation. Updating cores is explicit.
+- `proxyctl setup` installs all three supported cores sequentially; `--core` selects one.
+- `proxyctl cores` reports whether each proxyctl-managed executable is installed and displays its reported version.
+- Core binaries are stored only below the proxyctl data directory. The installer never searches PATH, invokes a package manager, uses sudo, or modifies system core installations.
+- Each upstream has a separate asset resolver. sing-box uses its Linux amd64 tar.gz archive, Xray uses its Linux 64-bit ZIP, and Mihomo uses its baseline GOAMD64 v1 gzip binary.
+- The installer requires the SHA-256 digest published in the official GitHub release asset metadata, verifies the complete archive before extraction, extracts only the expected regular executable, validates its version command, and replaces the destination only after validation.
+- Archive paths are never extracted to disk. Download and extracted executable sizes are bounded. Missing digest metadata or an unsupported platform fails closed.
+- Setup does not start a core or change proxy, DNS, routes, firewall, or TUN state. Other proxy applications, including V2rayN, remain outside Proxyctl's managed paths.
 
 ### 3.1.1 Unified application and core updater
 
