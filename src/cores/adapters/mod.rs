@@ -96,6 +96,55 @@ mod tests {
     }
 
     #[test]
+    fn adapters_map_grpc_service_names_with_core_specific_requirements() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&serviceName=proxy.Service&mode=gun&security=tls&sni=tls.example",
+        )
+        .unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let compatibility = adapter(core).compatibility(&node);
+            if core == CoreId::Mihomo {
+                assert_eq!(compatibility.status, CompatibilityStatus::Supported);
+            } else {
+                assert!(compatibility.is_supported(), "{core}: {:?}", compatibility.reason);
+            }
+            let generated = adapter(core).generate_config(&node).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let (network, service_name) = match core {
+                CoreId::SingBox => (
+                    document["outbounds"][0]["transport"]["type"].as_str(),
+                    document["outbounds"][0]["transport"]["service_name"].as_str(),
+                ),
+                CoreId::Xray => (
+                    document["outbounds"][0]["streamSettings"]["network"].as_str(),
+                    document["outbounds"][0]["streamSettings"]["grpcSettings"]["serviceName"].as_str(),
+                ),
+                CoreId::Mihomo => (
+                    document["proxies"][0]["network"].as_str(),
+                    document["proxies"][0]["grpc-opts"]["grpc-service-name"].as_str(),
+                ),
+            };
+            assert_eq!(network, Some("grpc"), "{core}");
+            assert_eq!(service_name, Some("proxy.Service"), "{core}");
+        }
+    }
+
+    #[test]
+    fn mihomo_requires_a_grpc_service_name() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc",
+        )
+        .unwrap();
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+        assert!(adapter(CoreId::SingBox).compatibility(&node).is_supported());
+        assert!(adapter(CoreId::Xray).compatibility(&node).is_supported());
+    }
+
+    #[test]
     fn adapters_reject_unknown_transport_without_dropping_it() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
