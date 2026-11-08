@@ -59,15 +59,52 @@ mod tests {
     }
 
     #[test]
-    fn adapters_reject_unmapped_options_instead_of_dropping_them() {
+    fn adapters_map_websocket_transport_and_keep_host_separate_from_sni() {
         let node = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fsocket",
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&host=cdn.example&path=%2Fsocket&security=tls&sni=tls.example",
+        )
+        .unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = adapter(core).generate_config(&node).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let (network, path, host, sni) = match core {
+                CoreId::SingBox => (
+                    document["outbounds"][0]["transport"]["type"].as_str(),
+                    document["outbounds"][0]["transport"]["path"].as_str(),
+                    document["outbounds"][0]["transport"]["headers"]["Host"].as_str(),
+                    document["outbounds"][0]["tls"]["server_name"].as_str(),
+                ),
+                CoreId::Xray => (
+                    document["outbounds"][0]["streamSettings"]["network"].as_str(),
+                    document["outbounds"][0]["streamSettings"]["wsSettings"]["path"].as_str(),
+                    document["outbounds"][0]["streamSettings"]["wsSettings"]["headers"]["Host"].as_str(),
+                    document["outbounds"][0]["streamSettings"]["tlsSettings"]["serverName"].as_str(),
+                ),
+                CoreId::Mihomo => (
+                    document["proxies"][0]["network"].as_str(),
+                    document["proxies"][0]["ws-opts"]["path"].as_str(),
+                    document["proxies"][0]["ws-opts"]["headers"]["Host"].as_str(),
+                    document["proxies"][0]["servername"].as_str(),
+                ),
+            };
+            assert_eq!(network, Some(if core == CoreId::SingBox { "ws" } else { "ws" }));
+            assert_eq!(path, Some("/socket"), "{core}");
+            assert_eq!(host, Some("cdn.example"), "{core}");
+            assert_eq!(sni, Some("tls.example"), "{core}");
+        }
+    }
+
+    #[test]
+    fn adapters_reject_unknown_transport_without_dropping_it() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
         )
         .unwrap();
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             let compatibility = adapter(core).compatibility(&node);
             assert_eq!(compatibility.status, CompatibilityStatus::Unsupported);
-            assert!(compatibility.reason.unwrap().contains("option"));
+            assert!(compatibility.reason.unwrap().contains("transport"));
         }
     }
 
@@ -116,20 +153,29 @@ mod tests {
     }
 
     #[test]
-    fn adapters_reject_non_tcp_transports_even_without_other_options() {
+    fn adapters_support_websocket_for_vless_and_vmess() {
         use base64::{Engine as _, engine::general_purpose};
 
         let vless =
-            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws")
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fws")
                 .unwrap();
-        let vmess_payload = general_purpose::STANDARD.encode(
-            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"ws"}"#
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"ws","path":"/vmess","host":"cdn.example","tls":"tls"}"#,
         );
-        let vmess = parse_proxy_url(&format!("vmess://{vmess_payload}")).unwrap();
+        let vmess = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
 
-        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-            assert!(!adapter(core).compatibility(&vless).is_supported());
-            assert!(!adapter(core).compatibility(&vmess).is_supported());
+        for node in [&vless, &vmess] {
+            for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+                assert!(
+                    adapter(core).compatibility(node).is_supported(),
+                    "{core}: {:?}",
+                    adapter(core).compatibility(node).reason
+                );
+                let _: Value = serde_json::from_slice(
+                    &adapter(core).generate_config(node).unwrap().content,
+                )
+                .unwrap();
+            }
         }
     }
 
