@@ -48,7 +48,9 @@ impl CoreId {
     }
 
     pub fn binary_path(self) -> anyhow::Result<PathBuf> {
-        Ok(managed_cores_directory()?.join(self.as_str()).join(self.executable_name()))
+        Ok(managed_cores_directory()?
+            .join(self.as_str())
+            .join(self.executable_name()))
     }
 
     pub fn is_installed(self) -> anyhow::Result<bool> {
@@ -136,7 +138,10 @@ mod tests {
     #[test]
     fn core_descriptors_use_official_release_sources() {
         for core in CoreId::ALL {
-            assert!(core.release_api().starts_with("https://api.github.com/repos/"));
+            assert!(
+                core.release_api()
+                    .starts_with("https://api.github.com/repos/")
+            );
             assert!(!core.executable_name().is_empty());
         }
     }
