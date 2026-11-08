@@ -25,7 +25,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     };
 
     if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::XHttp) {
-        return Err(format!("transport '{network}' is not implemented by this adapter batch"));
+        return Err("transport type is not supported by this adapter batch".into());
     }
 
     if matches!(&kind, TransportKind::Http2)
