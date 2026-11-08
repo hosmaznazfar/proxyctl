@@ -80,9 +80,10 @@ mod tests {
         let vmess_payload = general_purpose::STANDARD.encode(
             br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","ps":"vmess"}"#,
         );
-        let cases = [
+        let vmess_url = format!("vmess://{vmess_payload}");
+        let cases: [(&str, bool); 5] = [
             ("vless://11111111-1111-4111-8111-111111111111@example.com:443", true),
-            (&format!("vmess://{vmess_payload}"), true),
+            (vmess_url.as_str(), true),
             ("trojan://secret@example.com:443", true),
             ("ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388", true),
             ("hysteria2://secret@example.com:443", false),
