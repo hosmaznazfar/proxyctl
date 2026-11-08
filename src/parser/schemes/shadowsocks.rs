@@ -104,6 +104,8 @@ fn split_once_or_all(input: &str, separator: char) -> (&str, Option<&str>) {
 
 #[cfg(test)]
 mod tests {
+    use base64::Engine as _;
+
     use super::*;
 
     #[test]
