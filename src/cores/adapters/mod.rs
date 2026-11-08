@@ -117,6 +117,25 @@ mod tests {
     }
 
     #[test]
+    fn adapters_reject_non_tcp_transports_even_without_other_options() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let vless = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws",
+        )
+        .unwrap();
+        let vmess_payload = general_purpose::STANDARD.encode(
+            br#"{\"add\":\"vmess.example\",\"port\":\"443\",\"id\":\"11111111-1111-4111-8111-111111111111\",\"net\":\"ws\"}"#,
+        );
+        let vmess = parse_proxy_url(&format!("vmess://{vmess_payload}")).unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            assert!(!adapter(core).compatibility(&vless).is_supported());
+            assert!(!adapter(core).compatibility(&vmess).is_supported());
+        }
+    }
+
+    #[test]
     fn adapters_reject_repeated_or_ambiguous_options() {
         let repeated = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?sni=a.example&sni=b.example&security=tls",
