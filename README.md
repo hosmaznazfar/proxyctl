@@ -65,10 +65,20 @@ Normal output masks credentials. The show command displays option names but not 
 The following command groups are planned and are not available yet.
 
 ~~~sh
-# Install and inspect managed cores
+# Initial managed-core installation and inventory
 proxyctl setup
 proxyctl cores
+
+# One place to check/update the CLI and managed cores
 proxyctl update
+proxyctl update --check
+
+# Optional update targets
+proxyctl update --app
+proxyctl update --cores
+proxyctl update --core sing-box
+proxyctl update --core xray
+proxyctl update --core mihomo
 
 # Test nodes
 proxyctl test --all-cores
@@ -105,6 +115,10 @@ proxyctl stop
 proxyctl tun on
 proxyctl tun off
 ~~~
+
+### Unified update behavior
+
+`proxyctl update` is the single entry point for keeping proxyctl and its managed cores current. By default it checks and updates both. Use `--check` for a read-only version check, `--app` for the CLI only, `--cores` for all installed cores, or `--core <name>` for one core. Updates are verified and staged before replacement; they do not start a proxy or change network settings. `proxyctl setup` is for initial core installation.
 
 ### Sorting behavior
 

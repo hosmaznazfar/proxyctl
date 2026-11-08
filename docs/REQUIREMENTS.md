@@ -59,7 +59,10 @@ Acceptance criteria:
 
 - `proxyctl setup` installs the selected supported core binaries into a proxyctl-owned directory.
 - `proxyctl cores` reports installed core names and versions.
-- `proxyctl update` performs an explicit update operation.
+- `proxyctl update` checks for and updates both the proxyctl CLI and all installed managed cores by default.
+- `proxyctl update --check` checks versions without downloading or changing files.
+- `proxyctl update --app` updates only the CLI; `--cores` updates all installed cores; `--core <CORE>` updates one selected core.
+- `--check` is mutually exclusive with apply behavior and is supported with target selectors.
 - Downloads use official project release sources.
 - The selected version and platform artifact are explicit and recorded.
 - Published checksums/signatures are verified before installation; unverifiable artifacts are not silently trusted.
@@ -67,6 +70,11 @@ Acceptance criteria:
 - A failed download or verification does not replace a working installed binary.
 - Setup does not stop, replace, or reconfigure other proxy applications.
 - Core version metadata is separate from application logic so supported versions can be updated without rewriting command handlers.
+- CLI releases are published with platform-specific assets and verifiable checksums/signatures.
+- Self-update stages and verifies a replacement before atomic replacement; if safe replacement is not supported, the command provides a manual update path.
+- A failure updating one component does not damage other installed components or replace a working binary.
+- Update output reports current version, available version, and result separately for the CLI and each selected core.
+- Updates do not start cores or alter active proxy, DNS, routes, firewall, or TUN state.
 
 ### FR-003 — URL import (P0)
 
@@ -262,6 +270,28 @@ Acceptance criteria:
 - Errors leave the system in a recoverable state and explain any manual recovery needed.
 - TUN behavior is tested on supported Linux configurations before being advertised as stable.
 
+
+### FR-016 — Unified application and core updates (P1)
+
+The application shall provide one update command for the proxyctl executable and its managed core binaries.
+
+Acceptance criteria:
+
+- `proxyctl update` checks and applies available updates for proxyctl and all installed managed cores by default.
+- `proxyctl update --check` checks available versions without downloading or modifying files.
+- `proxyctl update --app` targets only the proxyctl executable.
+- `proxyctl update --cores` targets all installed managed cores.
+- `proxyctl update --core <CORE>` targets one selected core.
+- Target selectors are validated; ambiguous or conflicting selectors return a clear usage error.
+- The CLI and core versions are reported independently.
+- The CLI updater selects a release asset compatible with the current OS and architecture.
+- Application and core downloads come from official release sources and are verified against published checksums/signatures before execution or installation.
+- Updates are staged before replacement. A failed download, verification, or staging operation leaves the currently working binary untouched.
+- Self-update uses a safe atomic replacement strategy where supported; otherwise it provides a documented manual update path.
+- A failure updating one component does not prevent accurate reporting for other selected components and does not corrupt them.
+- Updates do not start a proxy core or modify active proxy, DNS, routes, firewall, or TUN configuration.
+- `proxyctl setup` remains the initial managed-core installation command and does not replace the unified update workflow.
+
 ## 3. Non-functional requirements
 
 ### NFR-001 — Resource usage
@@ -372,6 +402,10 @@ For each node/core/metric/run, calculate the median from successful samples only
 proxyctl setup
 proxyctl cores
 proxyctl update
+proxyctl update --check
+proxyctl update --app
+proxyctl update --cores
+proxyctl update --core sing-box
 
 proxyctl import ~/Documents/servers.txt
 proxyctl add "vless://..."
@@ -419,6 +453,7 @@ A release must not be considered complete until all applicable P0 requirements a
 - [ ] Versioned redb schema and repository tests.
 - [ ] Core compatibility and config validation.
 - [ ] Verified managed core installation/update.
+- [ ] Unified, verified proxyctl self-update and managed-core update.
 - [ ] Isolated, sequential benchmark process lifecycle.
 - [ ] Three samples per metric and per compatible core.
 - [ ] Benchmark history and accurate status handling.

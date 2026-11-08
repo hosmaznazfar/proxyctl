@@ -44,6 +44,33 @@ The setup command installs supported core binaries under the proxyctl-owned data
 
 Core versions must be selected deliberately and recorded. Downloads must come from official release sources and be checked against trusted checksums/signatures when published. Failed verification stops installation. Updating cores is explicit.
 
+### 3.1.1 Unified application and core updater
+
+There is one update entry point for the proxyctl executable and all managed core binaries:
+
+~~~sh
+# Check and apply updates for proxyctl and every installed managed core
+proxyctl update
+
+# Check only; do not download or replace anything
+proxyctl update --check
+
+# Limit the update operation
+proxyctl update --app
+proxyctl update --cores
+proxyctl update --core sing-box
+proxyctl update --core xray
+proxyctl update --core mihomo
+~~~
+
+With no target selector, `proxyctl update` checks and updates both the CLI application and all installed managed cores. `--check` makes the operation read-only and reports current/latest versions and availability. The target selectors are mutually exclusive; `--core` may be repeated only if the CLI design explicitly supports multiple values, otherwise it selects one core.
+
+Application releases are published by the proxyctl GitHub repository. The updater selects a compatible release asset for the current OS/architecture, verifies its published checksum/signature, stages it beside the installed executable, and replaces the executable atomically where the platform permits. It must never overwrite the running binary before the verified replacement is ready. If a safe self-replacement is unavailable, it reports the manual update command instead of risking a broken installation.
+
+Core updates use the same download/verification/staging policy and preserve the last working binary on any failure. The updater reports each component independently: current version, available version, action taken, and error. A failure updating one core must not corrupt or silently roll back another component. Updates never start a core or change active proxy/network settings.
+
+`proxyctl setup` remains the initial installation/bootstrap command; it installs the selected managed cores and does not update the CLI itself. `proxyctl cores` reports installed core versions and status.
+
 ### 3.2 URL records and source-file handling
 
 The user's text file is an import source, not a live database or output file. Proxyctl reads it without changing it. Imported URL records are stored in redb, including the original URL needed to recreate core configurations.
@@ -159,6 +186,10 @@ TUN is a separate opt-in feature. It must detect existing interfaces, routes, DN
 proxyctl setup
 proxyctl cores
 proxyctl update
+proxyctl update --check
+proxyctl update --app
+proxyctl update --cores
+proxyctl update --core sing-box
 
 # URL records
 proxyctl import ~/Documents/servers.txt
@@ -279,7 +310,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 2. Domain and parser: typed node/protocol models, URL parsing, normalization, validation, fingerprints, and compatibility representation.
 3. Persistence: redb schema, migrations/versioning, repository layer, permissions, and database tests.
 4. Node management: import, add, list, show, remove, restore, and duplicate handling.
-5. Core management: official-source metadata, pinned versions, checksum verification, setup, detection, and update.
+5. Core management and unified updater: official-source metadata, pinned versions, checksum verification, setup, detection, and a single update workflow for the proxyctl CLI plus managed cores.
 6. Core adapters: configuration generation and validation for each core, with fixtures and compatibility tests.
 7. Benchmark engine: isolated process lifecycle, HTTP latency/download/upload measurement, three samples, cancellation, and persistence.
 8. Reports and sorting: latest/history/compare views and core-independent/core-specific sorting.
@@ -296,6 +327,7 @@ These are implementation choices, not blockers to the architecture:
 
 - Exact minimum supported Rust version and edition.
 - Exact pinned versions and official release/checksum metadata for each core.
+- Proxyctl release asset naming, signing/checksum publication, and safe self-update behavior for each supported platform.
 - Benchmark endpoint selection, payload sizes, and timeout defaults.
 - Precise configuration support matrix for each core version and URL option.
 - Platform-specific TUN backend and DNS/firewall rollback strategy.
