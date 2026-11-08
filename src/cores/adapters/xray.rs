@@ -62,8 +62,17 @@ impl CoreAdapter for XrayAdapter {
         if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
             outbound["streamSettings"]["network"] = json!("ws");
             let mut ws = serde_json::Map::new();
-            if let Some(path) = transport.path {
-                ws.insert("path".into(), json!(path));
+            let mut ws_path = transport.path.unwrap_or_default();
+            if let Some(max_early_data) = transport.max_early_data {
+                if ws_path.is_empty() {
+                    ws_path.push('/');
+                }
+                let separator = if ws_path.contains('?') { '&' } else { '?' };
+                ws_path.push(separator);
+                ws_path.push_str(&format!("ed={max_early_data}"));
+            }
+            if !ws_path.is_empty() {
+                ws.insert("path".into(), json!(ws_path));
             }
             if !transport.headers.is_empty() {
                 ws.insert("headers".into(), json!(transport.headers));
