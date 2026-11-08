@@ -60,10 +60,7 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
     Ok(summary)
 }
 
-pub fn list_nodes(
-    database_path: &Path,
-    include_deleted: bool,
-) -> anyhow::Result<Vec<NodeRecord>> {
+pub fn list_nodes(database_path: &Path, include_deleted: bool) -> anyhow::Result<Vec<NodeRecord>> {
     NodeDatabase::open(database_path)?.list_nodes(include_deleted)
 }
 
@@ -120,10 +117,7 @@ mod tests {
         let database = directory.path().join("proxyctl.redb");
         let url = "vless://uuid@example.com:443";
 
-        assert_eq!(
-            add_url(&database, url).unwrap(),
-            AddNodeOutcome::Added(1)
-        );
+        assert_eq!(add_url(&database, url).unwrap(), AddNodeOutcome::Added(1));
         assert_eq!(
             add_url(&database, url).unwrap(),
             AddNodeOutcome::Duplicate(1)

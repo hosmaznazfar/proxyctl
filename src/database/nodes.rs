@@ -310,11 +310,7 @@ mod tests {
         let _database = NodeDatabase::open(&path).unwrap();
 
         assert_eq!(
-            fs::metadata(directory.path())
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o777,
+            fs::metadata(directory.path()).unwrap().permissions().mode() & 0o777,
             0o700
         );
         assert_eq!(

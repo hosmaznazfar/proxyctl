@@ -150,14 +150,29 @@ fn print_node_details(record: &NodeRecord) {
             .map(|name| safe_field(name, 200))
             .unwrap_or_else(|| "-".to_owned())
     );
-    println!("Status: {}", if record.is_deleted() { "deleted" } else { "active" });
+    println!(
+        "Status: {}",
+        if record.is_deleted() {
+            "deleted"
+        } else {
+            "active"
+        }
+    );
     println!(
         "Identity: {}",
-        if node.identity.is_some() { "[masked]" } else { "-" }
+        if node.identity.is_some() {
+            "[masked]"
+        } else {
+            "-"
+        }
     );
     println!(
         "Secret: {}",
-        if node.secret.is_some() { "[masked]" } else { "-" }
+        if node.secret.is_some() {
+            "[masked]"
+        } else {
+            "-"
+        }
     );
     println!("Fingerprint: {}", node.fingerprint());
 
