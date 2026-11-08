@@ -1,0 +1,6 @@
+/target/
+*.redb
+*.redb-lock
+.env
+.env.*
+!.env.example

@@ -2,7 +2,7 @@
 
 A lightweight Rust command-line tool for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> **Project status:** planning and requirements are documented; implementation has not started yet.
+> **Project status:** initial Rust project foundation is in place. Protocol parsing, storage, core management, and benchmarking are the next implementation stages.
 
 ## Goals
 
@@ -25,17 +25,29 @@ A lightweight Rust command-line tool for managing proxy URLs, testing them throu
 - Do not silently discard unsupported URL options.
 - Make TUN and system-wide networking changes explicit and reversible.
 
-## Planned commands
+## Current development status
 
-The command interface below is the planned target and is not available until the corresponding features are implemented.
+The initial Rust package and module boundaries are committed. The current executable supports Cargo's generated help and version output; application commands are being added incrementally.
 
 ~~~sh
-# Install and inspect managed cores
+cargo run -- --help
+cargo run -- --version
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+~~~
+
+The repository CI runs formatting, Clippy, and tests on pushes and pull requests.
+
+## Planned commands
+
+The following is the target command interface. Commands remain planned until their implementation is merged.
+
+~~~sh
 proxyctl setup
 proxyctl cores
 proxyctl update
 
-# Add and manage URL records
 proxyctl import ~/Documents/servers.txt
 proxyctl add "vless://..."
 proxyctl list
@@ -43,45 +55,35 @@ proxyctl show 12
 proxyctl remove 12
 proxyctl restore 12
 
-# Test nodes
 proxyctl test --all-cores
 proxyctl test --node 12 --core sing-box
 
-# View benchmark reports
 proxyctl report
 proxyctl report --history
 proxyctl report --compare
 proxyctl report --core mihomo
 proxyctl report --node 12
 
-# Sort by the best result across compatible cores
 proxyctl list --sort ping
 proxyctl list --sort download
 proxyctl list --sort upload
-
-# Restrict sorting to one core
 proxyctl list --sort ping --core xray
-proxyctl list --sort download --core sing-box
-proxyctl list --sort upload --core mihomo
 
-# Preview cleanup before applying it
 proxyctl prune --unavailable-all --dry-run
 proxyctl prune --unavailable-all --apply
 proxyctl prune --core xray --unavailable --dry-run
 proxyctl prune --core xray --unavailable --apply
 
-# Activate one node or stop a proxyctl-managed process
 proxyctl use 12 --core sing-box
 proxyctl stop
 
-# Optional TUN mode (planned)
 proxyctl tun on
 proxyctl tun off
 ~~~
 
 ### Sorting behavior
 
-Without a core filter, proxyctl will calculate each node's median successful result per compatible core, select that node's best result, and show which core produced it. With `--core`, only results from that core are considered. Lower latency is better; higher download and upload throughput are better.
+Without a core filter, proxyctl will calculate each node's median successful result per compatible core, select that node's best result, and show which core produced it. With the core filter, only results from that core are considered. Lower latency is better; higher download and upload throughput are better.
 
 ### Cleanup behavior
 
@@ -96,9 +98,21 @@ The plan documents the design, architecture, command semantics, and delivery sta
 
 ## Development
 
-The project is being developed in stages. The initial implementation will establish the Rust package, module boundaries, CLI skeleton, formatting/lint configuration, and CI before adding parsing, storage, core adapters, and benchmarks.
+- Rust edition: 2024.
+- Toolchain: Rust 1.99.1, pinned in rust-toolchain.toml.
+- Minimum supported Rust version: 1.90.
+- Core dependencies: clap, redb, serde, serde_json, thiserror, anyhow, and tracing.
 
-Once the Rust project foundation is committed, development instructions and exact toolchain requirements will be added here.
+Build and test locally with:
+
+~~~sh
+cargo build
+cargo test
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+~~~
+
+The next stages add the domain model and URL parsers, followed by database repositories and node-management commands. See [PLAN.md](docs/PLAN.md) for the staged roadmap.
 
 ## Security
 
