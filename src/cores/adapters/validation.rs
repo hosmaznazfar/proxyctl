@@ -7,7 +7,7 @@ use std::{
 use anyhow::Context;
 
 use crate::{
-    cores::{CoreId, adapters::{self, CoreAdapter}},
+    cores::{CoreId, adapters},
     domain::ProxyNode,
 };
 
