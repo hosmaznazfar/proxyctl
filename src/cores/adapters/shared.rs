@@ -1,6 +1,6 @@
 use serde_json::{Map, Value};
 
-use crate::domain::{OptionEntry, Protocol, ProxyNode};
+use crate::domain::{Protocol, ProxyNode};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompatibilityStatus {
@@ -40,23 +40,6 @@ pub struct GeneratedConfig {
     pub content: Vec<u8>,
 }
 
-pub(crate) fn option_values<'a>(node: &'a ProxyNode, key: &str) -> Vec<&'a Value> {
-    if node.option_entries.is_empty() {
-        return node.options.get(key).map(|value| vec![unsafe_string_value(value)]).unwrap_or_default();
-    }
-    node.option_entries
-        .iter()
-        .filter(|entry| entry.key == key)
-        .map(|entry| &entry.value)
-        .collect()
-}
-
-// This helper is intentionally avoided in normal adapter paths; legacy records are handled
-// through legacy_option below to keep the domain model backwards-compatible.
-fn unsafe_string_value(_value: &str) -> &'static Value {
-    unreachable!("legacy string options are read through legacy_option")
-}
-
 pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a str> {
     node.option(key).and_then(Value::as_str).or_else(|| {
         if node.option_entries.is_empty() {
@@ -67,22 +50,19 @@ pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a st
     })
 }
 
-pub(crate) fn reject_unknown_options(
-    node: &ProxyNode,
-    supported: &[&str],
-) -> Result<(), String> {
+fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), String> {
     let keys = if node.option_entries.is_empty() {
         node.options.keys().map(String::as_str).collect::<Vec<_>>()
     } else {
         node.option_entries.iter().map(|entry| entry.key.as_str()).collect::<Vec<_>>()
     };
-    if let Some(key) = keys.into_iter().find(|key| !supported.contains(key)) {
+    if let Some(key) = keys.into_iter().find(|key| !supported.contains(&key)) {
         return Err(format!("option '{key}' is not supported by this adapter yet"));
     }
     Ok(())
 }
 
-pub(crate) fn validate_common(node: &ProxyNode, supported: &[&str]) -> Result<(), String> {
+pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     if node.server.is_empty() || node.port == 0 {
         return Err("server and port must be valid".into());
     }
@@ -94,16 +74,47 @@ pub(crate) fn validate_common(node: &ProxyNode, supported: &[&str]) -> Result<()
     {
         return Err("protocol secret is missing".into());
     }
-    reject_unknown_options(node, supported)
+
+    let mut supported = vec!["security", "tls", "sni"];
+    match node.protocol {
+        Protocol::Vless => supported.push("encryption"),
+        Protocol::Vmess => {
+            supported.push("aid");
+            supported.push("scy");
+        }
+        Protocol::Trojan | Protocol::Shadowsocks | Protocol::Hysteria2 => {}
+    }
+    reject_unknown_options(node, &supported)?;
+
+    if node.protocol == Protocol::Vless
+        && option_string(node, "encryption").is_some_and(|value| value != "none")
+    {
+        return Err("only VLESS encryption=none is currently mapped".into());
+    }
+    if node.protocol == Protocol::Vmess {
+        if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
+            return Err("VMess alter ID is invalid".into());
+        }
+        if option_string(node, "scy").is_some_and(|value| !["auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305"].contains(&value)) {
+            return Err("VMess cipher is not supported by this adapter".into());
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
+    let default_tls = matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2);
     let security = option_string(node, "security")
         .or_else(|| option_string(node, "tls"))
-        .unwrap_or("none")
+        .unwrap_or(if default_tls { "tls" } else { "none" })
         .to_ascii_lowercase();
     match security.as_str() {
-        "none" | "" | "false" | "0" => Ok(None),
+        "none" | "" | "false" | "0" => {
+            if node.protocol == Protocol::Hysteria2 {
+                return Err("Hysteria2 requires TLS".into());
+            }
+            Ok(None)
+        }
         "tls" | "true" | "1" => {
             let mut tls = Map::new();
             tls.insert("enabled".into(), Value::Bool(true));
@@ -115,8 +126,4 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
         "reality" => Err("REALITY is not enabled in this adapter batch; refusing partial conversion".into()),
         _ => Err("unsupported TLS/security mode".into()),
     }
-}
-
-pub(crate) fn option_entry(key: &str, value: &str) -> OptionEntry {
-    OptionEntry { key: key.into(), value: Value::String(value.into()) }
 }
