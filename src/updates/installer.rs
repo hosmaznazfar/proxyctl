@@ -8,9 +8,9 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-
 use anyhow::{Context, ensure};
+
+static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Stage a verified executable beside its destination, validate its reported version, then
 /// atomically replace the destination. The previous binary is untouched until the final rename.
