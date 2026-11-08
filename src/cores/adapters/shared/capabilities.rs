@@ -104,7 +104,7 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
         return Err(format!("{core} does not support separate certificate-name verification"));
     }
 
-    if option_string(node, "pcs").is_some() && !capabilities.certificate_sha256_pin {
+    if option_string(node, "pcs").or_else(|| option_string(node, "pinSHA256")).is_some() && !capabilities.certificate_sha256_pin {
         return Err(format!("{core} does not support the imported certificate SHA-256 pin"));
     }
 
