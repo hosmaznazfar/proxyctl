@@ -7,10 +7,12 @@ This matrix describes only the currently implemented adapter subset. It is not a
 | VLESS, basic TCP | Yes | Yes | Yes |
 | VLESS, TLS + SNI | Yes | Yes | Yes |
 | VLESS, TLS + ALPN | Yes | Yes | Yes |
+| VLESS, TLS + client fingerprint | Yes | Yes | Yes |
 | VMess, basic TCP | Yes | Yes | Yes |
 | VMess, TLS + SNI | Yes | Yes | Yes |
 | VMess, TLS + ALPN | Yes | Yes | Yes |
-| Trojan, TCP + TLS (including ALPN) | Yes | Yes | Yes |
+| VMess, TLS + client fingerprint | Yes | Yes | Yes |
+| Trojan, TCP + TLS (including ALPN and client fingerprint) | Yes | Yes | Yes |
 | Shadowsocks, basic TCP | Yes | Yes | Yes |
 | Hysteria2, basic TLS (including ALPN) | Yes | No | Yes |
 | REALITY | Not yet | Not yet | Not yet |
@@ -26,6 +28,8 @@ This matrix describes only the currently implemented adapter subset. It is not a
 - ALPN accepts comma-separated URI values, repeated URI `alpn` keys, and VMess JSON string arrays; values are normalized into an ordered list.
 - Repeated ALPN keys are intentional multi-value input. Other repeated keys remain unsupported because their semantics are ambiguous.
 - ALPN requires TLS. Empty, repeated, oversized, or control-character-containing ALPN identifiers are rejected.
+- The `fp` option maps to sing-box `tls.utls`, Xray `tlsSettings.fingerprint`, and Mihomo `client-fingerprint`. The common supported values are `chrome`, `firefox`, `safari`, `ios`, `android`, `edge`, `360`, `qq`, and `random`.
+- Client fingerprints require TLS and are supported for VLESS, VMess, and Trojan. They are rejected for Hysteria2 (QUIC) and Shadowsocks. sing-box uTLS is documented upstream as not recommended; this mapping is explicit opt-in from the imported node's `fp` value.
 - An unrecognized or unmapped option produces an unsupported result; it is never silently discarded.
 - The generated document is serialized as JSON. For Mihomo this relies on JSON being accepted as a YAML-compatible configuration document.
 - Validation is delegated to the selected managed binary:
