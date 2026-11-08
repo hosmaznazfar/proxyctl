@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality:
@@ -24,19 +24,6 @@ jobs:
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
-
-      - name: Format source
-        run: cargo fmt --all
-
-      - name: Commit formatting changes
-        run: |
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src
-            git commit -m "style: apply rustfmt [skip ci]"
-            git push
-          fi
 
       - name: Check formatting
         run: cargo fmt --all -- --check

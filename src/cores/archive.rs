@@ -1,7 +1,10 @@
 //! Extract only the expected regular executable; archive paths are never written to disk.
-use anyhow::{Context, ensure};
 use std::io::{Cursor, Read};
+
+use anyhow::{Context, ensure};
+
 const MAX_BINARY_SIZE: u64 = 128 * 1024 * 1024;
+
 #[derive(Clone, Copy, Debug)]
 pub enum ArchiveFormat {
     TarGz,
@@ -20,11 +23,12 @@ pub fn extract_binary(
         ArchiveFormat::Gzip => extract_gzip(bytes),
     }
 }
+
 fn extract_tar_gz(bytes: &[u8], executable: &str) -> anyhow::Result<Vec<u8>> {
     let decoder = flate2::read::GzDecoder::new(Cursor::new(bytes));
     let mut archive = tar::Archive::new(decoder);
     for entry in archive.entries().context("invalid upstream tar archive")? {
-        let mut entry = entry.context("could not read tar archive entry")?;
+        let entry = entry.context("could not read tar archive entry")?;
         if !entry.header().entry_type().is_file() {
             continue;
         }
@@ -32,10 +36,7 @@ fn extract_tar_gz(bytes: &[u8], executable: &str) -> anyhow::Result<Vec<u8>> {
         if path.file_name().and_then(|name| name.to_str()) != Some(executable) {
             continue;
         }
-        let size = entry
-            .header()
-            .size()
-            .context("invalid executable size in tar archive")?;
+        let size = entry.header().size().context("invalid executable size in tar archive")?;
         ensure!(
             size <= MAX_BINARY_SIZE,
             "core executable exceeds the 128 MiB safety limit"
@@ -53,11 +54,12 @@ fn extract_tar_gz(bytes: &[u8], executable: &str) -> anyhow::Result<Vec<u8>> {
     }
     anyhow::bail!("tar archive does not contain the expected regular executable")
 }
+
 fn extract_zip(bytes: &[u8], executable: &str) -> anyhow::Result<Vec<u8>> {
     let mut archive =
         zip::ZipArchive::new(Cursor::new(bytes)).context("invalid upstream ZIP archive")?;
     for index in 0..archive.len() {
-        let mut entry = archive
+        let entry = archive
             .by_index(index)
             .context("could not read ZIP archive entry")?;
         if entry.is_dir() || entry.name().rsplit('/').next() != Some(executable) {
@@ -86,8 +88,9 @@ fn extract_zip(bytes: &[u8], executable: &str) -> anyhow::Result<Vec<u8>> {
     }
     anyhow::bail!("ZIP archive does not contain the expected regular executable")
 }
+
 fn extract_gzip(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let mut decoder = flate2::read::GzDecoder::new(Cursor::new(bytes));
+    let decoder = flate2::read::GzDecoder::new(Cursor::new(bytes));
     let mut binary = Vec::new();
     decoder
         .take(MAX_BINARY_SIZE + 1)
@@ -99,9 +102,11 @@ fn extract_gzip(bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     );
     Ok(binary)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn rejects_invalid_archive_bytes() {
         assert!(extract_binary(b"not an archive", ArchiveFormat::Zip, "xray").is_err());
