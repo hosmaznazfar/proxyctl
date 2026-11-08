@@ -241,12 +241,9 @@ mod tests {
                     }
                     CoreId::Mihomo => &document["proxies"][0]["client-fingerprint"],
                 };
-                assert_eq!(fingerprint, expected, "{core}");
+                assert_eq!(fingerprint.as_str(), Some(expected), "{core}");
                 if core == CoreId::SingBox {
-                    assert_eq!(
-                        document["outbounds"][0]["tls"]["utls"]["enabled"],
-                        true
-                    );
+                    assert!(document["outbounds"][0]["tls"]["utls"]["enabled"].as_bool().unwrap());
                 }
             }
         }
