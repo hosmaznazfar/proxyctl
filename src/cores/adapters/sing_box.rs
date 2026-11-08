@@ -47,7 +47,7 @@ impl CoreAdapter for SingBoxAdapter {
                 "type": "vmess", "tag": "proxy", "server": node.server, "server_port": node.port,
                 "uuid": node.identity.as_ref().map(|v| v.expose()).unwrap_or_default(),
                 "alter_id": node.options.get("aid").and_then(|v| v.parse::<u32>().ok()).unwrap_or(0),
-                "security": option_string(node, "scy").unwrap_or("auto")
+                "security": option_string(node, "scy").or_else(|| option_string(node, "security")).unwrap_or("auto")
             }),
             Protocol::Trojan => json!({
                 "type": "trojan", "tag": "proxy", "server": node.server, "server_port": node.port,
