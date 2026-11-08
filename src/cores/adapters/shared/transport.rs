@@ -28,6 +28,12 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         return Err(format!("transport '{network}' is not implemented by this adapter batch"));
     }
 
+    if matches!(&kind, TransportKind::Http2)
+        && !matches!(node.protocol, Protocol::Vless | Protocol::Vmess)
+    {
+        return Err("HTTP/2 transport is only mapped for VLESS and VMess".into());
+    }
+
     let path = option_string(node, "path").map(str::to_owned);
     let mut headers = BTreeMap::new();
     let mut hosts = Vec::new();
