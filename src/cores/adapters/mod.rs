@@ -217,6 +217,61 @@ mod tests {
     }
 
     #[test]
+    fn adapters_map_tls_client_fingerprints_for_supported_protocols() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let vless = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&fp=chrome",
+        )
+        .unwrap();
+        let vmess_payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","tls":"tls","fp":"firefox"}"#,
+        );
+        let vmess = parse_proxy_url(&format!("vmess://{vmess_payload}")).unwrap();
+        let trojan = parse_proxy_url("trojan://secret@example.com:443?fp=safari").unwrap();
+
+        for (node, expected) in [(&vless, "chrome"), (&vmess, "firefox"), (&trojan, "safari")] {
+            for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+                let generated = adapter(core).generate_config(node).unwrap();
+                let document: Value = serde_json::from_slice(&generated.content).unwrap();
+                let fingerprint = match core {
+                    CoreId::SingBox => &document["outbounds"][0]["tls"]["utls"]["fingerprint"],
+                    CoreId::Xray => {
+                        &document["outbounds"][0]["streamSettings"]["tlsSettings"]["fingerprint"]
+                    }
+                    CoreId::Mihomo => &document["proxies"][0]["client-fingerprint"],
+                };
+                assert_eq!(fingerprint, expected, "{core}");
+                if core == CoreId::SingBox {
+                    assert_eq!(
+                        document["outbounds"][0]["tls"]["utls"]["enabled"],
+                        true
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn adapters_reject_invalid_or_inapplicable_tls_fingerprints() {
+        let no_tls = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?fp=chrome",
+        )
+        .unwrap();
+        let invalid = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&fp=unknown",
+        )
+        .unwrap();
+        let hysteria2 = parse_proxy_url("hysteria2://secret@example.com:443?fp=chrome").unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            assert!(!adapter(core).compatibility(&no_tls).is_supported());
+            assert!(!adapter(core).compatibility(&invalid).is_supported());
+            assert!(!adapter(core).compatibility(&hysteria2).is_supported());
+        }
+    }
+
+    #[test]
     fn adapters_reject_alpn_without_tls_and_malformed_alpn() {
         let no_tls =
             parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?alpn=h2")
