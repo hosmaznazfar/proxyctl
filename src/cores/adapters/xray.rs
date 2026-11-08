@@ -41,7 +41,7 @@ impl CoreAdapter for XrayAdapter {
         let (protocol, settings) = match node.protocol {
             Protocol::Vless => (
                 "vless",
-                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"encryption":"none","flow":node.options.get("flow").cloned().unwrap_or_default()}]}]}),
+                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"encryption":"none","flow":option_string(node, "flow").unwrap_or_default()}]}]}),
             ),
             Protocol::Vmess => (
                 "vmess",
