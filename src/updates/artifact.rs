@@ -75,13 +75,15 @@ pub fn validate_github_download_url(url: &str) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
-    const HASH: &str =
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     #[test]
     fn parses_checksum_manifest() {
         let manifest = format!("{HASH}  proxyctl-test");
-        assert_eq!(checksum_for_asset(&manifest, "proxyctl-test").unwrap(), HASH);
+        assert_eq!(
+            checksum_for_asset(&manifest, "proxyctl-test").unwrap(),
+            HASH
+        );
     }
 
     #[test]
