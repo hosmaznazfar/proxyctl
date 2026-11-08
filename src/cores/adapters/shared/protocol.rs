@@ -4,6 +4,34 @@ use super::{
     alpn_protocols, normalize_transport, option_string, reject_unknown_options, validate_string_options,
 };
 
+fn vmess_alter_id(node: &ProxyNode) -> Result<Option<u32>, String> {
+    if let Some(value) = node.option("aid") {
+        return match value {
+            serde_json::Value::String(value) if value.is_empty() => Ok(None),
+            serde_json::Value::String(value) => value
+                .parse::<u32>()
+                .map(Some)
+                .map_err(|_| "VMess alter ID is invalid".into()),
+            serde_json::Value::Number(value) => value
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .map(Some)
+                .ok_or_else(|| "VMess alter ID is invalid".into()),
+            serde_json::Value::Null => Ok(None),
+            _ => Err("VMess alter ID must be an unsigned integer".into()),
+        };
+    }
+    node.options
+        .get("aid")
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value
+                .parse::<u32>()
+                .map_err(|_| "VMess alter ID is invalid".into())
+        })
+        .transpose()
+}
+
 pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     if node.server.is_empty() || node.port == 0 {
         return Err("server and port must be valid".into());
@@ -114,9 +142,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         if option_string(node, "net").is_some_and(|value| !["tcp", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)) {
             return Err("only VMess TCP, WebSocket, gRPC, HTTP/2, HTTPUpgrade, and XHTTP transports are currently mapped".into());
         }
-        if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
-            return Err("VMess alter ID is invalid".into());
-        }
+        let _ = vmess_alter_id(node)?;
         if option_string(node, "scy").is_some()
             && option_string(node, "security").is_some()
             && option_string(node, "scy") != option_string(node, "security")
