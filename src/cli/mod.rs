@@ -57,6 +57,22 @@ enum Command {
         /// Node ID.
         id: u64,
     },
+    /// Check for and install proxyctl updates.
+    #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
+    Update {
+        /// Check for updates without downloading or changing files.
+        #[arg(long)]
+        check: bool,
+        /// Update only the proxyctl executable.
+        #[arg(long)]
+        app: bool,
+        /// Update all installed proxyctl-managed cores.
+        #[arg(long)]
+        cores: bool,
+        /// Update one installed managed core.
+        #[arg(long, value_name = "CORE")]
+        core: Option<String>,
+    },
 }
 
 /// Execute the selected command.
@@ -64,6 +80,23 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let Some(command) = cli.command else {
         println!("Proxyctl is ready. Use --help to see available commands.");
         return Ok(());
+    };
+
+    let command = match command {
+        Command::Update { check, app, cores, core } => {
+            if let Some(core_name) = core {
+                anyhow::bail!("core updates are not available yet; managed core installation is the next implementation stage (requested: {core_name})");
+            }
+            if cores {
+                println!("No managed cores are installed yet.");
+                return Ok(());
+            }
+            // With no selector, update the application; --app has the same effect.
+            let _ = app;
+            crate::services::updates::update_application(check)?;
+            return Ok(());
+        }
+        other => other,
     };
 
     let database_path = default_database_path()?;
