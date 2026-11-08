@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_for_core},
 };
 
 pub struct XrayAdapter;
@@ -21,15 +21,7 @@ impl CoreAdapter for XrayAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        if node.protocol == Protocol::Hysteria2 {
-            return Compatibility::unsupported("Xray does not implement Hysteria2");
-        }
-        if normalize_transport(node)
-            .is_ok_and(|transport| matches!(&transport.kind, crate::domain::TransportKind::Http2))
-        {
-            return Compatibility::unsupported("current Xray transport schemas no longer support the legacy HTTP/2 transport");
-        }
-        match validate_common(node) {
+        match validate_for_core(CoreId::Xray, node) {
             Err(reason) => Compatibility::unsupported(reason),
             Ok(()) => match tls_options(node) {
                 Ok(_) => Compatibility::supported(),
