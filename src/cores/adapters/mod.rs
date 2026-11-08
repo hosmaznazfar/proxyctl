@@ -461,6 +461,40 @@ mod tests {
     }
 
     #[test]
+    fn vmess_security_alias_is_cipher_not_tls_security() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","security":"aes-128-gcm","net":"tcp","tls":"tls","sni":"tls.example"}"#,
+        );
+        let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = adapter(core).generate_config(&node).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            match core {
+                CoreId::SingBox => {
+                    assert_eq!(document["outbounds"][0]["security"], "aes-128-gcm");
+                    assert_eq!(document["outbounds"][0]["tls"]["server_name"], "tls.example");
+                }
+                CoreId::Xray => {
+                    assert_eq!(
+                        document["outbounds"][0]["settings"]["vnext"][0]["users"][0]["security"],
+                        "aes-128-gcm"
+                    );
+                    assert_eq!(
+                        document["outbounds"][0]["streamSettings"]["tlsSettings"]["serverName"],
+                        "tls.example"
+                    );
+                }
+                CoreId::Mihomo => {
+                    assert_eq!(document["proxies"][0]["cipher"], "aes-128-gcm");
+                    assert_eq!(document["proxies"][0]["servername"], "tls.example");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn vmess_empty_optional_fields_are_treated_as_defaults() {
         use base64::{Engine as _, engine::general_purpose};
 
