@@ -5,8 +5,6 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::Value;
-
 use crate::domain::{Protocol, ProxyNode, Transport, TransportKind};
 
 use super::option_string;
@@ -26,7 +24,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         other => TransportKind::Unknown(other.to_owned()),
     };
 
-    if !matches!(kind, TransportKind::Tcp | TransportKind::WebSocket) {
+    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket) {
         return Err(format!("transport '{network}' is not implemented by this adapter batch"));
     }
 
@@ -58,11 +56,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         }
     }
 
-    if matches!(kind, TransportKind::Tcp) && (path.is_some() || !headers.is_empty()) {
+    if matches!(&kind, TransportKind::Tcp) && (path.is_some() || !headers.is_empty()) {
         return Err("path or host/header was supplied for TCP transport".into());
     }
 
-    let _ = Value::Null;
     Ok(Transport {
         kind,
         path,
