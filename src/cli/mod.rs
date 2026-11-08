@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 
 use crate::{
     database::{AddNodeOutcome, NodeRecord, default_database_path},
