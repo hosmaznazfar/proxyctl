@@ -27,7 +27,7 @@ pub fn install_or_update(core: CoreId, check_only: bool) -> anyhow::Result<()> {
     let destination = core_binary_path(core)?;
     if destination.is_file() {
         let current = current_version(core, &destination).unwrap_or_else(|_| "unknown".to_owned());
-        if current == version {
+        if reported_version_matches(&current, version) {
             println!("{core}: already up to date ({current}).");
             return Ok(());
         }
@@ -64,4 +64,23 @@ pub fn current_version(core: CoreId, path: &std::path::Path) -> anyhow::Result<S
         "installed {core} returned an empty version"
     );
     Ok(text)
+}
+
+
+fn reported_version_matches(output: &str, expected: &str) -> bool {
+    output
+        .split(|character: char| !character.is_ascii_alphanumeric() && character != '.')
+        .any(|part| part.trim_start_matches('v') == expected)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn matches_core_versions_with_optional_v_prefix() {
+        assert!(reported_version_matches("Mihomo Meta v1.19.33 linux amd64", "1.19.33"));
+        assert!(reported_version_matches("sing-box version 1.14.4", "1.14.4"));
+        assert!(!reported_version_matches("Mihomo Meta v1.19.330", "1.19.33"));
+    }
 }
