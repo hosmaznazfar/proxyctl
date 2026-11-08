@@ -67,6 +67,9 @@ impl CoreAdapter for XrayAdapter {
             if let Some(sni) = tls.get("server_name") {
                 tls_settings.insert("serverName".into(), sni.clone());
             }
+            if let Some(alpn) = tls.get("alpn") {
+                tls_settings.insert("alpn".into(), alpn.clone());
+            }
             outbound["streamSettings"]["security"] = json!("tls");
             outbound["streamSettings"]["tlsSettings"] = serde_json::Value::Object(tls_settings);
         }
