@@ -117,8 +117,8 @@ fn print_node_list(records: &[NodeRecord]) {
     }
 
     println!(
-        "{:>5}  {:<12}  {:<32}  {:>5}  {}",
-        "ID", "PROTOCOL", "SERVER", "PORT", "NAME"
+        "{:>5}  {:<12}  {:<32}  {:>5}  NAME",
+        "ID", "PROTOCOL", "SERVER", "PORT"
     );
     for record in records {
         println!(
