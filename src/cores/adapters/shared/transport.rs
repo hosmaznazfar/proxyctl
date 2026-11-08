@@ -123,8 +123,11 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         return Err("early-data options are only mapped for WebSocket".into());
     }
     if matches!(&kind, TransportKind::XHttp) {
-        if node.protocol != Protocol::Vless {
-            return Err("XHTTP transport is only supported for VLESS".into());
+        if !matches!(node.protocol, Protocol::Vless | Protocol::Vmess) {
+            return Err("XHTTP transport is only supported for VLESS and VMess".into());
+        }
+        if node.protocol == Protocol::Vmess {
+            mode = option_string(node, "type").map(str::to_owned);
         }
         if mode.as_deref().is_some_and(|value| !["auto", "packet-up", "stream-up", "stream-one"].contains(&value)) {
             return Err("XHTTP mode is invalid".into());
