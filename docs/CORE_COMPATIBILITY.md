@@ -2,6 +2,8 @@
 
 This matrix describes only the currently implemented adapter subset. It is not a claim that every transport or security mode for a protocol is supported.
 
+Compatibility outcomes are distinct: **Supported** means every retained option was mapped for that core; **Unsupported** means the input is valid but the core or adapter cannot implement a feature; **Invalid** means the input is malformed, contradictory, or semantically invalid. Unknown options are preserved in the source node and reported as unsupported rather than silently dropped.
+
 | Protocol / feature | sing-box | Xray | Mihomo |
 |---|---:|---:|---:|
 | VLESS, basic TCP | Yes | Yes | Yes |
