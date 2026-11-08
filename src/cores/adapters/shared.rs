@@ -1,6 +1,10 @@
 use serde_json::{Map, Value};
 
-use crate::domain::{Protocol, ProxyNode};
+mod transport;
+
+pub(crate) use transport::normalize_transport;
+
+use crate::domain::{Protocol, ProxyNode, TransportKind};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompatibilityStatus {
@@ -152,9 +156,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "alpn", "fp"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "alpn", "fp"],
-        Protocol::Trojan => vec!["security", "tls", "sni", "alpn", "fp"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "alpn", "fp"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "alpn", "fp"],
+        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
     };
@@ -171,6 +175,15 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         }
     }
     alpn_protocols(node)?;
+    let transport = normalize_transport(node)?;
+    if node.protocol == Protocol::Vmess
+        && option_string(node, "type").is_some_and(|value| value != "none")
+    {
+        return Err("VMess TCP header modes are not implemented; only WebSocket and plain TCP are accepted".into());
+    }
+    if !matches!(transport.kind, TransportKind::Tcp | TransportKind::WebSocket) {
+        return Err("transport is not implemented by this adapter batch".into());
+    }
 
     if let Some(fingerprint) = option_string(node, "fp") {
         const SUPPORTED_FINGERPRINTS: &[&str] = &[
