@@ -20,6 +20,9 @@ ureq = "3.1.4"
 thiserror = "2.0.21"
 tracing = "0.1.44"
 url = "2.5.8"
+flate2 = "1.1"
+tar = "0.4"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"

@@ -1,130 +1,52 @@
-//! Command-line interface definitions and command dispatch.
-//!
-//! Keep argument parsing and presentation here. Business behavior belongs in services.
-
+//! CLI definitions and dispatch. Application behavior belongs in services.
 use std::path::PathBuf;
-
 use clap::{ArgGroup, Parser, Subcommand};
-
-use crate::{
-    database::{AddNodeOutcome, NodeRecord, default_database_path},
-    services::nodes,
-};
-
-/// Top-level proxyctl command line.
+use crate::{cores::CoreId, database::{AddNodeOutcome, NodeRecord, default_database_path}, services::nodes};
 #[derive(Debug, Parser)]
-#[command(
-    name = "proxyctl",
-    version,
-    about = "A lightweight CLI for managing and benchmarking proxy nodes",
-    long_about = None
-)]
-pub struct Cli {
-    #[command(subcommand)]
-    command: Option<Command>,
-}
-
+#[command(name = "proxyctl", version, about = "A lightweight CLI for managing and benchmarking proxy nodes")]
+pub struct Cli { #[command(subcommand)] command: Option<Command> }
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Add one proxy URL.
-    Add {
-        /// A VLESS, VMess, Trojan, Shadowsocks, or Hysteria2 URL.
-        url: String,
-    },
-    /// Import proxy URLs from a text file.
-    Import {
-        /// Source file. It is read without being modified.
-        file: PathBuf,
-    },
-    /// List stored proxy nodes.
-    List {
-        /// Include soft-deleted nodes.
-        #[arg(long)]
-        include_deleted: bool,
-    },
-    /// Show details for one node.
-    Show {
-        /// Node ID.
-        id: u64,
-    },
-    /// Soft-delete one node.
-    Remove {
-        /// Node ID.
-        id: u64,
-    },
-    /// Restore a soft-deleted node.
-    Restore {
-        /// Node ID.
-        id: u64,
-    },
-    /// Show the status of proxyctl-managed proxy cores.
+    Add { url: String },
+    Import { file: PathBuf },
+    List { #[arg(long)] include_deleted: bool },
+    Show { id: u64 },
+    Remove { id: u64 },
+    Restore { id: u64 },
+    /// Show managed core status and versions.
     Cores,
-    /// Check for and install proxyctl updates.
-    #[command(group(
-        ArgGroup::new("update_target")
-            .args(["app", "cores", "core"])
-            .multiple(false)
-    ))]
-    Update {
-        /// Check for updates without downloading or changing files.
-        #[arg(long)]
-        check: bool,
-        /// Update only the proxyctl executable.
-        #[arg(long)]
-        app: bool,
-        /// Update all installed proxyctl-managed cores.
-        #[arg(long)]
-        cores: bool,
-        /// Update one installed managed core.
-        #[arg(long, value_name = "CORE")]
-        core: Option<String>,
-    },
+    /// Install all supported cores, or one selected core.
+    Setup { #[arg(long, value_name = "CORE")] core: Option<String> },
+    /// Check for and install proxyctl and managed-core updates.
+    #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
+    Update { #[arg(long)] check: bool, #[arg(long)] app: bool, #[arg(long)] cores: bool, #[arg(long, value_name = "CORE")] core: Option<String> },
 }
-
-/// Execute the selected command.
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
-    let Some(command) = cli.command else {
-        println!("Proxyctl is ready. Use --help to see available commands.");
-        return Ok(());
-    };
-
+    let Some(command) = cli.command else { println!("Proxyctl is ready. Use --help to see available commands."); return Ok(()); };
     let command = match command {
         Command::Cores => {
-            for (core, installed) in crate::services::cores::inventory()? {
-                println!(
-                    "{core}: {}",
-                    if installed {
-                        "installed"
-                    } else {
-                        "not installed"
-                    }
-                );
+            for status in crate::services::cores::inventory()? {
+                match status.version { Some(version) => println!("{}: installed ({version})", status.core), None => println!("{}: not installed", status.core) }
             }
             return Ok(());
         }
-        Command::Update {
-            check,
-            app,
-            cores,
-            core,
-        } => {
-            if let Some(core_name) = core {
-                anyhow::bail!(
-                    "core updates are not available yet; managed core installation is the next implementation stage (requested: {core_name})"
-                );
+        Command::Setup { core } => { crate::services::cores::setup(parse_core(core.as_deref())?)?; return Ok(()); }
+        Command::Update { check, app, cores, core } => {
+            let selected = parse_core(core.as_deref())?;
+            if app { crate::services::updates::update_application(check)?; }
+            else if cores { crate::services::cores::update_installed(check, None)?; }
+            else if let Some(core) = selected { crate::services::cores::update_installed(check, Some(core))?; }
+            else {
+                let app_result = crate::services::updates::update_application(check);
+                let core_result = crate::services::cores::update_installed(check, None);
+                if let Err(error) = &app_result { eprintln!("proxyctl: {error:#}"); }
+                if let Err(error) = &core_result { eprintln!("managed cores: {error:#}"); }
+                if app_result.is_err() || core_result.is_err() { anyhow::bail!("one or more update targets failed; see errors above"); }
             }
-            if cores {
-                println!("No managed cores are installed yet.");
-                return Ok(());
-            }
-            // With no selector, update the application; --app has the same effect.
-            let _ = app;
-            crate::services::updates::update_application(check)?;
             return Ok(());
         }
         other => other,
     };
-
     let database_path = default_database_path()?;
     match command {
         Command::Add { url } => match nodes::add_url(&database_path, &url)? {
@@ -133,125 +55,51 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         },
         Command::Import { file } => {
             let summary = nodes::import_file(&database_path, &file)?;
-            println!(
-                "Import complete: {} added, {} duplicates, {} invalid.",
-                summary.added, summary.duplicates, summary.invalid
-            );
-            for failure in summary.failures {
-                eprintln!("Line {}: {}", failure.line_number, failure.reason);
-            }
+            println!("Import complete: {} added, {} duplicates, {} invalid.", summary.added, summary.duplicates, summary.invalid);
+            for failure in summary.failures { eprintln!("Line {}: {}", failure.line_number, failure.reason); }
         }
-        Command::List { include_deleted } => {
-            let records = nodes::list_nodes(&database_path, include_deleted)?;
-            print_node_list(&records);
-        }
+        Command::List { include_deleted } => print_node_list(&nodes::list_nodes(&database_path, include_deleted)?),
         Command::Show { id } => {
-            let record = nodes::get_node(&database_path, id)?
-                .ok_or_else(|| anyhow::anyhow!("node #{id} was not found"))?;
+            let record = nodes::get_node(&database_path, id)?.ok_or_else(|| anyhow::anyhow!("node #{id} was not found"))?;
             print_node_details(&record);
         }
         Command::Remove { id } => {
-            if nodes::remove_node(&database_path, id)? {
-                println!("Node #{id} was soft-deleted. Use 'proxyctl restore {id}' to restore it.");
-            } else {
-                println!("Node #{id} was not found or is already deleted.");
-            }
+            if nodes::remove_node(&database_path, id)? { println!("Node #{id} was soft-deleted. Use 'proxyctl restore {id}' to restore it."); }
+            else { println!("Node #{id} was not found or is already deleted."); }
         }
         Command::Restore { id } => {
-            if nodes::restore_node(&database_path, id)? {
-                println!("Restored node #{id}.");
-            } else {
-                println!("Node #{id} was not found or is not deleted.");
-            }
+            if nodes::restore_node(&database_path, id)? { println!("Restored node #{id}."); }
+            else { println!("Node #{id} was not found or is not deleted."); }
         }
-        Command::Cores => unreachable!("core inventory is handled before opening the database"),
-        Command::Update { .. } => unreachable!("updates are handled before opening the database"),
+        Command::Cores | Command::Setup { .. } | Command::Update { .. } => unreachable!("management commands are dispatched before database access"),
     }
-
     Ok(())
 }
-
+fn parse_core(value: Option<&str>) -> anyhow::Result<Option<CoreId>> { value.map(str::parse).transpose() }
 fn print_node_list(records: &[NodeRecord]) {
-    if records.is_empty() {
-        println!("No proxy nodes found.");
-        return;
-    }
-
-    println!(
-        "{:>5}  {:<12}  {:<32}  {:>5}  NAME",
-        "ID", "PROTOCOL", "SERVER", "PORT"
-    );
+    if records.is_empty() { println!("No proxy nodes found."); return; }
+    println!("{:>5}  {:<12}  {:<32}  {:>5}  NAME", "ID", "PROTOCOL", "SERVER", "PORT");
     for record in records {
-        println!(
-            "{:>5}  {:<12}  {:<32}  {:>5}  {}",
-            record.id,
-            record.node.protocol,
-            safe_field(&record.node.server, 32),
-            record.node.port,
-            record
-                .node
-                .name
-                .as_deref()
-                .map(|name| safe_field(name, 32))
-                .unwrap_or_else(|| "-".to_owned())
-        );
+        println!("{:>5}  {:<12}  {:<32}  {:>5}  {}", record.id, record.node.protocol, safe_field(&record.node.server, 32), record.node.port,
+            record.node.name.as_deref().map(|name| safe_field(name, 32)).unwrap_or_else(|| "-".to_owned()));
     }
 }
-
 fn print_node_details(record: &NodeRecord) {
     let node = &record.node;
     println!("ID: {}", record.id);
     println!("Protocol: {}", node.protocol);
     println!("Server: {}", safe_field(&node.server, 200));
     println!("Port: {}", node.port);
-    println!(
-        "Name: {}",
-        node.name
-            .as_deref()
-            .map(|name| safe_field(name, 200))
-            .unwrap_or_else(|| "-".to_owned())
-    );
-    println!(
-        "Status: {}",
-        if record.is_deleted() {
-            "deleted"
-        } else {
-            "active"
-        }
-    );
-    println!(
-        "Identity: {}",
-        if node.identity.is_some() {
-            "[masked]"
-        } else {
-            "-"
-        }
-    );
-    println!(
-        "Secret: {}",
-        if node.secret.is_some() {
-            "[masked]"
-        } else {
-            "-"
-        }
-    );
+    println!("Name: {}", node.name.as_deref().map(|name| safe_field(name, 200)).unwrap_or_else(|| "-".to_owned()));
+    println!("Status: {}", if record.is_deleted() { "deleted" } else { "active" });
+    println!("Identity: {}", if node.identity.is_some() { "[masked]" } else { "-" });
+    println!("Secret: {}", if node.secret.is_some() { "[masked]" } else { "-" });
     println!("Fingerprint: {}", node.fingerprint());
-
     if !node.options.is_empty() {
-        let keys = node
-            .options
-            .keys()
-            .map(|key| safe_field(key, 48))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let keys = node.options.keys().map(|key| safe_field(key, 48)).collect::<Vec<_>>().join(", ");
         println!("Options: {keys} (values hidden)");
     }
 }
-
 fn safe_field(value: &str, max_chars: usize) -> String {
-    value
-        .chars()
-        .filter(|character| !character.is_control())
-        .take(max_chars)
-        .collect()
+    value.chars().filter(|character| !character.is_control()).take(max_chars).collect()
 }
