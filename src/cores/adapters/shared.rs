@@ -75,15 +75,12 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         return Err("protocol secret is missing".into());
     }
 
-    let mut supported = vec!["security", "tls", "sni"];
-    match node.protocol {
-        Protocol::Vless => supported.push("encryption"),
-        Protocol::Vmess => {
-            supported.push("aid");
-            supported.push("scy");
-        }
-        Protocol::Trojan | Protocol::Shadowsocks | Protocol::Hysteria2 => {}
-    }
+    let supported = match node.protocol {
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy"],
+        Protocol::Trojan | Protocol::Hysteria2 => vec!["security", "tls", "sni"],
+        Protocol::Shadowsocks => Vec::new(),
+    };
     reject_unknown_options(node, &supported)?;
 
     if node.protocol == Protocol::Vless
