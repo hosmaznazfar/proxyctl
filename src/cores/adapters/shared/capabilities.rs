@@ -17,6 +17,8 @@ struct CoreCapabilities {
     http_upgrade: bool,
     xhttp: bool,
     grpc_service_name_required: bool,
+    grpc_authority: bool,
+    grpc_multi_mode: bool,
     certificate_sha256_pin: bool,
 }
 
@@ -43,6 +45,8 @@ const SING_BOX: CoreCapabilities = CoreCapabilities {
     http_upgrade: true,
     xhttp: false,
     grpc_service_name_required: false,
+    grpc_authority: false,
+    grpc_multi_mode: false,
     certificate_sha256_pin: false,
 };
 
@@ -56,6 +60,8 @@ const XRAY: CoreCapabilities = CoreCapabilities {
     http_upgrade: true,
     xhttp: true,
     grpc_service_name_required: false,
+    grpc_authority: true,
+    grpc_multi_mode: true,
     certificate_sha256_pin: true,
 };
 
@@ -68,6 +74,8 @@ const MIHOMO: CoreCapabilities = CoreCapabilities {
     http_upgrade: true,
     xhttp: true,
     grpc_service_name_required: true,
+    grpc_authority: false,
+    grpc_multi_mode: false,
     certificate_sha256_pin: false,
 };
 
@@ -108,6 +116,20 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
     }
 
     if matches!(&transport.kind, TransportKind::Grpc)
+        && transport.authority.is_some()
+        && !capabilities.grpc_authority
+    {
+        return Err(format!("{core} does not support gRPC authority"));
+    }
+
+    if matches!(&transport.kind, TransportKind::Grpc)
+        && transport.mode.as_deref() == Some("multi")
+        && !capabilities.grpc_multi_mode
+    {
+        return Err(format!("{core} does not support gRPC multi mode"));
+    }
+
+    if matches!(&transport.kind, TransportKind::Grpc)
         && capabilities.grpc_service_name_required
         && transport.service_name.as_deref().is_none_or(str::is_empty)
     {
@@ -130,5 +152,8 @@ mod tests {
         assert!(!capabilities(CoreId::SingBox).certificate_sha256_pin);
         assert!(capabilities(CoreId::Mihomo).http2);
         assert!(capabilities(CoreId::Mihomo).grpc_service_name_required);
+        assert!(capabilities(CoreId::Xray).grpc_authority);
+        assert!(capabilities(CoreId::Xray).grpc_multi_mode);
+        assert!(!capabilities(CoreId::Mihomo).grpc_authority);
     }
 }
