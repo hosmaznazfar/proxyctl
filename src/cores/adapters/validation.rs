@@ -1,8 +1,5 @@
 //! Secure, validation-only execution of generated core configurations.
-use std::{
-    io::Write,
-    path::Path,
-};
+use std::{io::Write, path::Path};
 
 use anyhow::Context;
 
@@ -28,7 +25,8 @@ fn validate_node_config_in(
     temporary_directory: &Path,
 ) -> anyhow::Result<()> {
     let adapter = adapters::adapter(core);
-    let generated = adapter.generate_config(node)
+    let generated = adapter
+        .generate_config(node)
         .with_context(|| format!("could not generate {core} configuration"))?;
 
     let mut temporary_file = tempfile::Builder::new()
@@ -40,16 +38,23 @@ fn validate_node_config_in(
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        temporary_file.as_file().set_permissions(std::fs::Permissions::from_mode(0o600))
+
+        temporary_file
+            .as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o600))
             .context("could not restrict temporary configuration permissions")?;
     }
 
-    temporary_file.write_all(&generated.content)
+    temporary_file
+        .write_all(&generated.content)
         .context("could not write temporary core configuration")?;
-    temporary_file.as_file().sync_all()
+    temporary_file
+        .as_file()
+        .sync_all()
         .context("could not flush temporary core configuration")?;
 
-    adapter.validate_config(executable, temporary_file.path())
+    adapter
+        .validate_config(executable, temporary_file.path())
         .with_context(|| format!("{core} rejected the generated configuration"))?;
 
     // NamedTempFile removes the secret-bearing config when it is dropped.
@@ -73,16 +78,11 @@ mod tests {
         let marker = directory.path().join("config-path");
         write_fake_core(&executable, &marker, 0);
 
-        let node = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@example.com:443",
-        ).unwrap();
+        let node =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+                .unwrap();
 
-        validate_node_config_in(
-            CoreId::SingBox,
-            &node,
-            &executable,
-            directory.path(),
-        ).unwrap();
+        validate_node_config_in(CoreId::SingBox, &node, &executable, directory.path()).unwrap();
 
         let config_path = fs::read_to_string(marker).unwrap();
         assert!(!Path::new(&config_path).exists());
@@ -100,16 +100,14 @@ mod tests {
         let marker = directory.path().join("config-path");
         write_fake_core(&executable, &marker, 42);
 
-        let node = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@example.com:443",
-        ).unwrap();
+        let node =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+                .unwrap();
 
-        assert!(validate_node_config_in(
-            CoreId::SingBox,
-            &node,
-            &executable,
-            directory.path(),
-        ).is_err());
+        assert!(
+            validate_node_config_in(CoreId::SingBox, &node, &executable, directory.path())
+                .is_err()
+        );
 
         let config_path = fs::read_to_string(marker).unwrap();
         assert!(!Path::new(&config_path).exists());
