@@ -4,7 +4,7 @@ use base64::{Engine as _, engine::general_purpose};
 use percent_encoding::percent_decode_str;
 use url::Url;
 
-use crate::domain::{Protocol, ProxyNode, SecretString};
+use crate::domain::{OptionEntry, Protocol, ProxyNode, SecretString};
 
 use super::super::ParseError;
 
@@ -36,10 +36,20 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
         .to_ascii_lowercase();
     let port = parsed.port().ok_or(ParseError::MissingServerOrPort)?;
 
+    let entries = query
+        .map(|query| {
+            url::form_urlencoded::parse(query.as_bytes())
+                .map(|(key, value)| OptionEntry {
+                    key: key.into_owned(),
+                    value: serde_json::Value::String(value.into_owned()),
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let mut options = BTreeMap::new();
-    if let Some(query) = query {
-        for (key, value) in url::form_urlencoded::parse(query.as_bytes()) {
-            options.insert(key.into_owned(), value.into_owned());
+    for entry in &entries {
+        if let Some(value) = entry.value.as_str() {
+            options.insert(entry.key.clone(), value.to_owned());
         }
     }
 
@@ -56,7 +66,8 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
         Some(SecretString::new(password)),
         options,
         SecretString::new(input),
-    ))
+    )
+    .with_option_entries(entries))
 }
 
 fn decode_credentials(value: &str) -> Result<String, ParseError> {
@@ -123,5 +134,13 @@ mod tests {
             node.secret.as_ref().map(|value| value.expose()),
             Some("password")
         );
+    }
+
+    #[test]
+    fn preserves_repeated_query_options() {
+        let node = parse("ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388?plugin=a&plugin=b").unwrap();
+        assert_eq!(node.option_entries.len(), 2);
+        assert_eq!(node.option_entries[0].value, "a");
+        assert_eq!(node.option_entries[1].value, "b");
     }
 }
