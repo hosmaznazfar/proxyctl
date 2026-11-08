@@ -45,7 +45,7 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
         .as_object()
         .into_iter()
         .flat_map(|object| object.iter())
-        .filter(|(key, _)| !matches!(key.as_str(), "add" | "port" | "id" | "ps"))
+        .filter(|(key, _)| !matches!(key.as_str(), "v" | "add" | "port" | "id" | "ps"))
         .map(|(key, value)| OptionEntry {
             key: key.clone(),
             value: value.clone(),
