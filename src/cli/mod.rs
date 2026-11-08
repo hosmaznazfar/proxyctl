@@ -57,6 +57,8 @@ enum Command {
         /// Node ID.
         id: u64,
     },
+    /// Show the status of proxyctl-managed proxy cores.
+    Cores,
     /// Check for and install proxyctl updates.
     #[command(group(
         ArgGroup::new("update_target")
@@ -87,6 +89,15 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     };
 
     let command = match command {
+        Command::Cores => {
+            for (core, installed) in crate::services::cores::inventory()? {
+                println!(
+                    "{core}: {}",
+                    if installed { "installed" } else { "not installed" }
+                );
+            }
+            return Ok(());
+        }
         Command::Update {
             check,
             app,
@@ -149,6 +160,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 println!("Node #{id} was not found or is not deleted.");
             }
         }
+        Command::Cores => unreachable!("core inventory is handled before opening the database"),
     }
 
     Ok(())
