@@ -270,6 +270,47 @@ mod tests {
     }
 
     #[test]
+    fn vmess_xhttp_is_supported_only_by_xray() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"xhttp","type":"stream-one","host":"cdn.example","path":"/xhttp","tls":"tls"}"#,
+        );
+        let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+        let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+        let document: Value = serde_json::from_slice(&xray.content).unwrap();
+        assert_eq!(
+            document["outbounds"][0]["streamSettings"]["xhttpSettings"]["mode"],
+            "stream-one"
+        );
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+    }
+
+    #[test]
+    fn vmess_http_upgrade_uses_native_core_mappings() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"httpupgrade","host":"upgrade.example","path":"/upgrade","tls":"tls"}"#,
+        );
+        let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            assert!(adapter(core).compatibility(&node).is_supported(), "{core}");
+            let _: Value = serde_json::from_slice(
+                &adapter(core).generate_config(&node).unwrap().content,
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
     fn xhttp_rejects_unknown_modes() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&mode=unknown",
