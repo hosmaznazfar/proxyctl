@@ -34,24 +34,18 @@ struct ReleaseAsset {
     browser_download_url: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UpdateCheck {
-    pub current: Version,
-    pub latest: Version,
-    pub asset_name: String,
-}
-
 pub fn update_application(check_only: bool) -> anyhow::Result<()> {
     let current = Version::parse(env!("CARGO_PKG_VERSION"))?;
     let release = fetch_latest_release()?;
-    ensure!(!release.draft && !release.prerelease, "GitHub returned a draft or prerelease; refusing to update");
+    ensure!(
+        !release.draft && !release.prerelease,
+        "GitHub returned a draft or prerelease; refusing to update"
+    );
 
     let latest_text = release.tag_name.strip_prefix('v').unwrap_or(&release.tag_name);
     let latest = Version::parse(latest_text)
         .with_context(|| format!("official release tag '{}' is not a semantic version", release.tag_name))?;
     let asset_name = platform_asset_name()?;
-    let check = UpdateCheck { current: current.clone(), latest: latest.clone(), asset_name: asset_name.clone() };
-
     if latest <= current {
         println!("proxyctl is up to date ({}).", current);
         return Ok(());
@@ -63,9 +57,20 @@ pub fn update_application(check_only: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let asset = release.assets.iter().find(|asset| asset.name == asset_name)
-        .with_context(|| format!("release {} has no asset for this platform ({asset_name}); see {RELEASES_PAGE}", release.tag_name))?;
-    let sums = release.assets.iter().find(|asset| asset.name == "SHA256SUMS")
+    let asset = release
+        .assets
+        .iter()
+        .find(|asset| asset.name == asset_name)
+        .with_context(|| {
+            format!(
+                "release {} has no asset for this platform ({asset_name}); see {RELEASES_PAGE}",
+                release.tag_name
+            )
+        })?;
+    let sums = release
+        .assets
+        .iter()
+        .find(|asset| asset.name == "SHA256SUMS")
         .context("official release is missing SHA256SUMS; refusing to install an unverifiable binary")?;
 
     let checksum_text = download_text(&sums.browser_download_url)?;
@@ -85,10 +90,12 @@ fn fetch_latest_release() -> anyhow::Result<Release> {
         .header("Accept", "application/vnd.github+json")
         .call()
         .context("could not query the official proxyctl GitHub Releases API")?;
-    let body = response.into_body().read_to_string()
+    let body = response
+        .into_body()
+        .read_to_string()
         .context("could not read GitHub release metadata")?;
-    let release: Release = serde_json::from_str(&body)
-        .context("GitHub returned invalid release metadata")?;
+    let release: Release =
+        serde_json::from_str(&body).context("GitHub returned invalid release metadata")?;
     Ok(release)
 }
 
@@ -98,15 +105,24 @@ fn download_text(url: &str) -> anyhow::Result<String> {
 }
 
 fn download_bytes(url: &str) -> anyhow::Result<Vec<u8>> {
-    ensure!(url.starts_with("https://github.com/") || url.starts_with("https://objects.githubusercontent.com/") || url.starts_with("https://release-assets.githubusercontent.com/"),
-        "release asset URL is outside the trusted GitHub download domains");
+    ensure!(
+        url.starts_with("https://github.com/")
+            || url.starts_with("https://objects.githubusercontent.com/")
+            || url.starts_with("https://release-assets.githubusercontent.com/"),
+        "release asset URL is outside the trusted GitHub download domains"
+    );
     let response = ureq::get(url)
         .header("User-Agent", USER_AGENT)
         .call()
         .context("could not download a GitHub release asset")?;
-    let bytes = response.into_body().read_to_vec()
+    let bytes = response
+        .into_body()
+        .read_to_vec()
         .context("could not read downloaded release asset")?;
-    ensure!(bytes.len() <= 128 * 1024 * 1024, "release asset exceeds the 128 MiB safety limit");
+    ensure!(
+        bytes.len() <= 128 * 1024 * 1024,
+        "release asset exceeds the 128 MiB safety limit"
+    );
     Ok(bytes)
 }
 
@@ -117,8 +133,10 @@ fn checksum_for_asset(manifest: &str, asset_name: &str) -> anyhow::Result<String
         let Some(name) = fields.next() else { continue };
         let name = name.trim_start_matches('*');
         if name == asset_name {
-            ensure!(hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()),
-                "checksum manifest contains an invalid SHA-256 value");
+            ensure!(
+                hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "checksum manifest contains an invalid SHA-256 value"
+            );
             return Ok(hash.to_owned());
         }
     }
@@ -128,29 +146,46 @@ fn checksum_for_asset(manifest: &str, asset_name: &str) -> anyhow::Result<String
 fn platform_asset_name() -> anyhow::Result<String> {
     let target = match (env::consts::OS, env::consts::ARCH) {
         ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
-        (os, arch) => bail!("automatic proxyctl updates are not yet supported on {os}/{arch}; use {RELEASES_PAGE}"),
+        (os, arch) => bail!(
+            "automatic proxyctl updates are not yet supported on {os}/{arch}; use {RELEASES_PAGE}"
+        ),
     };
     Ok(format!("proxyctl-{target}"))
 }
 
 fn replace_current_executable(bytes: &[u8], version: &Version) -> anyhow::Result<()> {
-    let executable = env::current_exe().context("could not locate the running proxyctl executable")?;
-    let executable = fs::canonicalize(&executable).context("could not resolve the installed proxyctl executable path")?;
+    let executable =
+        env::current_exe().context("could not locate the running proxyctl executable")?;
+    let executable = fs::canonicalize(&executable)
+        .context("could not resolve the installed proxyctl executable path")?;
     let parent = executable.parent().context("installed executable has no parent directory")?;
     let staged = staged_path(parent);
 
     let result = (|| {
-        let mut file = OpenOptions::new().write(true).create_new(true).open(&staged)
-            .with_context(|| format!("cannot stage update beside {} (installation may require elevated permissions)", executable.display()))?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staged)
+            .with_context(|| {
+                format!(
+                    "cannot stage update beside {} (installation may require elevated permissions)",
+                    executable.display()
+                )
+            })?;
         file.write_all(bytes).context("could not write staged proxyctl executable")?;
         file.sync_all().context("could not sync staged proxyctl executable")?;
         set_executable_permissions(&staged)?;
 
-        let output = Command::new(&staged).arg("--version").output()
+        let output = Command::new(&staged)
+            .arg("--version")
+            .output()
             .context("could not validate staged proxyctl executable")?;
         ensure!(output.status.success(), "staged proxyctl executable failed its --version check");
         let version_output = String::from_utf8_lossy(&output.stdout);
-        ensure!(version_output.contains(&version.to_string()), "staged executable version does not match release {version}");
+        ensure!(
+            version_output.contains(&version.to_string()),
+            "staged executable version does not match release {version}"
+        );
 
         fs::rename(&staged, &executable)
             .with_context(|| format!("could not safely replace {}; the existing executable was preserved", executable.display()))?;
