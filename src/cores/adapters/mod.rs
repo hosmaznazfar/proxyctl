@@ -102,4 +102,18 @@ mod tests {
         }
     }
 
+    #[test]
+    fn adapters_reject_repeated_or_ambiguous_options() {
+        let repeated = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?sni=a.example&sni=b.example&security=tls",
+        ).unwrap();
+        let ambiguous = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&tls=tls",
+        ).unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            assert!(!adapter(core).compatibility(&repeated).is_supported());
+            assert!(!adapter(core).compatibility(&ambiguous).is_supported());
+        }
+    }
+
 
