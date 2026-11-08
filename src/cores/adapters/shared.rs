@@ -197,6 +197,8 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
             value != "none"
                 && !(matches!(&transport.kind, TransportKind::Grpc)
                     && ["gun", "multi"].contains(&value))
+                && !(matches!(&transport.kind, TransportKind::XHttp)
+                    && ["auto", "packet-up", "stream-up", "stream-one"].contains(&value))
         })
     {
         return Err("VMess transport-specific header modes are not implemented for this network".into());
@@ -232,7 +234,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         }
     }
     if node.protocol == Protocol::Vmess {
-        if option_string(node, "net").is_some_and(|value| !["tcp", "ws", "grpc", "h2"].contains(&value)) {
+        if option_string(node, "net").is_some_and(|value| !["tcp", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)) {
             return Err("only VMess TCP, WebSocket, gRPC, and HTTP/2 transports are currently mapped".into());
         }
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
