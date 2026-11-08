@@ -76,8 +76,8 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net"],
         Protocol::Trojan | Protocol::Hysteria2 => vec!["security", "tls", "sni"],
         Protocol::Shadowsocks => Vec::new(),
     };
