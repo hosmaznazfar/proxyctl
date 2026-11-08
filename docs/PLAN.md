@@ -148,7 +148,7 @@ TLS is independent from transport. Keep SNI, ALPN, uTLS client fingerprint (`fp`
 
 #### Capability registry
 
-Maintain declarative, testable capability definitions per core and feature. Capability checks must be able to explain whether a feature is supported, invalid, or unsupported for a specific core/version. Do not assume all cores support the same subset or force the common model to the lowest common denominator. Version-specific differences must be recorded in the compatibility documentation and covered by fixtures.
+Maintain declarative, testable capability definitions per core and feature. Capability checks must explain whether a feature is supported, invalid, or unsupported for a specific core/version. Do not assume all cores support the same subset or force the common model to the lowest common denominator. The current registry is core-scoped and records the researched managed-schema baseline; version predicates are not yet wired because the adapter compatibility API does not yet receive the detected installed core version. Add that input before supporting multiple schema generations of the same core. Version-specific differences must be recorded in the compatibility documentation and covered by fixtures.
 
 A registry may initially be ordinary typed Rust data rather than an external configuration dependency. Avoid building a generic plugin framework prematurely. Adding a new protocol, transport, or core should require a focused parser/model definition, capability mapping, serializer, and fixtures—not edits scattered across command handlers.
 
@@ -167,7 +167,7 @@ A registry may initially be ordinary typed Rust data rather than an external con
 1. **Implemented:** preserve source representation and structured VMess values; add typed normalized transport semantics.
 2. **Implemented:** extract shared transport normalization and TLS interpretation into focused modules.
 3. **Implemented, native validation pending:** WebSocket/early data, standard gRPC, HTTP/2, HTTPUpgrade, and XHTTP mappings.
-4. **Implemented, native validation pending:** per-core capability definitions and explicit compatibility diagnostics.
+4. **Implemented, native validation pending:** per-core capability definitions and explicit `Invalid` versus `Unsupported` compatibility outcomes. Version-aware capability predicates remain a follow-up because the adapter API currently receives a core identity but not its detected version.
 5. **Partially implemented:** VMess aliases/defaults, certificate pins, certificate-name verification, and insecure TLS flags; REALITY, Shadowsocks plugins, Hysteria2 obfuscation, and XHTTP extra settings remain future work.
 6. **Next:** run unit tests and actual-core validation, then update `docs/CORE_COMPATIBILITY.md` only from verified results.
 
