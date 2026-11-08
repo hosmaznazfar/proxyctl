@@ -74,6 +74,13 @@ impl CoreAdapter for SingBoxAdapter {
                 ws.insert("headers".into(), json!(transport.headers));
             }
             outbound["transport"] = serde_json::Value::Object(ws);
+        } else if matches!(transport.kind, crate::domain::TransportKind::Grpc) {
+            let mut grpc = serde_json::Map::new();
+            grpc.insert("type".into(), json!("grpc"));
+            if let Some(service_name) = transport.service_name {
+                grpc.insert("service_name".into(), json!(service_name));
+            }
+            outbound["transport"] = serde_json::Value::Object(grpc);
         }
         if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             if let Some(fingerprint) = tls.as_object_mut().and_then(|options| options.remove("fingerprint")) {
