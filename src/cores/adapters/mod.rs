@@ -329,6 +329,45 @@ mod tests {
     }
 
     #[test]
+    fn vmess_pcs_certificate_pin_is_xray_only() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","tls":"tls","pcs":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}"#,
+        );
+        let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+
+        let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+        let document: Value = serde_json::from_slice(&xray.content).unwrap();
+        assert_eq!(
+            document["outbounds"][0]["streamSettings"]["tlsSettings"]["pinnedPeerCertSha256"],
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+    }
+
+    #[test]
+    fn certificate_pin_requires_tls_and_valid_sha256() {
+        let no_tls = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .unwrap();
+        let malformed = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&pcs=not-a-hash",
+        )
+        .unwrap();
+        assert!(!adapter(CoreId::Xray).compatibility(&no_tls).is_supported());
+        assert!(!adapter(CoreId::Xray).compatibility(&malformed).is_supported());
+    }
+
+    #[test]
     fn adapters_reject_unknown_transport_without_dropping_it() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
