@@ -21,6 +21,11 @@ impl CoreAdapter for SingBoxAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
+        if normalize_transport(node)
+            .is_ok_and(|transport| matches!(&transport.kind, crate::domain::TransportKind::XHttp))
+        {
+            return Compatibility::unsupported("sing-box does not support the XHTTP transport mapping");
+        }
         match validate_common(node) {
             Err(reason) => Compatibility::unsupported(reason),
             Ok(()) => match tls_options(node) {
