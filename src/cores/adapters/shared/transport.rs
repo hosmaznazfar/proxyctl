@@ -32,6 +32,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     let mut headers = BTreeMap::new();
     let mut hosts = Vec::new();
     let mut host = None;
+    let mut authority = None;
     let source_host = option_string(node, "host");
     if source_host.is_some_and(str::is_empty) {
         return Err("transport host must not be empty".into());
@@ -40,6 +41,13 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         if let Some(host) = source_host {
             headers.insert("Host".to_owned(), host.to_owned());
         }
+    } else if matches!(&kind, TransportKind::Grpc) {
+        let source_authority = if node.protocol == Protocol::Vmess {
+            source_host
+        } else {
+            option_string(node, "authority").or(source_host)
+        };
+        authority = source_authority.map(str::to_owned);
     } else if matches!(&kind, TransportKind::XHttp | TransportKind::HttpUpgrade) {
         host = source_host.map(str::to_owned);
     } else if matches!(&kind, TransportKind::Http2) {
@@ -75,7 +83,19 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         }
     }
 
-    let mode = option_string(node, "mode").map(str::to_owned);
+    let mut mode = option_string(node, "mode").map(str::to_owned);
+    if matches!(&kind, TransportKind::Grpc) {
+        if node.protocol == Protocol::Vmess {
+            mode = match option_string(node, "type") {
+                Some("gun" | "multi") => option_string(node, "type").map(str::to_owned),
+                Some("none") | None => None,
+                Some(_) => return Err("VMess gRPC mode must be gun or multi".into()),
+            };
+        }
+        if mode.as_deref().is_some_and(|value| !["gun", "multi"].contains(&value)) {
+            return Err("gRPC mode must be gun or multi".into());
+        }
+    }
     let early_data_raw = option_string(node, "ed")
         .or_else(|| option_string(node, "maxEarlyData"))
         .or_else(|| option_string(node, "max_early_data"))
@@ -120,7 +140,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             option_string(node, "serviceName").or_else(|| option_string(node, "service_name"))
         };
         if !headers.is_empty() {
-            return Err("HTTP Host headers are not valid gRPC service-name settings".into());
+            return Err("HTTP headers are not valid gRPC settings".into());
         }
         value.map(str::to_owned)
     } else {
@@ -146,6 +166,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         headers,
         hosts,
         host,
+        authority,
         service_name,
         mode,
         max_early_data,
