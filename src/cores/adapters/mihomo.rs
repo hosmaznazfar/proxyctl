@@ -10,13 +10,15 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, validate_common, tls_options},
+    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
 };
 
 pub struct MihomoAdapter;
 
 impl CoreAdapter for MihomoAdapter {
-    fn core(&self) -> CoreId { CoreId::Mihomo }
+    fn core(&self) -> CoreId {
+        CoreId::Mihomo
+    }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
         match validate_common(node) {
@@ -29,14 +31,34 @@ impl CoreAdapter for MihomoAdapter {
     }
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
         let compatibility = self.compatibility(node);
-        ensure!(compatibility.is_supported(), "{}", compatibility.reason.unwrap_or_else(|| "node is incompatible".into()));
-        let name = node.name.as_deref().filter(|v| !v.is_empty()).unwrap_or("proxy");
+        ensure!(
+            compatibility.is_supported(),
+            "{}",
+            compatibility
+                .reason
+                .unwrap_or_else(|| "node is incompatible".into())
+        );
+        let name = node
+            .name
+            .as_deref()
+            .filter(|v| !v.is_empty())
+            .unwrap_or("proxy");
         let mut proxy = match node.protocol {
-            Protocol::Vless => json!({"name":name,"type":"vless","server":node.server,"port":node.port,"uuid":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"network":"tcp"}),
-            Protocol::Vmess => json!({"name":name,"type":"vmess","server":node.server,"port":node.port,"uuid":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"cipher":node.options.get("scy").map(String::as_str).unwrap_or("auto"),"network":"tcp"}),
-            Protocol::Trojan => json!({"name":name,"type":"trojan","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default(),"network":"tcp"}),
-            Protocol::Shadowsocks => json!({"name":name,"type":"ss","server":node.server,"port":node.port,"cipher":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()}),
-            Protocol::Hysteria2 => json!({"name":name,"type":"hysteria2","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()}),
+            Protocol::Vless => {
+                json!({"name":name,"type":"vless","server":node.server,"port":node.port,"uuid":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"network":"tcp"})
+            }
+            Protocol::Vmess => {
+                json!({"name":name,"type":"vmess","server":node.server,"port":node.port,"uuid":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"cipher":node.options.get("scy").map(String::as_str).unwrap_or("auto"),"network":"tcp"})
+            }
+            Protocol::Trojan => {
+                json!({"name":name,"type":"trojan","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default(),"network":"tcp"})
+            }
+            Protocol::Shadowsocks => {
+                json!({"name":name,"type":"ss","server":node.server,"port":node.port,"cipher":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()})
+            }
+            Protocol::Hysteria2 => {
+                json!({"name":name,"type":"hysteria2","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()})
+            }
         };
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
@@ -55,9 +77,16 @@ impl CoreAdapter for MihomoAdapter {
 
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let output = Command::new(executable)
-            .arg("-t").arg("-f").arg(config)
-            .output().context("could not run Mihomo config validation")?;
-        ensure!(output.status.success(), "Mihomo rejected the generated configuration (exit status {:?})", output.status.code());
+            .arg("-t")
+            .arg("-f")
+            .arg(config)
+            .output()
+            .context("could not run Mihomo config validation")?;
+        ensure!(
+            output.status.success(),
+            "Mihomo rejected the generated configuration (exit status {:?})",
+            output.status.code()
+        );
         Ok(())
     }
 }

@@ -88,6 +88,9 @@ mod tests {
         assert_eq!(node.option_entries[0].key, "alpn");
         assert_eq!(node.option_entries[0].value, "h2");
         assert_eq!(node.option_entries[1].value, "http/1.1");
-        assert_eq!(node.options.get("alpn").map(String::as_str), Some("http/1.1"));
+        assert_eq!(
+            node.options.get("alpn").map(String::as_str),
+            Some("http/1.1")
+        );
     }
 }

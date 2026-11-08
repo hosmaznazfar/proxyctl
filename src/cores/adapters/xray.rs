@@ -10,13 +10,15 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, validate_common, tls_options},
+    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
 };
 
 pub struct XrayAdapter;
 
 impl CoreAdapter for XrayAdapter {
-    fn core(&self) -> CoreId { CoreId::Xray }
+    fn core(&self) -> CoreId {
+        CoreId::Xray
+    }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
         if node.protocol == Protocol::Hysteria2 {
@@ -32,12 +34,30 @@ impl CoreAdapter for XrayAdapter {
     }
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
         let compatibility = self.compatibility(node);
-        ensure!(compatibility.is_supported(), "{}", compatibility.reason.unwrap_or_else(|| "node is incompatible".into()));
+        ensure!(
+            compatibility.is_supported(),
+            "{}",
+            compatibility
+                .reason
+                .unwrap_or_else(|| "node is incompatible".into())
+        );
         let (protocol, settings) = match node.protocol {
-            Protocol::Vless => ("vless", json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"encryption":"none","flow":node.options.get("flow").cloned().unwrap_or_default()}]}]})),
-            Protocol::Vmess => ("vmess", json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"security":node.options.get("scy").map(String::as_str).unwrap_or("auto")}]}]})),
-            Protocol::Trojan => ("trojan", json!({"servers":[{"address":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()}]})),
-            Protocol::Shadowsocks => ("shadowsocks", json!({"servers":[{"address":node.server,"port":node.port,"method":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()}]})),
+            Protocol::Vless => (
+                "vless",
+                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"encryption":"none","flow":node.options.get("flow").cloned().unwrap_or_default()}]}]}),
+            ),
+            Protocol::Vmess => (
+                "vmess",
+                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"security":node.options.get("scy").map(String::as_str).unwrap_or("auto")}]}]}),
+            ),
+            Protocol::Trojan => (
+                "trojan",
+                json!({"servers":[{"address":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()}]}),
+            ),
+            Protocol::Shadowsocks => (
+                "shadowsocks",
+                json!({"servers":[{"address":node.server,"port":node.port,"method":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()}]}),
+            ),
             Protocol::Hysteria2 => unreachable!("Hysteria2 rejected by compatibility"),
         };
         let mut outbound = json!({"protocol":protocol,"tag":"proxy","settings":settings,"streamSettings":{"network":"tcp"}});
@@ -55,9 +75,17 @@ impl CoreAdapter for XrayAdapter {
 
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let output = Command::new(executable)
-            .arg("run").arg("-test").arg("-c").arg(config)
-            .output().context("could not run Xray config validation")?;
-        ensure!(output.status.success(), "Xray rejected the generated configuration (exit status {:?})", output.status.code());
+            .arg("run")
+            .arg("-test")
+            .arg("-c")
+            .arg(config)
+            .output()
+            .context("could not run Xray config validation")?;
+        ensure!(
+            output.status.success(),
+            "Xray rejected the generated configuration (exit status {:?})",
+            output.status.code()
+        );
         Ok(())
     }
 }

@@ -47,9 +47,8 @@ mod tests {
 
     #[test]
     fn all_adapters_generate_a_native_document_for_basic_vless() {
-        let node =
-            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
-                .unwrap();
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+            .unwrap();
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             let adapter = adapter(core);
             assert!(adapter.compatibility(&node).is_supported(), "{core}");
@@ -120,10 +119,9 @@ mod tests {
     fn adapters_reject_non_tcp_transports_even_without_other_options() {
         use base64::{Engine as _, engine::general_purpose};
 
-        let vless = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws",
-        )
-        .unwrap();
+        let vless =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws")
+                .unwrap();
         let vmess_payload = general_purpose::STANDARD.encode(
             br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"ws"}"#
         );

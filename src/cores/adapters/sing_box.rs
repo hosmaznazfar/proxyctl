@@ -9,15 +9,16 @@ use crate::{
 };
 
 use super::{
-    CoreAdapter,
-    shared::{Compatibility, GeneratedConfig, validate_common, tls_options},
-    json_config,
+    CoreAdapter, json_config,
+    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
 };
 
 pub struct SingBoxAdapter;
 
 impl CoreAdapter for SingBoxAdapter {
-    fn core(&self) -> CoreId { CoreId::SingBox }
+    fn core(&self) -> CoreId {
+        CoreId::SingBox
+    }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
         match validate_common(node) {
@@ -30,7 +31,13 @@ impl CoreAdapter for SingBoxAdapter {
     }
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
         let compatibility = self.compatibility(node);
-        ensure!(compatibility.is_supported(), "{}", compatibility.reason.unwrap_or_else(|| "node is incompatible".into()));
+        ensure!(
+            compatibility.is_supported(),
+            "{}",
+            compatibility
+                .reason
+                .unwrap_or_else(|| "node is incompatible".into())
+        );
         let mut outbound = match node.protocol {
             Protocol::Vless => json!({
                 "type": "vless", "tag": "proxy", "server": node.server, "server_port": node.port,
@@ -57,16 +64,26 @@ impl CoreAdapter for SingBoxAdapter {
             }),
         };
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
-            outbound.as_object_mut().expect("outbound object").insert("tls".into(), tls);
+            outbound
+                .as_object_mut()
+                .expect("outbound object")
+                .insert("tls".into(), tls);
         }
         json_config(json!({ "outbounds": [outbound] }))
     }
 
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let output = Command::new(executable)
-            .arg("check").arg("-c").arg(config)
-            .output().context("could not run sing-box config validation")?;
-        ensure!(output.status.success(), "sing-box rejected the generated configuration (exit status {:?})", output.status.code());
+            .arg("check")
+            .arg("-c")
+            .arg(config)
+            .output()
+            .context("could not run sing-box config validation")?;
+        ensure!(
+            output.status.success(),
+            "sing-box rejected the generated configuration (exit status {:?})",
+            output.status.code()
+        );
         Ok(())
     }
 }

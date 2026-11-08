@@ -69,7 +69,9 @@ fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), St
             .collect::<Vec<_>>()
     };
     if let Some(key) = keys.into_iter().find(|key| !supported.contains(key)) {
-        return Err(format!("option '{key}' is not supported by this adapter yet"));
+        return Err(format!(
+            "option '{key}' is not supported by this adapter yet"
+        ));
     }
     Ok(())
 }
@@ -161,9 +163,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             }
             Ok(Some(Value::Object(tls)))
         }
-        "reality" => Err(
-            "REALITY is not enabled in this adapter batch; refusing partial conversion".into(),
-        ),
+        "reality" => {
+            Err("REALITY is not enabled in this adapter batch; refusing partial conversion".into())
+        }
         _ => Err("unsupported TLS/security mode".into()),
     }
 }

@@ -181,12 +181,19 @@ mod tests {
     fn fingerprint_includes_repeated_options() {
         let base = node_with_name("one");
         let first = base.clone().with_option_entries(vec![
-            OptionEntry { key: "alpn".into(), value: Value::String("h2".into()) },
-            OptionEntry { key: "alpn".into(), value: Value::String("http/1.1".into()) },
+            OptionEntry {
+                key: "alpn".into(),
+                value: Value::String("h2".into()),
+            },
+            OptionEntry {
+                key: "alpn".into(),
+                value: Value::String("http/1.1".into()),
+            },
         ]);
-        let second = base.with_option_entries(vec![
-            OptionEntry { key: "alpn".into(), value: Value::String("h2".into()) },
-        ]);
+        let second = base.with_option_entries(vec![OptionEntry {
+            key: "alpn".into(),
+            value: Value::String("h2".into()),
+        }]);
         assert_ne!(first.fingerprint(), second.fingerprint());
     }
 
@@ -194,17 +201,38 @@ mod tests {
     fn fingerprint_ignores_query_option_order_but_keeps_duplicates() {
         let base = node_with_name("one");
         let first = base.clone().with_option_entries(vec![
-            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
-            OptionEntry { key: "b".into(), value: Value::String("2".into()) },
+            OptionEntry {
+                key: "a".into(),
+                value: Value::String("1".into()),
+            },
+            OptionEntry {
+                key: "b".into(),
+                value: Value::String("2".into()),
+            },
         ]);
         let reordered = base.clone().with_option_entries(vec![
-            OptionEntry { key: "b".into(), value: Value::String("2".into()) },
-            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
+            OptionEntry {
+                key: "b".into(),
+                value: Value::String("2".into()),
+            },
+            OptionEntry {
+                key: "a".into(),
+                value: Value::String("1".into()),
+            },
         ]);
         let duplicated = base.with_option_entries(vec![
-            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
-            OptionEntry { key: "a".into(), value: Value::String("1".into()) },
-            OptionEntry { key: "b".into(), value: Value::String("2".into()) },
+            OptionEntry {
+                key: "a".into(),
+                value: Value::String("1".into()),
+            },
+            OptionEntry {
+                key: "a".into(),
+                value: Value::String("1".into()),
+            },
+            OptionEntry {
+                key: "b".into(),
+                value: Value::String("2".into()),
+            },
         ]);
         assert_eq!(first.fingerprint(), reordered.fingerprint());
         assert_ne!(first.fingerprint(), duplicated.fingerprint());

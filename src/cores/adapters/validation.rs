@@ -78,9 +78,8 @@ mod tests {
         let marker = directory.path().join("config-path");
         write_fake_core(&executable, &marker, 0);
 
-        let node =
-            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
-                .unwrap();
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+            .unwrap();
 
         validate_node_config_in(CoreId::SingBox, &node, &executable, directory.path()).unwrap();
 
@@ -100,13 +99,11 @@ mod tests {
         let marker = directory.path().join("config-path");
         write_fake_core(&executable, &marker, 42);
 
-        let node =
-            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
-                .unwrap();
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+            .unwrap();
 
         assert!(
-            validate_node_config_in(CoreId::SingBox, &node, &executable, directory.path())
-                .is_err()
+            validate_node_config_in(CoreId::SingBox, &node, &executable, directory.path()).is_err()
         );
 
         let config_path = fs::read_to_string(marker).unwrap();
