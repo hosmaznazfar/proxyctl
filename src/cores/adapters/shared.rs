@@ -157,7 +157,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
 
     let supported = match node.protocol {
         Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "mode", "alpn", "fp"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "alpn", "fp"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "mode", "alpn", "fp"],
         Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
@@ -186,7 +186,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     {
         return Err("VMess TCP header modes are not implemented; only WebSocket and plain TCP are accepted".into());
     }
-    if !matches!(&transport.kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade) {
+    if !matches!(&transport.kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::XHttp) {
         return Err("transport is not implemented by this adapter batch".into());
     }
 
@@ -212,8 +212,8 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         if option_string(node, "encryption").is_some_and(|value| value != "none") {
             return Err("only VLESS encryption=none is currently mapped".into());
         }
-        if option_string(node, "type").is_some_and(|value| !["tcp", "ws", "grpc", "h2", "httpupgrade"].contains(&value)) {
-            return Err("only VLESS TCP, WebSocket, gRPC, HTTP/2, and HTTP Upgrade transports are currently mapped".into());
+        if option_string(node, "type").is_some_and(|value| !["tcp", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)) {
+            return Err("only VLESS TCP, WebSocket, gRPC, HTTP/2, HTTP Upgrade, and XHTTP transports are currently mapped".into());
         }
     }
     if node.protocol == Protocol::Vmess {
