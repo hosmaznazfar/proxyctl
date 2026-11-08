@@ -45,7 +45,7 @@ impl CoreAdapter for XrayAdapter {
             ),
             Protocol::Vmess => (
                 "vmess",
-                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"security":option_string(node, "scy").unwrap_or("auto")}]}]}),
+                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"security":option_string(node, "scy").or_else(|| option_string(node, "security")).unwrap_or("auto")}]}]}),
             ),
             Protocol::Trojan => (
                 "trojan",
