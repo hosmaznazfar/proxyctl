@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_for_core},
 };
 
 pub struct MihomoAdapter;
@@ -21,20 +21,11 @@ impl CoreAdapter for MihomoAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_common(node) {
+        match validate_for_core(CoreId::Mihomo, node) {
             Err(reason) => Compatibility::unsupported(reason),
-            Ok(()) => match normalize_transport(node) {
-                Ok(transport)
-                    if matches!(&transport.kind, crate::domain::TransportKind::Grpc)
-                        && transport.service_name.as_deref().is_none_or(str::is_empty) =>
-                {
-                    Compatibility::unsupported("Mihomo requires an explicit gRPC service name")
-                }
+            Ok(()) => match tls_options(node) {
+                Ok(_) => Compatibility::supported(),
                 Err(reason) => Compatibility::unsupported(reason),
-                _ => match tls_options(node) {
-                    Ok(_) => Compatibility::supported(),
-                    Err(reason) => Compatibility::unsupported(reason),
-                },
             },
         }
     }
