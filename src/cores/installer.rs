@@ -66,7 +66,6 @@ pub fn current_version(core: CoreId, path: &std::path::Path) -> anyhow::Result<S
     Ok(text)
 }
 
-
 fn reported_version_matches(output: &str, expected: &str) -> bool {
     output
         .split(|character: char| !character.is_ascii_alphanumeric() && character != '.')
@@ -79,8 +78,17 @@ mod tests {
 
     #[test]
     fn matches_core_versions_with_optional_v_prefix() {
-        assert!(reported_version_matches("Mihomo Meta v1.19.33 linux amd64", "1.19.33"));
-        assert!(reported_version_matches("sing-box version 1.14.4", "1.14.4"));
-        assert!(!reported_version_matches("Mihomo Meta v1.19.330", "1.19.33"));
+        assert!(reported_version_matches(
+            "Mihomo Meta v1.19.33 linux amd64",
+            "1.19.33"
+        ));
+        assert!(reported_version_matches(
+            "sing-box version 1.14.4",
+            "1.14.4"
+        ));
+        assert!(!reported_version_matches(
+            "Mihomo Meta v1.19.330",
+            "1.19.33"
+        ));
     }
 }
