@@ -187,6 +187,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
                 tls.insert("verify_peer_cert_by_name".into(), Value::String(name.into()));
             }
             if let Some(sni) = option_string(node, "sni") {
+                if sni.chars().any(char::is_control) {
+                    return Err("TLS server name contains control characters".into());
+                }
                 tls.insert("server_name".into(), Value::String(sni.into()));
             }
             if let Some(protocols) = alpn_protocols(node)? {
