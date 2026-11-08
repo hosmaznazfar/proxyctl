@@ -1,16 +1,30 @@
 //! Managed-core setup, update, and inventory use cases.
-use crate::cores::{CoreId, installer, paths::core_binary_path};
+use crate::cores::{core_binary_path, installer, CoreId};
+
 #[derive(Debug)]
-pub struct CoreStatus { pub core: CoreId, pub version: Option<String> }
-pub fn inventory() -> anyhow::Result<Vec<CoreStatus>> {
-    CoreId::ALL.into_iter().map(|core| {
-        let path = core_binary_path(core)?;
-        let version = if path.is_file() {
-            Some(installer::current_version(core, &path).unwrap_or_else(|_| "version unavailable".to_owned()))
-        } else { None };
-        Ok(CoreStatus { core, version })
-    }).collect()
+pub struct CoreStatus {
+    pub core: CoreId,
+    pub version: Option<String>,
 }
+
+pub fn inventory() -> anyhow::Result<Vec<CoreStatus>> {
+    CoreId::ALL
+        .into_iter()
+        .map(|core| {
+            let path = core_binary_path(core)?;
+            let version = if path.is_file() {
+                Some(
+                    installer::current_version(core, &path)
+                        .unwrap_or_else(|_| "version unavailable".to_owned()),
+                )
+            } else {
+                None
+            };
+            Ok(CoreStatus { core, version })
+        })
+        .collect()
+}
+
 pub fn setup(selected: Option<CoreId>) -> anyhow::Result<()> {
     let cores = selected.map_or_else(|| CoreId::ALL.to_vec(), |core| vec![core]);
     let mut failures = Vec::new();
@@ -20,10 +34,20 @@ pub fn setup(selected: Option<CoreId>) -> anyhow::Result<()> {
             failures.push(core);
         }
     }
-    if failures.is_empty() { Ok(()) } else {
-        anyhow::bail!("installation failed for: {}", failures.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "))
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "installation failed for: {}",
+            failures
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }
+
 pub fn update_installed(check_only: bool, selected: Option<CoreId>) -> anyhow::Result<()> {
     let candidates = match selected {
         Some(core) => {
@@ -32,9 +56,16 @@ pub fn update_installed(check_only: bool, selected: Option<CoreId>) -> anyhow::R
             }
             vec![core]
         }
-        None => inventory()?.into_iter().filter(|status| status.version.is_some()).map(|status| status.core).collect(),
+        None => inventory()?
+            .into_iter()
+            .filter(|status| status.version.is_some())
+            .map(|status| status.core)
+            .collect(),
     };
-    if candidates.is_empty() { println!("No managed cores are installed."); return Ok(()); }
+    if candidates.is_empty() {
+        println!("No managed cores are installed.");
+        return Ok(());
+    }
     let mut failures = Vec::new();
     for core in candidates {
         if let Err(error) = installer::install_or_update(core, check_only) {
@@ -42,7 +73,16 @@ pub fn update_installed(check_only: bool, selected: Option<CoreId>) -> anyhow::R
             failures.push(core);
         }
     }
-    if failures.is_empty() { Ok(()) } else {
-        anyhow::bail!("update failed for: {}", failures.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "))
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "update failed for: {}",
+            failures
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }
