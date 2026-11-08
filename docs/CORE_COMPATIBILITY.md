@@ -17,7 +17,8 @@ This matrix describes only the currently implemented adapter subset. It is not a
 | Hysteria2, basic TLS (including ALPN) | Yes | No | Yes |
 | REALITY | Not yet | Not yet | Not yet |
 | WebSocket (VLESS, VMess, Trojan) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
-| gRPC / HTTP/2 / HTTPUpgrade / XHTTP | Not yet | Not yet | Not yet |
+| gRPC (standard mode) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending* |
+| HTTP/2 / HTTPUpgrade / XHTTP | Not yet | Not yet | Not yet |
 | VMess non-TCP transports | Not yet | Not yet | Not yet |
 | Shadowsocks plugins / obfuscation | Not yet | Not yet | Not yet |
 | Hysteria2 obfuscation | Not yet | Not yet | Not yet |
@@ -45,7 +46,7 @@ This matrix describes only the currently implemented adapter subset. It is not a
 
 The adapters are an initial conservative implementation. The `check` command now owns the temporary config lifecycle and invokes the installed managed binary's validation mode. The command does not start a core. The compatibility table must be expanded only alongside fixtures and successful validation against the supported managed core versions.
 
-WebSocket is now normalized once and mapped to sing-box `transport`, Xray `streamSettings.network` + `wsSettings`, and Mihomo `network` + `ws-opts`. URI `host` and structured VMess request headers map to the WebSocket HTTP headers; TLS SNI remains independent. Unit fixtures cover VLESS and VMess mappings. Native validation against the installed managed binaries is still required before treating the mappings as verified. Other transports remain rejected until their complete mappings are implemented. REALITY is rejected rather than approximated as ordinary TLS.
+WebSocket is normalized once and mapped to sing-box `transport`, Xray `streamSettings.network` + `wsSettings`, and Mihomo `network` + `ws-opts`. Standard gRPC is normalized once and mapped to sing-box `transport.service_name`, Xray `grpcSettings.serviceName`, and Mihomo `grpc-opts.grpc-service-name`. URI `host` and structured VMess request headers map to WebSocket HTTP headers; TLS SNI remains independent. Unit fixtures cover VLESS and VMess WebSocket, plus VLESS gRPC. Mihomo requires an explicit gRPC service name; sing-box and Xray allow it to be omitted. Native validation against installed managed binaries is still required before treating these mappings as verified. HTTP/2, HTTPUpgrade, XHTTP, and non-standard gRPC modes remain unsupported. REALITY is rejected rather than approximated as ordinary TLS.
 
 
 ## Compatibility evaluation rules
@@ -63,7 +64,7 @@ The compatibility matrix describes the current implementation only. The long-ter
 - VMess JSON fields are interpreted according to VMess source semantics. In particular, `net` selects transport while `type` may describe a transport-specific header mode; it must not be treated as the VLESS URI `type` parameter.
 - Native validation with the corresponding core binary/version is required before marking a new mapping supported.
 
-## Planned transport coverage
+* Mihomo's gRPC mapping is considered compatible only when a non-empty service name is supplied.\n\n## Planned transport coverage
 
 The following is a development sequence, **not a claim of current support**:
 
