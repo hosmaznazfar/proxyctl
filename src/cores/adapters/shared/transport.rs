@@ -37,8 +37,6 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         if let Some(host) = source_host {
             headers.insert("Host".to_owned(), host.to_owned());
         }
-    } else if matches!(&kind, TransportKind::HttpUpgrade) {
-        host = source_host.map(str::to_owned);
     } else if matches!(&kind, TransportKind::XHttp | TransportKind::HttpUpgrade) {
         host = source_host.map(str::to_owned);
     } else if matches!(&kind, TransportKind::Http2) {
@@ -97,7 +95,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         None
     };
 
-    if matches!(&kind, TransportKind::Tcp) && (path.is_some() || !headers.is_empty() || !hosts.is_empty()) {
+    if matches!(&kind, TransportKind::Tcp) && (path.is_some() || host.is_some() || !headers.is_empty() || !hosts.is_empty()) {
         return Err("path or host/header was supplied for TCP transport".into());
     }
     if matches!(&kind, TransportKind::Grpc) && path.is_some() && node.protocol != Protocol::Vmess {
