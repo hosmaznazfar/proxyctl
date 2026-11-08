@@ -20,7 +20,7 @@ impl CoreAdapter for SingBoxAdapter {
     fn core(&self) -> CoreId { CoreId::SingBox }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_common(node, &["security", "tls", "sni", "encryption", "flow", "aid", "scy"]) {
+        match validate_common(node) {
             Err(reason) => Compatibility::unsupported(reason),
             Ok(()) if node.options.get("encryption").is_some_and(|v| v != "none") =>
                 Compatibility::unsupported("only VLESS encryption=none is currently mapped"),
