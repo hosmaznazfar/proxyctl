@@ -219,7 +219,10 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         }
     }
 
-    if option_string(node, "security").is_some() && option_string(node, "tls").is_some() {
+    if node.protocol != Protocol::Vmess
+        && option_string(node, "security").is_some()
+        && option_string(node, "tls").is_some()
+    {
         return Err(
             "both security and tls options were supplied; refusing ambiguous TLS settings".into(),
         );
@@ -240,9 +243,18 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
             return Err("VMess alter ID is invalid".into());
         }
-        if option_string(node, "scy").is_some_and(|value| {
-            !["auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305"].contains(&value)
-        }) {
+        if option_string(node, "scy").is_some()
+            && option_string(node, "security").is_some()
+            && option_string(node, "scy") != option_string(node, "security")
+        {
+            return Err("VMess scy and security cipher aliases conflict".into());
+        }
+        if option_string(node, "scy")
+            .or_else(|| option_string(node, "security"))
+            .is_some_and(|value| {
+                !["auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305"].contains(&value)
+            })
+        {
             return Err("VMess cipher is not supported by this adapter".into());
         }
     }
@@ -274,8 +286,11 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
     {
         return Err("certificate pin options conflict".into());
     }
-    let security = option_string(node, "security")
-        .or_else(|| option_string(node, "tls"))
+    let security = if node.protocol == Protocol::Vmess {
+        option_string(node, "tls")
+    } else {
+        option_string(node, "security").or_else(|| option_string(node, "tls"))
+    }
         .unwrap_or(if default_tls { "tls" } else { "none" })
         .to_ascii_lowercase();
     match security.as_str() {
