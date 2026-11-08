@@ -80,7 +80,12 @@ pub fn update_application(check_only: bool) -> anyhow::Result<()> {
     let actual = format!("{:x}", Sha256::digest(&bytes));
     ensure!(actual.eq_ignore_ascii_case(&expected), "SHA-256 verification failed for {asset_name}");
 
-    replace_current_executable(&bytes, &latest)?;
+    if let Err(error) = replace_current_executable(&bytes, &latest) {
+        eprintln!(
+            "Automatic replacement failed; the current executable was preserved. Download the verified asset manually from {RELEASES_PAGE}."
+        );
+        return Err(error);
+    }
     println!("Updated proxyctl to {latest}.");
     Ok(())
 }
