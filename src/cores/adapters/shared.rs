@@ -255,6 +255,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             if option_string(node, "fp").is_some() {
                 return Err("TLS fingerprint was supplied while TLS is disabled".into());
             }
+            if option_string(node, "pcs").is_some() {
+                return Err("certificate pin was supplied while TLS is disabled".into());
+            }
             Ok(None)
         }
         "tls" | "true" | "1" => {
@@ -271,6 +274,13 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             }
             if let Some(fingerprint) = option_string(node, "fp") {
                 tls.insert("fingerprint".into(), Value::String(fingerprint.into()));
+            }
+            if let Some(pin) = option_string(node, "pcs") {
+                let normalized = pin.replace(':', "");
+                if normalized.len() != 64 || !normalized.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                    return Err("certificate SHA-256 pin must contain exactly 64 hexadecimal digits".into());
+                }
+                tls.insert("certificate_sha256".into(), Value::String(normalized.to_ascii_lowercase()));
             }
             Ok(Some(Value::Object(tls)))
         }
