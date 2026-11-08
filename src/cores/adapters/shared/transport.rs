@@ -24,7 +24,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         other => TransportKind::Unknown(other.to_owned()),
     };
 
-    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket) {
+    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc) {
         return Err(format!("transport '{network}' is not implemented by this adapter batch"));
     }
 
@@ -56,15 +56,35 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         }
     }
 
+    let service_name = if matches!(&kind, TransportKind::Grpc) {
+        let value = if node.protocol == Protocol::Vmess {
+            option_string(node, "path")
+        } else {
+            option_string(node, "serviceName").or_else(|| option_string(node, "service_name"))
+        };
+        if !headers.is_empty() {
+            return Err("HTTP Host headers are not valid gRPC service-name settings".into());
+        }
+        value.map(str::to_owned)
+    } else {
+        None
+    };
+
     if matches!(&kind, TransportKind::Tcp) && (path.is_some() || !headers.is_empty()) {
         return Err("path or host/header was supplied for TCP transport".into());
+    }
+    if matches!(&kind, TransportKind::Grpc) && path.is_some() && node.protocol != Protocol::Vmess {
+        return Err("gRPC URI service names must use the serviceName parameter".into());
+    }
+    if !matches!(&kind, TransportKind::WebSocket) && !headers.is_empty() {
+        return Err("HTTP headers are only mapped for WebSocket in this adapter batch".into());
     }
 
     Ok(Transport {
         kind,
         path,
         headers,
-        service_name: None,
+        service_name,
         mode: None,
     })
 }
