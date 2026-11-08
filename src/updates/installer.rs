@@ -5,7 +5,10 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicU64, Ordering},
 };
+
+static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 use anyhow::{Context, ensure};
 
@@ -67,11 +70,8 @@ pub fn replace_executable(
 }
 
 fn staged_path(parent: &Path) -> PathBuf {
-    parent.join(format!(
-        ".proxyctl-install-{}-{}.tmp",
-        std::process::id(),
-        std::thread::current().name().unwrap_or("worker")
-    ))
+    let sequence = STAGING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    parent.join(format!(".proxyctl-install-{}-{sequence}.tmp", std::process::id()))
 }
 
 #[cfg(unix)]
