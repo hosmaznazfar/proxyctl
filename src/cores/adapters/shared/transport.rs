@@ -76,6 +76,26 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     }
 
     let mode = option_string(node, "mode").map(str::to_owned);
+    let early_data_raw = option_string(node, "ed")
+        .or_else(|| option_string(node, "maxEarlyData"))
+        .or_else(|| option_string(node, "max_early_data"))
+        .or_else(|| option_string(node, "max-early-data"));
+    let max_early_data = early_data_raw
+        .map(|value| value.parse::<u32>().map_err(|_| "WebSocket early-data size must be a valid unsigned integer".to_owned()))
+        .transpose()?;
+    let early_data_header_name = option_string(node, "eh")
+        .or_else(|| option_string(node, "earlyDataHeaderName"))
+        .or_else(|| option_string(node, "early_data_header_name"))
+        .or_else(|| option_string(node, "early-data-header-name"))
+        .map(str::to_owned);
+    if early_data_header_name.as_deref().is_some_and(|value| value.is_empty() || value.chars().any(char::is_control)) {
+        return Err("WebSocket early-data header name is invalid".into());
+    }
+    if (max_early_data.is_some() || early_data_header_name.is_some())
+        && !matches!(&kind, TransportKind::WebSocket)
+    {
+        return Err("early-data options are only mapped for WebSocket".into());
+    }
     if matches!(&kind, TransportKind::XHttp) {
         if node.protocol != Protocol::Vless {
             return Err("XHTTP transport is only supported for VLESS".into());
@@ -122,5 +142,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         host,
         service_name,
         mode,
+        max_early_data,
+        early_data_header_name,
     })
 }
