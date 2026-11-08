@@ -228,6 +228,54 @@ mod tests {
     }
 
     #[test]
+    fn xhttp_is_mapped_only_by_cores_with_verified_schema_support() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&host=cdn.example&path=%2Fapi&mode=packet-up",
+        )
+        .unwrap();
+
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+
+        let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+        let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
+        assert_eq!(
+            xray_doc["outbounds"][0]["streamSettings"]["network"],
+            "xhttp"
+        );
+        assert_eq!(
+            xray_doc["outbounds"][0]["streamSettings"]["xhttpSettings"]["mode"],
+            "packet-up"
+        );
+        assert_eq!(
+            xray_doc["outbounds"][0]["streamSettings"]["xhttpSettings"]["host"],
+            "cdn.example"
+        );
+
+        let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+        let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+        assert_eq!(mihomo_doc["proxies"][0]["network"], "xhttp");
+        assert_eq!(mihomo_doc["proxies"][0]["xhttp-opts"]["mode"], "packet-up");
+        assert_eq!(mihomo_doc["proxies"][0]["xhttp-opts"]["path"], "/api");
+    }
+
+    #[test]
+    fn xhttp_rejects_unknown_modes() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&mode=unknown",
+        )
+        .unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            assert_eq!(
+                adapter(core).compatibility(&node).status,
+                CompatibilityStatus::Unsupported
+            );
+        }
+    }
+
+    #[test]
     fn adapters_reject_unknown_transport_without_dropping_it() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
