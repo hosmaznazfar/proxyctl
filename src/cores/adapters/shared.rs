@@ -59,6 +59,56 @@ pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a st
     })
 }
 
+/// Collect ALPN identifiers from URI query values or structured VMess arrays.
+pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, String> {
+    let mut protocols = Vec::new();
+
+    if node.option_entries.is_empty() {
+        if let Some(value) = node.options.get("alpn") {
+            protocols.extend(value.split(',').map(str::to_owned));
+        }
+    } else {
+        for entry in node.option_entries.iter().filter(|entry| entry.key == "alpn") {
+            match &entry.value {
+                Value::String(value) => {
+                    protocols.extend(value.split(',').map(str::to_owned));
+                }
+                Value::Array(values) => {
+                    for value in values {
+                        let value = value
+                            .as_str()
+                            .ok_or_else(|| "ALPN entries must be strings".to_owned())?;
+                        protocols.extend(value.split(',').map(str::to_owned));
+                    }
+                }
+                _ => return Err("ALPN must be a string or an array of strings".into()),
+            }
+        }
+    }
+
+    if protocols.is_empty() {
+        return Ok(None);
+    }
+
+    let mut seen = std::collections::BTreeSet::new();
+    let mut normalized = Vec::with_capacity(protocols.len());
+    for protocol in protocols {
+        let protocol = protocol.trim();
+        if protocol.is_empty() {
+            return Err("ALPN contains an empty protocol identifier".into());
+        }
+        if protocol.len() > 255 || protocol.chars().any(char::is_control) {
+            return Err("ALPN protocol identifiers must be at most 255 bytes and contain no control characters".into());
+        }
+        if !seen.insert(protocol.to_owned()) {
+            return Err("ALPN protocol identifiers must not be repeated".into());
+        }
+        normalized.push(protocol.to_owned());
+    }
+
+    Ok(Some(normalized))
+}
+
 fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), String> {
     let keys = if node.option_entries.is_empty() {
         node.options.keys().map(String::as_str).collect::<Vec<_>>()
@@ -92,16 +142,16 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net"],
-        Protocol::Trojan | Protocol::Hysteria2 => vec!["security", "tls", "sni"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "alpn"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "alpn"],
+        Protocol::Trojan | Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn"],
         Protocol::Shadowsocks => Vec::new(),
     };
     reject_unknown_options(node, &supported)?;
     if !node.option_entries.is_empty() {
         let mut seen = std::collections::BTreeSet::new();
         for entry in &node.option_entries {
-            if !seen.insert(entry.key.as_str()) {
+            if entry.key != "alpn" && !seen.insert(entry.key.as_str()) {
                 return Err(format!(
                     "option '{}' is repeated and cannot be mapped safely",
                     entry.key
@@ -109,6 +159,8 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
             }
         }
     }
+    alpn_protocols(node)?;
+
     if option_string(node, "security").is_some() && option_string(node, "tls").is_some() {
         return Err(
             "both security and tls options were supplied; refusing ambiguous TLS settings".into(),
@@ -153,6 +205,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             if option_string(node, "sni").is_some() {
                 return Err("SNI was supplied while TLS is disabled".into());
             }
+            if alpn_protocols(node)?.is_some() {
+                return Err("ALPN was supplied while TLS is disabled".into());
+            }
             Ok(None)
         }
         "tls" | "true" | "1" => {
@@ -160,6 +215,12 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             tls.insert("enabled".into(), Value::Bool(true));
             if let Some(sni) = option_string(node, "sni") {
                 tls.insert("server_name".into(), Value::String(sni.into()));
+            }
+            if let Some(protocols) = alpn_protocols(node)? {
+                tls.insert(
+                    "alpn".into(),
+                    Value::Array(protocols.into_iter().map(Value::String).collect()),
+                );
             }
             Ok(Some(Value::Object(tls)))
         }
