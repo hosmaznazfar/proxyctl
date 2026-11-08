@@ -113,12 +113,18 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         );
     }
 
-    if node.protocol == Protocol::Vless
-        && option_string(node, "encryption").is_some_and(|value| value != "none")
-    {
-        return Err("only VLESS encryption=none is currently mapped".into());
+    if node.protocol == Protocol::Vless {
+        if option_string(node, "encryption").is_some_and(|value| value != "none") {
+            return Err("only VLESS encryption=none is currently mapped".into());
+        }
+        if option_string(node, "type").is_some_and(|value| value != "tcp") {
+            return Err("only VLESS type=tcp is currently mapped".into());
+        }
     }
     if node.protocol == Protocol::Vmess {
+        if option_string(node, "net").is_some_and(|value| value != "tcp") {
+            return Err("only VMess net=tcp is currently mapped".into());
+        }
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
             return Err("VMess alter ID is invalid".into());
         }
