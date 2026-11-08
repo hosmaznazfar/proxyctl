@@ -109,6 +109,13 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
     }
 
     let transport = normalize_transport(node)?;
+    if matches!(&transport.kind, TransportKind::XHttp)
+        && node.protocol == Protocol::Vmess
+        && core != CoreId::Xray
+    {
+        return Err(format!("{core} does not support VMess XHTTP"));
+    }
+
     if !capabilities.supports_transport(&transport.kind) {
         return Err(format!("{core} does not support this transport"));
     }
