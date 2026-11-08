@@ -1,0 +1,304 @@
+# Proxyctl — Plan and Architecture Decisions
+
+> Status: approved baseline for implementation  
+> Repository: https://github.com/hosmaznazfar/proxyctl  
+> Last updated: 2026-11-08
+
+## 1. Purpose
+
+Proxyctl is a lightweight, command-line-only Rust application for importing proxy URLs, checking compatibility with supported proxy cores, benchmarking them, comparing results, selecting a node, and optionally managing TUN mode.
+
+Initial cores: sing-box, Xray, and Mihomo. Proxyctl orchestrates official core binaries; it does not reimplement proxy protocols or embed the cores as Rust libraries.
+
+## 2. Product principles
+
+1. CLI only: no GUI, tray, background manager daemon, or always-running database service.
+2. Low overhead: keep dependencies and runtime footprint small; run one benchmark core at a time by default.
+3. Explicit behavior: never silently ignore unsupported URL options, silently change system networking, or delete a node based on incomplete tests.
+4. Separation of concerns: CLI parsing, domain logic, storage, protocol parsing, core adapters, benchmarking, and system networking remain independent.
+5. Extensibility: new cores, protocols, benchmark metrics, sort keys, and cleanup policies should be addable without rewriting command handlers.
+6. Safe defaults: mask credentials, protect local files, verify downloaded binaries, and make destructive or system-wide operations explicit.
+7. Preserve the source: importing a text file must never modify that file.
+
+## 3. Core decisions
+
+| Area | Decision |
+|---|---|
+| Language | Rust |
+| Interface | CLI only |
+| Core engines | sing-box, Xray, Mihomo |
+| Core installation | Proxyctl-managed binaries in its private data directory |
+| Core execution | External processes; one selected core at a time for normal use |
+| URL input | Import a user-provided text file or add one URL |
+| Source file | Read-only input; proxyctl never edits it |
+| Persistent storage | Embedded redb database |
+| Database lifecycle | Open only for a command's read/write phase, then close; no database daemon |
+| Benchmark history | Keep multiple runs and individual samples |
+| Default URL display | Mask credentials and sensitive URL fields |
+| Default benchmark concurrency | Sequential |
+| TUN | Optional, separate, explicit feature; never enabled by setup or benchmarking |
+
+### 3.1 Managed core binaries
+
+The setup command installs supported core binaries under the proxyctl-owned data directory. It must not replace, stop, or reconfigure another proxy application.
+
+Core versions must be selected deliberately and recorded. Downloads must come from official release sources and be checked against trusted checksums/signatures when published. Failed verification stops installation. Updating cores is explicit.
+
+### 3.2 URL records and source-file handling
+
+The user's text file is an import source, not a live database or output file. Proxyctl reads it without changing it. Imported URL records are stored in redb, including the original URL needed to recreate core configurations.
+
+A stable fingerprint prevents duplicate records. Re-importing an existing URL updates import metadata rather than creating a duplicate. Different credentials or connection settings remain distinct records. Duplicate lines within one import are also deduplicated.
+
+Default list output shows an ID, protocol, server, port, and optional display name. Credentials and other secrets are masked. Any future reveal operation must be explicit and must not write secrets to logs or ordinary error output.
+
+### 3.3 Storage model
+
+Use versioned logical tables, initially:
+
+- nodes: original URL, parsed fields, fingerprint, display metadata, lifecycle state, timestamps.
+- node_fingerprints: unique fingerprint-to-node lookup.
+- benchmark_runs: run metadata, selected cores, test settings, start/end state.
+- benchmark_samples: individual metric samples, status, value/unit, error category, and timestamp.
+
+The schema must include a migration/version strategy from the first implementation. Database access is behind repository interfaces so the storage engine can be replaced without changing domain services.
+
+Recommended local permissions: data/config directories 0700; database and secret-bearing files 0600, subject to platform support. Never print full credentials in diagnostics.
+
+### 3.4 Protocol and core compatibility
+
+Initial URL schemes:
+
+- VLESS
+- VMess
+- Trojan
+- Shadowsocks
+- Hysteria2
+
+Compatibility is not just a scheme lookup. Each core adapter must report whether it can represent the complete parsed node configuration, including relevant transport, TLS, Reality, flow, obfuscation, and other options.
+
+Expected baseline: VLESS, VMess, Trojan, and Shadowsocks are supported by all three selected cores; Hysteria2 is supported by sing-box and Mihomo but not Xray. This is a starting expectation, not a substitute for verified, version-specific capability checks.
+
+If an option cannot be represented faithfully, the node/core combination is unsupported; proxyctl must not silently drop that option. Invalid input, unsupported configuration, connection failure, timeout, and missing measurement are distinct outcomes.
+
+### 3.5 Benchmark execution and persistence
+
+A full benchmark checks each node against every core that can represent it. For each node/core:
+
+1. Parse and validate the URL and core-specific configuration.
+2. Generate temporary configuration and validate it with the selected core.
+3. Start the core with isolated local proxy listeners.
+4. Measure HTTP latency through the proxy.
+5. Measure download throughput through the proxy.
+6. Measure upload throughput through the proxy.
+7. Stop the child process and remove temporary files.
+8. Persist results.
+
+The database is not held open while a core process or network test is running. The benchmark service reads required node data, closes the database, performs tests, then reopens it to persist completed samples. If interrupted, completed samples are retained and the run is marked incomplete where possible.
+
+Collect three samples per metric per node/core: three latency, three download, and three upload samples. Store failures as a status with no numeric value, never as zero or a magic negative number. A failure in one metric must not erase successful measurements from other metrics.
+
+Latency is application-level HTTP latency through the proxy, not merely ICMP ping. Test endpoints, payload sizes, timeouts, and methodology must be configurable and recorded with each run. Results describe the end-to-end route and test conditions, not isolated core CPU performance.
+
+Initial sample statuses: success, unreachable, unsupported, invalid, timeout, unavailable, and cancelled.
+
+### 3.6 Sorting and comparison semantics
+
+Core-independent commands compare each node's best available compatible-core result:
+
+~~~sh
+proxyctl list --sort ping
+proxyctl list --sort download
+proxyctl list --sort upload
+~~~
+
+For each node, calculate the median of successful samples for a metric on each core, then choose the best compatible-core median. Display the core responsible for that result. Lower latency is better; higher download/upload throughput is better.
+
+Core-specific comparisons use the same aggregation but restrict results to the selected core:
+
+~~~sh
+proxyctl list --sort ping --core xray
+proxyctl list --sort download --core sing-box
+proxyctl list --sort upload --core mihomo
+~~~
+
+Only comparable successful results are ranked. Missing results are shown as unavailable/unmeasured rather than assigned fabricated values. Reports identify the benchmark run and methodology used.
+
+### 3.7 Pruning and recovery
+
+Core-independent pruning:
+
+~~~sh
+proxyctl prune --unavailable-all --dry-run
+proxyctl prune --unavailable-all --apply
+~~~
+
+Core-specific pruning:
+
+~~~sh
+proxyctl prune --core xray --unavailable --dry-run
+proxyctl prune --core xray --unavailable --apply
+~~~
+
+A node is unavailable across all cores only when every compatible core has a completed connectivity evaluation and none has a successful connection result. A core that cannot support the node is unsupported, not a failed connection. Thus, a Hysteria2 node is evaluated against sing-box and Mihomo; Xray's unsupported status does not count as a connection failure.
+
+A node must not be pruned if required tests are missing, incomplete, or ambiguous. One successful sample is enough to prevent classifying the node as unavailable, even if other samples failed. Core-specific pruning likewise requires a completed evaluation for that core.
+
+Pruning is a soft-delete/lifecycle-state change, not immediate permanent erasure. Preview is the default; applying changes requires an explicit flag. A restore command is part of the planned interface.
+
+### 3.8 Activation and TUN safety
+
+Normal activation selects one node and one core. The stop command stops only processes started and tracked by proxyctl.
+
+TUN is a separate opt-in feature. It must detect existing interfaces, routes, DNS configuration, NetworkManager/systemd-resolved state, and firewall configuration before making changes. It must not assume it owns the machine's network stack. Enabling TUN requires explicit user intent, privilege escalation where needed, and a rollback/cleanup path. Benchmarking must not depend on TUN and must use isolated local listeners.
+
+## 4. Proposed command surface
+
+~~~sh
+# Managed binaries
+proxyctl setup
+proxyctl cores
+proxyctl update
+
+# URL records
+proxyctl import ~/Documents/servers.txt
+proxyctl add "vless://..."
+proxyctl list
+proxyctl show 12
+proxyctl remove 12
+proxyctl restore 12
+
+# Benchmarks
+proxyctl test --all-cores
+proxyctl test --node 12 --core sing-box
+
+# Reports
+proxyctl report
+proxyctl report --history
+proxyctl report --compare
+proxyctl report --core mihomo
+proxyctl report --node 12
+
+# Sorting
+proxyctl list --sort ping
+proxyctl list --sort download --core sing-box
+
+# Cleanup
+proxyctl prune --unavailable-all --dry-run
+proxyctl prune --unavailable-all --apply
+proxyctl prune --core xray --unavailable --dry-run
+proxyctl prune --core xray --unavailable --apply
+
+# Activation
+proxyctl use 12 --core sing-box
+proxyctl stop
+
+# Optional TUN
+proxyctl tun on
+proxyctl tun off
+~~~
+
+This is the initial command contract. Help text and flags may be refined while preserving documented behavior.
+
+## 5. Architecture
+
+Keep the binary thin. Command handlers translate CLI arguments into application-service calls; domain logic must not depend on clap, redb, or a particular core's JSON/YAML format.
+
+~~~text
+src/
+├── main.rs
+├── cli/
+│   ├── mod.rs
+│   ├── setup.rs
+│   ├── nodes.rs
+│   ├── benchmark.rs
+│   ├── report.rs
+│   ├── prune.rs
+│   ├── proxy.rs
+│   └── tun.rs
+├── domain/
+│   ├── mod.rs
+│   ├── node.rs
+│   ├── protocol.rs
+│   ├── core.rs
+│   ├── benchmark.rs
+│   └── errors.rs
+├── parser/
+│   ├── mod.rs
+│   └── schemes/
+├── cores/
+│   ├── mod.rs
+│   ├── sing_box.rs
+│   ├── xray.rs
+│   └── mihomo.rs
+├── database/
+│   ├── mod.rs
+│   ├── schema.rs
+│   ├── migrations/
+│   └── repositories/
+├── services/
+│   ├── mod.rs
+│   ├── import.rs
+│   ├── setup.rs
+│   ├── benchmark.rs
+│   ├── sorting.rs
+│   ├── reporting.rs
+│   ├── pruning.rs
+│   └── activation.rs
+└── tun/
+    ├── mod.rs
+    └── platform/
+
+tests/
+├── parser/
+├── database/
+├── cores/
+├── services/
+└── cli/
+~~~
+
+Core adapters implement a shared interface for capability inspection, config generation/validation, process startup, and shutdown. Protocol parsers are independent of core adapters. Benchmark metrics are independent strategies so future metrics do not require changes to every command.
+
+## 6. Initial dependency direction
+
+Prefer small, focused crates. Candidate dependencies:
+
+- clap for CLI parsing
+- redb for embedded storage
+- serde and serde_json for structured data
+- url for URL parsing support where appropriate
+- thiserror for domain errors
+- anyhow at application boundaries
+- tracing for structured, secret-safe diagnostics
+
+Avoid introducing an async runtime, ORM, or large application framework unless implementation evidence demonstrates a need. Exact crate versions and core release versions are selected and verified during implementation.
+
+## 7. Delivery plan
+
+1. Project foundation: Cargo package, module boundaries, formatting/lint configuration, CLI skeleton, CI, and conventions.
+2. Domain and parser: typed node/protocol models, URL parsing, normalization, validation, fingerprints, and compatibility representation.
+3. Persistence: redb schema, migrations/versioning, repository layer, permissions, and database tests.
+4. Node management: import, add, list, show, remove, restore, and duplicate handling.
+5. Core management: official-source metadata, pinned versions, checksum verification, setup, detection, and update.
+6. Core adapters: configuration generation and validation for each core, with fixtures and compatibility tests.
+7. Benchmark engine: isolated process lifecycle, HTTP latency/download/upload measurement, three samples, cancellation, and persistence.
+8. Reports and sorting: latest/history/compare views and core-independent/core-specific sorting.
+9. Pruning: dry-run previews, compatible-core evaluation rules, soft deletion, and restore.
+10. Activation: managed process lifecycle and safe stop behavior.
+11. TUN: implement only after network-state detection and rollback design are tested.
+12. Hardening: integration tests, documentation, packaging, security review, and performance checks.
+
+Each stage should leave the default branch buildable and tested. Do not implement all features in one large change. Update this plan when a material design decision changes.
+
+## 8. Open implementation details
+
+These are implementation choices, not blockers to the architecture:
+
+- Exact minimum supported Rust version and edition.
+- Exact pinned versions and official release/checksum metadata for each core.
+- Benchmark endpoint selection, payload sizes, and timeout defaults.
+- Precise configuration support matrix for each core version and URL option.
+- Platform-specific TUN backend and DNS/firewall rollback strategy.
+- Whether an explicit credential-reveal command is needed.
+
+Resolve these choices with evidence and document them before the affected feature is considered complete.
