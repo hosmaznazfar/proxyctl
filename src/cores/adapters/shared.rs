@@ -57,13 +57,19 @@ pub struct GeneratedConfig {
 }
 
 pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a str> {
-    node.option(key).and_then(Value::as_str).or_else(|| {
-        if node.option_entries.is_empty() {
-            node.options.get(key).map(String::as_str)
-        } else {
-            None
-        }
-    })
+    node.option(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            if node.option_entries.is_empty() {
+                node.options
+                    .get(key)
+                    .map(String::as_str)
+                    .filter(|value| !value.is_empty())
+            } else {
+                None
+            }
+        })
 }
 
 /// Collect ALPN identifiers from URI query values or structured VMess arrays.
@@ -74,7 +80,9 @@ pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, St
     if node.option_entries.is_empty() {
         if let Some(value) = node.options.get("alpn") {
             was_supplied = true;
-            protocols.extend(value.split(',').map(str::to_owned));
+            if !value.is_empty() || node.protocol != Protocol::Vmess {
+                protocols.extend(value.split(',').map(str::to_owned));
+            }
         }
     } else {
         for entry in node
@@ -85,7 +93,9 @@ pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, St
             was_supplied = true;
             match &entry.value {
                 Value::String(value) => {
-                    protocols.extend(value.split(',').map(str::to_owned));
+                    if !value.is_empty() || node.protocol != Protocol::Vmess {
+                        protocols.extend(value.split(',').map(str::to_owned));
+                    }
                 }
                 Value::Array(values) => {
                     for value in values {
@@ -104,6 +114,9 @@ pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, St
         return Ok(None);
     }
     if protocols.is_empty() {
+        if node.protocol == Protocol::Vmess {
+            return Ok(None);
+        }
         return Err("ALPN list must not be empty".into());
     }
 
