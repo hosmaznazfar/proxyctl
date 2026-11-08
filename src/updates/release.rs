@@ -51,7 +51,10 @@ pub fn latest_release(api_url: &str) -> anyhow::Result<Release> {
         .context("could not read GitHub release metadata")?;
     let release: Release =
         serde_json::from_str(&body).context("GitHub returned invalid release metadata")?;
-    ensure!(release.stable(), "latest GitHub release is a draft or prerelease");
+    ensure!(
+        release.stable(),
+        "latest GitHub release is a draft or prerelease"
+    );
     for asset in &release.assets {
         validate_github_download_url(&asset.browser_download_url)?;
     }
