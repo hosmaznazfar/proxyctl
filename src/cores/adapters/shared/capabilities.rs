@@ -5,7 +5,7 @@ use crate::{
     domain::{Protocol, ProxyNode, TransportKind},
 };
 
-use super::{normalize_transport, option_string, validate_common};
+use super::{Compatibility, normalize_transport, option_string, tls_options, validate_common};
 
 #[derive(Clone, Copy, Debug)]
 struct CoreCapabilities {
@@ -91,21 +91,48 @@ fn capabilities(core: CoreId) -> &'static CoreCapabilities {
     }
 }
 
+fn compatibility_failure(reason: String) -> Compatibility {
+    let normalized = reason.to_ascii_lowercase();
+    let invalid_markers = [
+        "invalid", "must be", "must not", "conflict", "ambiguous", "repeated",
+        "empty", "missing", "malformed", "control characters", "was supplied while",
+        "requires tls", "certificate sha-256 pin must",
+    ];
+    if invalid_markers.iter().any(|marker| normalized.contains(marker)) {
+        return Compatibility::invalid(reason);
+    }
+
+    let unsupported_markers = [
+        "not supported", "not implemented", "does not support", "unsupported",
+        "removed", "currently mapped", "not enabled", "requires an explicit",
+        "requires the sec-websocket-protocol",
+    ];
+    if unsupported_markers.iter().any(|marker| normalized.contains(marker)) {
+        return Compatibility::unsupported(reason);
+    }
+
+    Compatibility::invalid(reason)
+}
+
 /// Validate the shared semantic node against one core's explicit capability set.
-pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), String> {
-    validate_common(node)?;
+pub(crate) fn validate_for_core(
+    core: CoreId,
+    node: &ProxyNode,
+) -> Result<(), Compatibility> {
+    validate_common(node).map_err(compatibility_failure)?;
+    tls_options(node).map_err(compatibility_failure)?;
     let capabilities = capabilities(core);
 
     if node.protocol == Protocol::Hysteria2 && !capabilities.hysteria2 {
-        return Err(format!("{core} does not implement Hysteria2"));
+        return Err(compatibility_failure(format!("{core} does not implement Hysteria2")));
     }
 
     if option_string(node, "vcn").is_some() && !capabilities.verify_peer_cert_by_name {
-        return Err(format!("{core} does not support separate certificate-name verification"));
+        return Err(compatibility_failure(format!("{core} does not support separate certificate-name verification")));
     }
 
     if option_string(node, "pcs").or_else(|| option_string(node, "pinSHA256")).is_some() && !capabilities.certificate_sha256_pin {
-        return Err(format!("{core} does not support the imported certificate SHA-256 pin"));
+        return Err(compatibility_failure(format!("{core} does not support the imported certificate SHA-256 pin")));
     }
 
     let transport = normalize_transport(node)?;
@@ -113,11 +140,11 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
         && node.protocol == Protocol::Vmess
         && core != CoreId::Xray
     {
-        return Err(format!("{core} does not support VMess XHTTP"));
+        return Err(compatibility_failure(format!("{core} does not support VMess XHTTP")));
     }
 
     if !capabilities.supports_transport(&transport.kind) {
-        return Err(format!("{core} does not support this transport"));
+        return Err(compatibility_failure(format!("{core} does not support this transport")));
     }
 
     if core == CoreId::Xray
@@ -127,28 +154,28 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
             .as_deref()
             .is_some_and(|name| name != "Sec-WebSocket-Protocol")
     {
-        return Err("Xray WebSocket early data requires the Sec-WebSocket-Protocol header".into());
+        return Err(compatibility_failure("Xray WebSocket early data requires the Sec-WebSocket-Protocol header".into()));
     }
 
     if matches!(&transport.kind, TransportKind::Grpc)
         && transport.authority.is_some()
         && !capabilities.grpc_authority
     {
-        return Err(format!("{core} does not support gRPC authority"));
+        return Err(compatibility_failure(format!("{core} does not support gRPC authority")));
     }
 
     if matches!(&transport.kind, TransportKind::Grpc)
         && transport.mode.as_deref() == Some("multi")
         && !capabilities.grpc_multi_mode
     {
-        return Err(format!("{core} does not support gRPC multi mode"));
+        return Err(compatibility_failure(format!("{core} does not support gRPC multi mode")));
     }
 
     if matches!(&transport.kind, TransportKind::Grpc)
         && capabilities.grpc_service_name_required
         && transport.service_name.as_deref().is_none_or(str::is_empty)
     {
-        return Err(format!("{core} requires an explicit gRPC service name"));
+        return Err(compatibility_failure(format!("{core} requires an explicit gRPC service name")));
     }
 
     Ok(())
