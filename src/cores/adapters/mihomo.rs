@@ -68,6 +68,9 @@ impl CoreAdapter for MihomoAdapter {
             if let Some(alpn) = tls.get("alpn") {
                 proxy["alpn"] = alpn.clone();
             }
+            if let Some(fingerprint) = tls.get("fingerprint") {
+                proxy["client-fingerprint"] = fingerprint.clone();
+            }
         }
         json_config(json!({
             "allow-lan": false,
