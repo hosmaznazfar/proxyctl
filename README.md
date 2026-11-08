@@ -2,7 +2,7 @@
 
 A lightweight Rust command-line tool for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> **Project status:** the first usable node-management commands are implemented. Core installation, benchmarking, reports, sorting, pruning, activation, and TUN are planned next.
+> **Project status:** node management and the managed-core inventory are implemented. Verified core installation/update, benchmarking, reports, sorting, pruning, activation, and TUN are being developed in stages.
 
 ## Goals
 
@@ -73,17 +73,19 @@ proxyctl update
 proxyctl update --app
 ~~~
 
-The first published proxyctl release is required before an update can be downloaded. Core installation and core update targets are still under development; the unified command will include installed managed cores when that stage is complete.
+The first published proxyctl release is required before an update can be downloaded. Core installation and core update targets are still under development; the unified command will include installed managed cores when that stage is complete. The updater is split into focused modules for release metadata, platform selection, artifact download/checksum verification, and staged installation.
 
 ## Planned commands
 
 The following command groups are planned and are not available yet.
 
 ~~~sh
+# Managed-core inventory (implemented); installation and updates are next
+proxyctl cores
+
 # Managed-core installation and updates (not implemented yet)
 proxyctl setup
 proxyctl setup --core sing-box
-proxyctl cores
 proxyctl update --cores
 proxyctl update --core sing-box
 proxyctl update --core xray
