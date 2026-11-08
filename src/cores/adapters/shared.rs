@@ -62,13 +62,16 @@ pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a st
 /// Collect ALPN identifiers from URI query values or structured VMess arrays.
 pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, String> {
     let mut protocols = Vec::new();
+    let mut was_supplied = false;
 
     if node.option_entries.is_empty() {
         if let Some(value) = node.options.get("alpn") {
+            was_supplied = true;
             protocols.extend(value.split(',').map(str::to_owned));
         }
     } else {
         for entry in node.option_entries.iter().filter(|entry| entry.key == "alpn") {
+            was_supplied = true;
             match &entry.value {
                 Value::String(value) => {
                     protocols.extend(value.split(',').map(str::to_owned));
@@ -86,8 +89,11 @@ pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, St
         }
     }
 
-    if protocols.is_empty() {
+    if !was_supplied {
         return Ok(None);
+    }
+    if protocols.is_empty() {
+        return Err("ALPN list must not be empty".into());
     }
 
     let mut seen = std::collections::BTreeSet::new();
