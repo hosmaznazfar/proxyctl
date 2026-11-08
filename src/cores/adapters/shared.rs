@@ -70,7 +70,11 @@ pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, St
             protocols.extend(value.split(',').map(str::to_owned));
         }
     } else {
-        for entry in node.option_entries.iter().filter(|entry| entry.key == "alpn") {
+        for entry in node
+            .option_entries
+            .iter()
+            .filter(|entry| entry.key == "alpn")
+        {
             was_supplied = true;
             match &entry.value {
                 Value::String(value) => {
