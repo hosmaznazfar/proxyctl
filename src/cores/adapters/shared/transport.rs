@@ -52,12 +52,14 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             headers.insert("Host".to_owned(), host.to_owned());
         }
     } else if matches!(&kind, TransportKind::Grpc) {
-        let source_authority = if node.protocol == Protocol::Vmess {
-            source_host
-        } else {
-            option_string(node, "authority").or(source_host)
-        };
-        authority = source_authority.map(str::to_owned);
+        let authority_values = [option_string(node, "authority"), source_host]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        if authority_values.windows(2).any(|values| values[0] != values[1]) {
+            return Err("gRPC authority aliases conflict".into());
+        }
+        authority = authority_values.first().map(|value| (*value).to_owned());
     } else if matches!(&kind, TransportKind::XHttp | TransportKind::HttpUpgrade) {
         host = source_host.map(str::to_owned);
     } else if matches!(&kind, TransportKind::Http2) {
@@ -159,17 +161,21 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     }
 
     let service_name = if matches!(&kind, TransportKind::Grpc) {
-        let value = if node.protocol == Protocol::Vmess {
-            option_string(node, "path")
-        } else {
-            option_string(node, "serviceName")
-                .or_else(|| option_string(node, "service_name"))
-                .or_else(|| option_string(node, "path"))
-        };
+        let service_values = [
+            option_string(node, "serviceName"),
+            option_string(node, "service_name"),
+            option_string(node, "path"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        if service_values.windows(2).any(|values| values[0] != values[1]) {
+            return Err("gRPC service-name aliases conflict".into());
+        }
         if !headers.is_empty() {
             return Err("HTTP headers are not valid gRPC settings".into());
         }
-        value.map(str::to_owned)
+        service_values.first().map(|value| (*value).to_owned())
     } else {
         None
     };
@@ -194,9 +200,6 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     }
     if matches!(&kind, TransportKind::Tcp) && (path.is_some() || host.is_some() || !headers.is_empty() || !hosts.is_empty()) {
         return Err("path or host/header was supplied for TCP transport".into());
-    }
-    if matches!(&kind, TransportKind::Grpc) && path.is_some() && node.protocol != Protocol::Vmess {
-        return Err("gRPC URI service names must use the serviceName parameter".into());
     }
     if !matches!(&kind, TransportKind::WebSocket | TransportKind::HttpUpgrade) && !headers.is_empty() {
         return Err("HTTP headers are only mapped for WebSocket in this adapter batch".into());
