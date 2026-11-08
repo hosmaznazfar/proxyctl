@@ -191,6 +191,43 @@ mod tests {
     }
 
     #[test]
+    fn adapters_map_http_upgrade_without_conflating_host_and_sni() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=httpupgrade&host=upgrade.example&path=%2Fupgrade&security=tls&sni=tls.example",
+        )
+        .unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = adapter(core).generate_config(&node).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let (transport, host, path, sni) = match core {
+                CoreId::SingBox => (
+                    document["outbounds"][0]["transport"]["type"].as_str(),
+                    document["outbounds"][0]["transport"]["host"].as_str(),
+                    document["outbounds"][0]["transport"]["path"].as_str(),
+                    document["outbounds"][0]["tls"]["server_name"].as_str(),
+                ),
+                CoreId::Xray => (
+                    document["outbounds"][0]["streamSettings"]["network"].as_str(),
+                    document["outbounds"][0]["streamSettings"]["httpupgradeSettings"]["host"].as_str(),
+                    document["outbounds"][0]["streamSettings"]["httpupgradeSettings"]["path"].as_str(),
+                    document["outbounds"][0]["streamSettings"]["tlsSettings"]["serverName"].as_str(),
+                ),
+                CoreId::Mihomo => (
+                    document["proxies"][0]["ws-opts"]["v2ray-http-upgrade"].as_bool().map(|v| if v { "httpupgrade" } else { "ws" }),
+                    document["proxies"][0]["ws-opts"]["headers"]["Host"].as_str(),
+                    document["proxies"][0]["ws-opts"]["path"].as_str(),
+                    document["proxies"][0]["servername"].as_str(),
+                ),
+            };
+            assert_eq!(transport, Some("httpupgrade"), "{core}");
+            assert_eq!(host, Some("upgrade.example"), "{core}");
+            assert_eq!(path, Some("/upgrade"), "{core}");
+            assert_eq!(sni, Some("tls.example"), "{core}");
+        }
+    }
+
+    #[test]
     fn adapters_reject_unknown_transport_without_dropping_it() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
