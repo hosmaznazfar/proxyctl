@@ -531,6 +531,23 @@ mod tests {
     }
 
     #[test]
+    fn vmess_boolean_tls_and_insecure_values_are_normalized() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","security":"auto","net":"tcp","tls":true,"insecure":true}"#,
+        );
+        let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+        let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+        let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+        assert_eq!(sing_box_doc["outbounds"][0]["tls"]["insecure"], true);
+
+        let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+        let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+        assert_eq!(mihomo_doc["proxies"][0]["skip-cert-verify"], true);
+    }
+
+    #[test]
     fn vmess_empty_optional_fields_are_treated_as_defaults() {
         use base64::{Engine as _, engine::general_purpose};
 
