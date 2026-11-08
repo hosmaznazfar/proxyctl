@@ -6,7 +6,7 @@ pub mod database;
 pub mod domain;
 pub mod parser;
 pub mod services;
-pub mod tun;
+pub mod tun;\npub mod updates;
 
 /// Parse command-line arguments and run the application.
 pub fn run() -> anyhow::Result<()> {
