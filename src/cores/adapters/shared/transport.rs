@@ -24,7 +24,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         other => TransportKind::Unknown(other.to_owned()),
     };
 
-    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade) {
+    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::XHttp) {
         return Err(format!("transport '{network}' is not implemented by this adapter batch"));
     }
 
@@ -38,6 +38,8 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             headers.insert("Host".to_owned(), host.to_owned());
         }
     } else if matches!(&kind, TransportKind::HttpUpgrade) {
+        host = source_host.map(str::to_owned);
+    } else if matches!(&kind, TransportKind::XHttp | TransportKind::HttpUpgrade) {
         host = source_host.map(str::to_owned);
     } else if matches!(&kind, TransportKind::Http2) {
         if let Some(host) = source_host {
@@ -67,6 +69,18 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
                 return Err("transport Host/header values are ambiguous".into());
             }
         }
+    }
+
+    let mode = option_string(node, "mode").map(str::to_owned);
+    if matches!(&kind, TransportKind::XHttp) {
+        if node.protocol != Protocol::Vless {
+            return Err("XHTTP transport is only supported for VLESS".into());
+        }
+        if mode.as_deref().is_some_and(|value| !["auto", "packet-up", "stream-up", "stream-one"].contains(&value)) {
+            return Err("XHTTP mode is invalid".into());
+        }
+    } else if mode.is_some() && !matches!(&kind, TransportKind::Grpc) {
+        return Err("mode is only mapped for gRPC and XHTTP transports".into());
     }
 
     let service_name = if matches!(&kind, TransportKind::Grpc) {
@@ -100,6 +114,6 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         hosts,
         host,
         service_name,
-        mode: None,
+        mode,
     })
 }
