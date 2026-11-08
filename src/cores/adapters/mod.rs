@@ -125,7 +125,7 @@ mod tests {
         )
         .unwrap();
         let vmess_payload = general_purpose::STANDARD.encode(
-            br#"{\"add\":\"vmess.example\",\"port\":\"443\",\"id\":\"11111111-1111-4111-8111-111111111111\",\"net\":\"ws\"}"#,
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"ws"}"#
         );
         let vmess = parse_proxy_url(&format!("vmess://{vmess_payload}")).unwrap();
 
