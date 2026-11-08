@@ -2,7 +2,7 @@
 
 use std::{env, fs};
 
-use anyhow::{Context, ensure};
+use anyhow::Context;
 use semver::Version;
 
 use super::{
