@@ -284,6 +284,51 @@ mod tests {
     }
 
     #[test]
+    fn websocket_early_data_is_mapped_per_core() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fws&ed=2048&eh=Sec-WebSocket-Protocol",
+        )
+        .unwrap();
+
+        let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+        let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+        assert_eq!(sing_box_doc["outbounds"][0]["transport"]["max_early_data"], 2048);
+        assert_eq!(
+            sing_box_doc["outbounds"][0]["transport"]["early_data_header_name"],
+            "Sec-WebSocket-Protocol"
+        );
+
+        let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+        let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
+        assert_eq!(
+            xray_doc["outbounds"][0]["streamSettings"]["wsSettings"]["path"],
+            "/ws?ed=2048"
+        );
+
+        let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+        let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+        assert_eq!(mihomo_doc["proxies"][0]["ws-opts"]["max-early-data"], 2048);
+        assert_eq!(
+            mihomo_doc["proxies"][0]["ws-opts"]["early-data-header-name"],
+            "Sec-WebSocket-Protocol"
+        );
+    }
+
+    #[test]
+    fn xray_rejects_custom_websocket_early_data_header() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&ed=1024&eh=X-Custom-Early-Data",
+        )
+        .unwrap();
+        assert_eq!(
+            adapter(CoreId::Xray).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+        assert!(adapter(CoreId::SingBox).compatibility(&node).is_supported());
+        assert!(adapter(CoreId::Mihomo).compatibility(&node).is_supported());
+    }
+
+    #[test]
     fn adapters_reject_unknown_transport_without_dropping_it() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
