@@ -2,7 +2,7 @@
 
 A lightweight Rust command-line tool for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> **Project status:** initial Rust project foundation is in place. Protocol parsing, storage, core management, and benchmarking are the next implementation stages.
+> **Project status:** the first usable node-management commands are implemented. Core installation, benchmarking, reports, sorting, pruning, activation, and TUN are planned next.
 
 ## Goals
 
@@ -25,58 +25,83 @@ A lightweight Rust command-line tool for managing proxy URLs, testing them throu
 - Do not silently discard unsupported URL options.
 - Make TUN and system-wide networking changes explicit and reversible.
 
-## Current development status
+## Available commands
 
-The initial Rust package and module boundaries are committed. The current executable supports Cargo's generated help and version output; application commands are being added incrementally.
+Build and run the application:
 
 ~~~sh
 cargo run -- --help
 cargo run -- --version
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets --all-features
 ~~~
 
-The repository CI runs formatting, Clippy, and tests on pushes and pull requests.
+Add one URL:
+
+~~~sh
+proxyctl add "vless://..."
+~~~
+
+Import a text file. Blank lines and lines beginning with # are ignored; the source file is never modified.
+
+~~~sh
+proxyctl import ~/Documents/servers.txt
+~~~
+
+List, inspect, soft-delete, and restore records:
+
+~~~sh
+proxyctl list
+proxyctl list --include-deleted
+proxyctl show 12
+proxyctl remove 12
+proxyctl restore 12
+~~~
+
+The default database is stored under XDG_DATA_HOME when set, otherwise under ~/.local/share/proxyctl/proxyctl.redb. On Unix, the application secures its data directory with mode 0700 and the database file with mode 0600.
+
+Normal output masks credentials. The show command displays option names but not option values or the original URL.
 
 ## Planned commands
 
-The following is the target command interface. Commands remain planned until their implementation is merged.
+The following command groups are planned and are not available yet.
 
 ~~~sh
+# Install and inspect managed cores
 proxyctl setup
 proxyctl cores
 proxyctl update
 
-proxyctl import ~/Documents/servers.txt
-proxyctl add "vless://..."
-proxyctl list
-proxyctl show 12
-proxyctl remove 12
-proxyctl restore 12
-
+# Test nodes
 proxyctl test --all-cores
 proxyctl test --node 12 --core sing-box
 
+# View benchmark reports
 proxyctl report
 proxyctl report --history
 proxyctl report --compare
 proxyctl report --core mihomo
 proxyctl report --node 12
 
+# Sort by the best result across compatible cores
 proxyctl list --sort ping
 proxyctl list --sort download
 proxyctl list --sort upload
-proxyctl list --sort ping --core xray
 
+# Restrict sorting to one core
+proxyctl list --sort ping --core xray
+proxyctl list --sort download --core sing-box
+proxyctl list --sort upload --core mihomo
+
+# Preview cleanup before applying it
 proxyctl prune --unavailable-all --dry-run
 proxyctl prune --unavailable-all --apply
 proxyctl prune --core xray --unavailable --dry-run
 proxyctl prune --core xray --unavailable --apply
 
+# Activate one node or stop a proxyctl-managed process
 proxyctl use 12 --core sing-box
 proxyctl stop
 
+# Optional TUN mode
 proxyctl tun on
 proxyctl tun off
 ~~~
@@ -112,11 +137,11 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 ~~~
 
-The next stages add the domain model and URL parsers, followed by database repositories and node-management commands. See [PLAN.md](docs/PLAN.md) for the staged roadmap.
+CI runs formatting, Clippy, and tests on pushes and pull requests. The next stages add core adapters and management, benchmarking, reporting, sorting, and cleanup. See [PLAN.md](docs/PLAN.md) for the staged roadmap.
 
 ## Security
 
-Proxy URLs may contain credentials and other sensitive values. Do not share database files, debug logs, or command output containing unmasked URLs. Proxyctl is designed to mask secrets in normal output and use restrictive permissions for local data.
+Proxy URLs may contain credentials and other sensitive values. Do not share database files, debug logs, or command output containing unmasked URLs. Proxyctl masks secrets in normal output and uses restrictive permissions for local data.
 
 Core binaries are planned to be downloaded from official release sources and verified before execution. TUN support will be opt-in and will require explicit network-state checks and rollback handling.
 

@@ -12,8 +12,5 @@ pub mod tun;
 pub fn run() -> anyhow::Result<()> {
     use clap::Parser as _;
 
-    let _cli = cli::Cli::parse();
-
-    println!("proxyctl is under development; see --help for available options.");
-    Ok(())
+    cli::dispatch(cli::Cli::parse())
 }
