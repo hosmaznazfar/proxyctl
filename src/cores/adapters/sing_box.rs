@@ -63,7 +63,10 @@ impl CoreAdapter for SingBoxAdapter {
                 "password": node.secret.as_ref().map(|v| v.expose()).unwrap_or_default()
             }),
         };
-        if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
+        if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
+            if let Some(fingerprint) = tls.as_object_mut().and_then(|options| options.remove("fingerprint")) {
+                tls["utls"] = json!({"enabled": true, "fingerprint": fingerprint});
+            }
             outbound
                 .as_object_mut()
                 .expect("outbound object")
