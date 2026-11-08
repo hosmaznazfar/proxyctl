@@ -30,6 +30,12 @@ impl CoreAdapter for MihomoAdapter {
                 {
                     Compatibility::unsupported("Mihomo requires an explicit gRPC service name")
                 }
+                Ok(transport)
+                    if node.protocol == Protocol::Vless
+                        && matches!(&transport.kind, crate::domain::TransportKind::Http2) =>
+                {
+                    Compatibility::unsupported("Mihomo VLESS HTTP/2 transport is not in the verified capability set")
+                }
                 Err(reason) => Compatibility::unsupported(reason),
                 _ => match tls_options(node) {
                     Ok(_) => Compatibility::supported(),
