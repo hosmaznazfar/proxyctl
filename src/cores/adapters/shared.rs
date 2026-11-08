@@ -156,9 +156,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "alpn", "fp"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "alpn", "fp"],
-        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "alpn", "fp"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "alpn", "fp"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "alpn", "fp"],
+        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
     };
@@ -181,7 +181,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     {
         return Err("VMess TCP header modes are not implemented; only WebSocket and plain TCP are accepted".into());
     }
-    if !matches!(&transport.kind, TransportKind::Tcp | TransportKind::WebSocket) {
+    if !matches!(&transport.kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc) {
         return Err("transport is not implemented by this adapter batch".into());
     }
 
@@ -207,13 +207,13 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         if option_string(node, "encryption").is_some_and(|value| value != "none") {
             return Err("only VLESS encryption=none is currently mapped".into());
         }
-        if option_string(node, "type").is_some_and(|value| !["tcp", "ws"].contains(&value)) {
-            return Err("only VLESS TCP and WebSocket transports are currently mapped".into());
+        if option_string(node, "type").is_some_and(|value| !["tcp", "ws", "grpc"].contains(&value)) {
+            return Err("only VLESS TCP, WebSocket, and gRPC transports are currently mapped".into());
         }
     }
     if node.protocol == Protocol::Vmess {
         if option_string(node, "net").is_some_and(|value| !["tcp", "ws"].contains(&value)) {
-            return Err("only VMess TCP and WebSocket transports are currently mapped".into());
+            return Err("only VMess TCP, WebSocket, and gRPC transports are currently mapped".into());
         }
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
             return Err("VMess alter ID is invalid".into());
