@@ -72,46 +72,6 @@ fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, String> {
     Ok(Some(normalized))
 }
 
-fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), String> {
-    let keys = if node.option_entries.is_empty() {
-        node.options.keys().map(String::as_str).collect::<Vec<_>>()
-    } else {
-        node.option_entries
-            .iter()
-            .map(|entry| entry.key.as_str())
-            .collect::<Vec<_>>()
-    };
-    if let Some(key) = keys.into_iter().find(|key| !supported.contains(key)) {
-        return Err(format!(
-            "option '{key}' is not supported by this adapter yet"
-        ));
-    }
-    Ok(())
-}
-
-fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
-    const STRING_OPTIONS: &[&str] = &[
-        "security", "sni", "encryption", "flow", "type", "host", "path", "serviceName",
-        "service_name", "authority", "mode", "net", "scy", "ed", "eh", "maxEarlyData",
-        "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data",
-        "early-data-header-name", "pcs", "pinSHA256", "vcn", "fp",
-    ];
-    for key in STRING_OPTIONS {
-        if let Some(value) = node.option(key)
-            && !matches!(value, Value::String(_) | Value::Null)
-        {
-            return Err(format!("option '{key}' must be a string"));
-        }
-    }
-    if node.protocol != Protocol::Vmess
-        && let Some(value) = node.option("tls")
-        && !matches!(value, Value::String(_) | Value::Null)
-    {
-        return Err("TLS option must be a string".into());
-    }
-    Ok(())
-}
-
 fn parse_bool_string(value: &str) -> Result<bool, String> {
     match value.to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Ok(true),
