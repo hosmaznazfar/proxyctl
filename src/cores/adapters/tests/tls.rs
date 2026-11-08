@@ -39,8 +39,14 @@ use super::*;
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&pcs=not-a-hash",
         )
         .unwrap();
-        assert!(!adapter(CoreId::Xray).compatibility(&no_tls).is_supported());
-        assert!(!adapter(CoreId::Xray).compatibility(&malformed).is_supported());
+        assert_eq!(
+            adapter(CoreId::Xray).compatibility(&no_tls).status,
+            CompatibilityStatus::Invalid
+        );
+        assert_eq!(
+            adapter(CoreId::Xray).compatibility(&malformed).status,
+            CompatibilityStatus::Invalid
+        );
     }
 
 
@@ -362,9 +368,18 @@ use super::*;
         let hysteria2 = parse_proxy_url("hysteria2://secret@example.com:443?fp=chrome").unwrap();
 
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-            assert!(!adapter(core).compatibility(&no_tls).is_supported());
-            assert!(!adapter(core).compatibility(&invalid).is_supported());
-            assert!(!adapter(core).compatibility(&hysteria2).is_supported());
+            assert_eq!(
+                adapter(core).compatibility(&no_tls).status,
+                CompatibilityStatus::Invalid
+            );
+            assert_eq!(
+                adapter(core).compatibility(&invalid).status,
+                CompatibilityStatus::Invalid
+            );
+            assert_eq!(
+                adapter(core).compatibility(&hysteria2).status,
+                CompatibilityStatus::Unsupported
+            );
         }
     }
 
@@ -385,9 +400,18 @@ use super::*;
         .unwrap();
 
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-            assert!(!adapter(core).compatibility(&no_tls).is_supported());
-            assert!(!adapter(core).compatibility(&empty_entry).is_supported());
-            assert!(!adapter(core).compatibility(&duplicate_entry).is_supported());
+            assert_eq!(
+                adapter(core).compatibility(&no_tls).status,
+                CompatibilityStatus::Invalid
+            );
+            assert_eq!(
+                adapter(core).compatibility(&empty_entry).status,
+                CompatibilityStatus::Invalid
+            );
+            assert_eq!(
+                adapter(core).compatibility(&duplicate_entry).status,
+                CompatibilityStatus::Invalid
+            );
         }
     }
 
