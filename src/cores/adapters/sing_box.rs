@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, tls_options, validate_common},
 };
 
 pub struct SingBoxAdapter;
@@ -63,6 +63,18 @@ impl CoreAdapter for SingBoxAdapter {
                 "password": node.secret.as_ref().map(|v| v.expose()).unwrap_or_default()
             }),
         };
+        let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
+        if matches!(transport.kind, crate::domain::TransportKind::WebSocket) {
+            let mut ws = serde_json::Map::new();
+            ws.insert("type".into(), json!("ws"));
+            if let Some(path) = transport.path {
+                ws.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                ws.insert("headers".into(), json!(transport.headers));
+            }
+            outbound["transport"] = serde_json::Value::Object(ws);
+        }
         if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             if let Some(fingerprint) = tls.as_object_mut().and_then(|options| options.remove("fingerprint")) {
                 tls["utls"] = json!({"enabled": true, "fingerprint": fingerprint});
