@@ -1,12 +1,11 @@
-use std::collections::BTreeSet;
-
 use serde_json::Value;
 
 use crate::domain::{Protocol, ProxyNode};
 
 use super::option_string;
 
-fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, String> {
+/// Collect ALPN identifiers from URI query values or structured VMess arrays.
+pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, String> {
     let mut protocols = Vec::new();
     let mut was_supplied = false;
 
