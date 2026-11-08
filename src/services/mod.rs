@@ -4,3 +4,4 @@
 //! clap's CLI types.
 
 pub mod nodes;
+pub mod updates;
