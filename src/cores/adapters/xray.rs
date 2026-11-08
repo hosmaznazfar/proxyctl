@@ -22,7 +22,7 @@ impl CoreAdapter for XrayAdapter {
         if node.protocol == Protocol::Hysteria2 {
             return Compatibility::unsupported("Xray does not implement Hysteria2");
         }
-        match validate_common(node, &["security", "tls", "sni", "encryption", "flow", "aid", "scy"]) {
+        match validate_common(node) {
             Err(reason) => Compatibility::unsupported(reason),
             Ok(()) if node.options.get("encryption").is_some_and(|v| v != "none") =>
                 Compatibility::unsupported("only VLESS encryption=none is currently mapped"),
