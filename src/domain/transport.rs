@@ -27,6 +27,8 @@ pub struct Transport {
     pub host: Option<String>,
     pub service_name: Option<String>,
     pub mode: Option<String>,
+    pub max_early_data: Option<u32>,
+    pub early_data_header_name: Option<String>,
 }
 
 impl Transport {
@@ -39,6 +41,8 @@ impl Transport {
             host: None,
             service_name: None,
             mode: None,
+            max_early_data: None,
+            early_data_header_name: None,
         }
     }
 }
