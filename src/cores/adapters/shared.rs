@@ -164,17 +164,18 @@ fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
         "early-data-header-name", "pcs", "pinSHA256", "vcn", "fp",
     ];
     for key in STRING_OPTIONS {
-        if let Some(value) = node.option(key)
-            && !matches!(value, Value::String(_) | Value::Null)
-        {
-            return Err(format!("option '{key}' must be a string"));
+        if let Some(value) = node.option(key) {
+            if !matches!(value, Value::String(_) | Value::Null) {
+                return Err(format!("option '{key}' must be a string"));
+            }
         }
     }
-    if node.protocol != Protocol::Vmess
-        && let Some(value) = node.option("tls")
-        && !matches!(value, Value::String(_) | Value::Null)
-    {
-        return Err("TLS option must be a string".into());
+    if node.protocol != Protocol::Vmess {
+        if let Some(value) = node.option("tls") {
+            if !matches!(value, Value::String(_) | Value::Null) {
+                return Err("TLS option must be a string".into());
+            }
+        }
     }
     Ok(())
 }
