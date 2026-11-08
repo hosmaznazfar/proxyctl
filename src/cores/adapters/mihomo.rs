@@ -135,6 +135,9 @@ impl CoreAdapter for MihomoAdapter {
             if let Some(fingerprint) = tls.get("fingerprint") {
                 proxy["client-fingerprint"] = fingerprint.clone();
             }
+            if let Some(pin) = tls.get("certificate_sha256") {
+                proxy["fingerprint"] = pin.clone();
+            }
         }
         json_config(json!({
             "allow-lan": false,
