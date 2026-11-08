@@ -76,7 +76,7 @@ const MIHOMO: CoreCapabilities = CoreCapabilities {
     grpc_service_name_required: true,
     grpc_authority: false,
     grpc_multi_mode: false,
-    certificate_sha256_pin: false,
+    certificate_sha256_pin: true,
 };
 
 fn capabilities(core: CoreId) -> &'static CoreCapabilities {
@@ -150,6 +150,7 @@ mod tests {
         assert!(!capabilities(CoreId::Xray).http2);
         assert!(capabilities(CoreId::Xray).certificate_sha256_pin);
         assert!(!capabilities(CoreId::SingBox).certificate_sha256_pin);
+        assert!(capabilities(CoreId::Mihomo).certificate_sha256_pin);
         assert!(capabilities(CoreId::Mihomo).http2);
         assert!(capabilities(CoreId::Mihomo).grpc_service_name_required);
         assert!(capabilities(CoreId::Xray).grpc_authority);
