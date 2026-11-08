@@ -118,6 +118,19 @@ impl CoreAdapter for MihomoAdapter {
                 upgrade.insert("headers".into(), json!(headers));
             }
             proxy["ws-opts"] = serde_json::Value::Object(upgrade);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::XHttp) {
+            proxy["network"] = json!("xhttp");
+            let mut xhttp = serde_json::Map::new();
+            if let Some(host) = transport.host {
+                xhttp.insert("host".into(), json!(host));
+            }
+            if let Some(path) = transport.path {
+                xhttp.insert("path".into(), json!(path));
+            }
+            if let Some(mode) = transport.mode {
+                xhttp.insert("mode".into(), json!(mode));
+            }
+            proxy["xhttp-opts"] = serde_json::Value::Object(xhttp);
         }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
