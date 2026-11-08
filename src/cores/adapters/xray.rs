@@ -57,7 +57,7 @@ impl CoreAdapter for XrayAdapter {
         let output = Command::new(executable)
             .arg("run").arg("-test").arg("-c").arg(config)
             .output().context("could not run Xray config validation")?;
-        ensure!(output.status.success(), "Xray rejected the generated configuration: {}", String::from_utf8_lossy(&output.stderr).trim());
+        ensure!(output.status.success(), "Xray rejected the generated configuration (exit status {:?})", output.status.code());
         Ok(())
     }
 }
