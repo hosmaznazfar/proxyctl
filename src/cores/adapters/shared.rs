@@ -172,9 +172,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "alpn", "fp"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "alpn", "fp"],
-        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "alpn", "fp"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
+        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
+        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
     };
@@ -247,8 +247,24 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     Ok(())
 }
 
+fn insecure_option(node: &ProxyNode) -> Result<bool, String> {
+    let parse = |value: &str| match value.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" => Ok(false),
+        _ => Err("TLS insecure option must be a boolean".to_owned()),
+    };
+    let insecure = option_string(node, "insecure").map(parse).transpose()?;
+    let allow_insecure = option_string(node, "allowInsecure").map(parse).transpose()?;
+    if insecure.is_some() && allow_insecure.is_some() && insecure != allow_insecure {
+        return Err("insecure and allowInsecure options conflict".into());
+    }
+    Ok(insecure.or(allow_insecure).unwrap_or(false))
+}
+
 pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
     let default_tls = matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2);
+    let insecure = insecure_option(node)?;
+    let verify_peer_cert_by_name = option_string(node, "vcn");
     let security = option_string(node, "security")
         .or_else(|| option_string(node, "tls"))
         .unwrap_or(if default_tls { "tls" } else { "none" })
@@ -270,11 +286,26 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             if option_string(node, "pcs").is_some() {
                 return Err("certificate pin was supplied while TLS is disabled".into());
             }
+            if insecure {
+                return Err("insecure certificate verification was requested while TLS is disabled".into());
+            }
+            if verify_peer_cert_by_name.is_some() {
+                return Err("certificate name verification was supplied while TLS is disabled".into());
+            }
             Ok(None)
         }
         "tls" | "true" | "1" => {
             let mut tls = Map::new();
             tls.insert("enabled".into(), Value::Bool(true));
+            if insecure {
+                tls.insert("insecure".into(), Value::Bool(true));
+            }
+            if let Some(name) = verify_peer_cert_by_name {
+                if name.chars().any(char::is_control) {
+                    return Err("certificate verification name contains control characters".into());
+                }
+                tls.insert("verify_peer_cert_by_name".into(), Value::String(name.into()));
+            }
             if let Some(sni) = option_string(node, "sni") {
                 tls.insert("server_name".into(), Value::String(sni.into()));
             }
