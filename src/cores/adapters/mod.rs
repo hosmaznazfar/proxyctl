@@ -192,6 +192,10 @@ mod tests {
             )
             .unwrap();
         }
+        assert_eq!(
+            adapter(CoreId::Xray).compatibility(&vmess).status,
+            CompatibilityStatus::Unsupported
+        );
     }
 
     #[test]
