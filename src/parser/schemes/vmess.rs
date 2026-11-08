@@ -88,8 +88,6 @@ fn decode_base64(input: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use base64::Engine as _;
-
     use super::*;
 
     #[test]
