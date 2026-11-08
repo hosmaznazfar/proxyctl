@@ -86,11 +86,15 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     let mut mode = option_string(node, "mode").map(str::to_owned);
     if matches!(&kind, TransportKind::Grpc) {
         if node.protocol == Protocol::Vmess {
-            mode = match option_string(node, "type") {
+            let type_mode = match option_string(node, "type") {
                 Some("gun" | "multi") => option_string(node, "type").map(str::to_owned),
                 Some("none") | None => None,
                 Some(_) => return Err("VMess gRPC mode must be gun or multi".into()),
             };
+            if mode.is_some() && type_mode.is_some() && mode != type_mode {
+                return Err("VMess gRPC mode fields conflict".into());
+            }
+            mode = type_mode.or(mode);
         }
         if mode.as_deref().is_some_and(|value| !["gun", "multi"].contains(&value)) {
             return Err("gRPC mode must be gun or multi".into());
@@ -127,7 +131,11 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             return Err("XHTTP transport is only supported for VLESS and VMess".into());
         }
         if node.protocol == Protocol::Vmess {
-            mode = option_string(node, "type").map(str::to_owned);
+            let type_mode = option_string(node, "type").map(str::to_owned);
+            if mode.is_some() && type_mode.is_some() && mode != type_mode {
+                return Err("VMess XHTTP mode fields conflict".into());
+            }
+            mode = type_mode.or(mode);
         }
         if mode.as_deref().is_some_and(|value| !["auto", "packet-up", "stream-up", "stream-one"].contains(&value)) {
             return Err("XHTTP mode is invalid".into());
