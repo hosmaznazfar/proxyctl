@@ -155,7 +155,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "alpn", "fp"],
         Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "alpn", "fp"],
         Protocol::Trojan => vec!["security", "tls", "sni", "alpn", "fp"],
-        Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn"],
+        Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
     };
     reject_unknown_options(node, &supported)?;
