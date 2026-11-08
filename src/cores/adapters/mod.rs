@@ -136,11 +136,9 @@ mod tests {
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc",
         )
         .unwrap();
-        let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
-        let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
         assert_eq!(
-            mihomo_doc["proxies"][0]["fingerprint"],
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            adapter(CoreId::Mihomo).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
         );
         assert!(adapter(CoreId::SingBox).compatibility(&node).is_supported());
         assert!(adapter(CoreId::Xray).compatibility(&node).is_supported());
@@ -349,9 +347,11 @@ mod tests {
             adapter(CoreId::SingBox).compatibility(&node).status,
             CompatibilityStatus::Unsupported
         );
+        let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+        let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
         assert_eq!(
-            adapter(CoreId::Mihomo).compatibility(&node).status,
-            CompatibilityStatus::Unsupported
+            mihomo_doc["proxies"][0]["fingerprint"],
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         );
     }
 
