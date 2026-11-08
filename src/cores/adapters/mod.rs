@@ -329,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn vmess_pcs_certificate_pin_is_xray_only() {
+    fn vmess_pcs_certificate_pin_maps_to_xray_and_mihomo() {
         use base64::{Engine as _, engine::general_purpose};
 
         let payload = general_purpose::STANDARD.encode(
