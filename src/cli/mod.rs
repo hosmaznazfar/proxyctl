@@ -37,6 +37,12 @@ enum Command {
     Restore {
         id: u64,
     },
+    /// Validate a stored node's generated config without starting a proxy core.
+    Check {
+        id: u64,
+        #[arg(long, value_name = "CORE")]
+        core: Option<String>,
+    },
     /// Show managed core status and versions.
     Cores,
     /// Install all supported cores, or one selected core.
@@ -143,6 +149,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             } else {
                 println!("Node #{id} was not found or is not deleted.");
             }
+        }
+        Command::Check { id, core } => {
+            crate::services::validation::check_node(
+                &database_path,
+                id,
+                parse_core(core.as_deref())?,
+            )?;
         }
         Command::Cores | Command::Setup { .. } | Command::Update { .. } => {
             unreachable!("management commands are dispatched before database access")
