@@ -18,7 +18,9 @@ This matrix describes only the currently implemented adapter subset. It is not a
 | REALITY | Not yet | Not yet | Not yet |
 | WebSocket (VLESS, VMess, Trojan) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
 | gRPC (standard mode) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending* |
-| HTTP/2 / HTTPUpgrade / XHTTP | Not yet | Not yet | Not yet |
+| HTTP/2 (VLESS/VMess) | Implemented; native validation pending | Unsupported in current Xray schema | Implemented; native validation pending |
+| HTTPUpgrade | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
+| XHTTP (VLESS only) | Unsupported | Implemented; native validation pending | Implemented; native validation pending |
 | VMess non-TCP transports | Not yet | Not yet | Not yet |
 | Shadowsocks plugins / obfuscation | Not yet | Not yet | Not yet |
 | Hysteria2 obfuscation | Not yet | Not yet | Not yet |
@@ -46,7 +48,7 @@ This matrix describes only the currently implemented adapter subset. It is not a
 
 The adapters are an initial conservative implementation. The `check` command now owns the temporary config lifecycle and invokes the installed managed binary's validation mode. The command does not start a core. The compatibility table must be expanded only alongside fixtures and successful validation against the supported managed core versions.
 
-WebSocket is normalized once and mapped to sing-box `transport`, Xray `streamSettings.network` + `wsSettings`, and Mihomo `network` + `ws-opts`. Standard gRPC is normalized once and mapped to sing-box `transport.service_name`, Xray `grpcSettings.serviceName`, and Mihomo `grpc-opts.grpc-service-name`. URI `host` and structured VMess request headers map to WebSocket HTTP headers; TLS SNI remains independent. Unit fixtures cover VLESS and VMess WebSocket, plus VLESS gRPC. Mihomo requires an explicit gRPC service name; sing-box and Xray allow it to be omitted. Native validation against installed managed binaries is still required before treating these mappings as verified. HTTP/2, HTTPUpgrade, XHTTP, and non-standard gRPC modes remain unsupported. REALITY is rejected rather than approximated as ordinary TLS.
+WebSocket, standard gRPC, HTTP/2, HTTPUpgrade, and VLESS XHTTP now have shared normalized representations and adapter mappings. sing-box HTTP/2 uses its HTTP transport; current Xray schemas have removed the legacy HTTP/2 transport, so Proxyctl rejects it there; Mihomo uses its `h2` transport. HTTPUpgrade maps to sing-box/Xray native transports and Mihomo's WebSocket transport with `v2ray-http-upgrade: true`. XHTTP is rejected by sing-box and mapped to Xray/Mihomo native XHTTP settings. URI `host`/path values are normalized without conflating HTTP Host with TLS SNI. Unit fixtures cover all implemented transports. Mihomo requires an explicit gRPC service name; sing-box and Xray allow it to be omitted. Native validation against installed managed binaries is still required before treating these mappings as verified. Non-standard gRPC modes remain unsupported. REALITY is rejected rather than approximated as ordinary TLS.
 
 
 ## Compatibility evaluation rules
@@ -66,16 +68,16 @@ The compatibility matrix describes the current implementation only. The long-ter
 
 * Mihomo's gRPC mapping is considered compatible only when a non-empty service name is supplied.\n\n## Planned transport coverage
 
-The following is a development sequence, **not a claim of current support**:
+The following table records the current implementation state. All `implemented` entries still require native validation against the supported managed core versions:
 
 | Normalized transport | sing-box | Xray | Mihomo | Implementation status |
 |---|---|---|---|---|
 | TCP | Existing basic subset | Existing basic subset | Existing basic subset | Implemented baseline |
-| WebSocket | To verify/map | To verify/map | To verify/map | Planned |
-| gRPC | To verify/map | To verify/map | To verify/map | Planned |
-| HTTP/2 | To verify/map | To verify/map | To verify/map | Planned |
-| HTTPUpgrade | To verify/map | To verify/map | To verify/map | Planned |
-| XHTTP | To verify/map | To verify/map | To verify/map | Planned |
+| WebSocket | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
+| gRPC (standard) | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending* | Unit fixtures added |
+| HTTP/2 | Implemented; validation pending | Unsupported in current schema | Implemented; validation pending | Unit fixtures added |
+| HTTPUpgrade | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
+| XHTTP (VLESS) | Unsupported | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
 
 Each cell must be updated only after schema research, adapter tests, and native validation against the supported managed core version. Core/version differences are expected.
 
