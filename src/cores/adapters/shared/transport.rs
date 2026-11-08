@@ -24,17 +24,27 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         other => TransportKind::Unknown(other.to_owned()),
     };
 
-    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc) {
+    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2) {
         return Err(format!("transport '{network}' is not implemented by this adapter batch"));
     }
 
     let path = option_string(node, "path").map(str::to_owned);
     let mut headers = BTreeMap::new();
-
-    if let Some(host) = option_string(node, "host") {
-        if !host.is_empty() {
+    let mut hosts = Vec::new();
+    let source_host = option_string(node, "host").filter(|value| !value.is_empty());
+    if matches!(&kind, TransportKind::WebSocket) {
+        if let Some(host) = source_host {
             headers.insert("Host".to_owned(), host.to_owned());
         }
+    } else if matches!(&kind, TransportKind::Http2) {
+        if let Some(host) = source_host {
+            hosts.extend(host.split(',').map(str::trim).filter(|host| !host.is_empty()).map(str::to_owned));
+            if hosts.is_empty() || hosts.iter().any(|host| host.chars().any(char::is_control)) {
+                return Err("HTTP/2 host list is invalid".into());
+            }
+        }
+    } else if source_host.is_some() {
+        return Err("host is not supported for this transport".into());
     }
 
     // Some VMess JSON producers encode request headers as an object. Preserve and map
@@ -70,7 +80,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         None
     };
 
-    if matches!(&kind, TransportKind::Tcp) && (path.is_some() || !headers.is_empty()) {
+    if matches!(&kind, TransportKind::Tcp) && (path.is_some() || !headers.is_empty() || !hosts.is_empty()) {
         return Err("path or host/header was supplied for TCP transport".into());
     }
     if matches!(&kind, TransportKind::Grpc) && path.is_some() && node.protocol != Protocol::Vmess {
@@ -84,6 +94,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         kind,
         path,
         headers,
+        hosts,
         service_name,
         mode: None,
     })
