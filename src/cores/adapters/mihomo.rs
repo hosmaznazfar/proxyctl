@@ -138,6 +138,12 @@ impl CoreAdapter for MihomoAdapter {
             if let Some(pin) = tls.get("certificate_sha256") {
                 proxy["fingerprint"] = pin.clone();
             }
+            if let Some(insecure) = tls.get("insecure") {
+                proxy["skip-cert-verify"] = insecure.clone();
+            }
+            if let Some(name) = tls.get("verify_peer_cert_by_name") {
+                proxy["name-cert-verify"] = name.clone();
+            }
         }
         json_config(json!({
             "allow-lan": false,
