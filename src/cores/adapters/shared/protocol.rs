@@ -1,7 +1,7 @@
 use crate::domain::{Protocol, ProxyNode, TransportKind};
 
 use super::{
-    normalize_transport, option_string, reject_unknown_options, validate_string_options,
+    alpn_protocols, normalize_transport, option_string, reject_unknown_options, validate_string_options,
 };
 
 pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
