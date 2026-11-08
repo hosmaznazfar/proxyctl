@@ -94,7 +94,7 @@ fn capabilities(core: CoreId) -> &'static CoreCapabilities {
 fn compatibility_failure(reason: String) -> Compatibility {
     let normalized = reason.to_ascii_lowercase();
     let invalid_markers = [
-        "invalid", "must be", "must not", "conflict", "ambiguous", "repeated",
+        "invalid", "fingerprint is not supported", "must be", "must not", "conflict", "ambiguous", "repeated",
         "empty", "missing", "malformed", "control characters", "was supplied while",
         "requires tls", "certificate sha-256 pin must",
     ];
