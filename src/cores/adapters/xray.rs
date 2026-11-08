@@ -79,6 +79,16 @@ impl CoreAdapter for XrayAdapter {
                 grpc.insert("serviceName".into(), json!(service_name));
             }
             outbound["streamSettings"]["grpcSettings"] = serde_json::Value::Object(grpc);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Http2) {
+            outbound["streamSettings"]["network"] = json!("h2");
+            let mut http = serde_json::Map::new();
+            if let Some(path) = transport.path {
+                http.insert("path".into(), json!(path));
+            }
+            if !transport.hosts.is_empty() {
+                http.insert("host".into(), json!(transport.hosts));
+            }
+            outbound["streamSettings"]["httpSettings"] = serde_json::Value::Object(http);
         }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             let mut tls_settings = serde_json::Map::new();
