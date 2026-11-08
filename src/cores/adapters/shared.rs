@@ -18,15 +18,24 @@ pub struct Compatibility {
 
 impl Compatibility {
     pub fn supported() -> Self {
-        Self { status: CompatibilityStatus::Supported, reason: None }
+        Self {
+            status: CompatibilityStatus::Supported,
+            reason: None,
+        }
     }
 
     pub fn unsupported(reason: impl Into<String>) -> Self {
-        Self { status: CompatibilityStatus::Unsupported, reason: Some(reason.into()) }
+        Self {
+            status: CompatibilityStatus::Unsupported,
+            reason: Some(reason.into()),
+        }
     }
 
     pub fn invalid(reason: impl Into<String>) -> Self {
-        Self { status: CompatibilityStatus::Invalid, reason: Some(reason.into()) }
+        Self {
+            status: CompatibilityStatus::Invalid,
+            reason: Some(reason.into()),
+        }
     }
 
     pub fn is_supported(&self) -> bool {
@@ -54,9 +63,12 @@ fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), St
     let keys = if node.option_entries.is_empty() {
         node.options.keys().map(String::as_str).collect::<Vec<_>>()
     } else {
-        node.option_entries.iter().map(|entry| entry.key.as_str()).collect::<Vec<_>>()
+        node.option_entries
+            .iter()
+            .map(|entry| entry.key.as_str())
+            .collect::<Vec<_>>()
     };
-    if let Some(key) = keys.into_iter().find(|key| !supported.contains(&key)) {
+    if let Some(key) = keys.into_iter().find(|key| !supported.contains(key)) {
         return Err(format!("option '{key}' is not supported by this adapter yet"));
     }
     Ok(())
@@ -69,8 +81,10 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     if matches!(node.protocol, Protocol::Vless | Protocol::Vmess) && node.identity.is_none() {
         return Err("protocol identity is missing".into());
     }
-    if matches!(node.protocol, Protocol::Trojan | Protocol::Shadowsocks | Protocol::Hysteria2)
-        && node.secret.is_none()
+    if matches!(
+        node.protocol,
+        Protocol::Trojan | Protocol::Shadowsocks | Protocol::Hysteria2
+    ) && node.secret.is_none()
     {
         return Err("protocol secret is missing".into());
     }
@@ -86,12 +100,17 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         let mut seen = std::collections::BTreeSet::new();
         for entry in &node.option_entries {
             if !seen.insert(entry.key.as_str()) {
-                return Err(format!("option '{}' is repeated and cannot be mapped safely", entry.key));
+                return Err(format!(
+                    "option '{}' is repeated and cannot be mapped safely",
+                    entry.key
+                ));
             }
         }
     }
     if option_string(node, "security").is_some() && option_string(node, "tls").is_some() {
-        return Err("both security and tls options were supplied; refusing ambiguous TLS settings".into());
+        return Err(
+            "both security and tls options were supplied; refusing ambiguous TLS settings".into(),
+        );
     }
 
     if node.protocol == Protocol::Vless
@@ -103,7 +122,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
             return Err("VMess alter ID is invalid".into());
         }
-        if option_string(node, "scy").is_some_and(|value| !["auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305"].contains(&value)) {
+        if option_string(node, "scy").is_some_and(|value| {
+            !["auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305"].contains(&value)
+        }) {
             return Err("VMess cipher is not supported by this adapter".into());
         }
     }
@@ -134,7 +155,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             }
             Ok(Some(Value::Object(tls)))
         }
-        "reality" => Err("REALITY is not enabled in this adapter batch; refusing partial conversion".into()),
+        "reality" => Err(
+            "REALITY is not enabled in this adapter batch; refusing partial conversion".into(),
+        ),
         _ => Err("unsupported TLS/security mode".into()),
     }
 }
