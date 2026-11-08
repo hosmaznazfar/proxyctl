@@ -87,6 +87,16 @@ impl CoreAdapter for MihomoAdapter {
                 grpc.insert("grpc-service-name".into(), json!(service_name));
             }
             proxy["grpc-opts"] = serde_json::Value::Object(grpc);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Http2) {
+            proxy["network"] = json!("h2");
+            let mut http = serde_json::Map::new();
+            if let Some(path) = transport.path {
+                http.insert("path".into(), json!(path));
+            }
+            if !transport.hosts.is_empty() {
+                http.insert("host".into(), json!(transport.hosts));
+            }
+            proxy["h2-opts"] = serde_json::Value::Object(http);
         }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
