@@ -34,7 +34,7 @@ impl Compatibility {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct GeneratedConfig {
     pub format: &'static str,
     pub content: Vec<u8>,
