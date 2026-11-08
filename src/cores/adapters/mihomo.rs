@@ -60,6 +60,9 @@ impl CoreAdapter for MihomoAdapter {
                 json!({"name":name,"type":"hysteria2","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()})
             }
         };
+        if let Some(flow) = option_string(node, "flow") {
+            proxy["flow"] = json!(flow);
+        }
         let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
         if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
             proxy["network"] = json!("ws");
