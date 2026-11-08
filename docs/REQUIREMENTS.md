@@ -284,7 +284,7 @@ Acceptance criteria:
 - `proxyctl update --core <CORE>` targets one selected core.
 - Target selectors are validated; ambiguous or conflicting selectors return a clear usage error.
 - The CLI and core versions are reported independently.
-- The CLI updater selects a release asset compatible with the current OS and architecture.
+- The CLI updater selects a release asset compatible with the current OS and architecture (initial implementation: Linux x86_64).
 - Application and core downloads come from official release sources and are verified against published checksums/signatures before execution or installation.
 - Updates are staged before replacement. A failed download, verification, or staging operation leaves the currently working binary untouched.
 - Self-update uses a safe atomic replacement strategy where supported; otherwise it provides a documented manual update path.
