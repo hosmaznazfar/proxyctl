@@ -106,3 +106,10 @@ The architecture research uses public projects as references, not dependencies:
 
 Their behavior is not treated as a normative protocol specification. Upstream core documentation/source and protocol specifications remain authoritative for native config mappings. Any copied fixture must be sanitized and attributed; no live credentials or endpoints belong in the repository.
 
+Primary implementation references:
+
+- [sing-box v1.14.4 configuration source](https://github.com/SagerNet/sing-box/tree/v1.14.4/option) and [V2Ray transport documentation](https://github.com/SagerNet/sing-box/tree/v1.14.4/docs/configuration/shared).
+- [Xray configuration documentation](https://github.com/XTLS/Xray-docs-next/tree/main/docs/en/config), including transport and TLS settings.
+- [Mihomo proxy configuration documentation](https://wiki.metacubex.one/en/config/proxies/) and transport-specific options.
+- [v2rayN formatter sources](https://github.com/2dust/v2rayN/tree/master/v2rayN/ServiceLib/Handler/Fmt) and [VMess DTO definitions](https://github.com/2dust/v2rayN/tree/master/v2rayN/ServiceLib/Models/Dto), used to verify source-specific field meanings such as VMess `net`/`type`, `pcs`, `vcn`, and `insecure`.
+
