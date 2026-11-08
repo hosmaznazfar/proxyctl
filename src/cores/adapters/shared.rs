@@ -181,7 +181,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     {
         return Err("VMess TCP header modes are not implemented; only WebSocket and plain TCP are accepted".into());
     }
-    if !matches!(transport.kind, TransportKind::Tcp | TransportKind::WebSocket) {
+    if !matches!(&transport.kind, TransportKind::Tcp | TransportKind::WebSocket) {
         return Err("transport is not implemented by this adapter batch".into());
     }
 
