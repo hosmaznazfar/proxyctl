@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use base64::{Engine as _, engine::general_purpose};
 use serde_json::Value;
 
-use crate::domain::{Protocol, ProxyNode, SecretString};
+use crate::domain::{OptionEntry, Protocol, ProxyNode, SecretString};
 
 use super::super::ParseError;
 
@@ -41,15 +41,22 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
         .and_then(value_as_string)
         .filter(|value| !value.is_empty());
 
+    let entries = value
+        .as_object()
+        .into_iter()
+        .flat_map(|object| object.iter())
+        .filter(|(key, _)| !matches!(key.as_str(), "v" | "add" | "port" | "id" | "ps"))
+        .map(|(key, value)| OptionEntry {
+            key: key.clone(),
+            value: value.clone(),
+        })
+        .collect::<Vec<_>>();
     let mut options = BTreeMap::new();
-    if let Some(object) = value.as_object() {
-        for (key, value) in object {
-            if matches!(key.as_str(), "add" | "port" | "id" | "ps") {
-                continue;
-            }
-            if let Some(value) = value_as_string(value) {
-                options.insert(key.clone(), value);
-            }
+    for entry in &entries {
+        if let Some(value) = value_as_string(&entry.value) {
+            options.insert(entry.key.clone(), value);
+        } else {
+            options.insert(entry.key.clone(), entry.value.to_string());
         }
     }
 
@@ -62,7 +69,8 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
         None,
         options,
         SecretString::new(input),
-    ))
+    )
+    .with_option_entries(entries))
 }
 
 fn value_as_string(value: &Value) -> Option<String> {
@@ -70,7 +78,7 @@ fn value_as_string(value: &Value) -> Option<String> {
         Value::String(value) => Some(value.clone()),
         Value::Number(value) => Some(value.to_string()),
         Value::Bool(value) => Some(value.to_string()),
-        _ => None,
+        Value::Null | Value::Array(_) | Value::Object(_) => None,
     }
 }
 
@@ -102,5 +110,15 @@ mod tests {
         assert_eq!(node.port, 8443);
         assert_eq!(node.name.as_deref(), Some("test-node"));
         assert_eq!(node.options.get("net").map(String::as_str), Some("ws"));
+    }
+
+    #[test]
+    fn preserves_structured_vmess_options() {
+        let payload = br#"{"add":"vmess.example","port":"443","id":"uuid","ps":"test","net":"ws","headers":{"Host":"cdn.example"},"alpn":["h2","http/1.1"]}"#;
+        let encoded = general_purpose::STANDARD.encode(payload);
+        let node = parse(&format!("vmess://{encoded}")).unwrap();
+
+        assert_eq!(node.option("headers").unwrap()["Host"], "cdn.example");
+        assert_eq!(node.option("alpn").unwrap()[0], "h2");
     }
 }
