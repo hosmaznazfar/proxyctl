@@ -128,7 +128,6 @@ fn checksum_for_asset(manifest: &str, asset_name: &str) -> anyhow::Result<String
 fn platform_asset_name() -> anyhow::Result<String> {
     let target = match (env::consts::OS, env::consts::ARCH) {
         ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
-        ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
         (os, arch) => bail!("automatic proxyctl updates are not yet supported on {os}/{arch}; use {RELEASES_PAGE}"),
     };
     Ok(format!("proxyctl-{target}"))
