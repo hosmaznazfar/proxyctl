@@ -19,7 +19,10 @@ pub fn check_node(
     let record = database
         .get_node(node_id)?
         .with_context(|| format!("node #{node_id} was not found"))?;
-    anyhow::ensure!(!record.is_deleted(), "node #{node_id} is deleted; restore it before checking");
+    anyhow::ensure!(
+        !record.is_deleted(),
+        "node #{node_id} is deleted; restore it before checking"
+    );
     let node = record.node;
     drop(database);
 
@@ -33,7 +36,10 @@ pub fn check_node(
         if !compatibility.is_supported() {
             println!(
                 "{core}: unsupported ({})",
-                compatibility.reason.as_deref().unwrap_or("configuration is incompatible")
+                compatibility
+                    .reason
+                    .as_deref()
+                    .unwrap_or("configuration is incompatible")
             );
             continue;
         }
@@ -60,7 +66,11 @@ pub fn check_node(
     if !failures.is_empty() {
         anyhow::bail!(
             "configuration validation failed for: {}",
-            failures.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")
+            failures
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
     Ok(())
