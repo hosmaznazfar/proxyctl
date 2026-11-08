@@ -60,12 +60,11 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
 }
 
 fn decode_credentials(value: &str) -> Result<String, ParseError> {
-    if let Some(decoded) = decode_base64(value) {
-        if let Ok(decoded) = String::from_utf8(decoded) {
-            if decoded.contains(':') {
-                return Ok(decoded);
-            }
-        }
+    if let Some(decoded) = decode_base64(value)
+        .and_then(|decoded| String::from_utf8(decoded).ok())
+        .filter(|decoded| decoded.contains(':'))
+    {
+        return Ok(decoded);
     }
 
     percent_decode_str(value)
