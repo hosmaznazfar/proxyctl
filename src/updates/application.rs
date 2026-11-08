@@ -18,9 +18,15 @@ const RELEASES_PAGE: &str = "https://github.com/hosmaznazfar/proxyctl/releases";
 pub fn update_application(check_only: bool) -> anyhow::Result<()> {
     let current = Version::parse(env!("CARGO_PKG_VERSION"))?;
     let release = latest_release(RELEASE_API)?;
-    let latest_text = release.tag_name.strip_prefix('v').unwrap_or(&release.tag_name);
+    let latest_text = release
+        .tag_name
+        .strip_prefix('v')
+        .unwrap_or(&release.tag_name);
     let latest = Version::parse(latest_text).with_context(|| {
-        format!("official release tag '{}' is not a semantic version", release.tag_name)
+        format!(
+            "official release tag '{}' is not a semantic version",
+            release.tag_name
+        )
     })?;
 
     if latest <= current {
