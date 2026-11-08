@@ -21,6 +21,8 @@ pub struct Transport {
     pub kind: TransportKind,
     pub path: Option<String>,
     pub headers: BTreeMap<String, String>,
+    /// HTTP/2 authority host alternatives, distinct from WebSocket headers and TLS SNI.
+    pub hosts: Vec<String>,
     pub service_name: Option<String>,
     pub mode: Option<String>,
 }
@@ -31,6 +33,7 @@ impl Transport {
             kind: TransportKind::Tcp,
             path: None,
             headers: BTreeMap::new(),
+            hosts: Vec::new(),
             service_name: None,
             mode: None,
         }
