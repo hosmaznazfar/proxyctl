@@ -18,14 +18,14 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
 
     let (credentials, host_port) =
         if let Some((credentials, host_port)) = authority.rsplit_once('@') {
-            (decode_credentials(credentials)?, host_port)
+            (decode_credentials(credentials)?, host_port.to_owned())
         } else {
             let decoded = decode_base64(authority).ok_or(ParseError::InvalidCredentials)?;
             let decoded = String::from_utf8(decoded).map_err(|_| ParseError::InvalidCredentials)?;
             let (credentials, host_port) = decoded
                 .rsplit_once('@')
                 .ok_or(ParseError::InvalidCredentials)?;
-            (decode_credentials(credentials)?, host_port)
+            (decode_credentials(credentials)?, host_port.to_owned())
         };
 
     let parsed = Url::parse(&format!("ss://{host_port}")).map_err(|_| ParseError::MalformedUrl)?;
