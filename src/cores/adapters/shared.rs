@@ -1,6 +1,9 @@
 use serde_json::{Map, Value};
 
+mod capabilities;
 mod transport;
+
+pub(crate) use capabilities::validate_for_core;
 
 pub(crate) use transport::normalize_transport;
 
