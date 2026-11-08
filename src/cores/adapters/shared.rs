@@ -111,7 +111,7 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
     match security.as_str() {
         "none" | "" | "false" | "0" => {
             if matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2) {
-                return Err("Hysteria2 requires TLS".into());
+                return Err("Trojan and Hysteria2 require TLS".into());
             }
             Ok(None)
         }
