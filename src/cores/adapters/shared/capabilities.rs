@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn capability_registry_keeps_core_differences_explicit() {
-        assert!(capabilities(CoreId::SingBox).xhttp == false);
+        assert!(!capabilities(CoreId::SingBox).xhttp);
         assert!(capabilities(CoreId::Xray).xhttp);
         assert!(!capabilities(CoreId::Xray).http2);
         assert!(capabilities(CoreId::Mihomo).http2);
