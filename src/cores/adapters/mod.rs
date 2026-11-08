@@ -184,6 +184,43 @@ mod tests {
     }
 
     #[test]
+    fn adapters_map_alpn_for_trojan_and_supported_hysteria2_cores() {
+        let trojan = parse_proxy_url(
+            "trojan://secret@example.com:443?alpn=h2&alpn=http%2F1.1",
+        )
+        .unwrap();
+        let hysteria2 = parse_proxy_url(
+            "hysteria2://secret@example.com:443?alpn=h2&alpn=http%2F1.1",
+        )
+        .unwrap();
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = adapter(core).generate_config(&trojan).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let alpn = match core {
+                CoreId::SingBox => &document["outbounds"][0]["tls"]["alpn"],
+                CoreId::Xray => {
+                    &document["outbounds"][0]["streamSettings"]["tlsSettings"]["alpn"]
+                }
+                CoreId::Mihomo => &document["proxies"][0]["alpn"],
+            };
+            assert_eq!(alpn, &serde_json::json!(["h2", "http/1.1"]), "{core}");
+        }
+
+        for core in [CoreId::SingBox, CoreId::Mihomo] {
+            let generated = adapter(core).generate_config(&hysteria2).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let alpn = match core {
+                CoreId::SingBox => &document["outbounds"][0]["tls"]["alpn"],
+                CoreId::Mihomo => &document["proxies"][0]["alpn"],
+                CoreId::Xray => unreachable!(),
+            };
+            assert_eq!(alpn, &serde_json::json!(["h2", "http/1.1"]), "{core}");
+        }
+        assert!(!adapter(CoreId::Xray).compatibility(&hysteria2).is_supported());
+    }
+
+    #[test]
     fn adapters_reject_alpn_without_tls_and_malformed_alpn() {
         let no_tls = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?alpn=h2",
