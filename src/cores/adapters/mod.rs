@@ -461,6 +461,42 @@ mod tests {
     }
 
     #[test]
+    fn vless_vision_flow_maps_to_all_three_core_schemas() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&flow=xtls-rprx-vision",
+        )
+        .unwrap();
+        let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+        let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+        assert_eq!(sing_box_doc["outbounds"][0]["flow"], "xtls-rprx-vision");
+
+        let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+        let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
+        assert_eq!(
+            xray_doc["outbounds"][0]["settings"]["vnext"][0]["users"][0]["flow"],
+            "xtls-rprx-vision"
+        );
+
+        let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+        let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+        assert_eq!(mihomo_doc["proxies"][0]["flow"], "xtls-rprx-vision");
+    }
+
+    #[test]
+    fn vless_vision_flow_requires_tls_and_rejects_unknown_modes() {
+        let no_tls = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?flow=xtls-rprx-vision",
+        )
+        .unwrap();
+        let unknown = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&flow=unknown",
+        )
+        .unwrap();
+        assert!(!adapter(CoreId::Xray).compatibility(&no_tls).is_supported());
+        assert!(!adapter(CoreId::Xray).compatibility(&unknown).is_supported());
+    }
+
+    #[test]
     fn vmess_security_alias_is_cipher_not_tls_security() {
         use base64::{Engine as _, engine::general_purpose};
 
