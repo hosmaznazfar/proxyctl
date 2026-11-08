@@ -86,6 +86,8 @@ The following table records the current implementation state. All `implemented` 
 |---|---|---|---|---|
 | TCP | Existing basic subset | Existing basic subset | Existing basic subset | Implemented baseline |
 | WebSocket | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
+| WebSocket early data | Implemented; validation pending | Implemented via path `ed` query; custom header unsupported | Implemented; validation pending | Core-specific fixtures added |
+| VLESS Vision flow | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
 | gRPC (standard) | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending* | Unit fixtures added |
 | gRPC authority / multi | Unsupported | Implemented; validation pending | Unsupported | Xray-specific fixtures added |
 | HTTP/2 | Implemented; validation pending | Unsupported in current schema | Implemented; validation pending | Unit fixtures added |
