@@ -9,6 +9,7 @@ A lightweight Rust command-line tool for managing proxy URLs, testing them throu
 - Manage proxy URLs from VLESS, VMess, Trojan, Shadowsocks, and Hysteria2 sources.
 - Work with three external proxy cores: [sing-box](https://sing-box.sagernet.org/), [Xray](https://github.com/XTLS/Xray-core), and [Mihomo](https://github.com/MetaCubeX/mihomo).
 - Install and update core binaries in a proxyctl-managed directory.
+- Update the proxyctl CLI itself from this repository's official GitHub Releases.
 - Benchmark latency, download, and upload performance through each compatible core.
 - Sort nodes by their best result across compatible cores or by a selected core.
 - Keep benchmark history and safely prune unavailable nodes.
@@ -24,6 +25,8 @@ A lightweight Rust command-line tool for managing proxy URLs, testing them throu
 - Run benchmarks sequentially by default.
 - Do not silently discard unsupported URL options.
 - Make TUN and system-wide networking changes explicit and reversible.
+- Download only platform-compatible stable release assets from official project release sources.
+- Verify artifacts and stage replacements before installing; never discard a working binary on failure.
 
 ## Available commands
 
@@ -67,11 +70,12 @@ The following command groups are planned and are not available yet.
 ~~~sh
 # Initial managed-core installation and inventory
 proxyctl setup
+proxyctl setup --core sing-box
 proxyctl cores
 
 # One place to check/update the CLI and managed cores
-proxyctl update
 proxyctl update --check
+proxyctl update
 
 # Optional update targets
 proxyctl update --app
@@ -116,9 +120,17 @@ proxyctl tun on
 proxyctl tun off
 ~~~
 
-### Unified update behavior
+### Unified update and installation behavior
 
-`proxyctl update` is the single entry point for keeping proxyctl and its managed cores current. By default it checks and updates both. Use `--check` for a read-only version check, `--app` for the CLI only, `--cores` for all installed cores, or `--core <name>` for one core. Updates are verified and staged before replacement; they do not start a proxy or change network settings. `proxyctl setup` is for initial core installation.
+The update command is the single entry point for keeping the CLI and its managed cores current. With no target selector, it updates the CLI and every core already installed by proxyctl. It does not install missing cores; setup handles initial core installation. Use --check for a read-only check, --app for the CLI only, --cores for all installed cores, or --core <name> for one core.
+
+The CLI updater uses official releases from [hosmaznazfar/proxyctl](https://github.com/hosmaznazfar/proxyctl/releases). Core installers use the official releases of [sing-box](https://github.com/SagerNet/sing-box/releases), [Xray](https://github.com/XTLS/Xray-core/releases), and [Mihomo](https://github.com/MetaCubeX/mihomo/releases). Stable releases are selected by default, and asset selection must match the detected OS and architecture.
+
+Setup and update share the same artifact download, verification, staging, validation, and installation pipeline. Checksums/signatures are verified before extraction or execution. If trusted verification material is unavailable or verification fails, proxyctl refuses to install the artifact. The previous working binary is preserved if an update fails. If safe self-replacement is not possible, the CLI prints a manual update path and leaves the current executable intact.
+
+Updates never start a core or modify active proxy processes, system proxy settings, DNS, routes, firewall, or TUN state. Only proxyctl-managed binaries are touched; system installations and other proxy applications are left alone.
+
+See [Update and Installation Design](docs/UPDATE_DESIGN.md) for the detailed release, verification, platform, and failure-handling contract.
 
 ### Sorting behavior
 
@@ -132,8 +144,9 @@ A node is considered unavailable across cores only if all cores capable of repre
 
 - [Plan and architecture decisions](docs/PLAN.md)
 - [Software requirements](docs/REQUIREMENTS.md)
+- [Update and installation design](docs/UPDATE_DESIGN.md)
 
-The plan documents the design, architecture, command semantics, and delivery stages. The requirements document defines functional behavior and acceptance criteria.
+The plan documents the design, architecture, command semantics, and delivery stages. The requirements document defines functional behavior and acceptance criteria. The update design specifies the shared secure installation/update pipeline.
 
 ## Development
 
@@ -157,7 +170,7 @@ CI runs formatting, Clippy, and tests on pushes and pull requests. The next stag
 
 Proxy URLs may contain credentials and other sensitive values. Do not share database files, debug logs, or command output containing unmasked URLs. Proxyctl masks secrets in normal output and uses restrictive permissions for local data.
 
-Core binaries are planned to be downloaded from official release sources and verified before execution. TUN support will be opt-in and will require explicit network-state checks and rollback handling.
+Core binaries and the CLI updater are designed to download official release assets and verify them before installation. TUN support will be opt-in and will require explicit network-state checks and rollback handling.
 
 ## License
 
