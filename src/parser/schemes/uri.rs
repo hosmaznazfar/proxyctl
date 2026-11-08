@@ -31,10 +31,9 @@ pub fn parse(input: &str, protocol: Protocol) -> Result<ProxyNode, ParseError> {
         .filter(|value| !value.is_empty());
 
     let (identity, secret) = match protocol {
-        Protocol::Vless | Protocol::Vmess => (
-            non_empty_secret(username),
-            password.map(SecretString::new),
-        ),
+        Protocol::Vless | Protocol::Vmess => {
+            (non_empty_secret(username), password.map(SecretString::new))
+        }
         Protocol::Trojan | Protocol::Hysteria2 => {
             (None, non_empty_secret(password.unwrap_or(username)))
         }

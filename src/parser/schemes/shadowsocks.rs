@@ -16,19 +16,19 @@ pub fn parse(input: &str) -> Result<ProxyNode, ParseError> {
     let (authority, query) = split_once_or_all(without_fragment, '?');
     let name = decode_component(fragment.unwrap_or_default())?.filter(|value| !value.is_empty());
 
-    let (credentials, host_port) = if let Some((credentials, host_port)) = authority.rsplit_once('@') {
-        (decode_credentials(credentials)?, host_port)
-    } else {
-        let decoded = decode_base64(authority).ok_or(ParseError::InvalidCredentials)?;
-        let decoded = String::from_utf8(decoded).map_err(|_| ParseError::InvalidCredentials)?;
-        let (credentials, host_port) = decoded
-            .rsplit_once('@')
-            .ok_or(ParseError::InvalidCredentials)?;
-        (decode_credentials(credentials)?, host_port)
-    };
+    let (credentials, host_port) =
+        if let Some((credentials, host_port)) = authority.rsplit_once('@') {
+            (decode_credentials(credentials)?, host_port)
+        } else {
+            let decoded = decode_base64(authority).ok_or(ParseError::InvalidCredentials)?;
+            let decoded = String::from_utf8(decoded).map_err(|_| ParseError::InvalidCredentials)?;
+            let (credentials, host_port) = decoded
+                .rsplit_once('@')
+                .ok_or(ParseError::InvalidCredentials)?;
+            (decode_credentials(credentials)?, host_port)
+        };
 
-    let parsed = Url::parse(&format!("ss://{host_port}"))
-        .map_err(|_| ParseError::MalformedUrl)?;
+    let parsed = Url::parse(&format!("ss://{host_port}")).map_err(|_| ParseError::MalformedUrl)?;
     let server = parsed
         .host_str()
         .filter(|host| !host.is_empty())
@@ -108,7 +108,8 @@ mod tests {
 
     #[test]
     fn parses_sip002_base64_userinfo() {
-        let credentials = general_purpose::STANDARD_NO_PAD.encode("chacha20-ietf-poly1305:password");
+        let credentials =
+            general_purpose::STANDARD_NO_PAD.encode("chacha20-ietf-poly1305:password");
         let node = parse(&format!("ss://{credentials}@ss.example:8388#office")).unwrap();
 
         assert_eq!(node.protocol, Protocol::Shadowsocks);
@@ -119,6 +120,9 @@ mod tests {
             node.identity.as_ref().map(|value| value.expose()),
             Some("chacha20-ietf-poly1305")
         );
-        assert_eq!(node.secret.as_ref().map(|value| value.expose()), Some("password"));
+        assert_eq!(
+            node.secret.as_ref().map(|value| value.expose()),
+            Some("password")
+        );
     }
 }

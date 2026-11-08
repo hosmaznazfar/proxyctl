@@ -64,7 +64,10 @@ mod tests {
         assert_eq!(node.server, "example.com");
         assert_eq!(node.port, 443);
         assert_eq!(node.name.as_deref(), Some("edge"));
-        assert_eq!(node.options.get("security").map(String::as_str), Some("tls"));
+        assert_eq!(
+            node.options.get("security").map(String::as_str),
+            Some("tls")
+        );
         assert_eq!(
             node.identity.as_ref().map(|value| value.expose()),
             Some("11111111-1111-4111-8111-111111111111")
@@ -75,8 +78,14 @@ mod tests {
     fn parses_trojan_password() {
         let node = parse_proxy_url("trojan://secret@example.com:443?sni=cdn.example#node").unwrap();
         assert_eq!(node.protocol, Protocol::Trojan);
-        assert_eq!(node.secret.as_ref().map(|value| value.expose()), Some("secret"));
-        assert_eq!(node.options.get("sni").map(String::as_str), Some("cdn.example"));
+        assert_eq!(
+            node.secret.as_ref().map(|value| value.expose()),
+            Some("secret")
+        );
+        assert_eq!(
+            node.options.get("sni").map(String::as_str),
+            Some("cdn.example")
+        );
     }
 
     #[test]
