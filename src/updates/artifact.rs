@@ -71,7 +71,9 @@ pub fn validate_github_download_url(value: &str) -> anyhow::Result<()> {
             && url.port().is_none()
             && matches!(
                 host,
-                "github.com" | "objects.githubusercontent.com" | "release-assets.githubusercontent.com"
+                "github.com"
+                    | "objects.githubusercontent.com"
+                    | "release-assets.githubusercontent.com"
             ),
         "release asset URL is outside trusted GitHub download domains"
     );

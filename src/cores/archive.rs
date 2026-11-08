@@ -36,7 +36,10 @@ fn extract_tar_gz(bytes: &[u8], executable: &str) -> anyhow::Result<Vec<u8>> {
         if path.file_name().and_then(|name| name.to_str()) != Some(executable) {
             continue;
         }
-        let size = entry.header().size().context("invalid executable size in tar archive")?;
+        let size = entry
+            .header()
+            .size()
+            .context("invalid executable size in tar archive")?;
         ensure!(
             size <= MAX_BINARY_SIZE,
             "core executable exceeds the 128 MiB safety limit"
