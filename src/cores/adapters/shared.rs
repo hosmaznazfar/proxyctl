@@ -264,18 +264,60 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     Ok(())
 }
 
-fn insecure_option(node: &ProxyNode) -> Result<bool, String> {
-    let parse = |value: &str| match value.to_ascii_lowercase().as_str() {
+fn parse_bool_string(value: &str) -> Result<bool, String> {
+    match value.to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Ok(true),
         "0" | "false" | "no" | "off" => Ok(false),
-        _ => Err("TLS insecure option must be a boolean".to_owned()),
-    };
-    let insecure = option_string(node, "insecure").map(parse).transpose()?;
-    let allow_insecure = option_string(node, "allowInsecure").map(parse).transpose()?;
+        _ => Err("TLS boolean option is invalid".into()),
+    }
+}
+
+fn bool_option(node: &ProxyNode, key: &str) -> Result<Option<bool>, String> {
+    if let Some(value) = node.option(key) {
+        return match value {
+            Value::Bool(value) => Ok(Some(*value)),
+            Value::Number(value) => match value.as_i64() {
+                Some(0) => Ok(Some(false)),
+                Some(1) => Ok(Some(true)),
+                _ => Err("TLS boolean option is invalid".into()),
+            },
+            Value::String(value) if value.is_empty() => Ok(None),
+            Value::String(value) => parse_bool_string(value).map(Some),
+            Value::Null => Ok(None),
+            _ => Err("TLS boolean option must be a boolean".into()),
+        };
+    }
+    option_string(node, key)
+        .map(parse_bool_string)
+        .transpose()
+}
+
+fn insecure_option(node: &ProxyNode) -> Result<bool, String> {
+    let insecure = bool_option(node, "insecure")?;
+    let allow_insecure = bool_option(node, "allowInsecure")?;
     if insecure.is_some() && allow_insecure.is_some() && insecure != allow_insecure {
         return Err("insecure and allowInsecure options conflict".into());
     }
     Ok(insecure.or(allow_insecure).unwrap_or(false))
+}
+
+fn vmess_tls_mode(node: &ProxyNode) -> Result<Option<String>, String> {
+    if let Some(value) = node.option("tls") {
+        return match value {
+            Value::Bool(true) => Ok(Some("tls".into())),
+            Value::Bool(false) => Ok(Some("none".into())),
+            Value::Number(value) => match value.as_i64() {
+                Some(0) => Ok(Some("none".into())),
+                Some(1) => Ok(Some("tls".into())),
+                _ => Err("VMess TLS option is invalid".into()),
+            },
+            Value::String(value) if value.is_empty() => Ok(None),
+            Value::String(value) => Ok(Some(value.to_ascii_lowercase())),
+            Value::Null => Ok(None),
+            _ => Err("VMess TLS option must be a string or boolean".into()),
+        };
+    }
+    Ok(option_string(node, "tls").map(str::to_ascii_lowercase))
 }
 
 pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
@@ -290,12 +332,13 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
         return Err("certificate pin options conflict".into());
     }
     let security = if node.protocol == Protocol::Vmess {
-        option_string(node, "tls")
+        vmess_tls_mode(node)?
     } else {
-        option_string(node, "security").or_else(|| option_string(node, "tls"))
+        option_string(node, "security")
+            .or_else(|| option_string(node, "tls"))
+            .map(str::to_ascii_lowercase)
     }
-        .unwrap_or(if default_tls { "tls" } else { "none" })
-        .to_ascii_lowercase();
+    .unwrap_or(if default_tls { "tls".into() } else { "none".into() });
     match security.as_str() {
         "none" | "" | "false" | "0" => {
             if matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2) {
