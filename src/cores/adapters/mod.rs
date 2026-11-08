@@ -145,6 +145,52 @@ mod tests {
     }
 
     #[test]
+    fn adapters_map_http2_transport_and_host_lists() {
+        use base64::{Engine as _, engine::general_purpose};
+
+        let vless = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=h2&host=one.example%2Ctwo.example&path=%2Fservice",
+        )
+        .unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray] {
+            let generated = adapter(core).generate_config(&vless).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let (network, hosts, path) = match core {
+                CoreId::SingBox => (
+                    document["outbounds"][0]["transport"]["type"].as_str(),
+                    &document["outbounds"][0]["transport"]["host"],
+                    document["outbounds"][0]["transport"]["path"].as_str(),
+                ),
+                CoreId::Xray => (
+                    document["outbounds"][0]["streamSettings"]["network"].as_str(),
+                    &document["outbounds"][0]["streamSettings"]["httpSettings"]["host"],
+                    document["outbounds"][0]["streamSettings"]["httpSettings"]["path"].as_str(),
+                ),
+                CoreId::Mihomo => unreachable!(),
+            };
+            assert_eq!(network, Some("http"), "{core}");
+            assert_eq!(hosts, &serde_json::json!(["one.example", "two.example"]), "{core}");
+            assert_eq!(path, Some("/service"), "{core}");
+        }
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(&vless).status,
+            CompatibilityStatus::Unsupported
+        );
+
+        let payload = general_purpose::STANDARD.encode(
+            br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"h2","host":"cdn.example","path":"/vmess"}"#,
+        );
+        let vmess = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            assert!(adapter(core).compatibility(&vmess).is_supported(), "{core}");
+            let _: Value = serde_json::from_slice(
+                &adapter(core).generate_config(&vmess).unwrap().content,
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
     fn adapters_reject_unknown_transport_without_dropping_it() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic",
