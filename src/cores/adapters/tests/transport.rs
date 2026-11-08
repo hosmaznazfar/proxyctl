@@ -238,7 +238,7 @@ use super::*;
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             assert_eq!(
                 adapter(core).compatibility(&node).status,
-                CompatibilityStatus::Unsupported
+                CompatibilityStatus::Invalid
             );
         }
     }
