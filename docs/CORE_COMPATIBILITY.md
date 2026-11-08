@@ -27,10 +27,12 @@ This matrix describes only the currently implemented adapter subset. It is not a
   - sing-box: `sing-box check -c CONFIG`
   - Xray: `xray run -test -c CONFIG`
   - Mihomo: `mihomo -t -f CONFIG`
-- Validation must be run before a generated configuration is used to start a core.
+- Run `proxyctl check <NODE_ID>` to validate against every installed compatible core, or add `--core sing-box|xray|mihomo` to select one.
+- Validation uses a private temporary file with mode 0600 on Unix and removes it on success or failure.
+- The validation command invokes only the core's config-check mode; it never starts a proxy process or changes system networking.
 
 ## Current limitations
 
-The adapters are an initial conservative implementation. They do not yet create temporary files, run validation as part of a CLI command, or start a core. The caller owns the config file lifecycle. The compatibility table must be expanded only alongside fixtures and successful validation against the supported managed core versions.
+The adapters are an initial conservative implementation. The `check` command now owns the temporary config lifecycle and invokes the installed managed binary's validation mode. The command does not start a core. The compatibility table must be expanded only alongside fixtures and successful validation against the supported managed core versions.
 
 VMess options such as `net=ws` and VLESS options such as `type=ws` are intentionally rejected until their complete transport mappings are implemented. REALITY is rejected rather than approximated as ordinary TLS.
