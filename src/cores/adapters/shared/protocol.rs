@@ -19,12 +19,34 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         return Err("protocol secret is missing".into());
     }
 
+    const VLESS_OPTIONS: &[&str] = &[
+        "security", "tls", "sni", "encryption", "flow", "type", "host", "path",
+        "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData",
+        "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data",
+        "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp",
+    ];
+    const VMESS_OPTIONS: &[&str] = &[
+        "security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers",
+        "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData",
+        "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data",
+        "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp",
+    ];
+    const TROJAN_OPTIONS: &[&str] = &[
+        "security", "tls", "sni", "type", "host", "path", "serviceName", "service_name",
+        "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName",
+        "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name",
+        "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp",
+    ];
+    const HYSTERIA2_OPTIONS: &[&str] = &[
+        "security", "tls", "sni", "insecure", "allowInsecure", "pinSHA256", "pcs", "alpn", "fp",
+    ];
+
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "flow", "type", "host", "path", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
-        Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
-        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
-        Protocol::Hysteria2 => vec!["security", "tls", "sni", "insecure", "allowInsecure", "pinSHA256", "pcs", "alpn", "fp"],
-        Protocol::Shadowsocks => Vec::new(),
+        Protocol::Vless => VLESS_OPTIONS,
+        Protocol::Vmess => VMESS_OPTIONS,
+        Protocol::Trojan => TROJAN_OPTIONS,
+        Protocol::Hysteria2 => HYSTERIA2_OPTIONS,
+        Protocol::Shadowsocks => &[],
     };
     reject_unknown_options(node, &supported)?;
     validate_string_options(node)?;
@@ -90,7 +112,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
     if node.protocol == Protocol::Vmess {
         if option_string(node, "net").is_some_and(|value| !["tcp", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)) {
-            return Err("only VMess TCP, WebSocket, gRPC, and HTTP/2 transports are currently mapped".into());
+            return Err("only VMess TCP, WebSocket, gRPC, HTTP/2, HTTPUpgrade, and XHTTP transports are currently mapped".into());
         }
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
             return Err("VMess alter ID is invalid".into());
