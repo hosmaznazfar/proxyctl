@@ -58,7 +58,11 @@ enum Command {
         id: u64,
     },
     /// Check for and install proxyctl updates.
-    #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
+    #[command(group(
+        ArgGroup::new("update_target")
+            .args(["app", "cores", "core"])
+            .multiple(false)
+    ))]
     Update {
         /// Check for updates without downloading or changing files.
         #[arg(long)]
@@ -83,9 +87,16 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     };
 
     let command = match command {
-        Command::Update { check, app, cores, core } => {
+        Command::Update {
+            check,
+            app,
+            cores,
+            core,
+        } => {
             if let Some(core_name) = core {
-                anyhow::bail!("core updates are not available yet; managed core installation is the next implementation stage (requested: {core_name})");
+                anyhow::bail!(
+                    "core updates are not available yet; managed core installation is the next implementation stage (requested: {core_name})"
+                );
             }
             if cores {
                 println!("No managed cores are installed yet.");
