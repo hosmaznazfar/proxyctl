@@ -45,3 +45,46 @@ This matrix describes only the currently implemented adapter subset. It is not a
 The adapters are an initial conservative implementation. The `check` command now owns the temporary config lifecycle and invokes the installed managed binary's validation mode. The command does not start a core. The compatibility table must be expanded only alongside fixtures and successful validation against the supported managed core versions.
 
 VMess options such as `net=ws` and VLESS options such as `type=ws` are intentionally rejected until their complete transport mappings are implemented. REALITY is rejected rather than approximated as ordinary TLS.
+
+
+## Compatibility evaluation rules
+
+The compatibility matrix describes the current implementation only. The long-term design is capability-driven and evaluated per core (and, where schemas differ, per core version).
+
+- Source parsing and semantic normalization are core-independent. Adapters consume normalized domain values and must not reinterpret URI query parameters.
+- A normalized feature can be supported by one core and unsupported by another. Do not reduce the shared model to the lowest common denominator.
+- **Supported** means every meaningful setting is represented in the generated native configuration.
+- **Unsupported** means the input is recognized but this core/version cannot represent it faithfully.
+- **Invalid** means the source values are malformed, contradictory, or violate the protocol's semantics.
+- Unknown source fields are retained and reported as unmapped; they are never silently discarded.
+- Original source text and structured source fields remain available even when the current adapter cannot use them.
+- Transport HTTP Host and TLS SNI are separate fields. They must not be conflated.
+- VMess JSON fields are interpreted according to VMess source semantics. In particular, `net` selects transport while `type` may describe a transport-specific header mode; it must not be treated as the VLESS URI `type` parameter.
+- Native validation with the corresponding core binary/version is required before marking a new mapping supported.
+
+## Planned transport coverage
+
+The following is a development sequence, **not a claim of current support**:
+
+| Normalized transport | sing-box | Xray | Mihomo | Implementation status |
+|---|---|---|---|---|
+| TCP | Existing basic subset | Existing basic subset | Existing basic subset | Implemented baseline |
+| WebSocket | To verify/map | To verify/map | To verify/map | Planned |
+| gRPC | To verify/map | To verify/map | To verify/map | Planned |
+| HTTP/2 | To verify/map | To verify/map | To verify/map | Planned |
+| HTTPUpgrade | To verify/map | To verify/map | To verify/map | Planned |
+| XHTTP | To verify/map | To verify/map | To verify/map | Planned |
+
+Each cell must be updated only after schema research, adapter tests, and native validation against the supported managed core version. Core/version differences are expected.
+
+## Reference projects and research use
+
+The architecture research uses public projects as references, not dependencies:
+
+- L×Box / singbox-launcher: registry-oriented protocol definitions and conformance fixture concepts.
+- microsubsproxy: separation between protocol parsers, a common node model, and output renderers.
+- v2rayN: real-world VMess JSON and share-link field conventions.
+- Hiddify and subconverter: broad subscription-format and cross-client interoperability cases.
+
+Their behavior is not treated as a normative protocol specification. Upstream core documentation/source and protocol specifications remain authoritative for native config mappings. Any copied fixture must be sanitized and attributed; no live credentials or endpoints belong in the repository.
+
