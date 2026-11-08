@@ -25,6 +25,8 @@ pub struct Transport {
     pub hosts: Vec<String>,
     /// HTTP Upgrade authority host, distinct from TLS SNI.
     pub host: Option<String>,
+    /// gRPC authority; not the HTTP Host header and not TLS SNI.
+    pub authority: Option<String>,
     pub service_name: Option<String>,
     pub mode: Option<String>,
     pub max_early_data: Option<u32>,
@@ -39,6 +41,7 @@ impl Transport {
             headers: BTreeMap::new(),
             hosts: Vec::new(),
             host: None,
+            authority: None,
             service_name: None,
             mode: None,
             max_early_data: None,
