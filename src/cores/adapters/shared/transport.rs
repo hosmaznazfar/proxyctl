@@ -88,8 +88,14 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         .or_else(|| option_string(node, "early_data_header_name"))
         .or_else(|| option_string(node, "early-data-header-name"))
         .map(str::to_owned);
+    if max_early_data.is_some_and(|value| value > 8192) {
+        return Err("WebSocket early-data size must not exceed 8192 bytes".into());
+    }
     if early_data_header_name.as_deref().is_some_and(|value| value.is_empty() || value.chars().any(char::is_control)) {
         return Err("WebSocket early-data header name is invalid".into());
+    }
+    if early_data_header_name.is_some() && max_early_data.is_none() {
+        return Err("WebSocket early-data header requires an early-data size".into());
     }
     if (max_early_data.is_some() || early_data_header_name.is_some())
         && !matches!(&kind, TransportKind::WebSocket)
