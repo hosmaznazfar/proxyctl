@@ -143,6 +143,12 @@ impl CoreAdapter for XrayAdapter {
             if let Some(pin) = tls.get("certificate_sha256") {
                 tls_settings.insert("pinnedPeerCertSha256".into(), pin.clone());
             }
+            if let Some(insecure) = tls.get("insecure") {
+                tls_settings.insert("allowInsecure".into(), insecure.clone());
+            }
+            if let Some(name) = tls.get("verify_peer_cert_by_name") {
+                tls_settings.insert("verifyPeerCertByName".into(), name.clone());
+            }
             outbound["streamSettings"]["security"] = json!("tls");
             outbound["streamSettings"]["tlsSettings"] = serde_json::Value::Object(tls_settings);
         }
