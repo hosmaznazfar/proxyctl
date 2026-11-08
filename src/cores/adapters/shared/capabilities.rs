@@ -20,6 +20,7 @@ struct CoreCapabilities {
     grpc_authority: bool,
     grpc_multi_mode: bool,
     certificate_sha256_pin: bool,
+    verify_peer_cert_by_name: bool,
 }
 
 impl CoreCapabilities {
@@ -48,6 +49,7 @@ const SING_BOX: CoreCapabilities = CoreCapabilities {
     grpc_authority: false,
     grpc_multi_mode: false,
     certificate_sha256_pin: false,
+    verify_peer_cert_by_name: false,
 };
 
 const XRAY: CoreCapabilities = CoreCapabilities {
@@ -63,6 +65,7 @@ const XRAY: CoreCapabilities = CoreCapabilities {
     grpc_authority: true,
     grpc_multi_mode: true,
     certificate_sha256_pin: true,
+    verify_peer_cert_by_name: true,
 };
 
 const MIHOMO: CoreCapabilities = CoreCapabilities {
@@ -77,6 +80,7 @@ const MIHOMO: CoreCapabilities = CoreCapabilities {
     grpc_authority: false,
     grpc_multi_mode: false,
     certificate_sha256_pin: true,
+    verify_peer_cert_by_name: true,
 };
 
 fn capabilities(core: CoreId) -> &'static CoreCapabilities {
@@ -94,6 +98,10 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
 
     if node.protocol == Protocol::Hysteria2 && !capabilities.hysteria2 {
         return Err(format!("{core} does not implement Hysteria2"));
+    }
+
+    if option_string(node, "vcn").is_some() && !capabilities.verify_peer_cert_by_name {
+        return Err(format!("{core} does not support separate certificate-name verification"));
     }
 
     if option_string(node, "pcs").is_some() && !capabilities.certificate_sha256_pin {
@@ -151,6 +159,8 @@ mod tests {
         assert!(capabilities(CoreId::Xray).certificate_sha256_pin);
         assert!(!capabilities(CoreId::SingBox).certificate_sha256_pin);
         assert!(capabilities(CoreId::Mihomo).certificate_sha256_pin);
+        assert!(capabilities(CoreId::Xray).verify_peer_cert_by_name);
+        assert!(!capabilities(CoreId::SingBox).verify_peer_cert_by_name);
         assert!(capabilities(CoreId::Mihomo).http2);
         assert!(capabilities(CoreId::Mihomo).grpc_service_name_required);
         assert!(capabilities(CoreId::Xray).grpc_authority);
