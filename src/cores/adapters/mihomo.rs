@@ -65,6 +65,9 @@ impl CoreAdapter for MihomoAdapter {
             if let Some(sni) = tls.get("server_name") {
                 proxy["servername"] = sni.clone();
             }
+            if let Some(alpn) = tls.get("alpn") {
+                proxy["alpn"] = alpn.clone();
+            }
         }
         json_config(json!({
             "allow-lan": false,
