@@ -63,6 +63,18 @@ The default database is stored under XDG_DATA_HOME when set, otherwise under ~/.
 
 Normal output masks credentials. The show command displays option names but not option values or the original URL.
 
+## Updating proxyctl
+
+The initial self-update command is implemented for Linux x86_64. It checks the official GitHub Releases endpoint, verifies the matching asset against the release SHA-256 manifest, validates the staged executable, and replaces the current binary only after validation.
+
+~~~sh
+proxyctl update --check
+proxyctl update
+proxyctl update --app
+~~~
+
+The first published proxyctl release is required before an update can be downloaded. Core installation and core update targets are still under development; the unified command will include installed managed cores when that stage is complete.
+
 ## Planned commands
 
 The following command groups are planned and are not available yet.
@@ -74,11 +86,10 @@ proxyctl setup --core sing-box
 proxyctl cores
 
 # One place to check/update the CLI and managed cores
-proxyctl update --check
-proxyctl update
-
-# Optional update targets
-proxyctl update --app
+# Managed-core installation and updates (not implemented yet)
+proxyctl setup
+proxyctl setup --core sing-box
+proxyctl cores
 proxyctl update --cores
 proxyctl update --core sing-box
 proxyctl update --core xray
