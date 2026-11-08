@@ -1,113 +1,96 @@
 # Update and Installation Design
 
-> Status: approved design baseline
+> Status: implementation baseline
 > Last updated: 2026-11-08
 
 ## 1. Goals
 
-Proxyctl uses one consistent, verifiable artifact acquisition and installation pipeline for the proxyctl CLI executable and the managed sing-box, Xray, and Mihomo binaries. The CLI and core targets share safety rules and reusable implementation, while each upstream project has its own release resolver because asset names, archive formats, and checksum conventions differ.
+Proxyctl uses one verified artifact pipeline for its CLI and managed sing-box, Xray, and Mihomo binaries. Shared mechanisms (release metadata, bounded download, SHA-256 verification, archive extraction boundary, staging, and executable validation) are separate from upstream asset policy.
 
-## 2. Official release sources
+## 2. Official sources and verification
 
-| Component | Official release source |
+| Component | Official source |
 |---|---|
 | proxyctl | https://github.com/hosmaznazfar/proxyctl/releases |
 | sing-box | https://github.com/SagerNet/sing-box/releases |
 | Xray | https://github.com/XTLS/Xray-core/releases |
 | Mihomo | https://github.com/MetaCubeX/mihomo/releases |
 
-Only stable releases are selected by default. Prereleases, drafts, arbitrary branch snapshots, unofficial mirrors, and third-party repackaging are not silently accepted. A future explicit opt-in may support prereleases.
+Only stable releases are selected. The installer uses GitHub's release asset digest field and requires a sha256 digest. If release metadata does not provide a digest, installation fails closed. No checksum bypass or unofficial mirror is provided.
 
-The updater queries each project's official GitHub Releases metadata and selects an asset using a component-specific release resolver. It must not assume all projects share a tag format, asset naming scheme, archive format, or checksum convention.
+## 3. Initial platform and asset policy
 
-## 3. Platform and architecture
+The first implementation supports Linux x86_64 only.
 
-The initial validated target is Linux x86_64 (GNU/Linux, including CachyOS/Arch Linux). The artifact model must allow additional targets, especially Linux aarch64, without changing update orchestration.
+| Core | Asset policy | Archive | Extracted executable |
+|---|---|---|---|
+| sing-box | sing-box-{version}-linux-amd64.tar.gz | tar.gz | sing-box |
+| Xray | Xray-linux-64.zip | ZIP | xray |
+| Mihomo | mihomo-linux-amd64-v1-{version}.gz | gzip | mihomo |
 
-Proxyctl detects the operating system and architecture before downloading and resolves an exact compatible asset. If no compatible artifact exists, it fails with a clear unsupported-platform message; it never guesses or installs a binary for a different architecture.
+Mihomo's GOAMD64 v1 build is selected for broad x86_64 compatibility rather than assuming newer CPU instruction support. Each asset selector lives in its own core-specific module.
 
-## 4. Shared artifact pipeline
+## 4. Shared installation pipeline
 
-Setup and update use the same underlying component installer:
+1. Query the fixed official GitHub Releases API endpoint.
+2. Reject drafts and prereleases.
+3. Select the exact platform-specific asset by name.
+4. Require the release API's SHA-256 digest.
+5. Download and verify the complete archive before parsing it.
+6. Extract only the expected regular executable into memory. Archive paths are never written to disk; directories and symlinks are ignored.
+7. Stage the executable beside its final managed path, set executable permissions, and execute its version command.
+8. Replace the destination only after the version matches the selected release.
+9. Remove staging files on failure.
 
-1. Resolve official release metadata.
-2. Select the latest stable release and a compatible asset.
-3. Resolve the checksum/signature artifact and its trusted verification procedure.
-4. Download into a private staging directory beneath proxyctl's data directory.
-5. Verify downloaded bytes before extraction or execution.
-6. Safely inspect and extract only expected files; reject path traversal and unexpected layouts.
-7. Set executable permissions and verify the binary's reported version.
-8. Install using a staged replacement strategy, retaining the previous working binary until the replacement is ready.
-9. Record installed version, release identifier, source, asset identity, and verification result.
-10. Remove temporary artifacts on success and failure.
+The download reader is capped at 256 MiB and extracted executables at 128 MiB. Installation directories are private (0700 on Unix); installed binaries are executable (0755).
 
-If an upstream release does not provide verification material that proxyctl can validate against a trusted source, installation fails closed. It must not silently skip verification. Exact checksum/signature formats are implemented and tested separately for each upstream project.
-
-Downloaded files and temporary configuration are stored with restrictive permissions. Never log credential-bearing URLs or sensitive local paths unnecessarily.
-
-## 5. CLI self-update
-
-Proxyctl releases are published in this repository with versioned tags and platform-specific release assets. The release workflow builds clearly identified artifacts for supported targets and publishes a SHA-256 manifest (and stronger signatures/provenance when configured).
-
-The self-updater compares the installed CLI version with the latest stable proxyctl release, chooses the exact asset for the detected platform/architecture, verifies it against the release's published SHA-256 manifest from the official repository, and stages and validates the new executable before replacement.
-
-It uses atomic replacement where supported and safe. It never truncates or overwrites the currently running executable before the replacement is verified and ready.
-
-If the OS or installation layout prevents safe self-replacement, proxyctl leaves the current executable untouched and prints the official release URL plus a precise manual update instruction. It must not claim success when no update occurred.
-
-## 6. Command behavior
+## 5. CLI behavior
 
 ~~~sh
-# Initial installation of managed cores
 proxyctl setup
 proxyctl setup --core sing-box
-
-# Inventory and versions
 proxyctl cores
-
-# Check all update targets without modifying anything
 proxyctl update --check
-
-# Update CLI and all installed managed cores
 proxyctl update
-
-# Update only selected targets
 proxyctl update --app
 proxyctl update --cores
 proxyctl update --core mihomo
 ~~~
 
-With no target selector, update targets the CLI and every already-installed managed core. It does not install cores that are not installed; setup is responsible for initial installation. Check is read-only. App, cores, and core are mutually exclusive target selectors unless a later explicit CLI design supports another combination.
+Setup installs all three cores by default; --core installs one. Cores displays each managed installation and its reported version. Update without a selector targets the CLI and every installed managed core. Check performs metadata and asset checks without downloading or changing files. App, cores, and core are exclusive selectors.
 
-The command reports each target independently: installed version, latest stable version, status, verification result, and action/error. One component's failure must not corrupt another component or hide its result.
+## 6. Safety boundaries
 
-## 7. Operational safety
+- Only binaries inside proxyctl's private managed directory are installed or updated.
+- No package manager, sudo, PATH lookup, external core process, or system proxy setting is used.
+- Setup and update do not start a core or alter active proxy processes, DNS, routes, firewall, or TUN.
+- Existing working binaries are preserved until the staged replacement passes its version check.
+- A failed core update does not stop other selected core updates.
+- Archive paths are never extracted to the filesystem.
 
-- Update and setup never start a proxy core.
-- They do not alter active proxy processes, system proxy settings, DNS, routes, firewall rules, or TUN state.
-- Only binaries in proxyctl's managed directory are installed or updated. System-installed cores and other proxy applications are not modified.
-- A failed request, checksum/signature check, extraction, version check, or replacement leaves the last working binary intact.
-- Staging and replacement are serialized per component to avoid concurrent update races.
-- The updater handles interrupted operations and stale staging files safely.
-- Release metadata and asset URLs are constrained to the expected official GitHub repository/release origin; redirects and downloaded content are validated rather than blindly trusted.
+## 7. Module responsibilities
 
-## 8. Release workflow and testing
-
-The proxyctl repository should publish release assets from a version tag (for example, v0.1.0) through GitHub Actions. The workflow should validate the tag/version relationship, build each supported target, package binaries with unambiguous OS/architecture names, generate a SHA-256 manifest after packaging, attach assets and manifest to the GitHub Release, and avoid publishing when required build or test jobs fail.
-
-Tests cover platform/asset selection, stable-versus-prerelease selection, checksum parsing and mismatch, missing verification material, archive path traversal, interrupted downloads, failed version checks, staging cleanup, atomic replacement behavior, self-update fallback, and independent per-component failures. Network-dependent integration tests are opt-in; ordinary CI uses fixtures and fake download/process interfaces.
-
-## 9. Implementation boundaries
-
-The Rust implementation keeps policy and mechanisms separate:
-
-| Module | Single responsibility |
+| Module | Responsibility |
 |---|---|
-| `updates/application.rs` | Proxyctl-specific release policy and self-update use case |
-| `updates/release.rs` | GitHub Releases metadata model and retrieval |
-| `updates/platform.rs` | Platform/architecture detection and application asset naming |
-| `updates/artifact.rs` | Bounded downloads, trusted-host validation, checksum parsing and verification |
-| `updates/installer.rs` | Staging, executable validation, permissions, and replacement |
-| `updates/mod.rs` | Module boundary and public update entry point |
+| cores/catalog.rs | Core identity, official endpoint, executable and version command |
+| cores/paths.rs | Private managed filesystem layout |
+| cores/releases/*.rs | One upstream's asset naming and archive format |
+| cores/archive.rs | Safe extraction of one expected executable |
+| cores/installer.rs | Shared core installation orchestration |
+| updates/release.rs | GitHub release metadata and asset digest |
+| updates/artifact.rs | Bounded download and SHA-256 verification |
+| updates/installer.rs | Staging, version validation, replacement |
+| services/cores.rs | Setup, update, and inventory use cases |
+| cli/mod.rs | Argument parsing and presentation only |
 
-Core-specific release resolution and archive extraction must be implemented as separate adapters. They may use the shared artifact and installer services, but must not duplicate HTTP, checksum, staging, or replacement code. The CLI only dispatches use cases; it does not implement update policy. Keep individual modules narrowly scoped and split them when a new responsibility is introduced.
+Each module has one narrow responsibility. Core-specific policy is not duplicated in the shared installer.
+
+## 8. Tests
+
+Unit tests cover core-name parsing, archive rejection, checksum mismatch, URL host validation, and staged installation. Network-dependent release tests are not part of ordinary CI. Local checks:
+
+~~~sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+~~~
