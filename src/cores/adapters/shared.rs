@@ -156,6 +156,29 @@ fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Result<(), St
     Ok(())
 }
 
+fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
+    const STRING_OPTIONS: &[&str] = &[
+        "security", "sni", "encryption", "flow", "type", "host", "path", "serviceName",
+        "service_name", "authority", "mode", "net", "scy", "ed", "eh", "maxEarlyData",
+        "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data",
+        "early-data-header-name", "pcs", "pinSHA256", "vcn", "fp",
+    ];
+    for key in STRING_OPTIONS {
+        if let Some(value) = node.option(key)
+            && !matches!(value, Value::String(_) | Value::Null)
+        {
+            return Err(format!("option '{key}' must be a string"));
+        }
+    }
+    if node.protocol != Protocol::Vmess
+        && let Some(value) = node.option("tls")
+        && !matches!(value, Value::String(_) | Value::Null)
+    {
+        return Err("TLS option must be a string".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     if node.server.is_empty() || node.port == 0 {
         return Err("server and port must be valid".into());
@@ -179,6 +202,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         Protocol::Shadowsocks => Vec::new(),
     };
     reject_unknown_options(node, &supported)?;
+    validate_string_options(node)?;
     if !node.option_entries.is_empty() {
         let mut seen = std::collections::BTreeSet::new();
         for entry in &node.option_entries {
