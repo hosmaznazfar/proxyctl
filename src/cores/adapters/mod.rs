@@ -532,6 +532,25 @@ mod tests {
     }
 
     #[test]
+    fn hysteria2_pin_sha256_maps_to_mihomo_but_not_sing_box_114() {
+        let node = parse_proxy_url(
+            "hysteria2://password@example.com:443?pinSHA256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef&insecure=1",
+        )
+        .unwrap();
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+        let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+        let document: Value = serde_json::from_slice(&mihomo.content).unwrap();
+        assert_eq!(
+            document["proxies"][0]["fingerprint"],
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        assert_eq!(document["proxies"][0]["skip-cert-verify"], true);
+    }
+
+    #[test]
     fn certificate_name_verification_maps_only_where_supported() {
         let node = parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&vcn=verify.example",
