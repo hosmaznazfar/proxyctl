@@ -25,6 +25,16 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Format source
+        run: cargo fmt --all
+
+      - name: Save formatted source for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: formatted-source
+          path: src/
+          if-no-files-found: error
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
