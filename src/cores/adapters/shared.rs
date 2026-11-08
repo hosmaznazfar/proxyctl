@@ -158,7 +158,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     let supported = match node.protocol {
         Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "mode", "alpn", "fp"],
         Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "mode", "alpn", "fp"],
-        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "alpn", "fp"],
+        Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "alpn", "fp"],
         Protocol::Shadowsocks => Vec::new(),
     };
@@ -217,8 +217,8 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         }
     }
     if node.protocol == Protocol::Vmess {
-        if option_string(node, "net").is_some_and(|value| !["tcp", "ws", "grpc"].contains(&value)) {
-            return Err("only VMess TCP, WebSocket, gRPC, HTTP/2, and HTTP Upgrade transports are currently mapped".into());
+        if option_string(node, "net").is_some_and(|value| !["tcp", "ws", "grpc", "h2"].contains(&value)) {
+            return Err("only VMess TCP, WebSocket, gRPC, and HTTP/2 transports are currently mapped".into());
         }
         if option_string(node, "aid").is_some_and(|value| value.parse::<u32>().is_err()) {
             return Err("VMess alter ID is invalid".into());
