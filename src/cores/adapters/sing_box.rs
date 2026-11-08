@@ -64,7 +64,7 @@ impl CoreAdapter for SingBoxAdapter {
             }),
         };
         let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
-        if matches!(transport.kind, crate::domain::TransportKind::WebSocket) {
+        if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
             let mut ws = serde_json::Map::new();
             ws.insert("type".into(), json!("ws"));
             if let Some(path) = transport.path {
@@ -74,7 +74,7 @@ impl CoreAdapter for SingBoxAdapter {
                 ws.insert("headers".into(), json!(transport.headers));
             }
             outbound["transport"] = serde_json::Value::Object(ws);
-        } else if matches!(transport.kind, crate::domain::TransportKind::Grpc) {
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
             let mut grpc = serde_json::Map::new();
             grpc.insert("type".into(), json!("grpc"));
             if let Some(service_name) = transport.service_name {
