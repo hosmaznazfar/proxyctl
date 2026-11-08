@@ -24,6 +24,11 @@ impl CoreAdapter for XrayAdapter {
         if node.protocol == Protocol::Hysteria2 {
             return Compatibility::unsupported("Xray does not implement Hysteria2");
         }
+        if normalize_transport(node)
+            .is_ok_and(|transport| matches!(&transport.kind, crate::domain::TransportKind::Http2))
+        {
+            return Compatibility::unsupported("current Xray transport schemas no longer support the legacy HTTP/2 transport");
+        }
         match validate_common(node) {
             Err(reason) => Compatibility::unsupported(reason),
             Ok(()) => match tls_options(node) {
