@@ -37,7 +37,7 @@ jobs:
           cargo test --all-targets --all-features
 
       - name: Build release binary
-        run: cargo build --locked --release
+        run: cargo build --release
 
       - name: Package and checksum
         shell: bash
