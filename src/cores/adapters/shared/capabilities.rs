@@ -5,7 +5,7 @@ use crate::{
     domain::{Protocol, ProxyNode, TransportKind},
 };
 
-use super::{normalize_transport, validate_common};
+use super::{normalize_transport, option_string, validate_common};
 
 #[derive(Clone, Copy, Debug)]
 struct CoreCapabilities {
@@ -17,6 +17,7 @@ struct CoreCapabilities {
     http_upgrade: bool,
     xhttp: bool,
     grpc_service_name_required: bool,
+    certificate_sha256_pin: bool,
 }
 
 impl CoreCapabilities {
@@ -42,6 +43,7 @@ const SING_BOX: CoreCapabilities = CoreCapabilities {
     http_upgrade: true,
     xhttp: false,
     grpc_service_name_required: false,
+    certificate_sha256_pin: false,
 };
 
 const XRAY: CoreCapabilities = CoreCapabilities {
@@ -54,6 +56,7 @@ const XRAY: CoreCapabilities = CoreCapabilities {
     http_upgrade: true,
     xhttp: true,
     grpc_service_name_required: false,
+    certificate_sha256_pin: true,
 };
 
 const MIHOMO: CoreCapabilities = CoreCapabilities {
@@ -65,6 +68,7 @@ const MIHOMO: CoreCapabilities = CoreCapabilities {
     http_upgrade: true,
     xhttp: true,
     grpc_service_name_required: true,
+    certificate_sha256_pin: false,
 };
 
 fn capabilities(core: CoreId) -> &'static CoreCapabilities {
@@ -82,6 +86,10 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
 
     if node.protocol == Protocol::Hysteria2 && !capabilities.hysteria2 {
         return Err(format!("{core} does not implement Hysteria2"));
+    }
+
+    if option_string(node, "pcs").is_some() && !capabilities.certificate_sha256_pin {
+        return Err(format!("{core} does not support the imported certificate SHA-256 pin"));
     }
 
     let transport = normalize_transport(node)?;
@@ -118,6 +126,8 @@ mod tests {
         assert!(!capabilities(CoreId::SingBox).xhttp);
         assert!(capabilities(CoreId::Xray).xhttp);
         assert!(!capabilities(CoreId::Xray).http2);
+        assert!(capabilities(CoreId::Xray).certificate_sha256_pin);
+        assert!(!capabilities(CoreId::SingBox).certificate_sha256_pin);
         assert!(capabilities(CoreId::Mihomo).http2);
         assert!(capabilities(CoreId::Mihomo).grpc_service_name_required);
     }
