@@ -82,6 +82,17 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         Protocol::Shadowsocks => Vec::new(),
     };
     reject_unknown_options(node, &supported)?;
+    if !node.option_entries.is_empty() {
+        let mut seen = std::collections::BTreeSet::new();
+        for entry in &node.option_entries {
+            if !seen.insert(entry.key.as_str()) {
+                return Err(format!("option '{}' is repeated and cannot be mapped safely", entry.key));
+            }
+        }
+    }
+    if option_string(node, "security").is_some() && option_string(node, "tls").is_some() {
+        return Err("both security and tls options were supplied; refusing ambiguous TLS settings".into());
+    }
 
     if node.protocol == Protocol::Vless
         && option_string(node, "encryption").is_some_and(|value| value != "none")
@@ -109,6 +120,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
         "none" | "" | "false" | "0" => {
             if matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2) {
                 return Err("Trojan and Hysteria2 require TLS".into());
+            }
+            if option_string(node, "sni").is_some() {
+                return Err("SNI was supplied while TLS is disabled".into());
             }
             Ok(None)
         }
