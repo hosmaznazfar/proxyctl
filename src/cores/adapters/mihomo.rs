@@ -70,7 +70,7 @@ impl CoreAdapter for MihomoAdapter {
             }
         };
         let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
-        if matches!(transport.kind, crate::domain::TransportKind::WebSocket) {
+        if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
             proxy["network"] = json!("ws");
             let mut ws = serde_json::Map::new();
             if let Some(path) = transport.path {
@@ -80,7 +80,7 @@ impl CoreAdapter for MihomoAdapter {
                 ws.insert("headers".into(), json!(transport.headers));
             }
             proxy["ws-opts"] = serde_json::Value::Object(ws);
-        } else if matches!(transport.kind, crate::domain::TransportKind::Grpc) {
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
             proxy["network"] = json!("grpc");
             let mut grpc = serde_json::Map::new();
             if let Some(service_name) = transport.service_name {
