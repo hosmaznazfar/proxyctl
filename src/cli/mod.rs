@@ -93,7 +93,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             for (core, installed) in crate::services::cores::inventory()? {
                 println!(
                     "{core}: {}",
-                    if installed { "installed" } else { "not installed" }
+                    if installed {
+                        "installed"
+                    } else {
+                        "not installed"
+                    }
                 );
             }
             return Ok(());
