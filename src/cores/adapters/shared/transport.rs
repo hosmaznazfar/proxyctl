@@ -14,7 +14,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     let network = option_string(node, network_key).unwrap_or("tcp").to_ascii_lowercase();
 
     let kind = match network.as_str() {
-        "" | "tcp" => TransportKind::Tcp,
+        "" | "tcp" | "raw" => TransportKind::Tcp,
         "ws" | "websocket" => TransportKind::WebSocket,
         "grpc" => TransportKind::Grpc,
         "http" => TransportKind::Http,
