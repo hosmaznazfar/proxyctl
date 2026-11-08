@@ -134,6 +134,9 @@ impl CoreAdapter for XrayAdapter {
             if let Some(fingerprint) = tls.get("fingerprint") {
                 tls_settings.insert("fingerprint".into(), fingerprint.clone());
             }
+            if let Some(pin) = tls.get("certificate_sha256") {
+                tls_settings.insert("pinnedPeerCertSha256".into(), pin.clone());
+            }
             outbound["streamSettings"]["security"] = json!("tls");
             outbound["streamSettings"]["tlsSettings"] = serde_json::Value::Object(tls_settings);
         }
