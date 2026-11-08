@@ -172,7 +172,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     let supported = match node.protocol {
-        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "type", "host", "path", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
+        Protocol::Vless => vec!["security", "tls", "sni", "encryption", "flow", "type", "host", "path", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
         Protocol::Vmess => vec!["security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers", "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
         Protocol::Trojan => vec!["security", "tls", "sni", "type", "host", "path", "serviceName", "service_name", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp"],
         Protocol::Hysteria2 => vec!["security", "tls", "sni", "insecure", "allowInsecure", "pinSHA256", "pcs", "alpn", "fp"],
@@ -231,6 +231,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     if node.protocol == Protocol::Vless {
         if option_string(node, "encryption").is_some_and(|value| value != "none") {
             return Err("only VLESS encryption=none is currently mapped".into());
+        }
+        if option_string(node, "flow").is_some_and(|value| value != "xtls-rprx-vision") {
+            return Err("only VLESS xtls-rprx-vision flow is currently mapped".into());
         }
         if option_string(node, "type").is_some_and(|value| !["tcp", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)) {
             return Err("only VLESS TCP, WebSocket, gRPC, HTTP/2, HTTP Upgrade, and XHTTP transports are currently mapped".into());
@@ -297,6 +300,9 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
         "none" | "" | "false" | "0" => {
             if matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2) {
                 return Err("Trojan and Hysteria2 require TLS".into());
+            }
+            if option_string(node, "flow").is_some() {
+                return Err("VLESS flow requires TLS".into());
             }
             if option_string(node, "sni").is_some() {
                 return Err("SNI was supplied while TLS is disabled".into());
