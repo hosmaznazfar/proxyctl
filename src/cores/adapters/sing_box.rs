@@ -91,6 +91,19 @@ impl CoreAdapter for SingBoxAdapter {
                 http.insert("host".into(), json!(transport.hosts));
             }
             outbound["transport"] = serde_json::Value::Object(http);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::HttpUpgrade) {
+            let mut upgrade = serde_json::Map::new();
+            upgrade.insert("type".into(), json!("httpupgrade"));
+            if let Some(host) = transport.host {
+                upgrade.insert("host".into(), json!(host));
+            }
+            if let Some(path) = transport.path {
+                upgrade.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                upgrade.insert("headers".into(), json!(transport.headers));
+            }
+            outbound["transport"] = serde_json::Value::Object(upgrade);
         }
         if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             if let Some(fingerprint) = tls.as_object_mut().and_then(|options| options.remove("fingerprint")) {
