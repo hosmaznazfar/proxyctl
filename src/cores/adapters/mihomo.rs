@@ -22,11 +22,8 @@ impl CoreAdapter for MihomoAdapter {
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
         match validate_for_core(CoreId::Mihomo, node) {
-            Err(reason) => Compatibility::unsupported(reason),
-            Ok(()) => match tls_options(node) {
-                Ok(_) => Compatibility::supported(),
-                Err(reason) => Compatibility::unsupported(reason),
-            },
+            Ok(()) => Compatibility::supported(),
+            Err(compatibility) => compatibility,
         }
     }
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
