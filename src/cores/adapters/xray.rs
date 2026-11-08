@@ -84,6 +84,12 @@ impl CoreAdapter for XrayAdapter {
             if let Some(service_name) = transport.service_name {
                 grpc.insert("serviceName".into(), json!(service_name));
             }
+            if let Some(authority) = transport.authority {
+                grpc.insert("authority".into(), json!(authority));
+            }
+            if transport.mode.as_deref() == Some("multi") {
+                grpc.insert("multiMode".into(), json!(true));
+            }
             outbound["streamSettings"]["grpcSettings"] = serde_json::Value::Object(grpc);
         } else if matches!(&transport.kind, crate::domain::TransportKind::Http2) {
             outbound["streamSettings"]["network"] = json!("h2");
