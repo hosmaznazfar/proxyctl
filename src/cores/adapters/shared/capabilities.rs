@@ -89,6 +89,16 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), St
         return Err(format!("{core} does not support this transport"));
     }
 
+    if core == CoreId::Xray
+        && matches!(&transport.kind, TransportKind::WebSocket)
+        && transport
+            .early_data_header_name
+            .as_deref()
+            .is_some_and(|name| name != "Sec-WebSocket-Protocol")
+    {
+        return Err("Xray WebSocket early data requires the Sec-WebSocket-Protocol header".into());
+    }
+
     if matches!(&transport.kind, TransportKind::Grpc)
         && capabilities.grpc_service_name_required
         && transport.service_name.as_deref().is_none_or(str::is_empty)
