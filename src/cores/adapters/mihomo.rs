@@ -70,6 +70,13 @@ impl CoreAdapter for MihomoAdapter {
             if !transport.headers.is_empty() {
                 ws.insert("headers".into(), json!(transport.headers));
             }
+            if let Some(max_early_data) = transport.max_early_data {
+                ws.insert("max-early-data".into(), json!(max_early_data));
+                ws.insert(
+                    "early-data-header-name".into(),
+                    json!(transport.early_data_header_name.unwrap_or_else(|| "Sec-WebSocket-Protocol".into())),
+                );
+            }
             proxy["ws-opts"] = serde_json::Value::Object(ws);
         } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
             proxy["network"] = json!("grpc");
