@@ -34,7 +34,11 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         return Err("HTTP/2 transport is only mapped for VLESS and VMess".into());
     }
 
-    let path = option_string(node, "path").map(str::to_owned);
+    let path = if matches!(&kind, TransportKind::Grpc) && node.protocol != Protocol::Vmess {
+        None
+    } else {
+        option_string(node, "path").map(str::to_owned)
+    };
     let mut headers = BTreeMap::new();
     let mut hosts = Vec::new();
     let mut host = None;
@@ -80,10 +84,14 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             let value = value
                 .as_str()
                 .ok_or_else(|| "transport header values must be strings".to_owned())?;
-            if key.is_empty() || key.chars().any(char::is_control) {
+            if key.is_empty() || key.chars().any(char::is_control) || value.chars().any(char::is_control) {
                 return Err("transport header names must be non-empty and contain no control characters".into());
             }
-            if headers.insert(key.clone(), value.to_owned()).is_some() {
+            if headers.keys().any(|existing| existing.eq_ignore_ascii_case(key)) {
+                return Err("transport Host/header values are ambiguous".into());
+            }
+            let key = if key.eq_ignore_ascii_case("host") { "Host".to_owned() } else { key.clone() };
+            if headers.insert(key, value.to_owned()).is_some() {
                 return Err("transport Host/header values are ambiguous".into());
             }
         }
@@ -154,7 +162,9 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         let value = if node.protocol == Protocol::Vmess {
             option_string(node, "path")
         } else {
-            option_string(node, "serviceName").or_else(|| option_string(node, "service_name"))
+            option_string(node, "serviceName")
+                .or_else(|| option_string(node, "service_name"))
+                .or_else(|| option_string(node, "path"))
         };
         if !headers.is_empty() {
             return Err("HTTP headers are not valid gRPC settings".into());
@@ -164,7 +174,22 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         None
     };
 
-    if matches!(&kind, TransportKind::HttpUpgrade) && host.is_some() && headers.contains_key("Host") {
+    if path.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err("transport path contains control characters".into());
+    }
+    if host.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err("transport host contains control characters".into());
+    }
+    if authority.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err("gRPC authority contains control characters".into());
+    }
+    if service_name.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err("gRPC service name contains control characters".into());
+    }
+    if matches!(&kind, TransportKind::HttpUpgrade)
+        && host.is_some()
+        && headers.keys().any(|key| key.eq_ignore_ascii_case("host"))
+    {
         return Err("HTTP Upgrade host and Host header were both supplied".into());
     }
     if matches!(&kind, TransportKind::Tcp) && (path.is_some() || host.is_some() || !headers.is_empty() || !hosts.is_empty()) {
