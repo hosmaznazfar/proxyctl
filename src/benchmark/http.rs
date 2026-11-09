@@ -1,6 +1,9 @@
 //! Bounded HTTP measurements routed through the benchmark's explicit local proxy.
 
-use std::time::{Duration, Instant};
+use std::{
+    io::Read,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, ensure};
 use ureq::{Agent, Proxy};
@@ -9,12 +12,15 @@ use url::Url;
 use crate::domain::{BenchmarkSettings, throughput_bps};
 
 const MAX_PAYLOAD_BYTES: u64 = 64 * 1024 * 1024;
+const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
 
 /// A successful, timed HTTP measurement.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Measurement {
     pub value: f64,
     pub duration: Duration,
+    pub transferred_bytes: Option<u64>,
 }
 
 /// Safe failure classification; deliberately excludes raw URLs and library diagnostics.
@@ -24,6 +30,7 @@ pub enum MeasurementFailure {
     Unreachable,
     InvalidResponse,
     Unavailable,
+    Cancelled,
 }
 
 impl MeasurementFailure {
@@ -33,6 +40,7 @@ impl MeasurementFailure {
             Self::Unreachable => "unreachable",
             Self::InvalidResponse => "invalid_response",
             Self::Unavailable => "unavailable",
+            Self::Cancelled => "cancelled",
         }
     }
 
@@ -42,6 +50,7 @@ impl MeasurementFailure {
             Self::Unreachable => "the measurement endpoint could not be reached",
             Self::InvalidResponse => "the measurement endpoint returned an invalid payload",
             Self::Unavailable => "the measurement request failed",
+            Self::Cancelled => "measurement cancelled by user",
         }
     }
 }
@@ -76,59 +85,86 @@ impl BenchmarkHttpClient {
         })
     }
 
-    /// Measure time until response headers arrive from the zero-byte latency endpoint.
+    /// Measure a real HTTP response through the proxy; 204 No Content is valid.
     pub fn latency(&self) -> Result<Measurement, MeasurementFailure> {
         let started = Instant::now();
-        let url = with_bytes_parameter(&self.latency_url, 0);
         let mut response = self
             .agent
-            .get(url.as_str())
+            .get(self.latency_url.as_str())
             .header("Accept-Encoding", "identity")
             .call()
             .map_err(classify_error)?;
         let duration = started.elapsed();
-        let response_body = response
+        // Some configurable ping endpoints return a small body; discard it with a strict cap.
+        response
             .body_mut()
             .with_config()
-            .limit(1_024)
+            .limit(64 * 1024)
             .read_to_vec()
             .map_err(classify_error)?;
-        if !response_body.is_empty() {
-            return Err(MeasurementFailure::InvalidResponse);
-        }
         Ok(Measurement {
             value: duration.as_secs_f64() * 1_000.0,
             duration,
+            transferred_bytes: None,
         })
     }
 
-    /// Download exactly the requested number of bytes through the local proxy.
-    pub fn download(&self, bytes: u64) -> Result<Measurement, MeasurementFailure> {
-        let url = with_bytes_parameter(&self.download_url, bytes);
+    /// Stream a download until EOF, reporting throttled byte progress.
+    ///
+    /// `max_bytes` is a safety ceiling. Different providers may return different object sizes.
+    pub fn download<F>(
+        &self,
+        max_bytes: u64,
+        mut progress: F,
+    ) -> Result<Measurement, MeasurementFailure>
+    where
+        F: FnMut(u64),
+    {
         let started = Instant::now();
         let mut response = self
             .agent
-            .get(url.as_str())
+            .get(self.download_url.as_str())
             .header("Accept-Encoding", "identity")
             .call()
             .map_err(classify_error)?;
-        let body = response
+        let mut reader = response
             .body_mut()
             .with_config()
-            .limit(bytes.saturating_add(1))
-            .read_to_vec()
-            .map_err(classify_error)?;
+            .limit(max_bytes.saturating_add(1))
+            .reader();
+        let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
+        let mut received = 0_u64;
+        let mut last_progress = Instant::now();
+
+        loop {
+            let count = reader.read(&mut buffer).map_err(classify_io_error)?;
+            if count == 0 {
+                break;
+            }
+            received = received.saturating_add(count as u64);
+            if received > max_bytes {
+                return Err(MeasurementFailure::InvalidResponse);
+            }
+            if last_progress.elapsed() >= PROGRESS_INTERVAL {
+                progress(received);
+                last_progress = Instant::now();
+            }
+        }
+
         let duration = started.elapsed();
-        if body.len() as u64 != bytes {
+        progress(received);
+        if received == 0 {
             return Err(MeasurementFailure::InvalidResponse);
         }
         Ok(Measurement {
-            value: throughput_bps(bytes, duration).ok_or(MeasurementFailure::InvalidResponse)?,
+            value: throughput_bps(received, duration)
+                .ok_or(MeasurementFailure::InvalidResponse)?,
             duration,
+            transferred_bytes: Some(received),
         })
     }
 
-    /// Upload a deterministic in-memory payload and wait for the response body.
+    /// Upload a deterministic in-memory payload and wait for a successful response.
     pub fn upload(&self, bytes: u64) -> Result<Measurement, MeasurementFailure> {
         let size = usize::try_from(bytes).map_err(|_| MeasurementFailure::InvalidResponse)?;
         let body = vec![0x5a; size];
@@ -153,6 +189,7 @@ impl BenchmarkHttpClient {
         Ok(Measurement {
             value: throughput_bps(bytes, duration).ok_or(MeasurementFailure::InvalidResponse)?,
             duration,
+            transferred_bytes: Some(bytes),
         })
     }
 }
@@ -163,7 +200,7 @@ pub fn validate_settings(settings: &BenchmarkSettings) -> anyhow::Result<()> {
     validate_endpoint(&settings.upload_url)?;
     ensure!(
         settings.download_bytes > 0 && settings.download_bytes <= MAX_PAYLOAD_BYTES,
-        "download payload must be between 1 byte and 64 MiB"
+        "download safety limit must be between 1 byte and 64 MiB"
     );
     ensure!(
         settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES,
@@ -200,27 +237,9 @@ fn validate_endpoint(value: &str) -> anyhow::Result<Url> {
     );
     ensure!(
         url.query().is_none(),
-        "benchmark endpoint must not contain query parameters; payload settings are added by Proxyctl"
+        "benchmark endpoint must not contain query parameters"
     );
     Ok(url)
-}
-
-fn with_bytes_parameter(base: &Url, bytes: u64) -> Url {
-    let mut url = base.clone();
-    let retained = url
-        .query_pairs()
-        .filter(|(key, _)| key != "bytes")
-        .map(|(key, value)| (key.into_owned(), value.into_owned()))
-        .collect::<Vec<_>>();
-    url.set_query(None);
-    {
-        let mut query = url.query_pairs_mut();
-        for (key, value) in retained {
-            query.append_pair(&key, &value);
-        }
-        query.append_pair("bytes", &bytes.to_string());
-    }
-    url
 }
 
 fn classify_error(error: ureq::Error) -> MeasurementFailure {
@@ -232,6 +251,22 @@ fn classify_error(error: ureq::Error) -> MeasurementFailure {
         || message.contains("connection reset")
         || message.contains("failed to connect")
     {
+        MeasurementFailure::Unreachable
+    } else {
+        MeasurementFailure::Unavailable
+    }
+}
+
+fn classify_io_error(error: std::io::Error) -> MeasurementFailure {
+    if error.kind() == std::io::ErrorKind::TimedOut {
+        MeasurementFailure::Timeout
+    } else if matches!(
+        error.kind(),
+        std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionRefused
+            | std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::NotConnected
+    ) {
         MeasurementFailure::Unreachable
     } else {
         MeasurementFailure::Unavailable
@@ -251,17 +286,10 @@ mod tests {
     }
 
     #[test]
-    fn accepts_https_endpoint_without_credentials() {
-        assert!(validate_endpoint("https://speed.cloudflare.com/__down").is_ok());
-    }
-
-    #[test]
-    fn download_size_parameter_is_replaced_not_duplicated() {
-        let base = Url::parse("https://speed.example/__down").unwrap();
-        let result = with_bytes_parameter(&base, 1024);
-        let pairs = result.query_pairs().collect::<Vec<_>>();
-        assert_eq!(pairs.len(), 1);
-        assert_eq!(pairs[0], ("bytes".into(), "1024".into()));
+    fn accepts_v2rayn_style_https_endpoints() {
+        assert!(validate_endpoint("https://www.google.com/generate_204").is_ok());
+        assert!(validate_endpoint("https://cachefly.cachefly.net/10mb.test").is_ok());
+        assert!(validate_endpoint("https://speed.cloudflare.com/__up").is_ok());
     }
 
     #[test]
@@ -295,22 +323,14 @@ mod tests {
                     format!("http://measurement.invalid{target}")
                 };
                 let url = Url::parse(&target).unwrap();
-                let response_body = match url.path() {
-                    "/__down" => {
-                        let bytes = url
-                            .query_pairs()
-                            .find(|(key, _)| key == "bytes")
-                            .unwrap()
-                            .1
-                            .parse::<usize>()
-                            .unwrap();
-                        vec![0x33; bytes]
-                    }
-                    "/__up" => {
+                let response_body = match (method.as_str(), url.path()) {
+                    ("GET", "/ping") => Vec::new(),
+                    ("GET", "/download") => vec![0x33; 8],
+                    ("POST", "/upload") => {
                         assert_eq!(request_body, vec![0x5a; 8]);
                         b"ok".to_vec()
                     }
-                    path => panic!("unexpected fake endpoint path: {path}"),
+                    other => panic!("unexpected fake request: {other:?}"),
                 };
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -331,43 +351,18 @@ mod tests {
             .build();
         let client = BenchmarkHttpClient {
             agent: config.into(),
-            latency_url: Url::parse("http://measurement.invalid/__down").unwrap(),
-            download_url: Url::parse("http://measurement.invalid/__down").unwrap(),
-            upload_url: Url::parse("http://measurement.invalid/__up").unwrap(),
+            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
         };
 
         assert!(client.latency().unwrap().value >= 0.0);
-        assert!(client.download(8).unwrap().value > 0.0);
+        let mut progress = Vec::new();
+        let download = client.download(16, |bytes| progress.push(bytes)).unwrap();
+        assert_eq!(download.transferred_bytes, Some(8));
+        assert_eq!(progress.last(), Some(&8));
         assert!(client.upload(8).unwrap().value > 0.0);
         server.join().unwrap();
-    }
-
-    fn read_fake_request(
-        reader: &mut std::io::BufReader<std::net::TcpStream>,
-    ) -> (String, String, Vec<u8>) {
-        use std::io::{BufRead, Read};
-
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line).unwrap();
-        let mut content_length = 0usize;
-        loop {
-            let mut header = String::new();
-            reader.read_line(&mut header).unwrap();
-            if header == "\r\n" || header.is_empty() {
-                break;
-            }
-            if let Some((name, value)) = header.split_once(':')
-                && name.eq_ignore_ascii_case("content-length")
-            {
-                content_length = value.trim().parse().unwrap();
-            }
-        }
-        let mut body = vec![0; content_length];
-        reader.read_exact(&mut body).unwrap();
-        let mut parts = request_line.split_whitespace();
-        let method = parts.next().unwrap().to_owned();
-        let target = parts.next().unwrap().to_owned();
-        (method, target, body)
     }
 
     #[test]
