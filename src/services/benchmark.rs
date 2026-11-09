@@ -14,11 +14,11 @@ use crate::{
         http::{BenchmarkHttpClient, Measurement, MeasurementFailure, validate_settings},
         process::ManagedCoreProcess,
     },
-    cores::{CoreId, core_binary_path, installer::current_version, adapters},
+    cores::{CoreId, adapters, core_binary_path, installer::current_version},
     database::{NodeDatabase, NodeRecord},
     domain::{
-        BenchmarkMetric, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample,
-        BenchmarkSampleStatus, BenchmarkSettings,
+        BenchmarkMetric, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, BenchmarkSampleStatus,
+        BenchmarkSettings,
     },
 };
 
@@ -58,11 +58,8 @@ pub fn default_settings() -> BenchmarkSettings {
     }
 }
 
-/// Run the requested benchmark scope and persist each sample as soon as it completes.
-pub fn run_benchmark(
-    database_path: &Path,
-    options: BenchmarkOptions,
-) -> anyhow::Result<u64> {
+/// Run the requested benchmark scope and persist each node/core sample batch after its core exits.
+pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow::Result<u64> {
     ensure!(
         (options.all_cores && options.node_id.is_none() && options.core.is_none())
             || (!options.all_cores && options.node_id.is_some() && options.core.is_some()),
