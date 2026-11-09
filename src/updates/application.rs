@@ -9,7 +9,7 @@ use super::{
     artifact::{checksum_for_asset, download, download_text, verify_sha256},
     installer::replace_executable,
     platform::application_asset_name,
-    release::{latest_release, ReleaseChannel},
+    release::{ReleaseChannel, latest_release},
 };
 
 const RELEASE_API: &str =

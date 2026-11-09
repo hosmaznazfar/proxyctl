@@ -83,7 +83,9 @@ fn select_release(releases: Vec<Release>, channel: ReleaseChannel) -> anyhow::Re
                 .tag_name
                 .strip_prefix('v')
                 .unwrap_or(&release.tag_name);
-            Version::parse(version).ok().map(|version| (version, release))
+            Version::parse(version)
+                .ok()
+                .map(|version| (version, release))
         })
         .max_by(|left, right| left.0.cmp(&right.0))
         .map(|(_, release)| release)
@@ -135,10 +137,12 @@ mod tests {
 
     #[test]
     fn drafts_are_never_selected() {
-        assert!(select_release(
-            vec![release("v2.0.0", true, false)],
-            ReleaseChannel::Prerelease,
-        )
-        .is_err());
+        assert!(
+            select_release(
+                vec![release("v2.0.0", true, false)],
+                ReleaseChannel::Prerelease,
+            )
+            .is_err()
+        );
     }
 }

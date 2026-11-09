@@ -222,15 +222,27 @@ fn print_node_details(record: &NodeRecord) {
     );
     println!(
         "Status: {}",
-        if record.is_deleted() { "deleted" } else { "active" }
+        if record.is_deleted() {
+            "deleted"
+        } else {
+            "active"
+        }
     );
     println!(
         "Identity: {}",
-        if node.identity.is_some() { "[masked]" } else { "-" }
+        if node.identity.is_some() {
+            "[masked]"
+        } else {
+            "-"
+        }
     );
     println!(
         "Secret: {}",
-        if node.secret.is_some() { "[masked]" } else { "-" }
+        if node.secret.is_some() {
+            "[masked]"
+        } else {
+            "-"
+        }
     );
     println!("Fingerprint: {}", node.fingerprint());
     if !node.options.is_empty() {

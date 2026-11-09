@@ -6,7 +6,7 @@ use crate::{
     updates::{
         artifact::{download, verify_sha256},
         installer::replace_executable,
-        release::{latest_release, ReleaseChannel},
+        release::{ReleaseChannel, latest_release},
     },
 };
 
@@ -75,7 +75,10 @@ fn reported_version_matches(output: &str, expected: &str) -> bool {
         .split_whitespace()
         .map(|part| {
             part.trim_matches(|character: char| {
-                !character.is_ascii_alphanumeric() && character != '.' && character != '-' && character != '+'
+                !character.is_ascii_alphanumeric()
+                    && character != '.'
+                    && character != '-'
+                    && character != '+'
             })
             .trim_start_matches('v')
         })
