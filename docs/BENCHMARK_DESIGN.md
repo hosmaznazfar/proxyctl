@@ -115,7 +115,7 @@ A sample records:
 - Status, optional value, unit, safe failure category/reason.
 - Start timestamp and elapsed duration.
 
-Persist the run as running before tests begin. Persist each completed sample immediately in a short write transaction, then close the database before the next network operation. Finalize the run after all work. Never keep a redb handle open while a core process or HTTP request is active.
+Persist the run as running before tests begin. Keep the database closed while a core is active or a network request is running. After stopping a core, persist its completed node/core sample batch in short write transactions. Finalize the run after all work. Never keep a redb handle open while a core process or HTTP request is active.
 
 If Ctrl-C is received, stop the active child, persist the final sample/run state where possible, and retain completed samples. If the process is killed without cleanup, the next benchmark invocation detects stale running records and marks them interrupted before starting a new run. Never delete prior runs or samples when a new run begins.
 
@@ -139,7 +139,7 @@ Schema migration: advance the current schema version and initialize benchmark ID
 3. **Implemented:** per-core benchmark config generation with loopback HTTP inbounds and native config validation.
 4. **Implemented:** isolated child-process ownership, bounded readiness, termination/wait, and temporary-config cleanup; Unix SIGINT/SIGTERM are converted into cooperative cancellation requests.
 5. **Implemented:** explicit local HTTP proxy client, HTTPS endpoint validation, bounded download/upload bodies, and throughput calculation.
-6. **Implemented:** sequential service orchestration and the `proxyctl test` CLI command, including preflight outcomes and per-sample persistence.
+6. **Implemented:** sequential service orchestration and the `proxyctl test` CLI command, including preflight outcomes and post-process node/core sample-batch persistence.
 7. **Next:** add deterministic service-level tests and local fake-core/fake-endpoint integration tests. Tests must not contact Cloudflare or start real proxy cores.
 8. Add reports and sorting only after benchmark persistence is verified.
 
