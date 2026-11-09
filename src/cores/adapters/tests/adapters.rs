@@ -39,6 +39,37 @@ fn all_adapters_generate_a_native_document_for_basic_vless() {
 }
 
 #[test]
+fn benchmark_configs_bind_only_to_loopback_for_each_core() {
+    let node =
+        parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        let generated = adapter(core)
+            .generate_benchmark_config(&node, 43127)
+            .unwrap();
+        let document: Value = serde_json::from_slice(&generated.content).unwrap();
+        match core {
+            CoreId::SingBox => {
+                assert_eq!(document["inbounds"][0]["type"], "http");
+                assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
+                assert_eq!(document["inbounds"][0]["listen_port"], 43127);
+                assert_eq!(document["route"]["final"], "proxy");
+            }
+            CoreId::Xray => {
+                assert_eq!(document["inbounds"][0]["protocol"], "http");
+                assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
+                assert_eq!(document["inbounds"][0]["port"], 43127);
+            }
+            CoreId::Mihomo => {
+                assert_eq!(document["port"], 43127);
+                assert_eq!(document["bind-address"], "127.0.0.1");
+                assert_eq!(document["allow-lan"], false);
+            }
+        }
+    }
+}
+
+#[test]
 fn adapters_reject_unknown_transport_without_dropping_it() {
     let node =
         parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic")
