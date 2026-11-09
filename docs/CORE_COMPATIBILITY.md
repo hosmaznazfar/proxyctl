@@ -31,7 +31,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 | XHTTP (VMess) | Unsupported | Implemented; native validation pending | Unsupported |
 | VMess transport coverage | Partial; see transport matrix | Partial; see transport matrix | Partial; see transport matrix |
 | Shadowsocks plugins / obfuscation | Not yet | Not yet | Not yet |
-| Hysteria2 obfuscation | Not yet | Not yet | Not yet |
+| Hysteria2 obfuscation (Salamander, Gecko) | Implemented; native validation pending | Unsupported | Implemented; native validation pending |
 
 ## Safety contract
 
@@ -47,6 +47,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 - `vcn` is separate certificate-name verification, not SNI. It maps to Xray `verifyPeerCertByName` and Mihomo `name-cert-verify`; sing-box 1.14.4 has no equivalent field and rejects it.
 - `insecure` / `allowInsecure` is parsed as a boolean and maps to sing-box `insecure`, Xray `allowInsecure` (deprecated upstream), and Mihomo `skip-cert-verify`. Empty optional VMess JSON fields are treated as absent, while non-empty unknown fields remain explicit incompatibilities.
 - An unrecognized or unmapped option produces an unsupported result; it is never silently discarded.
+- Hysteria2 obfuscation accepts `obfs=salamander` or `obfs=gecko` only when a matching `obfs-password` is supplied. It maps to sing-box `obfs.type/password` and Mihomo `obfs/obfs-password`; Xray does not implement Hysteria2. Native validation against the managed sing-box 1.14.4 and Mihomo 1.19.33 binaries remains required.
 - The generated document is serialized as JSON. For Mihomo this relies on JSON being accepted as a YAML-compatible configuration document.
 - Validation is delegated to the selected managed binary:
   - sing-box: `sing-box check -c CONFIG`
