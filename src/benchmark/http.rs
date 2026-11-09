@@ -56,11 +56,10 @@ pub struct BenchmarkHttpClient {
 
 impl BenchmarkHttpClient {
     pub fn new(port: u16, settings: &BenchmarkSettings) -> anyhow::Result<Self> {
+        validate_settings(settings)?;
         let latency_url = validate_endpoint(&settings.latency_url)?;
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
-        ensure!(settings.download_bytes > 0 && settings.download_bytes <= MAX_PAYLOAD_BYTES, "download payload must be between 1 byte and 64 MiB");
-        ensure!(settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES, "upload payload must be between 1 byte and 64 MiB");
         let proxy_url = format!("http://127.0.0.1:{port}");
         let proxy = Proxy::new(&proxy_url)
             .context("could not configure the local benchmark HTTP proxy")?;
@@ -147,6 +146,23 @@ impl BenchmarkHttpClient {
             duration,
         })
     }
+}
+
+pub fn validate_settings(settings: &BenchmarkSettings) -> anyhow::Result<()> {
+    validate_endpoint(&settings.latency_url)?;
+    validate_endpoint(&settings.download_url)?;
+    validate_endpoint(&settings.upload_url)?;
+    ensure!(
+        settings.download_bytes > 0 && settings.download_bytes <= MAX_PAYLOAD_BYTES,
+        "download payload must be between 1 byte and 64 MiB"
+    );
+    ensure!(
+        settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES,
+        "upload payload must be between 1 byte and 64 MiB"
+    );
+    ensure!(settings.request_timeout_ms > 0, "request timeout must be positive");
+    ensure!(settings.startup_timeout_ms > 0, "startup timeout must be positive");
+    Ok(())
 }
 
 fn validate_endpoint(value: &str) -> anyhow::Result<Url> {
