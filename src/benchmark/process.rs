@@ -200,6 +200,37 @@ mod tests {
         assert_eq!(listener.local_addr().unwrap().ip().to_string(), "127.0.0.1");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn startup_timeout_stops_a_non_ready_fake_core() {
+        use std::{fs, os::unix::fs::PermissionsExt};
+
+        use tempfile::tempdir;
+
+        let directory = tempdir().unwrap();
+        let executable = directory.path().join("fake-sing-box");
+        fs::write(
+            &executable,
+            "#!/bin/sh\nif [ \"$1\" = \"check\" ]; then exit 0; fi\nexec sleep 30\n",
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        let node = crate::parser::parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@proxy.local:443",
+        )
+        .unwrap();
+
+        let started = Instant::now();
+        let result = ManagedCoreProcess::start(
+            CoreId::SingBox,
+            &node,
+            &executable,
+            Duration::from_millis(200),
+        );
+        assert!(result.is_err());
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
     #[test]
     fn command_arguments_are_core_specific() {
         let config = Path::new("/tmp/proxyctl-test.json");
