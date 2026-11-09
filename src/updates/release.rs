@@ -43,6 +43,16 @@ impl Release {
 }
 
 pub fn latest_release(api_url: &str, channel: ReleaseChannel) -> anyhow::Result<Release> {
+    latest_release_optional(api_url, channel)?.with_context(|| match channel {
+        ReleaseChannel::Stable => "no valid stable release was found",
+        ReleaseChannel::Prerelease => "no valid non-draft release was found",
+    })
+}
+
+pub fn latest_release_optional(
+    api_url: &str,
+    channel: ReleaseChannel,
+) -> anyhow::Result<Option<Release>> {
     let endpoint = url::Url::parse(api_url).context("invalid release metadata endpoint")?;
     ensure!(
         endpoint.scheme() == "https"
@@ -64,11 +74,14 @@ pub fn latest_release(api_url: &str, channel: ReleaseChannel) -> anyhow::Result<
         .context("could not read GitHub release metadata")?;
     let releases: Vec<Release> =
         serde_json::from_str(&body).context("GitHub returned invalid release metadata")?;
+    if releases.is_empty() {
+        return Ok(None);
+    }
     let release = select_release(releases, channel)?;
     for asset in &release.assets {
         validate_github_download_url(&asset.browser_download_url)?;
     }
-    Ok(release)
+    Ok(Some(release))
 }
 
 fn select_release(releases: Vec<Release>, channel: ReleaseChannel) -> anyhow::Result<Release> {
