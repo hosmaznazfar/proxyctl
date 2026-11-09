@@ -109,3 +109,54 @@ fn adapters_reject_repeated_or_ambiguous_options() {
         assert!(!adapter(core).compatibility(&ambiguous).is_supported());
     }
 }
+
+
+#[test]
+fn hysteria2_obfuscation_maps_to_sing_box_and_mihomo() {
+    let node = parse_proxy_url(
+        "hysteria2://secret@example.com:443?obfs=salamander&obfs-password=obfs-secret",
+    )
+    .unwrap();
+
+    let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+    let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+    assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["type"], "salamander");
+    assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["password"], "obfs-secret");
+
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(mihomo_doc["proxies"][0]["obfs"], "salamander");
+    assert_eq!(mihomo_doc["proxies"][0]["obfs-password"], "obfs-secret");
+
+    assert_eq!(
+        adapter(CoreId::Xray).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+}
+
+#[test]
+fn hysteria2_obfuscation_requires_a_supported_type_and_password() {
+    let missing_password = parse_proxy_url(
+        "hysteria2://secret@example.com:443?obfs=salamander",
+    )
+    .unwrap();
+    let missing_type = parse_proxy_url(
+        "hysteria2://secret@example.com:443?obfs-password=secret",
+    )
+    .unwrap();
+    let unknown_type = parse_proxy_url(
+        "hysteria2://secret@example.com:443?obfs=unknown&obfs-password=secret",
+    )
+    .unwrap();
+
+    for node in [&missing_password, &missing_type, &unknown_type] {
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(node).status,
+            CompatibilityStatus::Invalid
+        );
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(node).status,
+            CompatibilityStatus::Invalid
+        );
+    }
+}
