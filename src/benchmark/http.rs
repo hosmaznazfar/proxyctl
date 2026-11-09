@@ -307,7 +307,7 @@ mod tests {
                 let (stream, _) = listener.accept().unwrap();
                 let mut reader = BufReader::new(stream);
                 let (method, target, request_body) = read_fake_request(&mut reader);
-                let (_method, target, request_body) = if method == "CONNECT" {
+                let (method, target, request_body) = if method == "CONNECT" {
                     reader
                         .get_mut()
                         .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
