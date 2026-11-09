@@ -54,6 +54,7 @@ enum Command {
         core: Option<String>,
     },
     /// Run sequential latency, download, and upload tests through managed proxy cores.
+    /// Defaults use Cloudflare Speed Test; Cloudflare collects completed measurements for aggregated insights.
     #[command(group(ArgGroup::new("test_scope").args(["all_cores", "node"]).required(true).multiple(false)))]
     Test {
         /// Test every active node against all installed compatible managed cores.
