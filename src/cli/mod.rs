@@ -53,6 +53,40 @@ enum Command {
         #[arg(long, value_name = "CORE")]
         core: Option<String>,
     },
+    /// Run sequential latency, download, and upload tests through managed proxy cores.
+    #[command(group(ArgGroup::new("test_scope").args(["all_cores", "node"]).required(true).multiple(false)))]
+    Test {
+        /// Test every active node against all installed compatible managed cores.
+        #[arg(long)]
+        all_cores: bool,
+        /// Test one stored node; requires --core.
+        #[arg(long, requires = "core")]
+        node: Option<u64>,
+        /// Managed core to use with --node.
+        #[arg(long, value_name = "CORE", requires = "node")]
+        core: Option<String>,
+        /// HTTPS endpoint returning an empty response for the latency test.
+        #[arg(long, default_value = "https://speed.cloudflare.com/__down")]
+        latency_url: String,
+        /// HTTPS endpoint accepting a bytes query parameter for downloads.
+        #[arg(long, default_value = "https://speed.cloudflare.com/__down")]
+        download_url: String,
+        /// HTTPS endpoint accepting a POST body for uploads.
+        #[arg(long, default_value = "https://speed.cloudflare.com/__up")]
+        upload_url: String,
+        /// Download payload size for each sample.
+        #[arg(long, default_value_t = 1_048_576)]
+        download_bytes: u64,
+        /// Upload payload size for each sample.
+        #[arg(long, default_value_t = 1_048_576)]
+        upload_bytes: u64,
+        /// Maximum duration of each HTTP measurement request, in seconds.
+        #[arg(long, default_value_t = 15)]
+        request_timeout_secs: u64,
+        /// Maximum startup/readiness wait for a managed core, in seconds.
+        #[arg(long, default_value_t = 10)]
+        startup_timeout_secs: u64,
+    },
     /// Check for and install proxyctl and managed-core updates.
     #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
     Update {
@@ -168,6 +202,42 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 &database_path,
                 id,
                 parse_core(core.as_deref())?,
+            )?;
+        }
+        Command::Test {
+            all_cores,
+            node,
+            core,
+            latency_url,
+            download_url,
+            upload_url,
+            download_bytes,
+            upload_bytes,
+            request_timeout_secs,
+            startup_timeout_secs,
+        } => {
+            let request_timeout_ms = request_timeout_secs
+                .checked_mul(1_000)
+                .ok_or_else(|| anyhow::anyhow!("request timeout is too large"))?;
+            let startup_timeout_ms = startup_timeout_secs
+                .checked_mul(1_000)
+                .ok_or_else(|| anyhow::anyhow!("startup timeout is too large"))?;
+            let mut settings = crate::services::benchmark::default_settings();
+            settings.latency_url = latency_url;
+            settings.download_url = download_url;
+            settings.upload_url = upload_url;
+            settings.download_bytes = download_bytes;
+            settings.upload_bytes = upload_bytes;
+            settings.request_timeout_ms = request_timeout_ms;
+            settings.startup_timeout_ms = startup_timeout_ms;
+            crate::services::benchmark::run_benchmark(
+                &database_path,
+                crate::services::benchmark::BenchmarkOptions {
+                    all_cores,
+                    node_id: node,
+                    core: parse_core(core.as_deref())?,
+                    settings,
+                },
             )?;
         }
         Command::Cores | Command::Setup { .. } | Command::Update { .. } => {
