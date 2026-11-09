@@ -11,7 +11,7 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, tls_options,
         validate_for_core,
     },
 };
@@ -128,7 +128,23 @@ impl CoreAdapter for XrayAdapter {
             }
             outbound["streamSettings"]["xhttpSettings"] = serde_json::Value::Object(xhttp);
         }
-        if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
+        if let Some(reality) = reality_options(node).map_err(anyhow::Error::msg)? {
+            let mut settings = serde_json::Map::new();
+            settings.insert("fingerprint".into(), reality["fingerprint"].clone());
+            settings.insert("password".into(), reality["public_key"].clone());
+            settings.insert("shortId".into(), reality["short_id"].clone());
+            if let Some(server_name) = reality.get("server_name") {
+                settings.insert("serverName".into(), server_name.clone());
+            }
+            if let Some(spider_x) = reality.get("spider_x") {
+                settings.insert("spiderX".into(), spider_x.clone());
+            }
+            if let Some(verify) = reality.get("mldsa65_verify") {
+                settings.insert("mldsa65Verify".into(), verify.clone());
+            }
+            outbound["streamSettings"]["security"] = json!("reality");
+            outbound["streamSettings"]["realitySettings"] = serde_json::Value::Object(settings);
+        } else if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             let mut tls_settings = serde_json::Map::new();
             tls_settings.insert("allowInsecure".into(), serde_json::Value::Bool(false));
             if let Some(sni) = tls.get("server_name") {
