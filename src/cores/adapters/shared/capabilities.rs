@@ -38,7 +38,7 @@ impl CoreCapabilities {
             TransportKind::Http2 => self.http2,
             TransportKind::HttpUpgrade => self.http_upgrade,
             TransportKind::XHttp => self.xhttp,
-            TransportKind::Http | TransportKind::Unknown(_) => false,
+            TransportKind::Unknown(_) => false,
         }
     }
 }
