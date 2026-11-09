@@ -59,9 +59,12 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 continue;
             }
 
-            let generated = adapter
-                .generate_config(&node)
-                .unwrap_or_else(|error| panic!("fixture '{}' config generation failed for {core}: {error:#}", fixture.name));
+            let generated = adapter.generate_config(&node).unwrap_or_else(|error| {
+                panic!(
+                    "fixture '{}' config generation failed for {core}: {error:#}",
+                    fixture.name
+                )
+            });
             if let Err(error) =
                 adapters::validation::validate_generated_config(*core, &generated, executable)
             {
@@ -79,7 +82,12 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
 
             let benchmark_generated = adapter
                 .generate_benchmark_config(&node, 43127)
-                .unwrap_or_else(|error| panic!("fixture '{}' benchmark config generation failed for {core}: {error:#}", fixture.name));
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "fixture '{}' benchmark config generation failed for {core}: {error:#}",
+                        fixture.name
+                    )
+                });
             if let Err(error) = adapters::validation::validate_generated_config(
                 *core,
                 &benchmark_generated,
