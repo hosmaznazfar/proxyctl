@@ -222,6 +222,14 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
             "{core} does not support VMess XHTTP"
         )));
     }
+    if matches!(&transport.kind, TransportKind::XHttp)
+        && core == CoreId::Mihomo
+        && transport.mode.as_deref() == Some("auto")
+    {
+        return Err(compatibility_failure(
+            "Mihomo XHTTP does not support the explicit auto mode".into(),
+        ));
+    }
 
     if !capabilities.supports_transport(&transport.kind) {
         return Err(compatibility_failure(format!(
