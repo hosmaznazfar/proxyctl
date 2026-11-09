@@ -54,9 +54,11 @@ proxyctl update
 proxyctl update --app
 proxyctl update --cores
 proxyctl update --core sing-box
+proxyctl update --prerelease
+proxyctl update --core sing-box --prerelease
 ~~~
 
-With no selector, update targets the CLI and every installed managed core. Check is read-only. App updates only proxyctl; cores updates all installed managed cores; core selects one. Setup handles initial installation; update does not install missing cores. A component failure is reported independently.
+With no selector, update targets the CLI and every installed managed core. Check is read-only. App updates only proxyctl; cores updates all installed managed cores; core selects one. Stable releases are always the default. `--prerelease` explicitly opts the selected update target(s) into prereleases; combine it with `--app`, `--cores`, or `--core` to scope that choice. Without it, a newer alpha, beta, or release candidate is ignored. Setup handles initial installation; update does not install missing cores. A component failure is reported independently.
 
 The self-updater requires a published proxyctl GitHub Release. Core updates use the same official-release, digest-verification, staged installation pipeline as setup.
 
