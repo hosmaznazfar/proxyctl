@@ -147,20 +147,16 @@ fn compatibility_failure(reason: String) -> Compatibility {
 pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Compatibility> {
     let capabilities = capabilities(core);
 
-    // Protocol-level incompatibility is independent of the core's transport/TLS schema.
-    // Check the endpoint's basic shape first, then report a valid Hysteria2 node as
-    // unsupported by Xray instead of misclassifying it based on unrelated adapter rules.
+    validate_common(node).map_err(compatibility_failure)?;
+    tls_options(node).map_err(compatibility_failure)?;
+
+    // Report valid Hysteria2 nodes as unsupported by Xray only after validating
+    // their shared protocol semantics, so malformed source values remain Invalid.
     if node.protocol == Protocol::Hysteria2 && !capabilities.hysteria2 {
-        if node.server.is_empty() || node.port == 0 {
-            return Err(Compatibility::invalid("server and port must be valid"));
-        }
         return Err(Compatibility::unsupported(format!(
             "{core} does not implement Hysteria2"
         )));
     }
-
-    validate_common(node).map_err(compatibility_failure)?;
-    tls_options(node).map_err(compatibility_failure)?;
     if shadowsocks_plugin(node).map_err(compatibility_failure)?.is_some()
         && core == CoreId::Xray
     {
