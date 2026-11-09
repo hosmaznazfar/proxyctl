@@ -117,7 +117,7 @@ A sample records:
 
 Persist the run as running before tests begin. Keep the database closed while a core is active or a network request is running. After stopping a core, persist its completed node/core sample batch in short write transactions. Finalize the run after all work. Never keep a redb handle open while a core process or HTTP request is active.
 
-If Ctrl-C is received, stop the active child, persist the final sample/run state where possible, and retain completed samples. If the process is killed without cleanup, the next benchmark invocation detects stale running records and marks them interrupted before starting a new run. Never delete prior runs or samples when a new run begins.
+If Ctrl-C is received, stop the active child, persist the current node/core's completed sample batch and finalize the run as cancelled. If the process is killed without cleanup, the next benchmark invocation detects stale running records and marks them interrupted; only the unflushed active node/core batch may be lost. Never delete prior runs or samples when a new run begins. Never delete prior runs or samples when a new run begins.
 
 Schema migration: advance the current schema version and initialize benchmark ID counters through an explicit migration. Existing node records and fingerprints must remain unchanged.
 
@@ -135,7 +135,7 @@ Schema migration: advance the current schema version and initialize benchmark ID
 ## 9. Implementation sequence
 
 1. **Implemented:** typed benchmark run/sample/metric/status models, validation invariants, and pure median/throughput calculations.
-2. **Implemented:** schema version 2 migration, independent run/sample ID counters, incremental sample transactions, run finalization, and stale-running-run recovery.
+2. **Implemented:** schema version 2 migration, independent run/sample ID counters, short sample transactions, run finalization, and stale-running-run recovery.
 3. **Implemented:** per-core benchmark config generation with loopback HTTP inbounds and native config validation.
 4. **Implemented:** isolated child-process ownership, bounded readiness, termination/wait, and temporary-config cleanup; Unix SIGINT/SIGTERM are converted into cooperative cancellation requests.
 5. **Implemented:** explicit local HTTP proxy client, HTTPS endpoint validation, bounded download/upload bodies, and throughput calculation.
