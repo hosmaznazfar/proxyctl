@@ -489,3 +489,31 @@ fn vmess_reality_maps_only_to_xray() {
         "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0"
     );
 }
+
+#[test]
+fn reality_mldsa65_verify_maps_only_to_xray() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&mldsa65Verify=verification-key",
+    )
+    .unwrap();
+
+    assert_eq!(
+        adapter(CoreId::Xray).compatibility(&node).status,
+        CompatibilityStatus::Supported
+    );
+    assert_eq!(
+        adapter(CoreId::SingBox).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+    assert_eq!(
+        adapter(CoreId::Mihomo).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+
+    let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let document: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(
+        document["outbounds"][0]["streamSettings"]["realitySettings"]["mldsa65Verify"],
+        "verification-key"
+    );
+}
