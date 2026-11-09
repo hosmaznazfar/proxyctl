@@ -171,6 +171,14 @@ fn installed_core_versions(cores: &[CoreId]) -> BTreeMap<String, String> {
         .collect()
 }
 
+#[derive(Clone, Copy)]
+struct SampleContext<'a> {
+    run_id: u64,
+    node_id: u64,
+    core: CoreId,
+    version: Option<&'a str>,
+}
+
 fn execute_run(
     database_path: &Path,
     run_id: u64,
@@ -186,13 +194,16 @@ fn execute_run(
             }
             let executable = core_binary_path(*core)?;
             let version = core_versions.get(core.as_str()).cloned();
+            let context = SampleContext {
+                run_id,
+                node_id: record.id,
+                core: *core,
+                version: version.as_deref(),
+            };
             if !executable.is_file() {
                 record_preflight(
                     database_path,
-                    run_id,
-                    record.id,
-                    *core,
-                    version,
+                    context,
                     BenchmarkSampleStatus::Unavailable,
                     "core_missing",
                     "the selected managed core is not installed",
@@ -216,16 +227,7 @@ fn execute_run(
                     ),
                     crate::cores::adapters::CompatibilityStatus::Supported => unreachable!(),
                 };
-                record_preflight(
-                    database_path,
-                    run_id,
-                    record.id,
-                    *core,
-                    version,
-                    status,
-                    category,
-                    reason,
-                )?;
+                record_preflight(database_path, context, status, category, reason)?;
                 continue;
             }
 
@@ -239,10 +241,7 @@ fn execute_run(
                 Err(_) => {
                     record_preflight(
                         database_path,
-                        run_id,
-                        record.id,
-                        *core,
-                        version,
+                        context,
                         BenchmarkSampleStatus::Unavailable,
                         "core_startup",
                         "the managed core failed to start or open its local listener",
@@ -257,10 +256,7 @@ fn execute_run(
                     process.stop()?;
                     record_preflight(
                         database_path,
-                        run_id,
-                        record.id,
-                        *core,
-                        version,
+                        context,
                         BenchmarkSampleStatus::Invalid,
                         "measurement_settings",
                         "the configured measurement endpoint settings are invalid",
@@ -278,10 +274,7 @@ fn execute_run(
                 for sample_index in 1..=SAMPLES_PER_METRIC {
                     let sample = if CANCELLED.load(Ordering::Relaxed) {
                         failed_sample(
-                            run_id,
-                            record.id,
-                            *core,
-                            version.as_deref(),
+                            context,
                             metric,
                             sample_index,
                             BenchmarkSampleStatus::Cancelled,
@@ -290,20 +283,11 @@ fn execute_run(
                         )
                     } else {
                         match measure(&client, metric, settings) {
-                            Ok(measurement) => successful_sample(
-                                run_id,
-                                record.id,
-                                *core,
-                                version.as_deref(),
-                                metric,
-                                sample_index,
-                                measurement,
-                            ),
+                            Ok(measurement) => {
+                                successful_sample(context, metric, sample_index, measurement)
+                            }
                             Err(error) => failed_sample(
-                                run_id,
-                                record.id,
-                                *core,
-                                version.as_deref(),
+                                context,
                                 metric,
                                 sample_index,
                                 status_for_failure(error),
@@ -327,7 +311,6 @@ fn execute_run(
     }
     Ok(())
 }
-
 fn measure(
     client: &BenchmarkHttpClient,
     metric: BenchmarkMetric,
@@ -350,20 +333,17 @@ fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSampleStatus {
 }
 
 fn successful_sample(
-    run_id: u64,
-    node_id: u64,
-    core: CoreId,
-    version: Option<&str>,
+    context: SampleContext<'_>,
     metric: BenchmarkMetric,
     sample_index: u8,
     measurement: Measurement,
 ) -> BenchmarkSample {
     BenchmarkSample {
         id: 0,
-        run_id,
-        node_id,
-        core: core.as_str().into(),
-        core_version: version.map(str::to_owned),
+        run_id: context.run_id,
+        node_id: context.node_id,
+        core: context.core.as_str().into(),
+        core_version: context.version.map(str::to_owned),
         metric,
         sample_index,
         status: BenchmarkSampleStatus::Success,
@@ -377,10 +357,7 @@ fn successful_sample(
 }
 
 fn failed_sample(
-    run_id: u64,
-    node_id: u64,
-    core: CoreId,
-    version: Option<&str>,
+    context: SampleContext<'_>,
     metric: BenchmarkMetric,
     sample_index: u8,
     status: BenchmarkSampleStatus,
@@ -389,10 +366,10 @@ fn failed_sample(
 ) -> BenchmarkSample {
     BenchmarkSample {
         id: 0,
-        run_id,
-        node_id,
-        core: core.as_str().into(),
-        core_version: version.map(str::to_owned),
+        run_id: context.run_id,
+        node_id: context.node_id,
+        core: context.core.as_str().into(),
+        core_version: context.version.map(str::to_owned),
         metric,
         sample_index,
         status,
@@ -407,10 +384,7 @@ fn failed_sample(
 
 fn record_preflight(
     database_path: &Path,
-    run_id: u64,
-    node_id: u64,
-    core: CoreId,
-    version: Option<String>,
+    context: SampleContext<'_>,
     status: BenchmarkSampleStatus,
     category: &str,
     reason: &str,
@@ -422,17 +396,7 @@ fn record_preflight(
     ] {
         persist_sample(
             database_path,
-            failed_sample(
-                run_id,
-                node_id,
-                core,
-                version.as_deref(),
-                metric,
-                0,
-                status,
-                category,
-                reason,
-            ),
+            failed_sample(context, metric, 0, status, category, reason),
         )?;
     }
     Ok(())
@@ -462,7 +426,7 @@ fn install_cancellation_handler() {
         }
         // The handler only performs an atomic store, which is signal-safe.
         unsafe {
-            libc::signal(libc::SIGINT, handle_signal as libc::sighandler_t);
+            libc::signal(libc::SIGINT, handle_signal as *const () as libc::sighandler_t);
             libc::signal(libc::SIGTERM, handle_signal as libc::sighandler_t);
         }
     }
