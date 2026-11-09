@@ -272,6 +272,7 @@ fn execute_run(
                 }
             };
 
+            let mut completed_samples = Vec::with_capacity(usize::from(SAMPLES_PER_METRIC) * 3);
             for metric in [
                 BenchmarkMetric::Latency,
                 BenchmarkMetric::Download,
@@ -314,10 +315,17 @@ fn execute_run(
                             ),
                         }
                     };
-                    persist_sample(database_path, sample)?;
+                    completed_samples.push(sample);
                 }
             }
-            process.stop()?;
+
+            // Keep redb closed for the entire child-process lifetime. Flush this node/core
+            // batch only after the child has exited, including when cancellation was requested.
+            let stop_result = process.stop();
+            for sample in completed_samples {
+                persist_sample(database_path, sample)?;
+            }
+            stop_result?;
         }
     }
     Ok(())
