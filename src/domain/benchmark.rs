@@ -114,6 +114,17 @@ impl BenchmarkSample {
         if self.status == BenchmarkSampleStatus::Success && self.sample_index == 0 {
             return Err("preflight sample index 0 cannot be successful");
         }
+        if self.status == BenchmarkSampleStatus::Success
+            && (self.failure_category.is_some() || self.failure_reason.is_some())
+        {
+            return Err("successful samples cannot contain failure details");
+        }
+        if self.status != BenchmarkSampleStatus::Success
+            && (self.failure_category.as_deref().is_none_or(str::is_empty)
+                || self.failure_reason.as_deref().is_none_or(str::is_empty))
+        {
+            return Err("failed samples require a failure category and reason");
+        }
         Ok(())
     }
 }
