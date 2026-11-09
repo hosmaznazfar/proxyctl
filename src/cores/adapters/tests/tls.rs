@@ -455,3 +455,14 @@ fn reality_spider_x_is_supported_only_by_xray_in_this_adapter_set() {
         "/dns-query"
     );
 }
+
+
+#[test]
+fn reality_parameters_without_reality_security_are_invalid() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&fp=chrome",
+    ).unwrap();
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        assert_eq!(adapter(core).compatibility(&node).status, CompatibilityStatus::Invalid);
+    }
+}
