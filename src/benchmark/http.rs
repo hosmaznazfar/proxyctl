@@ -66,7 +66,7 @@ impl MeasurementFailure {
             Self::TlsFailed => "the TLS connection to the measurement endpoint failed".into(),
             Self::HttpStatus(status) => format!("the measurement endpoint returned HTTP status {status}"),
             Self::ProtocolFailed => "the measurement endpoint returned an invalid HTTP response".into(),
-            Self::IncompleteResponse => "the download connection closed before the response completed".into(),
+            Self::IncompleteResponse => "the connection closed before the HTTP exchange completed".into(),
             Self::ReadFailed => "the response stream could not be read".into(),
             Self::Cancelled => "measurement cancelled by user".into(),
         }
