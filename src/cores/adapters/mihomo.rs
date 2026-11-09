@@ -63,6 +63,17 @@ impl CoreAdapter for MihomoAdapter {
         if let Some(flow) = option_string(node, "flow") {
             proxy["flow"] = json!(flow);
         }
+        if node.protocol == Protocol::Hysteria2
+            && let Some(obfs) = option_string(node, "obfs")
+        {
+            proxy["obfs"] = json!(obfs);
+            proxy["obfs-password"] = json!(
+                option_string(node, "obfs-password")
+                    .or_else(|| option_string(node, "obfs_password"))
+                    .unwrap_or_default()
+            );
+        }
+
         let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
         if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
             proxy["network"] = json!("ws");
