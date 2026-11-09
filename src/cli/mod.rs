@@ -3,9 +3,11 @@ use crate::{
     cores::CoreId,
     database::{AddNodeOutcome, NodeRecord, default_database_path},
     services::nodes,
+    updates::release::ReleaseChannel,
 };
 use clap::{ArgGroup, Parser, Subcommand};
 use std::path::PathBuf;
+
 #[derive(Debug, Parser)]
 #[command(
     name = "proxyctl",
@@ -16,6 +18,7 @@ pub struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
 }
+
 #[derive(Debug, Subcommand)]
 enum Command {
     Add {
@@ -61,8 +64,12 @@ enum Command {
         cores: bool,
         #[arg(long, value_name = "CORE")]
         core: Option<String>,
+        /// Include prereleases instead of selecting stable releases only.
+        #[arg(long, conflicts_with = "check", action = clap::ArgAction::SetTrue)]
+        prerelease: bool,
     },
 }
+
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let Some(command) = cli.command else {
         println!("Proxyctl is ready. Use --help to see available commands.");
@@ -87,17 +94,23 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             app,
             cores,
             core,
+            prerelease,
         } => {
             let selected = parse_core(core.as_deref())?;
-            if app {
-                crate::services::updates::update_application(check)?;
-            } else if cores {
-                crate::services::cores::update_installed(check, None)?;
-            } else if let Some(core) = selected {
-                crate::services::cores::update_installed(check, Some(core))?;
+            let channel = if prerelease {
+                ReleaseChannel::Prerelease
             } else {
-                let app_result = crate::services::updates::update_application(check);
-                let core_result = crate::services::cores::update_installed(check, None);
+                ReleaseChannel::Stable
+            };
+            if app {
+                crate::services::updates::update_application(check, channel)?;
+            } else if cores {
+                crate::services::cores::update_installed(check, None, channel)?;
+            } else if let Some(core) = selected {
+                crate::services::cores::update_installed(check, Some(core), channel)?;
+            } else {
+                let app_result = crate::services::updates::update_application(check, channel);
+                let core_result = crate::services::cores::update_installed(check, None, channel);
                 if let Err(error) = &app_result {
                     eprintln!("proxyctl: {error:#}");
                 }
@@ -145,7 +158,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Restore { id } => {
             if nodes::restore_node(&database_path, id)? {
-                println!("Restored node #{id}.");
+                println!("Restored node #{id}.")
             } else {
                 println!("Node #{id} was not found or is not deleted.");
             }
@@ -163,9 +176,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
 fn parse_core(value: Option<&str>) -> anyhow::Result<Option<CoreId>> {
     value.map(str::parse).transpose()
 }
+
 fn print_node_list(records: &[NodeRecord]) {
     if records.is_empty() {
         println!("No proxy nodes found.");
@@ -191,6 +206,7 @@ fn print_node_list(records: &[NodeRecord]) {
         );
     }
 }
+
 fn print_node_details(record: &NodeRecord) {
     let node = &record.node;
     println!("ID: {}", record.id);
@@ -206,27 +222,15 @@ fn print_node_details(record: &NodeRecord) {
     );
     println!(
         "Status: {}",
-        if record.is_deleted() {
-            "deleted"
-        } else {
-            "active"
-        }
+        if record.is_deleted() { "deleted" } else { "active" }
     );
     println!(
         "Identity: {}",
-        if node.identity.is_some() {
-            "[masked]"
-        } else {
-            "-"
-        }
+        if node.identity.is_some() { "[masked]" } else { "-" }
     );
     println!(
         "Secret: {}",
-        if node.secret.is_some() {
-            "[masked]"
-        } else {
-            "-"
-        }
+        if node.secret.is_some() { "[masked]" } else { "-" }
     );
     println!("Fingerprint: {}", node.fingerprint());
     if !node.options.is_empty() {
@@ -239,6 +243,7 @@ fn print_node_details(record: &NodeRecord) {
         println!("Options: {keys} (values hidden)");
     }
 }
+
 fn safe_field(value: &str, max_chars: usize) -> String {
     value
         .chars()
