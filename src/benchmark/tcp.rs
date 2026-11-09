@@ -11,11 +11,7 @@ use crate::benchmark::http::{Measurement, MeasurementFailure};
 ///
 /// DNS resolution is performed by the operating system. The timeout bounds each
 /// address connection attempt; it does not alter resolver or network settings.
-pub fn ping(
-    host: &str,
-    port: u16,
-    timeout: Duration,
-) -> Result<Measurement, MeasurementFailure> {
+pub fn ping(host: &str, port: u16, timeout: Duration) -> Result<Measurement, MeasurementFailure> {
     let addresses = (host, port)
         .to_socket_addrs()
         .map_err(|_| MeasurementFailure::Unreachable)?
@@ -70,8 +66,7 @@ mod tests {
     #[test]
     fn rejects_an_unresolvable_host() {
         assert_eq!(
-            ping("invalid.invalid", 443, Duration::from_millis(100))
-                .unwrap_err(),
+            ping("invalid.invalid", 443, Duration::from_millis(100)).unwrap_err(),
             MeasurementFailure::Unreachable
         );
     }
