@@ -3,8 +3,8 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, ensure};
-use url::Url;
 use ureq::{Agent, Proxy};
+use url::Url;
 
 use crate::domain::{BenchmarkSettings, throughput_bps};
 
@@ -61,8 +61,8 @@ impl BenchmarkHttpClient {
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
         let proxy_url = format!("http://127.0.0.1:{port}");
-        let proxy = Proxy::new(&proxy_url)
-            .context("could not configure the local benchmark HTTP proxy")?;
+        let proxy =
+            Proxy::new(&proxy_url).context("could not configure the local benchmark HTTP proxy")?;
         let config = Agent::config_builder()
             .proxy(Some(proxy))
             .timeout_global(Some(Duration::from_millis(settings.request_timeout_ms)))
@@ -123,8 +123,7 @@ impl BenchmarkHttpClient {
             return Err(MeasurementFailure::InvalidResponse);
         }
         Ok(Measurement {
-            value: throughput_bps(bytes, duration)
-                .ok_or(MeasurementFailure::InvalidResponse)?,
+            value: throughput_bps(bytes, duration).ok_or(MeasurementFailure::InvalidResponse)?,
             duration,
         })
     }
@@ -171,8 +170,14 @@ pub fn validate_settings(settings: &BenchmarkSettings) -> anyhow::Result<()> {
         settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES,
         "upload payload must be between 1 byte and 64 MiB"
     );
-    ensure!(settings.request_timeout_ms > 0, "request timeout must be positive");
-    ensure!(settings.startup_timeout_ms > 0, "startup timeout must be positive");
+    ensure!(
+        settings.request_timeout_ms > 0,
+        "request timeout must be positive"
+    );
+    ensure!(
+        settings.startup_timeout_ms > 0,
+        "startup timeout must be positive"
+    );
     Ok(())
 }
 
@@ -262,10 +267,7 @@ mod tests {
 
     #[test]
     fn throughput_is_bits_per_second() {
-        assert_eq!(
-            throughput_bps(1_000, Duration::from_secs(2)),
-            Some(4_000.0)
-        );
+        assert_eq!(throughput_bps(1_000, Duration::from_secs(2)), Some(4_000.0));
         assert_eq!(throughput_bps(0, Duration::from_secs(1)), None);
     }
 }
