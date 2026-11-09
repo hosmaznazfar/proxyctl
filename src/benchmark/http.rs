@@ -62,7 +62,9 @@ impl MeasurementFailure {
             Self::Unreachable => "the measurement endpoint could not be reached".into(),
             Self::InvalidResponse => "the measurement endpoint returned an invalid payload".into(),
             Self::Unavailable => "the measurement request failed for an unclassified reason".into(),
-            Self::ProxyTunnelFailed => "the local proxy tunnel could not be established".into(),
+            Self::ProxyTunnelFailed => {
+                "the selected core could not establish the outbound HTTPS tunnel to the measurement endpoint".into()
+            },
             Self::TlsFailed => "the TLS connection to the measurement endpoint failed".into(),
             Self::HttpStatus(status) => format!("the measurement endpoint returned HTTP status {status}"),
             Self::ProtocolFailed => "the measurement endpoint returned an invalid HTTP response".into(),
