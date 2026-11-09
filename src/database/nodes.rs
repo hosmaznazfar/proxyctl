@@ -569,7 +569,8 @@ mod tests {
         let directory = tempdir().unwrap();
         let path = directory.path().join("proxyctl.redb");
         {
-            let _database = NodeDatabase::open(&path).unwrap();
+            let database = NodeDatabase::open(&path).unwrap();
+            database.add_node(&sample_node()).unwrap();
         }
         {
             let database = RedbDatabase::open(&path).unwrap();
@@ -584,7 +585,7 @@ mod tests {
         }
 
         let database = NodeDatabase::open(&path).unwrap();
-        database.add_node(&sample_node()).unwrap();
+        assert_eq!(database.get_node(1).unwrap().unwrap().node.server, "example.com");
         assert_eq!(database.start_benchmark_run(sample_run()).unwrap(), 1);
     }
 
