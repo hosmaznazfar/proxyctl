@@ -64,7 +64,10 @@ impl CoreAdapter for SingBoxAdapter {
             }),
         };
         if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
-            if let Some(fingerprint) = tls.as_object_mut().and_then(|options| options.remove("fingerprint")) {
+            if let Some(fingerprint) = tls
+                .as_object_mut()
+                .and_then(|options| options.remove("fingerprint"))
+            {
                 tls["utls"] = json!({"enabled": true, "fingerprint": fingerprint});
             }
             outbound

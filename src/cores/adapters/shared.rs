@@ -177,7 +177,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
             "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random",
         ];
         if !SUPPORTED_FINGERPRINTS.contains(&fingerprint) {
-            return Err("TLS fingerprint is not supported; use a common browser fingerprint".into());
+            return Err(
+                "TLS fingerprint is not supported; use a common browser fingerprint".into(),
+            );
         }
         if matches!(node.protocol, Protocol::Hysteria2) {
             return Err("TLS client fingerprints are not supported for Hysteria2".into());

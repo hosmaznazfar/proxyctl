@@ -243,7 +243,11 @@ mod tests {
                 };
                 assert_eq!(fingerprint.as_str(), Some(expected), "{core}");
                 if core == CoreId::SingBox {
-                    assert!(document["outbounds"][0]["tls"]["utls"]["enabled"].as_bool().unwrap());
+                    assert!(
+                        document["outbounds"][0]["tls"]["utls"]["enabled"]
+                            .as_bool()
+                            .unwrap()
+                    );
                 }
             }
         }
