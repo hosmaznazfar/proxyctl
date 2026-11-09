@@ -81,7 +81,7 @@ enum Command {
             default_value_t = 2_097_152
         )]
         download_bytes: u64,
-        /// Upload payload size for each sample.
+        /// Upload payload size for each sample (default 256 KiB).
         #[arg(long, default_value_t = 1_048_576)]
         upload_bytes: u64,
         /// Maximum duration of each HTTP measurement request, in seconds.
@@ -398,7 +398,7 @@ mod tests {
                 node: Some(7),
                 core: Some(ref core),
                 download_bytes: 2_097_152,
-                upload_bytes: 1_048_576,
+                upload_bytes: 262_144,
                 ..
             }) if core == "sing-box"
         ));
