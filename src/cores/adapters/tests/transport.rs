@@ -393,10 +393,7 @@ fn adapters_map_websocket_transport_and_keep_host_separate_from_sni() {
                 document["proxies"][0]["servername"].as_str(),
             ),
         };
-        assert_eq!(
-            network,
-            Some(if core == CoreId::SingBox { "ws" } else { "ws" })
-        );
+        assert_eq!(network, Some("ws"));
         assert_eq!(path, Some("/socket"), "{core}");
         assert_eq!(host, Some("cdn.example"), "{core}");
         assert_eq!(sni, Some("tls.example"), "{core}");
