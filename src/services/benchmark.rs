@@ -69,9 +69,9 @@ pub fn default_settings() -> BenchmarkSettings {
 /// Run the requested benchmark scope and persist each node/core sample batch after its core exits.
 pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow::Result<u64> {
     ensure!(
-        (options.all_cores && options.node_id.is_none() && options.core.is_none())
+        (options.all_cores && options.core.is_none())
             || (!options.all_cores && options.node_id.is_some() && options.core.is_some()),
-        "choose either --all-cores or both --node and --core"
+        "choose --all-cores (optionally with --node), or both --node and --core"
     );
     validate_settings(&options.settings)?;
     install_cancellation_handler();
@@ -147,7 +147,18 @@ fn load_scope(
 ) -> anyhow::Result<(Vec<NodeRecord>, Vec<CoreId>)> {
     let database = NodeDatabase::open(database_path)?;
     if options.all_cores {
-        let nodes = database.list_nodes(false)?;
+        let nodes = if let Some(node_id) = options.node_id {
+            let record = database
+                .get_node(node_id)?
+                .with_context(|| format!("node #{node_id} was not found"))?;
+            ensure!(
+                !record.is_deleted(),
+                "node #{node_id} is deleted; restore it before benchmarking"
+            );
+            vec![record]
+        } else {
+            database.list_nodes(false)?
+        };
         ensure!(!nodes.is_empty(), "there are no active nodes to benchmark");
         let cores = CoreId::ALL
             .into_iter()
