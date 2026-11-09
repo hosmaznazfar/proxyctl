@@ -9,15 +9,16 @@ use super::{
     artifact::{checksum_for_asset, download, download_text, verify_sha256},
     installer::replace_executable,
     platform::application_asset_name,
-    release::latest_release,
+    release::{latest_release, ReleaseChannel},
 };
 
-const RELEASE_API: &str = "https://api.github.com/repos/hosmaznazfar/proxyctl/releases/latest";
+const RELEASE_API: &str =
+    "https://api.github.com/repos/hosmaznazfar/proxyctl/releases?per_page=100";
 const RELEASES_PAGE: &str = "https://github.com/hosmaznazfar/proxyctl/releases";
 
-pub fn update_application(check_only: bool) -> anyhow::Result<()> {
+pub fn update_application(check_only: bool, channel: ReleaseChannel) -> anyhow::Result<()> {
     let current = Version::parse(env!("CARGO_PKG_VERSION"))?;
-    let release = latest_release(RELEASE_API)?;
+    let release = latest_release(RELEASE_API, channel)?;
     let latest_text = release
         .tag_name
         .strip_prefix('v')
