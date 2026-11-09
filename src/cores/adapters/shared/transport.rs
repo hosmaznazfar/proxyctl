@@ -104,9 +104,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             if key.is_empty()
                 || key.chars().any(char::is_control)
                 || value.chars().any(char::is_control)
+                || (matches!(&kind, TransportKind::XHttp) && key.eq_ignore_ascii_case("host"))
             {
                 return Err(
-                    "transport header names must be non-empty and contain no control characters"
+                    "transport header names must be non-empty, non-Host for XHTTP, and contain no control characters"
                         .into(),
                 );
             }
@@ -297,6 +298,14 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         None
     };
 
+    if matches!(&kind, TransportKind::XHttp)
+        && !headers.is_empty()
+        && xhttp_extra.as_ref().and_then(serde_json::Value::as_object)
+            .and_then(|extra| extra.get("headers")).is_some()
+    {
+        return Err("XHTTP headers were supplied both directly and inside extra".into());
+    }
+
     let service_name = if matches!(&kind, TransportKind::Grpc) {
         let service_values = [
             option_string(node, "serviceName"),
@@ -355,7 +364,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     {
         return Err("path or host/header was supplied for TCP transport".into());
     }
-    if !matches!(&kind, TransportKind::WebSocket | TransportKind::HttpUpgrade)
+    if !matches!(&kind, TransportKind::WebSocket | TransportKind::HttpUpgrade | TransportKind::XHttp)
         && !headers.is_empty()
     {
         return Err("HTTP headers are only mapped for WebSocket in this adapter batch".into());
