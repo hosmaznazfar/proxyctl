@@ -9,7 +9,7 @@ use redb::{Database as RedbDatabase, ReadableDatabase, ReadableTable, TableDefin
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, BenchmarkSampleStatus, ProxyNode,
+    BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, ProxyNode,
 };
 
 const SCHEMA_VERSION: u64 = 2;
