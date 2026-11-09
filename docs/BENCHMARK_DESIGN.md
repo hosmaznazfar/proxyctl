@@ -140,7 +140,7 @@ Schema migration: advance the current schema version and initialize benchmark ID
 4. **Implemented:** isolated child-process ownership, bounded readiness, termination/wait, and temporary-config cleanup; Unix SIGINT/SIGTERM are converted into cooperative cancellation requests.
 5. **Implemented:** explicit local HTTP proxy client, HTTPS endpoint validation, bounded download/upload bodies, and throughput calculation.
 6. **Implemented:** sequential service orchestration and the `proxyctl test` CLI command, including preflight outcomes and post-process node/core sample-batch persistence.
-7. **Next:** add deterministic service-level tests and local fake-core/fake-endpoint integration tests. Tests must not contact Cloudflare or start real proxy cores.
+7. **In progress:** local fake-core startup/cleanup and fake HTTP-proxy measurement tests are implemented without contacting external services. Add end-to-end service orchestration tests using injected fake process/measurement interfaces before treating the benchmark stage as fully verified.
 8. Add reports and sorting only after benchmark persistence is verified.
 
 Keep each step buildable and update this document and `docs/PLAN.md` as implementation decisions are refined.
