@@ -278,26 +278,23 @@ mod tests {
             for _ in 0..3 {
                 let (stream, _) = listener.accept().unwrap();
                 let mut reader = BufReader::new(stream);
-                let mut request_line = String::new();
-                reader.read_line(&mut request_line).unwrap();
-                let mut content_length = 0usize;
-                loop {
-                    let mut header = String::new();
-                    reader.read_line(&mut header).unwrap();
-                    if header == "\r\n" || header.is_empty() {
-                        break;
-                    }
-                    if let Some((name, value)) = header.split_once(':')
-                        && name.eq_ignore_ascii_case("content-length")
-                    {
-                        content_length = value.trim().parse().unwrap();
-                    }
-                }
-                let mut request_body = vec![0; content_length];
-                reader.read_exact(&mut request_body).unwrap();
-
-                let target = request_line.split_whitespace().nth(1).unwrap();
-                let url = Url::parse(target).unwrap();
+                let (method, target, request_body) = read_fake_request(&mut reader);
+                let (method, target, request_body) = if method == "CONNECT" {
+                    reader
+                        .get_mut()
+                        .write_all(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
+                        .unwrap();
+                    reader.get_mut().flush().unwrap();
+                    read_fake_request(&mut reader)
+                } else {
+                    (method, target, request_body)
+                };
+                let target = if target.starts_with("http://") {
+                    target
+                } else {
+                    format!("http://measurement.invalid{target}")
+                };
+                let url = Url::parse(&target).unwrap();
                 let response_body = match url.path() {
                     "/__down" => {
                         let bytes = url
@@ -343,6 +340,34 @@ mod tests {
         assert!(client.download(8).unwrap().value > 0.0);
         assert!(client.upload(8).unwrap().value > 0.0);
         server.join().unwrap();
+    }
+
+    fn read_fake_request(
+        reader: &mut std::io::BufReader<std::net::TcpStream>,
+    ) -> (String, String, Vec<u8>) {
+        use std::io::{BufRead, Read};
+
+        let mut request_line = String::new();
+        reader.read_line(&mut request_line).unwrap();
+        let mut content_length = 0usize;
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header).unwrap();
+            if header == "\\r\\n" || header.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = header.split_once(':')
+                && name.eq_ignore_ascii_case("content-length")
+            {
+                content_length = value.trim().parse().unwrap();
+            }
+        }
+        let mut body = vec![0; content_length];
+        reader.read_exact(&mut body).unwrap();
+        let mut parts = request_line.split_whitespace();
+        let method = parts.next().unwrap().to_owned();
+        let target = parts.next().unwrap().to_owned();
+        (method, target, body)
     }
 
     #[test]
