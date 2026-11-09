@@ -565,6 +565,30 @@ mod tests {
     }
 
     #[test]
+    fn schema_v1_database_migrates_benchmark_id_counters() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("proxyctl.redb");
+        {
+            let _database = NodeDatabase::open(&path).unwrap();
+        }
+        {
+            let database = RedbDatabase::open(&path).unwrap();
+            let write_txn = database.begin_write().unwrap();
+            {
+                let mut metadata = write_txn.open_table(METADATA).unwrap();
+                metadata.insert("schema_version", &1).unwrap();
+                metadata.remove("next_benchmark_run_id").unwrap();
+                metadata.remove("next_benchmark_sample_id").unwrap();
+            }
+            write_txn.commit().unwrap();
+        }
+
+        let database = NodeDatabase::open(&path).unwrap();
+        database.add_node(&sample_node()).unwrap();
+        assert_eq!(database.start_benchmark_run(sample_run()).unwrap(), 1);
+    }
+
+    #[test]
     fn interrupted_benchmark_runs_are_recovered() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("proxyctl.redb");
