@@ -134,8 +134,8 @@ Schema migration: advance the current schema version and initialize benchmark ID
 
 ## 9. Implementation sequence
 
-1. Add typed benchmark run/sample/metric/status models and pure median/throughput calculations.
-2. Add schema migration and transactional persistence methods, including stale-run recovery.
+1. **Implemented:** typed benchmark run/sample/metric/status models, validation invariants, and pure median/throughput calculations.
+2. **Implemented:** schema version 2 migration, independent run/sample ID counters, incremental sample transactions, run finalization, and stale-running-run recovery.
 3. Add per-core benchmark config generation with loopback HTTP inbounds and native validation.
 4. Add an isolated core process guard, readiness probe, bounded shutdown, and cancellation handling.
 5. Add the HTTP measurement client with explicit local proxy configuration and bounded request/body handling.
