@@ -36,6 +36,9 @@ LibreSpeed remains a supported endpoint family when a user supplies a compatible
 # Test all active nodes against installed compatible cores
 proxyctl test --all-cores
 
+# Test one node against every installed compatible core
+proxyctl test --node 12 --all-cores
+
 # Test one node through one selected core
 proxyctl test --node 12 --core sing-box
 
@@ -46,7 +49,7 @@ proxyctl test --node 12 --core sing-box \
   --upload-url https://speed.cloudflare.com/__up
 ```
 
-The all-cores and explicit node/core selectors remain mutually exclusive. The direct TCP test runs once for each selected node. The HTTP tests run once for each supported node/core pair.
+The all-cores scope can cover every active node or be restricted to one node with `--node`. A specific node/core pair uses `--node` with `--core`; `--core` and `--all-cores` are mutually exclusive. The direct TCP test runs once for each selected node. The HTTP tests run once for each supported node/core pair.
 
 The run stores effective endpoint URLs, payload limits, timeout values, and methodology version. The default download sample is 2 MiB even though the static CacheFly object is 10 MB; Proxyctl stops reading once the sample target is reached and closes the response rather than downloading the full object. The upload body is a bounded 256 KiB synthetic payload per sample. This smaller default keeps a single POST practical on asymmetric or slow upstream links; users can raise it with `--upload-bytes`. Upload requests still have a finite configurable timeout, and Proxyctl does not retry a failed sample automatically. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
 
