@@ -204,10 +204,12 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     let xhttp_extra = if matches!(&kind, TransportKind::XHttp) {
         node.option("extra")
             .map(|value| {
-                let raw = value.as_str()
-                    .ok_or_else(|| "XHTTP extra settings must be a JSON string".to_owned())?;
-                let parsed: serde_json::Value = serde_json::from_str(raw)
-                    .map_err(|_| "XHTTP extra settings contain malformed JSON".to_owned())?;
+                let parsed: serde_json::Value = match value {
+                    serde_json::Value::String(raw) => serde_json::from_str(raw)
+                        .map_err(|_| "XHTTP extra settings contain malformed JSON".to_owned())?,
+                    serde_json::Value::Object(_) => value.clone(),
+                    _ => return Err("XHTTP extra settings must be a JSON object or encoded JSON string".into()),
+                };
                 let object = parsed.as_object()
                     .ok_or_else(|| "XHTTP extra settings must be a JSON object".to_owned())?;
                 const ALLOWED: &[&str] = &[
@@ -227,7 +229,8 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
                     for (key, value) in headers {
                         let value = value.as_str()
                             .ok_or_else(|| "XHTTP extra header values must be strings".to_owned())?;
-                        if key.is_empty() || key.chars().any(char::is_control)
+                        if key.is_empty() || key.eq_ignore_ascii_case("host")
+                            || key.chars().any(char::is_control)
                             || value.chars().any(char::is_control)
                         {
                             return Err("XHTTP extra header name or value is invalid".into());
@@ -239,7 +242,26 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
                 {
                     return Err("XHTTP xPaddingObfsMode must be a boolean".into());
                 }
-                if let Some(value) = object.get("noGRPCHeader")
+                const STRING_KEYS: &[&str] = &[
+                    "xPaddingKey", "xPaddingHeader", "xPaddingPlacement", "xPaddingMethod",
+                    "uplinkHTTPMethod", "sessionIDPlacement", "sessionIDKey", "sessionIDTable",
+                    "sessionIDLength", "seqPlacement", "seqKey", "uplinkDataPlacement",
+                    "uplinkDataKey",
+                ];
+                for key in STRING_KEYS {
+                    if object.get(*key).is_some_and(|value| !value.is_string()) {
+                        return Err(format!("XHTTP extra option '{key}' must be a string"));
+                    }
+                }
+                const RANGE_KEYS: &[&str] = &[
+                    "xPaddingBytes", "uplinkChunkSize", "scMaxEachPostBytes", "scMinPostsIntervalMs",
+                ];
+                for key in RANGE_KEYS {
+                    if object.get(*key).is_some_and(|value| !value.is_string() && !value.is_number()) {
+                        return Err(format!("XHTTP extra option '{key}' must be a range string or number"));
+                    }
+                }
+                                if let Some(value) = object.get("noGRPCHeader")
                     && !value.is_boolean()
                 {
                     return Err("XHTTP noGRPCHeader must be a boolean".into());
@@ -253,6 +275,16 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
                     ];
                     if xmux.keys().any(|key| !XMUX_ALLOWED.contains(&key.as_str())) {
                         return Err("XHTTP xmux contains an unsupported setting".into());
+                    }
+                    for (key, value) in xmux {
+                        let valid = if key == "hKeepAlivePeriod" {
+                            value.is_number()
+                        } else {
+                            value.is_string() || value.is_number()
+                        };
+                        if !valid {
+                            return Err(format!("XHTTP xmux option '{key}' has an invalid type"));
+                        }
                     }
                 }
                 Ok(parsed)
