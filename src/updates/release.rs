@@ -74,7 +74,7 @@ pub fn latest_release_optional(
         .context("could not read GitHub release metadata")?;
     let releases: Vec<Release> =
         serde_json::from_str(&body).context("GitHub returned invalid release metadata")?;
-    let Some(release) = select_available_release(releases, channel)? else {
+    let Some(release) = select_release(releases, channel) else {
         return Ok(None);
     };
     for asset in &release.assets {
@@ -83,17 +83,7 @@ pub fn latest_release_optional(
     Ok(Some(release))
 }
 
-fn select_available_release(
-    releases: Vec<Release>,
-    channel: ReleaseChannel,
-) -> anyhow::Result<Option<Release>> {
-    if releases.is_empty() {
-        return Ok(None);
-    }
-    select_release(releases, channel).map(Some)
-}
-
-fn select_release(releases: Vec<Release>, channel: ReleaseChannel) -> anyhow::Result<Release> {
+fn select_release(releases: Vec<Release>, channel: ReleaseChannel) -> Option<Release> {
     releases
         .into_iter()
         .filter(|release| match channel {
@@ -111,10 +101,6 @@ fn select_release(releases: Vec<Release>, channel: ReleaseChannel) -> anyhow::Re
         })
         .max_by(|left, right| left.0.cmp(&right.0))
         .map(|(_, release)| release)
-        .context(match channel {
-            ReleaseChannel::Stable => "no valid stable release was found",
-            ReleaseChannel::Prerelease => "no valid non-draft release was found",
-        })
 }
 
 #[cfg(test)]
@@ -132,12 +118,8 @@ mod tests {
 
     #[test]
     fn empty_repository_release_list_is_a_normal_no_update_state() {
-        assert!(select_available_release(Vec::new(), ReleaseChannel::Stable)
-            .unwrap()
-            .is_none());
-        assert!(select_available_release(Vec::new(), ReleaseChannel::Prerelease)
-            .unwrap()
-            .is_none());
+        assert!(select_release(Vec::new(), ReleaseChannel::Stable).is_none());
+        assert!(select_release(Vec::new(), ReleaseChannel::Prerelease).is_none());
     }
 
     #[test]
@@ -174,7 +156,7 @@ mod tests {
                 vec![release("v2.0.0", true, false)],
                 ReleaseChannel::Prerelease,
             )
-            .is_err()
+            .is_none()
         );
     }
 }
