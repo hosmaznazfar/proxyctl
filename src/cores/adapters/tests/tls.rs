@@ -413,7 +413,7 @@ fn vless_reality_maps_to_each_core_native_schema() {
 
     let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
     let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
-    assert_eq!(mihomo_doc["proxies"][0]["reality-opts"]["jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0"], "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0");
+    assert_eq!(mihomo_doc["proxies"][0]["reality-opts"]["public-key"], "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0");
     assert_eq!(mihomo_doc["proxies"][0]["reality-opts"]["short-id"], "0123456789abcdef");
     assert_eq!(mihomo_doc["proxies"][0]["client-fingerprint"], "chrome");
 }
