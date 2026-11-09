@@ -524,3 +524,52 @@ fn xhttp_auto_mode_is_supported_by_xray_but_not_mihomo() {
         CompatibilityStatus::Unsupported
     );
 }
+
+#[test]
+fn http_transport_alias_normalizes_to_http2_for_vless_and_vmess() {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let vless = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=http&host=cdn.example&path=%2Fh2&security=tls&sni=tls.example",
+    )
+    .unwrap();
+    let payload = general_purpose::STANDARD.encode(
+        br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"http","host":"cdn.example","path":"/h2","tls":"tls","sni":"tls.example"}"#,
+    );
+    let vmess = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+
+    for node in [&vless, &vmess] {
+        for core in [CoreId::SingBox, CoreId::Mihomo] {
+            let compatibility = adapter(core).compatibility(node);
+            assert!(
+                compatibility.is_supported(),
+                "{core}: {:?}",
+                compatibility.reason
+            );
+
+            let generated = adapter(core).generate_config(node).unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            let (transport, path) = match core {
+                CoreId::SingBox => (
+                    document["outbounds"][0]["transport"]["type"].as_str(),
+                    document["outbounds"][0]["transport"]["path"].as_str(),
+                ),
+                CoreId::Mihomo => (
+                    document["proxies"][0]["network"].as_str(),
+                    document["proxies"][0]["h2-opts"]["path"].as_str(),
+                ),
+                CoreId::Xray => unreachable!(),
+            };
+            assert_eq!(
+                transport,
+                Some(if core == CoreId::SingBox { "http" } else { "h2" }),
+                "{core}"
+            );
+            assert_eq!(path, Some("/h2"), "{core}");
+        }
+        assert_eq!(
+            adapter(CoreId::Xray).compatibility(node).status,
+            CompatibilityStatus::Unsupported
+        );
+    }
+}
