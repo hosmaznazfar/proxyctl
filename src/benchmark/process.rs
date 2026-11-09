@@ -243,8 +243,8 @@ mod tests {
         let sing_box_args = sing_box.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
         let xray_args = xray.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
         let mihomo_args = mihomo.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
-        assert_eq!(sing_box_args, vec!["run", "-c", "/tmp/proxyctl-test.json"]);
+        assert_eq!(sing_box_args, vec!["run".to_owned(), "-c".to_owned(), "/tmp/proxyctl-test.json".to_owned()]);
         assert_eq!(xray_args, vec!["run", "-c", "/tmp/proxyctl-test.json"]);
-        assert_eq!(mihomo_args, vec!["-f", "/tmp/proxyctl-test.json"]);
+        assert_eq!(mihomo_args, vec!["-f".to_owned(), "/tmp/proxyctl-test.json".to_owned()]);
     }
 }
