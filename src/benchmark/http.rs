@@ -30,6 +30,8 @@ pub enum MeasurementFailure {
     Unreachable,
     InvalidResponse,
     Unavailable,
+    IncompleteResponse,
+    ReadFailed,
     Cancelled,
 }
 
@@ -40,6 +42,8 @@ impl MeasurementFailure {
             Self::Unreachable => "unreachable",
             Self::InvalidResponse => "invalid_response",
             Self::Unavailable => "unavailable",
+            Self::IncompleteResponse => "incomplete_response",
+            Self::ReadFailed => "read_failed",
             Self::Cancelled => "cancelled",
         }
     }
@@ -50,6 +54,8 @@ impl MeasurementFailure {
             Self::Unreachable => "the measurement endpoint could not be reached",
             Self::InvalidResponse => "the measurement endpoint returned an invalid payload",
             Self::Unavailable => "the measurement request failed",
+            Self::IncompleteResponse => "the download connection closed before the response completed",
+            Self::ReadFailed => "the response stream could not be read",
             Self::Cancelled => "measurement cancelled by user",
         }
     }
@@ -130,8 +136,9 @@ impl BenchmarkHttpClient {
         let mut reader = response
             .body_mut()
             .with_config()
-            .limit(max_bytes.saturating_add(1))
-            .reader();
+            .limit(max_bytes)
+            .reader()
+            .take(max_bytes);
         let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
         let mut received = 0_u64;
         let mut last_progress = Instant::now();
@@ -251,6 +258,8 @@ fn classify_error(error: ureq::Error) -> MeasurementFailure {
         || message.contains("failed to connect")
     {
         MeasurementFailure::Unreachable
+    } else if message.contains("status code: 4") || message.contains("status code: 5") {
+        MeasurementFailure::InvalidResponse
     } else {
         MeasurementFailure::Unavailable
     }
@@ -267,8 +276,10 @@ fn classify_io_error(error: std::io::Error) -> MeasurementFailure {
             | std::io::ErrorKind::NotConnected
     ) {
         MeasurementFailure::Unreachable
+    } else if error.kind() == std::io::ErrorKind::UnexpectedEof {
+        MeasurementFailure::IncompleteResponse
     } else {
-        MeasurementFailure::Unavailable
+        MeasurementFailure::ReadFailed
     }
 }
 
@@ -324,7 +335,7 @@ mod tests {
                 let url = Url::parse(&target).unwrap();
                 let response_body = match (method.as_str(), url.path()) {
                     ("GET", "/ping") => Vec::new(),
-                    ("GET", "/download") => vec![0x33; 8],
+                    ("GET", "/download") => vec![0x33; 32],
                     ("POST", "/upload") => {
                         assert_eq!(request_body, vec![0x5a; 8]);
                         b"ok".to_vec()
@@ -357,7 +368,7 @@ mod tests {
 
         assert!(client.latency().unwrap().value >= 0.0);
         let mut progress = Vec::new();
-        let download = client.download(16, |bytes| progress.push(bytes)).unwrap();
+        let download = client.download(8, |bytes| progress.push(bytes)).unwrap();
         assert_eq!(download.transferred_bytes, Some(8));
         assert_eq!(progress.last(), Some(&8));
         assert!(client.upload(8).unwrap().value > 0.0);
@@ -390,6 +401,18 @@ mod tests {
         let method = parts.next().unwrap().to_owned();
         let target = parts.next().unwrap().to_owned();
         (method, target, body)
+    }
+
+    #[test]
+    fn classifies_interrupted_download_streams_separately() {
+        assert_eq!(
+            classify_io_error(std::io::Error::from(std::io::ErrorKind::UnexpectedEof)),
+            MeasurementFailure::IncompleteResponse
+        );
+        assert_eq!(
+            classify_io_error(std::io::Error::other("socket read failed")),
+            MeasurementFailure::ReadFailed
+        );
     }
 
     #[test]
