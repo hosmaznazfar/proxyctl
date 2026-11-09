@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn measurements_work_through_a_local_fake_http_proxy() {
         use std::{
-            io::{BufRead, BufReader, Read, Write},
+            io::{BufReader, Write},
             net::TcpListener,
             thread,
         };
