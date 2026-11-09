@@ -135,6 +135,12 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
             .map(str::to_ascii_lowercase)
     };
     if security.as_deref() != Some("reality") {
+        if ["pbk", "publicKey", "sid", "spx", "mldsa65Verify"]
+            .iter()
+            .any(|key| option_string(node, key).is_some())
+        {
+            return Err("REALITY parameters require security=reality".into());
+        }
         return Ok(None);
     }
 
