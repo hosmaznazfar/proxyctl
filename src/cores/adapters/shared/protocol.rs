@@ -162,6 +162,8 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "obfs",
         "obfs-password",
         "obfs_password",
+        "obfs-min-packet-size",
+        "obfs-max-packet-size",
     ];
 
     let supported = match node.protocol {
