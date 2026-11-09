@@ -30,6 +30,10 @@ pub enum MeasurementFailure {
     Unreachable,
     InvalidResponse,
     Unavailable,
+    ProxyTunnelFailed,
+    TlsFailed,
+    HttpStatus(u16),
+    ProtocolFailed,
     IncompleteResponse,
     ReadFailed,
     Cancelled,
@@ -42,23 +46,29 @@ impl MeasurementFailure {
             Self::Unreachable => "unreachable",
             Self::InvalidResponse => "invalid_response",
             Self::Unavailable => "unavailable",
+            Self::ProxyTunnelFailed => "proxy_tunnel_failed",
+            Self::TlsFailed => "tls_failed",
+            Self::HttpStatus(_) => "http_status",
+            Self::ProtocolFailed => "protocol_failed",
             Self::IncompleteResponse => "incomplete_response",
             Self::ReadFailed => "read_failed",
             Self::Cancelled => "cancelled",
         }
     }
 
-    pub const fn reason(self) -> &'static str {
+    pub fn reason(self) -> String {
         match self {
-            Self::Timeout => "the measurement request exceeded its time limit",
-            Self::Unreachable => "the measurement endpoint could not be reached",
-            Self::InvalidResponse => "the measurement endpoint returned an invalid payload",
-            Self::Unavailable => "the measurement request failed",
-            Self::IncompleteResponse => {
-                "the download connection closed before the response completed"
-            }
-            Self::ReadFailed => "the response stream could not be read",
-            Self::Cancelled => "measurement cancelled by user",
+            Self::Timeout => "the measurement request exceeded its time limit".into(),
+            Self::Unreachable => "the measurement endpoint could not be reached".into(),
+            Self::InvalidResponse => "the measurement endpoint returned an invalid payload".into(),
+            Self::Unavailable => "the measurement request failed for an unclassified reason".into(),
+            Self::ProxyTunnelFailed => "the local proxy tunnel could not be established".into(),
+            Self::TlsFailed => "the TLS connection to the measurement endpoint failed".into(),
+            Self::HttpStatus(status) => format!("the measurement endpoint returned HTTP status {status}"),
+            Self::ProtocolFailed => "the measurement endpoint returned an invalid HTTP response".into(),
+            Self::IncompleteResponse => "the download connection closed before the response completed".into(),
+            Self::ReadFailed => "the response stream could not be read".into(),
+            Self::Cancelled => "measurement cancelled by user".into(),
         }
     }
 }
@@ -246,19 +256,17 @@ fn validate_endpoint(value: &str) -> anyhow::Result<Url> {
 }
 
 fn classify_error(error: ureq::Error) -> MeasurementFailure {
-    let message = error.to_string().to_ascii_lowercase();
-    if message.contains("timeout") || message.contains("timed out") {
-        MeasurementFailure::Timeout
-    } else if message.contains("dns")
-        || message.contains("connection refused")
-        || message.contains("connection reset")
-        || message.contains("failed to connect")
-    {
-        MeasurementFailure::Unreachable
-    } else if message.contains("status code: 4") || message.contains("status code: 5") {
-        MeasurementFailure::InvalidResponse
-    } else {
-        MeasurementFailure::Unavailable
+    match error {
+        ureq::Error::Timeout(_) => MeasurementFailure::Timeout,
+        ureq::Error::HostNotFound | ureq::Error::ConnectionFailed => {
+            MeasurementFailure::Unreachable
+        }
+        ureq::Error::ConnectProxyFailed(_) => MeasurementFailure::ProxyTunnelFailed,
+        ureq::Error::Tls(_) | ureq::Error::Rustls(_) => MeasurementFailure::TlsFailed,
+        ureq::Error::StatusCode(status) => MeasurementFailure::HttpStatus(status),
+        ureq::Error::Protocol(_) => MeasurementFailure::ProtocolFailed,
+        ureq::Error::Io(error) => classify_io_error(error),
+        _ => MeasurementFailure::Unavailable,
     }
 }
 
@@ -410,6 +418,15 @@ mod tests {
             classify_io_error(std::io::Error::other("socket read failed")),
             MeasurementFailure::ReadFailed
         );
+    }
+
+    #[test]
+    fn classifies_ureq_transport_failures_without_exposing_diagnostics() {
+        assert_eq!(classify_error(ureq::Error::Timeout(ureq::Timeout::Global)), MeasurementFailure::Timeout);
+        assert_eq!(classify_error(ureq::Error::HostNotFound), MeasurementFailure::Unreachable);
+        assert_eq!(classify_error(ureq::Error::ConnectProxyFailed("secret proxy detail".into())), MeasurementFailure::ProxyTunnelFailed);
+        assert_eq!(classify_error(ureq::Error::Tls("secret tls detail")), MeasurementFailure::TlsFailed);
+        assert_eq!(classify_error(ureq::Error::StatusCode(502)), MeasurementFailure::HttpStatus(502));
     }
 
     #[test]
