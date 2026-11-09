@@ -126,6 +126,9 @@ impl CoreAdapter for XrayAdapter {
             if let Some(mode) = transport.mode {
                 xhttp.insert("mode".into(), json!(mode));
             }
+            if !transport.headers.is_empty() {
+                xhttp.insert("headers".into(), json!(transport.headers));
+            }
             if let Some(extra) = transport.xhttp_extra {
                 xhttp.insert("extra".into(), extra);
             }
