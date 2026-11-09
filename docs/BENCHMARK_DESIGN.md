@@ -48,7 +48,7 @@ proxyctl test --node 12 --core sing-box \
 
 The all-cores and explicit node/core selectors remain mutually exclusive. The direct TCP test runs once for each selected node. The HTTP tests run once for each supported node/core pair.
 
-The run stores effective endpoint URLs, payload limits, timeout values, and methodology version. The default download sample is 2 MiB even though the static CacheFly object is 10 MB; Proxyctl stops reading once the sample target is reached and closes the response rather than downloading the full object. The upload body remains a bounded 1 MiB synthetic payload. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
+The run stores effective endpoint URLs, payload limits, timeout values, and methodology version. The default download sample is 2 MiB even though the static CacheFly object is 10 MB; Proxyctl stops reading once the sample target is reached and closes the response rather than downloading the full object. The upload body is a bounded 256 KiB synthetic payload per sample. This smaller default keeps a single POST practical on asymmetric or slow upstream links; users can raise it with `--upload-bytes`. Upload requests still have a finite configurable timeout, and Proxyctl does not retry a failed sample automatically. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
 
 ## 4. Measurement semantics
 
@@ -101,7 +101,7 @@ Startup commands:
 - Xray: `xray run -c CONFIG`.
 - Mihomo: `mihomo -f CONFIG`.
 
-Write secret-bearing generated configs to private temporary files (0600 on Unix). Start the core directly without a shell; capture child stderr in a private temporary log (0600 on Unix), never print raw log lines, and surface only allowlisted diagnostic categories on startup failure. Remove the log after the attempt. Probe readiness with a bounded timeout. The HTTP client must use an explicit proxy URL for the loopback listener and must not inherit `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, or `NO_PROXY`.
+Write secret-bearing generated configs to private temporary files (0600 on Unix). Start the core directly without a shell; capture child stderr in a private temporary log (0600 on Unix), never print raw log lines, and surface only allowlisted diagnostic categories on startup failure. Xray's native `run -test` stdout/stderr is also reduced to allowlisted categories when validation fails; raw native diagnostics are never printed. Remove temporary logs after the attempt. Probe readiness with a bounded timeout. The HTTP client must use an explicit proxy URL for the loopback listener and must not inherit `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, or `NO_PROXY`.
 
 The process guard owns the child and config. Every normal error, timeout, and cancellation path stops and waits for the child and removes the config. Benchmarking never changes system proxy settings, DNS, routes, firewall rules, interfaces, or TUN state.
 
