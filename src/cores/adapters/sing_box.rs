@@ -11,7 +11,7 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, tls_options,
         validate_for_core,
     },
 };
@@ -130,7 +130,27 @@ impl CoreAdapter for SingBoxAdapter {
             }
             outbound["transport"] = serde_json::Value::Object(upgrade);
         }
-        if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
+        if let Some(reality) = reality_options(node).map_err(anyhow::Error::msg)? {
+            let mut tls = json!({
+                "enabled": true,
+                "reality": {
+                    "enabled": true,
+                    "public_key": reality["public_key"],
+                    "short_id": reality["short_id"]
+                },
+                "utls": {
+                    "enabled": true,
+                    "fingerprint": reality["fingerprint"]
+                }
+            });
+            if let Some(server_name) = reality.get("server_name") {
+                tls["server_name"] = server_name.clone();
+            }
+            if let Some(spider_x) = reality.get("spider_x") {
+                tls["reality"]["spider_x"] = spider_x.clone();
+            }
+            outbound["tls"] = tls;
+        } else if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             if let Some(fingerprint) = tls
                 .as_object_mut()
                 .and_then(|options| options.remove("fingerprint"))
