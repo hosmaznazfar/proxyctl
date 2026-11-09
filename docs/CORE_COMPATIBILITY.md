@@ -61,6 +61,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
   - Mihomo: `mihomo -t -f CONFIG`
 - Run `proxyctl check <NODE_ID>` to validate against every installed compatible core, or add `--core sing-box|xray|mihomo` to select one.
 - Validation uses a private temporary file with mode 0600 on Unix and removes it on success or failure.
+- The opt-in native fixture matrix is run with `cargo test --test native_adapter_validation -- --ignored --nocapture`. It requires all three proxyctl-managed core binaries to be installed. The matrix checks expected per-core compatibility and validates every supported fixture using only each core's config-check mode; unsupported combinations are asserted but not sent to the binary. It never starts a proxy or changes system networking.
 - The validation command invokes only the core's config-check mode; it never starts a proxy process or changes system networking.
 
 ## Current limitations
