@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options, validate_for_core},
 };
 
 pub struct MihomoAdapter;
@@ -21,12 +21,9 @@ impl CoreAdapter for MihomoAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_common(node) {
-            Err(reason) => Compatibility::unsupported(reason),
-            Ok(()) => match tls_options(node) {
-                Ok(_) => Compatibility::supported(),
-                Err(reason) => Compatibility::unsupported(reason),
-            },
+        match validate_for_core(CoreId::Mihomo, node) {
+            Ok(()) => Compatibility::supported(),
+            Err(compatibility) => compatibility,
         }
     }
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
@@ -48,7 +45,7 @@ impl CoreAdapter for MihomoAdapter {
                 json!({"name":name,"type":"vless","server":node.server,"port":node.port,"uuid":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"network":"tcp"})
             }
             Protocol::Vmess => {
-                json!({"name":name,"type":"vmess","server":node.server,"port":node.port,"uuid":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"cipher":node.options.get("scy").map(String::as_str).unwrap_or("auto"),"network":"tcp"})
+                json!({"name":name,"type":"vmess","server":node.server,"port":node.port,"uuid":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"cipher":option_string(node, "scy").or_else(|| option_string(node, "security")).unwrap_or("auto"),"network":"tcp"})
             }
             Protocol::Trojan => {
                 json!({"name":name,"type":"trojan","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default(),"network":"tcp"})
@@ -60,6 +57,73 @@ impl CoreAdapter for MihomoAdapter {
                 json!({"name":name,"type":"hysteria2","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()})
             }
         };
+        if let Some(flow) = option_string(node, "flow") {
+            proxy["flow"] = json!(flow);
+        }
+        let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
+        if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
+            proxy["network"] = json!("ws");
+            let mut ws = serde_json::Map::new();
+            if let Some(path) = transport.path {
+                ws.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                ws.insert("headers".into(), json!(transport.headers));
+            }
+            if let Some(max_early_data) = transport.max_early_data {
+                ws.insert("max-early-data".into(), json!(max_early_data));
+                ws.insert(
+                    "early-data-header-name".into(),
+                    json!(transport.early_data_header_name.unwrap_or_else(|| "Sec-WebSocket-Protocol".into())),
+                );
+            }
+            proxy["ws-opts"] = serde_json::Value::Object(ws);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
+            proxy["network"] = json!("grpc");
+            let mut grpc = serde_json::Map::new();
+            if let Some(service_name) = transport.service_name {
+                grpc.insert("grpc-service-name".into(), json!(service_name));
+            }
+            proxy["grpc-opts"] = serde_json::Value::Object(grpc);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Http2) {
+            proxy["network"] = json!("h2");
+            let mut http = serde_json::Map::new();
+            if let Some(path) = transport.path {
+                http.insert("path".into(), json!(path));
+            }
+            if !transport.hosts.is_empty() {
+                http.insert("host".into(), json!(transport.hosts));
+            }
+            proxy["h2-opts"] = serde_json::Value::Object(http);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::HttpUpgrade) {
+            proxy["network"] = json!("ws");
+            let mut upgrade = serde_json::Map::new();
+            upgrade.insert("v2ray-http-upgrade".into(), json!(true));
+            if let Some(path) = transport.path {
+                upgrade.insert("path".into(), json!(path));
+            }
+            let mut headers = transport.headers;
+            if let Some(host) = transport.host {
+                headers.insert("Host".into(), host);
+            }
+            if !headers.is_empty() {
+                upgrade.insert("headers".into(), json!(headers));
+            }
+            proxy["ws-opts"] = serde_json::Value::Object(upgrade);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::XHttp) {
+            proxy["network"] = json!("xhttp");
+            let mut xhttp = serde_json::Map::new();
+            if let Some(host) = transport.host {
+                xhttp.insert("host".into(), json!(host));
+            }
+            if let Some(path) = transport.path {
+                xhttp.insert("path".into(), json!(path));
+            }
+            if let Some(mode) = transport.mode {
+                xhttp.insert("mode".into(), json!(mode));
+            }
+            proxy["xhttp-opts"] = serde_json::Value::Object(xhttp);
+        }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
             if let Some(sni) = tls.get("server_name") {
@@ -70,6 +134,15 @@ impl CoreAdapter for MihomoAdapter {
             }
             if let Some(fingerprint) = tls.get("fingerprint") {
                 proxy["client-fingerprint"] = fingerprint.clone();
+            }
+            if let Some(pin) = tls.get("certificate_sha256") {
+                proxy["fingerprint"] = pin.clone();
+            }
+            if let Some(insecure) = tls.get("insecure") {
+                proxy["skip-cert-verify"] = insecure.clone();
+            }
+            if let Some(name) = tls.get("verify_peer_cert_by_name") {
+                proxy["name-cert-verify"] = name.clone();
             }
         }
         json_config(json!({

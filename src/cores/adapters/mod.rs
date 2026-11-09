@@ -41,6 +41,7 @@ pub(crate) fn json_config(value: Value) -> anyhow::Result<GeneratedConfig> {
 }
 
 #[cfg(test)]
+<<<<<<< HEAD
 mod tests {
     use super::*;
     use crate::parser::parse_proxy_url;
@@ -309,3 +310,6 @@ mod tests {
         }
     }
 }
+=======
+mod tests;
+>>>>>>> refs/remotes/origin/main

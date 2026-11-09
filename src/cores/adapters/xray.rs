@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options, validate_for_core},
 };
 
 pub struct XrayAdapter;
@@ -21,15 +21,9 @@ impl CoreAdapter for XrayAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        if node.protocol == Protocol::Hysteria2 {
-            return Compatibility::unsupported("Xray does not implement Hysteria2");
-        }
-        match validate_common(node) {
-            Err(reason) => Compatibility::unsupported(reason),
-            Ok(()) => match tls_options(node) {
-                Ok(_) => Compatibility::supported(),
-                Err(reason) => Compatibility::unsupported(reason),
-            },
+        match validate_for_core(CoreId::Xray, node) {
+            Ok(()) => Compatibility::supported(),
+            Err(compatibility) => compatibility,
         }
     }
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
@@ -44,11 +38,11 @@ impl CoreAdapter for XrayAdapter {
         let (protocol, settings) = match node.protocol {
             Protocol::Vless => (
                 "vless",
-                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"encryption":"none","flow":node.options.get("flow").cloned().unwrap_or_default()}]}]}),
+                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"encryption":"none","flow":option_string(node, "flow").unwrap_or_default()}]}]}),
             ),
             Protocol::Vmess => (
                 "vmess",
-                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"security":node.options.get("scy").map(String::as_str).unwrap_or("auto")}]}]}),
+                json!({"vnext":[{"address":node.server,"port":node.port,"users":[{"id":node.identity.as_ref().map(|v|v.expose()).unwrap_or_default(),"alterId":node.options.get("aid").and_then(|v|v.parse::<u32>().ok()).unwrap_or(0),"security":option_string(node, "scy").or_else(|| option_string(node, "security")).unwrap_or("auto")}]}]}),
             ),
             Protocol::Trojan => (
                 "trojan",
@@ -61,6 +55,76 @@ impl CoreAdapter for XrayAdapter {
             Protocol::Hysteria2 => unreachable!("Hysteria2 rejected by compatibility"),
         };
         let mut outbound = json!({"protocol":protocol,"tag":"proxy","settings":settings,"streamSettings":{"network":"tcp"}});
+        let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
+        if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
+            outbound["streamSettings"]["network"] = json!("ws");
+            let mut ws = serde_json::Map::new();
+            let mut ws_path = transport.path.unwrap_or_default();
+            if let Some(max_early_data) = transport.max_early_data {
+                if ws_path.is_empty() {
+                    ws_path.push('/');
+                }
+                let separator = if ws_path.contains('?') { '&' } else { '?' };
+                ws_path.push(separator);
+                ws_path.push_str(&format!("ed={max_early_data}"));
+            }
+            if !ws_path.is_empty() {
+                ws.insert("path".into(), json!(ws_path));
+            }
+            if !transport.headers.is_empty() {
+                ws.insert("headers".into(), json!(transport.headers));
+            }
+            outbound["streamSettings"]["wsSettings"] = serde_json::Value::Object(ws);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
+            outbound["streamSettings"]["network"] = json!("grpc");
+            let mut grpc = serde_json::Map::new();
+            if let Some(service_name) = transport.service_name {
+                grpc.insert("serviceName".into(), json!(service_name));
+            }
+            if let Some(authority) = transport.authority {
+                grpc.insert("authority".into(), json!(authority));
+            }
+            if transport.mode.as_deref() == Some("multi") {
+                grpc.insert("multiMode".into(), json!(true));
+            }
+            outbound["streamSettings"]["grpcSettings"] = serde_json::Value::Object(grpc);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Http2) {
+            outbound["streamSettings"]["network"] = json!("h2");
+            let mut http = serde_json::Map::new();
+            if let Some(path) = transport.path {
+                http.insert("path".into(), json!(path));
+            }
+            if !transport.hosts.is_empty() {
+                http.insert("host".into(), json!(transport.hosts));
+            }
+            outbound["streamSettings"]["httpSettings"] = serde_json::Value::Object(http);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::HttpUpgrade) {
+            outbound["streamSettings"]["network"] = json!("httpupgrade");
+            let mut upgrade = serde_json::Map::new();
+            if let Some(host) = transport.host {
+                upgrade.insert("host".into(), json!(host));
+            }
+            if let Some(path) = transport.path {
+                upgrade.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                upgrade.insert("headers".into(), json!(transport.headers));
+            }
+            outbound["streamSettings"]["httpupgradeSettings"] = serde_json::Value::Object(upgrade);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::XHttp) {
+            outbound["streamSettings"]["network"] = json!("xhttp");
+            let mut xhttp = serde_json::Map::new();
+            if let Some(host) = transport.host {
+                xhttp.insert("host".into(), json!(host));
+            }
+            if let Some(path) = transport.path {
+                xhttp.insert("path".into(), json!(path));
+            }
+            if let Some(mode) = transport.mode {
+                xhttp.insert("mode".into(), json!(mode));
+            }
+            outbound["streamSettings"]["xhttpSettings"] = serde_json::Value::Object(xhttp);
+        }
         if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             let mut tls_settings = serde_json::Map::new();
             tls_settings.insert("allowInsecure".into(), serde_json::Value::Bool(false));
@@ -72,6 +136,15 @@ impl CoreAdapter for XrayAdapter {
             }
             if let Some(fingerprint) = tls.get("fingerprint") {
                 tls_settings.insert("fingerprint".into(), fingerprint.clone());
+            }
+            if let Some(pin) = tls.get("certificate_sha256") {
+                tls_settings.insert("pinnedPeerCertSha256".into(), pin.clone());
+            }
+            if let Some(insecure) = tls.get("insecure") {
+                tls_settings.insert("allowInsecure".into(), insecure.clone());
+            }
+            if let Some(name) = tls.get("verify_peer_cert_by_name") {
+                tls_settings.insert("verifyPeerCertByName".into(), name.clone());
             }
             outbound["streamSettings"]["security"] = json!("tls");
             outbound["streamSettings"]["tlsSettings"] = serde_json::Value::Object(tls_settings);

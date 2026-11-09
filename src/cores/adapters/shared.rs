@@ -1,6 +1,4 @@
-use serde_json::{Map, Value};
-
-use crate::domain::{Protocol, ProxyNode};
+//! Shared validation and normalization primitives used by core adapters.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompatibilityStatus {
@@ -49,16 +47,13 @@ pub struct GeneratedConfig {
     pub content: Vec<u8>,
 }
 
-pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a str> {
-    node.option(key).and_then(Value::as_str).or_else(|| {
-        if node.option_entries.is_empty() {
-            node.options.get(key).map(String::as_str)
-        } else {
-            None
-        }
-    })
-}
+mod capabilities;
+mod options;
+mod protocol;
+mod tls;
+mod transport;
 
+<<<<<<< HEAD
 /// Collect ALPN identifiers from URI query values or structured VMess arrays.
 pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, String> {
     let mut protocols = Vec::new();
@@ -261,3 +256,11 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
         _ => Err("unsupported TLS/security mode".into()),
     }
 }
+=======
+pub(crate) use capabilities::validate_for_core;
+pub(crate) use options::{option_string, reject_unknown_options, validate_string_options};
+pub(crate) use tls::alpn_protocols;
+pub(crate) use protocol::validate_common;
+pub(crate) use tls::tls_options;
+pub(crate) use transport::normalize_transport;
+>>>>>>> refs/remotes/origin/main

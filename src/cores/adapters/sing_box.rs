@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, tls_options, validate_common},
+    shared::{Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options, validate_for_core},
 };
 
 pub struct SingBoxAdapter;
@@ -21,12 +21,9 @@ impl CoreAdapter for SingBoxAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_common(node) {
-            Err(reason) => Compatibility::unsupported(reason),
-            Ok(()) => match tls_options(node) {
-                Ok(_) => Compatibility::supported(),
-                Err(reason) => Compatibility::unsupported(reason),
-            },
+        match validate_for_core(CoreId::SingBox, node) {
+            Ok(()) => Compatibility::supported(),
+            Err(compatibility) => compatibility,
         }
     }
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig> {
@@ -47,7 +44,7 @@ impl CoreAdapter for SingBoxAdapter {
                 "type": "vmess", "tag": "proxy", "server": node.server, "server_port": node.port,
                 "uuid": node.identity.as_ref().map(|v| v.expose()).unwrap_or_default(),
                 "alter_id": node.options.get("aid").and_then(|v| v.parse::<u32>().ok()).unwrap_or(0),
-                "security": node.options.get("scy").map(String::as_str).unwrap_or("auto")
+                "security": option_string(node, "scy").or_else(|| option_string(node, "security")).unwrap_or("auto")
             }),
             Protocol::Trojan => json!({
                 "type": "trojan", "tag": "proxy", "server": node.server, "server_port": node.port,
@@ -63,6 +60,58 @@ impl CoreAdapter for SingBoxAdapter {
                 "password": node.secret.as_ref().map(|v| v.expose()).unwrap_or_default()
             }),
         };
+        if let Some(flow) = option_string(node, "flow") {
+            outbound["flow"] = json!(flow);
+        }
+        let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
+        if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
+            let mut ws = serde_json::Map::new();
+            ws.insert("type".into(), json!("ws"));
+            if let Some(path) = transport.path {
+                ws.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                ws.insert("headers".into(), json!(transport.headers));
+            }
+            if let Some(max_early_data) = transport.max_early_data {
+                ws.insert("max_early_data".into(), json!(max_early_data));
+                ws.insert(
+                    "early_data_header_name".into(),
+                    json!(transport.early_data_header_name.unwrap_or_else(|| "Sec-WebSocket-Protocol".into())),
+                );
+            }
+            outbound["transport"] = serde_json::Value::Object(ws);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
+            let mut grpc = serde_json::Map::new();
+            grpc.insert("type".into(), json!("grpc"));
+            if let Some(service_name) = transport.service_name {
+                grpc.insert("service_name".into(), json!(service_name));
+            }
+            outbound["transport"] = serde_json::Value::Object(grpc);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::Http2) {
+            let mut http = serde_json::Map::new();
+            http.insert("type".into(), json!("http"));
+            if let Some(path) = transport.path {
+                http.insert("path".into(), json!(path));
+            }
+            if !transport.hosts.is_empty() {
+                http.insert("host".into(), json!(transport.hosts));
+            }
+            outbound["transport"] = serde_json::Value::Object(http);
+        } else if matches!(&transport.kind, crate::domain::TransportKind::HttpUpgrade) {
+            let mut upgrade = serde_json::Map::new();
+            upgrade.insert("type".into(), json!("httpupgrade"));
+            if let Some(host) = transport.host {
+                upgrade.insert("host".into(), json!(host));
+            }
+            if let Some(path) = transport.path {
+                upgrade.insert("path".into(), json!(path));
+            }
+            if !transport.headers.is_empty() {
+                upgrade.insert("headers".into(), json!(transport.headers));
+            }
+            outbound["transport"] = serde_json::Value::Object(upgrade);
+        }
         if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             if let Some(fingerprint) = tls
                 .as_object_mut()

@@ -110,11 +110,68 @@ Initial URL schemes:
 
 Compatibility is not just a scheme lookup. Each core adapter reports whether it can represent the complete parsed node configuration. The domain model retains ordered option entries, repeated URI query keys, and structured VMess JSON values. The legacy string map remains as a compatibility index for existing database records; new adapter code reads the complete option entries.
 
-**Adapter implementation status:** a shared `CoreAdapter` contract, initial sing-box/Xray/Mihomo serializers, and validation-only execution through `proxyctl check <NODE_ID> [--core CORE]` are implemented on `main`. The check command writes generated configuration to a private temporary file, invokes the selected installed core's config parser, and removes the file without starting a proxy process. The initial serializers intentionally cover a conservative subset: basic TCP outbounds, VLESS/VMess/Trojan/Shadowsocks, Hysteria2 for sing-box and Mihomo, basic TLS/SNI, ALPN lists, and explicit TLS client fingerprints for supported protocols. ALPN is preserved from comma-separated URI values, repeated URI `alpn` keys, and VMess JSON arrays. The `fp` option maps to each core's native client-fingerprint setting for VLESS, VMess, and Trojan; it is rejected for Hysteria2 and Shadowsocks. REALITY, WebSocket/gRPC/XHTTP, plugin/obfuscation settings, VMess non-TCP transports, and other unimplemented options are rejected explicitly. These are not yet the full protocol compatibility matrix and must not be advertised as complete.
+**Adapter implementation status:** a shared `CoreAdapter` contract, initial sing-box/Xray/Mihomo serializers, and validation-only execution through `proxyctl check <NODE_ID> [--core CORE]` are implemented on `main`. The check command writes generated configuration to a private temporary file, invokes the selected installed core's config parser, and removes the file without starting a proxy process. The initial serializers intentionally cover a conservative subset: basic TCP outbounds, VLESS/VMess/Trojan/Shadowsocks, Hysteria2 for sing-box and Mihomo, basic TLS/SNI, ALPN lists, and explicit TLS client fingerprints for supported protocols. ALPN is preserved from comma-separated URI values, repeated URI `alpn` keys, and VMess JSON arrays. The `fp` option maps to each core's native client-fingerprint setting for VLESS, VMess, and Trojan; it is rejected for Hysteria2 and Shadowsocks. The shared adapter layer is split by responsibility (`options`, `protocol`, `tls`, `transport`, and `capabilities`); adapter fixtures are grouped into adapter, TLS, and transport suites. The current implementation has added shared normalized transports for WebSocket (including early data), standard gRPC, HTTP/2, HTTPUpgrade, and XHTTP, plus a typed per-core capability registry. Current differences include: Xray rejects legacy HTTP/2; sing-box rejects XHTTP; Xray alone maps gRPC authority/multi mode and VMess XHTTP; Mihomo requires an explicit gRPC service name. TLS source fields now distinguish uTLS `fp`, full-certificate SHA-256 pins (`pcs` / Hysteria2 `pinSHA256`), certificate-name verification (`vcn`), insecure verification flags, and VLESS Vision flow. Empty optional VMess JSON values are normalized as absent, and VMess `security` is treated as the cipher alias for `scy`, not TLS security. Full mappings and remaining limitations are documented in `docs/CORE_COMPATIBILITY.md`. Native binary validation remains pending; these mappings must not be advertised as verified until checked against the managed core versions.
 
-The current adapter subset is an implementation checkpoint, not a substitute for version-specific conformance tests against each installed core. Validation is available with `proxyctl check <NODE_ID>` (all installed compatible cores) or `proxyctl check <NODE_ID> --core sing-box|xray|mihomo`. It validates configuration only; it does not start a core or alter networking. The next work is expanding transports/security options, adding version-specific validation fixtures for the managed core versions, and recording capability coverage.
+The current adapter subset is an implementation checkpoint, not a substitute for version-specific conformance tests against each installed core. Validation is available with `proxyctl check <NODE_ID>` (all installed compatible cores) or `proxyctl check <NODE_ID> --core sing-box|xray|mihomo`. It validates configuration only; it does not start a core or alter networking. The next work is to run the complete unit suite and native validation against each installed managed core, correct any schema mismatches, then add remaining protocol-specific features (REALITY, Shadowsocks plugins, Hysteria2 obfuscation, and XHTTP extras) in focused increments. Current fixtures cover WebSocket/early data, standard and extended gRPC, HTTP/2, HTTPUpgrade, XHTTP, VMess source aliases/defaults, and TLS verification/pinning semantics.
 
 If an option cannot be represented faithfully, the node/core combination is unsupported; proxyctl must not silently drop that option. Invalid input, unsupported configuration, connection failure, timeout, and missing measurement are distinct outcomes.
+
+### 3.4.1 Extensible import, normalization, and adapter architecture
+
+**Decision: approved.** Proxyctl will use a shared semantic model between source parsers and core adapters. The design takes architectural inspiration from L×Box's registry/conformance-fixture approach, microsubsproxy's separation of protocol parsers, common node model, and renderers, and the real-world format coverage documented by v2rayN, Hiddify, and subconverter. These projects are references, not runtime dependencies; Proxyctl will implement its own Rust model and mappings.
+
+The pipeline is:
+
+1. **Source acquisition:** accept individual URLs and local text imports now; keep subscription retrieval and additional source formats independently addable.
+2. **Format detection:** dispatch URI schemes and structured formats (including VMess JSON, Clash YAML, and sing-box/Xray JSON when those importers are implemented) to independent parsers.
+3. **Loss-aware parsing:** retain the exact original source, source format, ordered/repeated URI query entries, structured JSON values, and unknown fields. Never discard an unrecognized field merely because the current adapters do not understand it.
+4. **Shared semantic normalization:** interpret protocol, transport, TLS, REALITY, authentication, and protocol-specific extensions once. Keep distinct concepts distinct: for example, a WebSocket HTTP Host header is not TLS SNI, and VMess JSON `type` may carry transport-specific mode information while `net` selects the transport.
+5. **Core capability evaluation:** evaluate the normalized node against an explicit per-core/per-version capability definition. A core may support a node while another rejects it.
+6. **Native serialization:** each adapter maps the same semantic model into its own native schema. Adapters must not independently reinterpret source URI keys.
+7. **Native validation:** validate generated configurations with the actual managed core binary/version before claiming compatibility.
+
+#### Domain and preservation rules
+
+- Preserve original input exactly and keep all parsed source fields, including fields not yet understood by Proxyctl. Source data is immutable; normalization must not rewrite it.
+- Keep ordered/repeated URI query parameters. Repetition is valid only where the format defines multi-value semantics (for example, ALPN); otherwise report ambiguity instead of silently selecting a value.
+- Preserve structured VMess JSON values as JSON values (arrays, objects, booleans, numbers, and strings); do not flatten objects into lossy strings.
+- Store normalized semantics separately from source representation. The normalized model is the adapter input; raw fields remain available for future parsers/adapters and diagnostics.
+- Never expose credentials or sensitive option values in Debug output, errors, logs, or ordinary CLI output.
+- Unknown fields are retained and surfaced as unsupported/unmapped when evaluating a core. They must never be silently ignored during config generation.
+- Parser failures, invalid semantics, unsupported-by-this-core features, missing core binaries, and native config validation failures remain distinct outcomes.
+
+#### Transport and security model
+
+Transport is a shared domain concept, not a core-specific string. Initial transport vocabulary: TCP, WebSocket, gRPC, HTTP/2, HTTPUpgrade, and XHTTP; extend only when upstream specifications and native schemas are verified. A normalized transport carries semantically distinct fields (path, WebSocket HTTP Host headers, HTTP/2 host lists, HTTPUpgrade/XHTTP host, gRPC authority, service name, and transport mode). Do not infer a transport from a field name alone.
+
+TLS is independent from transport. Keep SNI, ALPN, uTLS client fingerprint (`fp`), full-certificate SHA-256 pin (`pcs` / `pinSHA256`), certificate-name verification (`vcn`), insecure verification policy, and REALITY parameters separate. Empty optional fields in structured VMess JSON are treated as absent, and VMess `security` is a cipher alias for `scy` while `tls` controls TLS. In particular, transport Host and TLS SNI must never overwrite one another. VMess JSON field aliases and VLESS/Trojan URI query names are normalized by source parsers, not by core adapters.
+
+#### Capability registry
+
+Maintain declarative, testable capability definitions per core and feature. Capability checks must explain whether a feature is supported, invalid, or unsupported for a specific core/version. Do not assume all cores support the same subset or force the common model to the lowest common denominator. The current registry is core-scoped and records the researched managed-schema baseline; version predicates are not yet wired because the adapter compatibility API does not yet receive the detected installed core version. Add that input before supporting multiple schema generations of the same core. Version-specific differences must be recorded in the compatibility documentation and covered by fixtures.
+
+A registry may initially be ordinary typed Rust data rather than an external configuration dependency. Avoid building a generic plugin framework prematurely. Adding a new protocol, transport, or core should require a focused parser/model definition, capability mapping, serializer, and fixtures—not edits scattered across command handlers.
+
+#### Conformance and regression tests
+
+- Keep sanitized, source-attributed fixtures for real-world URI variants and structured subscription formats. Fixtures must not contain live credentials or endpoints.
+- Test parse → normalized model, repeated/unknown field retention, and fingerprint stability.
+- Test semantic equivalence across different source encodings (for example URI and VMess JSON where both represent the same settings).
+- Test adapter output independently for sing-box, Xray, and Mihomo.
+- Run generated configurations through the exact supported core binaries in integration tests where available; unit tests alone do not establish upstream schema validity.
+- Test unsupported features per core and assert that no partial config is emitted.
+- Add round-trip tests only for formats whose serializer can preserve their semantics; do not claim round-trip fidelity where the source format cannot represent the full model.
+
+#### Implementation sequence
+
+1. **Implemented:** preserve source representation and structured VMess values; add typed normalized transport semantics.
+2. **Implemented:** extract shared transport normalization and TLS interpretation into focused modules.
+3. **Implemented, native validation pending:** WebSocket/early data, standard gRPC, HTTP/2, HTTPUpgrade, and XHTTP mappings.
+4. **Implemented, native validation pending:** per-core capability definitions and explicit `Invalid` versus `Unsupported` compatibility outcomes. Version-aware capability predicates remain a follow-up because the adapter API currently receives a core identity but not its detected version.
+5. **Partially implemented:** VMess aliases/defaults, certificate pins, certificate-name verification, and insecure TLS flags; REALITY, Shadowsocks plugins, Hysteria2 obfuscation, and XHTTP extra settings remain future work.
+6. **Next:** run unit tests and actual-core validation, then update `docs/CORE_COMPATIBILITY.md` only from verified results.
+
+This work does not start cores, activate proxies, or modify system networking. All config checks remain validation-only.
 
 ### 3.5 Benchmark execution and persistence
 
