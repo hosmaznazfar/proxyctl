@@ -51,9 +51,15 @@ pub(crate) fn shadowsocks_plugin(
     if node.protocol != Protocol::Shadowsocks {
         return Ok(None);
     }
-    let Some(raw) = option_string(node, "plugin") else {
+    let Some(value) = node.option("plugin") else {
         return Ok(None);
     };
+    let raw = value
+        .as_str()
+        .ok_or_else(|| "Shadowsocks plugin option must be a string".to_owned())?;
+    if raw.is_empty() {
+        return Err("Shadowsocks plugin option must not be empty".into());
+    }
     let (segments, raw_options) = split_sip003(raw)?;
     let name = segments.first().map(String::as_str).unwrap_or_default();
     let mut options = std::collections::BTreeMap::new();
