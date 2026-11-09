@@ -187,9 +187,66 @@ impl CoreAdapter for XrayAdapter {
             .context("could not run Xray config validation")?;
         ensure!(
             output.status.success(),
-            "Xray rejected the generated configuration (exit status {:?})",
-            output.status.code()
+            "Xray rejected the generated configuration (exit status {:?}; {})",
+            output.status.code(),
+            summarize_validation_failure(&output.stdout, &output.stderr)
         );
         Ok(())
+    }
+}
+
+fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'static str {
+    let diagnostic = format!(
+        "{} {}",
+        String::from_utf8_lossy(stdout),
+        String::from_utf8_lossy(stderr)
+    )
+    .to_ascii_lowercase();
+
+    if diagnostic.contains("unknown field") || diagnostic.contains("unknown config field") {
+        "Xray rejected an unrecognized configuration field; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to build inbound")
+        || diagnostic.contains("invalid inbound")
+    {
+        "Xray rejected the loopback HTTP inbound; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to build outbound")
+        || diagnostic.contains("invalid outbound")
+    {
+        "Xray rejected the proxy outbound settings; raw diagnostics withheld"
+    } else if diagnostic.contains("reality") {
+        "Xray rejected the proxy REALITY settings; raw diagnostics withheld"
+    } else if diagnostic.contains("tls") || diagnostic.contains("certificate") {
+        "Xray rejected the proxy TLS or certificate settings; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to parse")
+        || diagnostic.contains("invalid character")
+        || diagnostic.contains("unexpected end of json")
+    {
+        "Xray could not parse the generated JSON configuration; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to load config") {
+        "Xray could not load the generated configuration; raw diagnostics withheld"
+    } else {
+        "Xray returned a validation error; raw diagnostics withheld"
+    }
+}
+
+#[cfg(test)]
+mod validation_diagnostic_tests {
+    use super::summarize_validation_failure;
+
+    #[test]
+    fn validation_diagnostics_are_categorized_without_exposing_raw_output() {
+        let summary = summarize_validation_failure(
+            b"",
+            b"failed to build inbound config: secret=do-not-print and private-host",
+        );
+        assert!(summary.contains("loopback HTTP inbound"));
+        assert!(!summary.contains("do-not-print"));
+        assert!(!summary.contains("private-host"));
+    }
+
+    #[test]
+    fn validation_diagnostics_identify_tls_and_unknown_fields() {
+        assert!(summarize_validation_failure(b"", b"unknown field").contains("unrecognized"));
+        assert!(summarize_validation_failure(b"", b"TLS certificate invalid").contains("TLS"));
     }
 }
