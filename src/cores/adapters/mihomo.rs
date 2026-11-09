@@ -152,6 +152,9 @@ impl CoreAdapter for MihomoAdapter {
             if let Some(mode) = transport.mode {
                 xhttp.insert("mode".into(), json!(mode));
             }
+            if !transport.headers.is_empty() {
+                xhttp.insert("headers".into(), json!(transport.headers));
+            }
             if let Some(extra) = transport.xhttp_extra {
                 let extra = extra.as_object().expect("validated XHTTP extra object");
                 const KEYS: &[(&str, &str)] = &[
