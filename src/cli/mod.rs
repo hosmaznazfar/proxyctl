@@ -82,7 +82,7 @@ enum Command {
         )]
         download_bytes: u64,
         /// Upload payload size for each sample (default 256 KiB).
-        #[arg(long, default_value_t = 1_048_576)]
+        #[arg(long, default_value_t = 262_144)]
         upload_bytes: u64,
         /// Maximum duration of each HTTP measurement request, in seconds.
         #[arg(long, default_value_t = 15)]
