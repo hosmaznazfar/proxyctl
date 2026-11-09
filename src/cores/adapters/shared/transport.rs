@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::domain::{Protocol, ProxyNode, Transport, TransportKind};
 
-use super::option_string;
+use super::{normalize_xhttp_extra, option_string};
 
 pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String> {
     let network_key = if node.protocol == Protocol::Vmess {
