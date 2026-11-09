@@ -2,7 +2,7 @@
 
 > Status: baseline requirements for implementation  
 > Source of truth for behavior: this document and [PLAN.md](PLAN.md)  
-> Last updated: 2026-11-08
+> Last updated: 2026-11-09
 
 ## 1. Scope
 
@@ -157,14 +157,18 @@ Acceptance criteria:
 - `proxyctl test --all-cores` tests all active nodes against every compatible installed core.
 - `proxyctl test --node <ID> --core <CORE>` tests one node with one selected core.
 - A requested core that is missing or incompatible produces an explicit result; it is not silently skipped.
-- The benchmark creates temporary per-test configuration and isolated local proxy listeners.
+- The benchmark creates a private temporary config and an HTTP proxy listener bound only to `127.0.0.1`; it never binds to a LAN or wildcard address.
+- Each core's native config is validated before startup; the benchmark process uses only the selected Proxyctl-managed binary.
 - The core is launched as a managed child process and stopped after its test.
 - Benchmarking does not require TUN.
 - The database is closed while the core and network tests are running.
-- Tests are sequential by default.
+- Tests are sequential; at most one managed core child process exists at a time.
+- The HTTP measurement client uses an explicit proxy pointing to the local inbound and ignores shell proxy environment variables.
 - Temporary configurations and listeners are cleaned up after success, failure, timeout, or cancellation.
 - A failed node does not prevent the remaining nodes from being tested unless the user explicitly requests fail-fast behavior.
-- The run records its start/end state and test methodology.
+- The run records its start/end state, methodology version, core versions, endpoints, payload sizes, and timeouts.
+- Completed samples are committed incrementally; the database is closed during process execution and network requests.
+- Cancellation stops and waits for the child process, cleans temporary files, and retains completed samples.
 
 ### FR-009 — Benchmark metrics and sample persistence (P1)
 
@@ -174,7 +178,8 @@ Acceptance criteria:
 
 - Latency is measured using an application-level HTTP request through the proxy; ICMP-only ping is insufficient.
 - Three samples are collected for each metric for each node/core combination.
-- Download and upload tests use controlled, documented test payloads and endpoints.
+- Download and upload tests use bounded, deterministic payloads and documented HTTPS endpoints.
+- The default endpoint is Cloudflare Speed Test (`speed.cloudflare.com/__down` and `/__up`); the CLI and README disclose that Cloudflare collects completed measurement results for aggregated insights. Endpoints and payload sizes are configurable.
 - Test endpoints, payload sizes, timeouts, and relevant settings are recorded with the run.
 - Each sample stores node ID, run ID, core, metric, sample index, status, optional numeric value, unit, error category, and timestamp.
 - A failed sample has no numeric value; it is never stored as zero or a magic negative number.
