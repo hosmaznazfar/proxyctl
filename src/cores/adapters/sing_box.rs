@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    CoreAdapter, json_config,
+    CoreAdapter, json_config, summarize_validation_failure,
     shared::{
         Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
         shadowsocks_plugin, tls_options, validate_for_core,
@@ -189,8 +189,9 @@ impl CoreAdapter for SingBoxAdapter {
             .context("could not run sing-box config validation")?;
         ensure!(
             output.status.success(),
-            "sing-box rejected the generated configuration (exit status {:?})",
-            output.status.code()
+            "sing-box rejected the generated configuration (exit status {:?}; {})",
+            output.status.code(),
+            summarize_validation_failure(&output.stdout, &output.stderr)
         );
         Ok(())
     }
