@@ -474,3 +474,25 @@ fn xhttp_extra_rejects_malformed_or_unknown_fields() {
         assert_eq!(adapter(core).compatibility(&unknown_extra).status, CompatibilityStatus::Unsupported);
     }
 }
+
+
+#[test]
+fn vmess_xhttp_headers_map_to_xray_direct_headers_field() {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let payload = general_purpose::STANDARD.encode(
+        br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"xhttp","host":"cdn.example","path":"/api","headers":{"User-Agent":"proxyctl-test"}}"#,
+    );
+    let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+
+    let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let doc: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(
+        doc["outbounds"][0]["streamSettings"]["xhttpSettings"]["headers"]["User-Agent"],
+        "proxyctl-test"
+    );
+    assert_eq!(
+        adapter(CoreId::Mihomo).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+}
