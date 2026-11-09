@@ -135,7 +135,7 @@ impl BenchmarkHttpClient {
             .map_err(classify_error)?;
         let mut reader = response
             .body_mut()
-            .reader()
+            .as_reader()
             .take(max_bytes);
         let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
         let mut received = 0_u64;
