@@ -375,7 +375,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 4. Node management: import, add, list, show, remove, restore, and duplicate handling.
 5. Core management and unified updater: official-source metadata, pinned versions, checksum verification, setup, detection, and a single update workflow for the proxyctl CLI plus managed cores.
 6. Core adapters: **complete for the documented initial subset**; 97 unit tests, formatting, Clippy, release build, and the 23-fixture native matrix (51 supported fixture/core combinations) pass. Version-aware capability predicates and additional protocol/option coverage remain future enhancements. Benchmark implementation is the next stage, subject to explicit approval.
-7. Benchmark engine: **in progress**. Typed records, schema migration, incremental persistence, aggregation primitives, and stale-run recovery are implemented. Remaining work: per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cancellation, and CLI orchestration.
+7. Benchmark engine: **in progress**. Typed records, schema migration, incremental persistence, aggregation primitives, stale-run recovery, per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cooperative cancellation, and CLI orchestration are implemented. Remaining work: deterministic service tests and local fake-core/fake-endpoint integration tests.
 8. Reports and sorting: latest/history/compare views and core-independent/core-specific sorting.
 9. Pruning: dry-run previews, compatible-core evaluation rules, soft deletion, and restore.
 10. Activation: managed process lifecycle and safe stop behavior.
