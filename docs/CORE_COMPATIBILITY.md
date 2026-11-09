@@ -30,7 +30,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 | XHTTP (VLESS) | Unsupported | Implemented; native validation pending | Implemented; native validation pending |
 | XHTTP (VMess) | Unsupported | Implemented; native validation pending | Unsupported |
 | VMess transport coverage | Partial; see transport matrix | Partial; see transport matrix | Partial; see transport matrix |
-| Shadowsocks plugins / obfuscation | Not yet | Not yet | Not yet |
+| Shadowsocks SIP003 obfs-local / v2ray-plugin | Implemented; native validation pending | Unsupported | Implemented; native validation pending |
 | Hysteria2 obfuscation (Salamander, Gecko) | Implemented; native validation pending | Unsupported | Implemented; native validation pending |
 
 ## Safety contract
@@ -49,6 +49,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 - An unrecognized or unmapped option produces an unsupported result; it is never silently discarded.
 - VLESS REALITY requires pbk (or publicKey), fp, and an optional even-length hexadecimal sid up to 16 characters. It maps to sing-box tls.reality + tls.utls, Xray streamSettings.realitySettings (the client public key uses the current password field), and Mihomo reality-opts. Xray additionally accepts VMess REALITY; this batch deliberately keeps sing-box and Mihomo REALITY limited to VLESS. Xray transport restrictions are enforced. Native binary validation remains pending.
 - Hysteria2 obfuscation accepts `obfs=salamander` or `obfs=gecko` only when a matching `obfs-password` is supplied. It maps to sing-box `obfs.type/password` and Mihomo `obfs/obfs-password`; Xray does not implement Hysteria2. Native validation against the managed sing-box 1.14.4 and Mihomo 1.19.33 binaries remains required.
+- Shadowsocks SIP003 supports only `obfs-local` and `v2ray-plugin` in this adapter batch. sing-box receives the plugin name and original escaped option string; Mihomo receives its native plugin name and structured options. Xray has no documented outbound SIP003 plugin fields and rejects plugin-enabled nodes. Other plugin types and unknown plugin options are unsupported, not discarded.
 - The generated document is serialized as JSON. For Mihomo this relies on JSON being accepted as a YAML-compatible configuration document.
 - Validation is delegated to the selected managed binary:
   - sing-box: `sing-box check -c CONFIG`
