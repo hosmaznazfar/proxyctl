@@ -160,3 +160,58 @@ fn hysteria2_obfuscation_requires_a_supported_type_and_password() {
         );
     }
 }
+
+
+#[test]
+fn shadowsocks_obfs_local_plugin_maps_to_sing_box_and_mihomo() {
+    let node = parse_proxy_url(
+        "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dcdn.example",
+    ).unwrap();
+
+    let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+    let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+    assert_eq!(sing_box_doc["outbounds"][0]["plugin"], "obfs-local");
+    assert_eq!(sing_box_doc["outbounds"][0]["plugin_opts"], "obfs=http;obfs-host=cdn.example");
+
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(mihomo_doc["proxies"][0]["plugin"], "obfs");
+    assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["mode"], "http");
+    assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["host"], "cdn.example");
+
+    assert_eq!(
+        adapter(CoreId::Xray).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+}
+
+#[test]
+fn shadowsocks_v2ray_plugin_maps_to_sing_box_and_mihomo() {
+    let node = parse_proxy_url(
+        "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Btls%3Bhost%3Dcdn.example%3Bpath%3D%2Fws",
+    ).unwrap();
+
+    let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+    let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+    assert_eq!(sing_box_doc["outbounds"][0]["plugin"], "v2ray-plugin");
+
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(mihomo_doc["proxies"][0]["plugin"], "v2ray-plugin");
+    assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["tls"], true);
+    assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["host"], "cdn.example");
+    assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["path"], "/ws");
+}
+
+#[test]
+fn unsupported_shadowsocks_plugin_options_are_not_dropped() {
+    let node = parse_proxy_url(
+        "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=unknown-plugin",
+    ).unwrap();
+    for core in [CoreId::SingBox, CoreId::Mihomo] {
+        assert_eq!(
+            adapter(core).compatibility(&node).status,
+            CompatibilityStatus::Unsupported
+        );
+    }
+}
