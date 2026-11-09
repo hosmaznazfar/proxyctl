@@ -60,9 +60,11 @@ mod options;
 mod protocol;
 mod tls;
 mod transport;
+mod xhttp;
 
 pub(crate) use capabilities::validate_for_core;
 pub(crate) use options::{option_string, reject_unknown_options, shadowsocks_plugin, validate_string_options};
 pub(crate) use protocol::validate_common;
 pub(crate) use tls::{alpn_protocols, reality_options, tls_options};
 pub(crate) use transport::normalize_transport;
+pub(crate) use xhttp::normalize_xhttp_extra;
