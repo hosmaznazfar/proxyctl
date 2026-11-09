@@ -364,6 +364,34 @@ mod tests {
         server.join().unwrap();
     }
 
+    fn read_fake_request(
+        reader: &mut std::io::BufReader<std::net::TcpStream>,
+    ) -> (String, String, Vec<u8>) {
+        use std::io::{BufRead, Read};
+
+        let mut request_line = String::new();
+        reader.read_line(&mut request_line).unwrap();
+        let mut content_length = 0usize;
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header).unwrap();
+            if header == "\r\n" || header.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = header.split_once(':')
+                && name.eq_ignore_ascii_case("content-length")
+            {
+                content_length = value.trim().parse().unwrap();
+            }
+        }
+        let mut body = vec![0; content_length];
+        reader.read_exact(&mut body).unwrap();
+        let mut parts = request_line.split_whitespace();
+        let method = parts.next().unwrap().to_owned();
+        let target = parts.next().unwrap().to_owned();
+        (method, target, body)
+    }
+
     #[test]
     fn throughput_is_bits_per_second() {
         assert_eq!(throughput_bps(1_000, Duration::from_secs(2)), Some(4_000.0));
