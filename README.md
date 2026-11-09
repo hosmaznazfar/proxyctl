@@ -2,7 +2,7 @@
 
 A lightweight Rust CLI for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> Project status: node management, managed-core inventory, initial core installation, and the shared verified artifact pipeline are implemented. Benchmarking, reports, sorting, pruning, activation, and TUN are being developed in stages.
+> Project status: node management, managed-core inventory, initial core installation, the shared verified artifact pipeline, and the initial sequential benchmark command are implemented. Reports, sorting, pruning, activation, and TUN are being developed in stages.
 
 ## Goals
 
@@ -63,6 +63,17 @@ With no selector, update targets the CLI and every installed managed core. Check
 
 The self-updater requires a published proxyctl GitHub Release. Core updates use the same official-release, digest-verification, staged installation pipeline as setup.
 
+## Benchmarking
+
+Run the initial sequential benchmark against all active nodes and installed compatible cores, or select one node/core pair:
+
+~~~sh
+~~~
+
+Each compatible node/core pair receives three latency, three download, and three upload samples. The initial default endpoints use Cloudflare Speed Test. **Cloudflare states that completed measurements are collected for aggregated Internet-connection insights.** Endpoint URLs, payload sizes, and timeouts are configurable.
+
+Benchmarking is explicit and sequential. It starts only the selected Proxyctl-managed core, binds its temporary HTTP proxy listener to 127.0.0.1, and does not change system proxy, DNS, routes, firewall, or TUN settings. See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) for the full design and endpoint contract.
+
 ## Planned commands
 
 ~~~sh
@@ -79,8 +90,6 @@ proxyctl stop
 proxyctl tun on
 proxyctl tun off
 ~~~
-
-Benchmark design and external measurement-service disclosure: see [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md). `proxyctl test --all-cores` tests active nodes against installed compatible managed cores; `--node ID --core CORE` selects one pair. The initial defaults use Cloudflare Speed Test endpoints. Cloudflare states that completed measurements are collected for aggregated Internet-connection insights. Endpoint URLs, payload sizes, and timeouts are configurable. Benchmarking is explicit and sequential, uses a loopback-only local HTTP proxy listener, and does not change system proxy or network settings.
 
 See docs/PLAN.md, docs/REQUIREMENTS.md, and docs/UPDATE_DESIGN.md.
 
@@ -99,4 +108,4 @@ cargo build --release
 
 ## Security
 
-Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking.
+Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking. Only the explicit benchmark command starts a managed core, with a loopback-only listener.
