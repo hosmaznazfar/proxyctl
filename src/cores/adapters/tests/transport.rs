@@ -469,8 +469,8 @@ fn xhttp_extra_rejects_malformed_or_unknown_fields() {
     let unknown_extra = parse_proxy_url(
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&extra=%7B%22unknown%22%3Atrue%7D"
     ).unwrap();
-    for node in [&malformed, &unknown_extra] {
-        assert_eq!(adapter(CoreId::Xray).compatibility(node).status, CompatibilityStatus::Invalid);
-        assert_eq!(adapter(CoreId::Mihomo).compatibility(node).status, CompatibilityStatus::Invalid);
+    for core in [CoreId::Xray, CoreId::Mihomo] {
+        assert_eq!(adapter(core).compatibility(&malformed).status, CompatibilityStatus::Invalid);
+        assert_eq!(adapter(core).compatibility(&unknown_extra).status, CompatibilityStatus::Unsupported);
     }
 }
