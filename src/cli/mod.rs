@@ -53,8 +53,7 @@ enum Command {
         #[arg(long, value_name = "CORE")]
         core: Option<String>,
     },
-    /// Run sequential latency, download, and upload tests through managed proxy cores.
-    /// Defaults use Cloudflare Speed Test; Cloudflare collects completed measurements for aggregated insights.
+    /// Run direct TCP ping and real-ping/download/upload tests through managed proxy cores.
     #[command(group(ArgGroup::new("test_scope").args(["all_cores", "node"]).required(true).multiple(false)))]
     Test {
         /// Test every active node against all installed compatible managed cores.
@@ -66,17 +65,17 @@ enum Command {
         /// Managed core to use with --node.
         #[arg(long, value_name = "CORE", requires = "node")]
         core: Option<String>,
-        /// HTTPS endpoint returning an empty response for the latency test.
-        #[arg(long, default_value = "https://speed.cloudflare.com/__down")]
+        /// HTTPS URL used for real HTTP ping through the selected core.
+        #[arg(long, default_value = "https://www.google.com/generate_204")]
         latency_url: String,
-        /// HTTPS endpoint accepting a bytes query parameter for downloads.
-        #[arg(long, default_value = "https://speed.cloudflare.com/__down")]
+        /// HTTPS URL of a bounded download test object (default: CacheFly 10 MB).
+        #[arg(long, default_value = "https://cachefly.cachefly.net/10mb.test")]
         download_url: String,
         /// HTTPS endpoint accepting a POST body for uploads.
         #[arg(long, default_value = "https://speed.cloudflare.com/__up")]
         upload_url: String,
-        /// Download payload size for each sample.
-        #[arg(long, default_value_t = 1_048_576)]
+        /// Maximum accepted download size per sample (safety limit; default 16 MiB).
+        #[arg(long = "download-max-bytes", alias = "download-bytes", default_value_t = 16_777_216)]
         download_bytes: u64,
         /// Upload payload size for each sample.
         #[arg(long, default_value_t = 1_048_576)]
