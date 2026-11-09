@@ -466,3 +466,26 @@ fn reality_parameters_without_reality_security_are_invalid() {
         assert_eq!(adapter(core).compatibility(&node).status, CompatibilityStatus::Invalid);
     }
 }
+
+
+#[test]
+fn vmess_reality_maps_only_to_xray() {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let payload = general_purpose::STANDARD.encode(
+        br#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","scy":"auto","tls":"reality","sni":"www.example.com","fp":"chrome","pbk":"jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0","sid":"0123456789abcdef"}"#,
+    );
+    let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+
+    assert_eq!(adapter(CoreId::Xray).compatibility(&node).status, CompatibilityStatus::Supported);
+    assert_eq!(adapter(CoreId::SingBox).compatibility(&node).status, CompatibilityStatus::Unsupported);
+    assert_eq!(adapter(CoreId::Mihomo).compatibility(&node).status, CompatibilityStatus::Unsupported);
+
+    let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let doc: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(doc["outbounds"][0]["streamSettings"]["security"], "reality");
+    assert_eq!(
+        doc["outbounds"][0]["streamSettings"]["realitySettings"]["password"],
+        "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0"
+    );
+}
