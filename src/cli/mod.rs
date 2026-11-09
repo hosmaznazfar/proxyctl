@@ -304,8 +304,8 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
         return;
     }
     println!(
-        "{:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  NAME",
-        "ID", "PROTOCOL", "SERVER", "PORT", metric.label(), "CORE(S)"
+        "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  NAME",
+        "RANK", "ID", "PROTOCOL", "SERVER", "PORT", metric.label(), "CORE(S)"
     );
     for (index, record) in records.iter().enumerate() {
         let value = match record.value {
@@ -314,8 +314,9 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
             None => "unmeasured".to_owned(),
         };
         println!(
-            "{:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  {}",
+            "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  {}",
             if record.value.is_some() { (index + 1).to_string() } else { "-".into() },
+            record.node.id,
             record.node.node.protocol,
             safe_field(&record.node.node.server, 32),
             record.node.node.port,
