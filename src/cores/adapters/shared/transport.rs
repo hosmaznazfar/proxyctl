@@ -246,7 +246,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
                 const STRING_KEYS: &[&str] = &[
                     "xPaddingKey", "xPaddingHeader", "xPaddingPlacement", "xPaddingMethod",
                     "uplinkHTTPMethod", "sessionIDPlacement", "sessionIDKey", "sessionIDTable",
-                    "sessionIDLength", "seqPlacement", "seqKey", "uplinkDataPlacement",
+                    "seqPlacement", "seqKey", "uplinkDataPlacement",
                     "uplinkDataKey",
                 ];
                 for key in STRING_KEYS {
@@ -255,7 +255,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
                     }
                 }
                 const RANGE_KEYS: &[&str] = &[
-                    "xPaddingBytes", "uplinkChunkSize", "scMaxEachPostBytes", "scMinPostsIntervalMs",
+                    "xPaddingBytes", "sessionIDLength", "uplinkChunkSize", "scMaxEachPostBytes", "scMinPostsIntervalMs",
                 ];
                 for key in RANGE_KEYS {
                     if object.get(*key).is_some_and(|value| !value.is_string() && !value.is_number()) {
