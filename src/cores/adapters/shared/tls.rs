@@ -295,7 +295,7 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             }
             Ok(Some(Value::Object(tls)))
         }
-        "reality" => Ok(None)
+        "reality" => Ok(None),
         _ => Err("unsupported TLS/security mode".into()),
     }
 }
