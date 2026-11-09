@@ -72,8 +72,14 @@ pub fn current_version(core: CoreId, path: &std::path::Path) -> anyhow::Result<S
 
 fn reported_version_matches(output: &str, expected: &str) -> bool {
     output
-        .split(|character: char| !character.is_ascii_alphanumeric() && character != '.')
-        .any(|part| part.trim_start_matches('v') == expected)
+        .split_whitespace()
+        .map(|part| {
+            part.trim_matches(|character: char| {
+                !character.is_ascii_alphanumeric() && character != '.' && character != '-' && character != '+'
+            })
+            .trim_start_matches('v')
+        })
+        .any(|part| part == expected)
 }
 
 #[cfg(test)]
@@ -93,6 +99,10 @@ mod tests {
         assert!(!reported_version_matches(
             "Mihomo Meta v1.19.330",
             "1.19.33"
+        ));
+        assert!(reported_version_matches(
+            "sing-box version 1.15.0-alpha.13",
+            "1.15.0-alpha.13"
         ));
     }
 }
