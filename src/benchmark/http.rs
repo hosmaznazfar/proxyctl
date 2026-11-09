@@ -61,7 +61,8 @@ impl BenchmarkHttpClient {
         let upload_url = validate_endpoint(&settings.upload_url)?;
         ensure!(settings.download_bytes > 0 && settings.download_bytes <= MAX_PAYLOAD_BYTES, "download payload must be between 1 byte and 64 MiB");
         ensure!(settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES, "upload payload must be between 1 byte and 64 MiB");
-        let proxy = Proxy::new(format!("http://127.0.0.1:{port}"))
+        let proxy_url = format!("http://127.0.0.1:{port}");
+        let proxy = Proxy::new(&proxy_url)
             .context("could not configure the local benchmark HTTP proxy")?;
         let config = Agent::config_builder()
             .proxy(Some(proxy))
