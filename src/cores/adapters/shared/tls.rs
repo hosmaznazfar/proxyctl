@@ -137,7 +137,7 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
     if security.as_deref() != Some("reality") {
         if ["pbk", "publicKey", "sid", "spx", "mldsa65Verify"]
             .iter()
-            .any(|key| option_string(node, key).is_some())
+            .any(|key| node.option(key).is_some_and(|value| !value.is_null()))
         {
             return Err("REALITY parameters require security=reality".into());
         }
@@ -161,9 +161,9 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
     {
         return Err("REALITY public key and fingerprint must not contain control characters".into());
     }
-    if option_string(node, "pbk").is_some()
-        && option_string(node, "publicKey").is_some()
-        && option_string(node, "pbk") != option_string(node, "publicKey")
+    if node.option("pbk").is_some_and(|value| !value.is_null())
+        && node.option("publicKey").is_some_and(|value| !value.is_null())
+        && node.option("pbk") != node.option("publicKey")
     {
         return Err("REALITY public-key aliases conflict".into());
     }
