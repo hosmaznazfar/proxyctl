@@ -25,6 +25,7 @@ const READINESS_POLL_INTERVAL: Duration = Duration::from_millis(100);
 pub struct ManagedCoreProcess {
     child: Child,
     _config: NamedTempFile,
+    log: NamedTempFile,
     port: u16,
 }
 
@@ -94,6 +95,7 @@ impl ManagedCoreProcess {
                     return Ok(Self {
                         child,
                         _config: config,
+                        log,
                         port,
                     });
                 }
@@ -110,6 +112,13 @@ impl ManagedCoreProcess {
     /// Port of the loopback HTTP proxy listener.
     pub const fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Return a safe summary of recognized runtime failures from the private core log.
+    /// Raw log lines are never returned or printed.
+    pub fn runtime_diagnostic(&self) -> Option<&'static str> {
+        let contents = fs::read_to_string(self.log.path()).ok()?;
+        classify_runtime_diagnostic(&contents)
     }
 
     /// Stop the child and wait for process exit before removing its config.
@@ -221,6 +230,32 @@ fn summarize_startup_failure(fallback: &str, log_path: &Path) -> String {
     }
 }
 
+fn classify_runtime_diagnostic(contents: &str) -> Option<&'static str> {
+    let diagnostic = contents.to_ascii_lowercase();
+    if diagnostic.contains("websocket: bad handshake") || diagnostic.contains("bad websocket handshake") {
+        Some("the remote server rejected the WebSocket handshake")
+    } else if diagnostic.contains("certificate verify failed")
+        || diagnostic.contains("failed to verify certificate")
+        || diagnostic.contains("x509:")
+    {
+        Some("the core could not verify the remote TLS certificate")
+    } else if diagnostic.contains("tls handshake") || diagnostic.contains("handshake failure") {
+        Some("the outbound TLS handshake failed")
+    } else if diagnostic.contains("no such host") {
+        Some("the core could not resolve the remote server hostname")
+    } else if diagnostic.contains("connection refused") {
+        Some("the remote server refused the outbound connection")
+    } else if diagnostic.contains("i/o timeout") || diagnostic.contains("context deadline exceeded") {
+        Some("the outbound connection timed out")
+    } else if diagnostic.contains("connection reset by peer") {
+        Some("the remote server reset the outbound connection")
+    } else if diagnostic.contains("unexpected eof") || diagnostic.contains("\"eof\"") {
+        Some("the remote side closed the outbound connection unexpectedly")
+    } else {
+        None
+    }
+}
+
 fn wait_for_listener(child: &mut Child, port: u16, timeout: Duration) -> Result<(), String> {
     let started = Instant::now();
     let address = ("127.0.0.1", port);
@@ -307,6 +342,20 @@ mod tests {
         assert!(summary.contains("local listener port is already in use"));
         assert!(!summary.contains("secret"));
         assert!(!summary.contains("127.0.0.1"));
+    }
+
+    #[test]
+    fn runtime_diagnostics_are_allowlisted_and_never_return_raw_log_content() {
+        let diagnostic = classify_runtime_diagnostic(
+            "[error] websocket: bad handshake for user=secret url=https://example.invalid/path",
+        );
+        assert_eq!(diagnostic, Some("the remote server rejected the WebSocket handshake"));
+        assert!(!diagnostic.unwrap().contains("secret"));
+        assert_eq!(
+            classify_runtime_diagnostic("dial tcp 203.0.113.1:443: i/o timeout"),
+            Some("the outbound connection timed out")
+        );
+        assert_eq!(classify_runtime_diagnostic("normal startup message"), None);
     }
 
     #[test]
