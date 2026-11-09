@@ -363,6 +363,34 @@ mod tests {
         assert_eq!(classify_runtime_diagnostic("normal startup message"), None);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn captures_runtime_diagnostics_from_stdout_and_stderr() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use tempfile::tempdir;
+
+        let directory = tempdir().unwrap();
+        let executable = directory.path().join("fake-mihomo");
+        let config = directory.path().join("config.json");
+        fs::write(&config, "{}").unwrap();
+        fs::write(
+            &executable,
+            "#!/bin/sh\nprintf 'stdout diagnostic\\n'\nprintf 'stderr diagnostic\\n' >&2\n",
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let log = NamedTempFile::new().unwrap();
+        let mut child =
+            spawn_core(CoreId::Mihomo, &executable, &config, &log).unwrap();
+        assert!(child.wait().unwrap().success());
+
+        let contents = fs::read_to_string(log.path()).unwrap();
+        assert!(contents.contains("stdout diagnostic"));
+        assert!(contents.contains("stderr diagnostic"));
+    }
+
     #[test]
     fn command_arguments_are_core_specific() {
         let config = Path::new("/tmp/proxyctl-test.json");
