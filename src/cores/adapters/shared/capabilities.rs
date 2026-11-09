@@ -5,7 +5,7 @@ use crate::{
     domain::{Protocol, ProxyNode, TransportKind},
 };
 
-use super::{Compatibility, normalize_transport, option_string, tls_options, validate_common};
+use super::{Compatibility, normalize_transport, option_string, reality_options, tls_options, validate_common};
 
 #[derive(Clone, Copy, Debug)]
 struct CoreCapabilities {
@@ -161,6 +161,29 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
 
     validate_common(node).map_err(compatibility_failure)?;
     tls_options(node).map_err(compatibility_failure)?;
+    let reality = reality_options(node).map_err(compatibility_failure)?;
+    if reality.is_some() {
+        if node.protocol != Protocol::Vless
+            && !(core == CoreId::Xray && node.protocol == Protocol::Vmess)
+        {
+            return Err(compatibility_failure(format!(
+                "{core} does not support REALITY for this protocol"
+            )));
+        }
+        let transport = normalize_transport(node).map_err(compatibility_failure)?;
+        if core == CoreId::Xray
+            && !matches!(transport.kind, TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp)
+        {
+            return Err(compatibility_failure(
+                "Xray REALITY supports only TCP/RAW, gRPC, and XHTTP transports".into(),
+            ));
+        }
+        if matches!(transport.kind, TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket) {
+            return Err(compatibility_failure(
+                "REALITY is not supported with this transport mapping".into(),
+            ));
+        }
+    }
 
     if option_string(node, "vcn").is_some() && !capabilities.verify_peer_cert_by_name {
         return Err(compatibility_failure(format!(
