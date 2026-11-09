@@ -1,15 +1,14 @@
 //! Bounded HTTP measurements routed through the benchmark's explicit local proxy.
 
-use std::{
-    io::Read,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, ensure};
 use url::Url;
 use ureq::{Agent, Proxy};
 
-use crate::domain::BenchmarkSettings;
+use crate::domain::{BenchmarkSettings, throughput_bps};
+
+const MAX_PAYLOAD_BYTES: u64 = 64 * 1024 * 1024;
 
 /// A successful, timed HTTP measurement.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -60,6 +59,8 @@ impl BenchmarkHttpClient {
         let latency_url = validate_endpoint(&settings.latency_url)?;
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
+        ensure!(settings.download_bytes > 0 && settings.download_bytes <= MAX_PAYLOAD_BYTES, "download payload must be between 1 byte and 64 MiB");
+        ensure!(settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES, "upload payload must be between 1 byte and 64 MiB");
         let proxy = Proxy::new(format!("http://127.0.0.1:{port}"))
             .context("could not configure the local benchmark HTTP proxy")?;
         let config = Agent::config_builder()
@@ -78,9 +79,10 @@ impl BenchmarkHttpClient {
     /// Measure time until response headers arrive from the zero-byte latency endpoint.
     pub fn latency(&self) -> Result<Measurement, MeasurementFailure> {
         let started = Instant::now();
+        let url = with_bytes_parameter(&self.latency_url, 0);
         let response = self
             .agent
-            .get(self.latency_url.as_str())
+            .get(url.as_str())
             .header("Accept-Encoding", "identity")
             .call()
             .map_err(classify_error)?;
@@ -164,6 +166,10 @@ fn validate_endpoint(value: &str) -> anyhow::Result<Url> {
         url.fragment().is_none(),
         "benchmark endpoint must not contain a fragment"
     );
+    ensure!(
+        url.query().is_none(),
+        "benchmark endpoint must not contain query parameters; payload settings are added by Proxyctl"
+    );
     Ok(url)
 }
 
@@ -183,15 +189,6 @@ fn with_bytes_parameter(base: &Url, bytes: u64) -> Url {
         query.append_pair("bytes", &bytes.to_string());
     }
     url
-}
-
-fn throughput_bps(bytes: u64, duration: Duration) -> Option<f64> {
-    let seconds = duration.as_secs_f64();
-    if bytes == 0 || !seconds.is_finite() || seconds <= 0.0 {
-        return None;
-    }
-    let value = (bytes as f64 * 8.0) / seconds;
-    value.is_finite().then_some(value)
 }
 
 fn classify_error(error: ureq::Error) -> MeasurementFailure {
@@ -218,6 +215,7 @@ mod tests {
         assert!(validate_endpoint("http://speed.example/test").is_err());
         assert!(validate_endpoint("https://user:pass@speed.example/test").is_err());
         assert!(validate_endpoint("https://speed.example/test#fragment").is_err());
+        assert!(validate_endpoint("https://speed.example/test?token=secret").is_err());
     }
 
     #[test]
@@ -227,12 +225,11 @@ mod tests {
 
     #[test]
     fn download_size_parameter_is_replaced_not_duplicated() {
-        let base = Url::parse("https://speed.example/__down?token=public&bytes=10").unwrap();
+        let base = Url::parse("https://speed.example/__down").unwrap();
         let result = with_bytes_parameter(&base, 1024);
         let pairs = result.query_pairs().collect::<Vec<_>>();
-        assert_eq!(pairs.len(), 2);
-        assert_eq!(pairs[0], ("token".into(), "public".into()));
-        assert_eq!(pairs[1], ("bytes".into(), "1024".into()));
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0], ("bytes".into(), "1024".into()));
     }
 
     #[test]
