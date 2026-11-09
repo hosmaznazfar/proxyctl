@@ -55,8 +55,11 @@ impl ManagedCoreProcess {
             let generated = adapter
                 .generate_benchmark_config(node, port)
                 .with_context(|| format!("could not generate benchmark config for {core}"))?;
-            let mut config =
-                NamedTempFile::new().context("could not create private benchmark configuration")?;
+            let mut config = tempfile::Builder::new()
+                .prefix("proxyctl-benchmark-")
+                .suffix(".json")
+                .tempfile()
+                .context("could not create private benchmark configuration")?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
