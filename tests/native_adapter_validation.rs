@@ -143,6 +143,9 @@ fn fixtures() -> Vec<Fixture> {
     });
     let encoded_extra = url::form_urlencoded::byte_serialize(xhttp_extra.to_string().as_bytes())
         .collect::<String>();
+    // Xray expects ML-DSA-65 verification material as unpadded base64url encoding
+    // of exactly 1,952 bytes; the deterministic bytes are synthetic test data.
+    let mldsa_verify = general_purpose::URL_SAFE_NO_PAD.encode([0x42; 1952]);
 
     // Xray 26.7.11+ rejects unencrypted VLESS to public addresses. Use the reserved
     // private `.local` test domain for fixtures that intentionally omit TLS/REALITY.
@@ -174,7 +177,9 @@ fn fixtures() -> Vec<Fixture> {
         },
         Fixture {
             name: "REALITY ML-DSA-65 verification",
-            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&mldsa65Verify=verification-key".into(),
+            url: format!(
+                "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&mldsa65Verify={mldsa_verify}"
+            ),
             supported_by: xray_only,
         },
         Fixture {
