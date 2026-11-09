@@ -391,3 +391,48 @@ fn adapters_reject_alpn_without_tls_and_malformed_alpn() {
         );
     }
 }
+
+
+#[test]
+fn vless_reality_maps_to_each_core_native_schema() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=public-key&sid=0123456789abcdef&spx=%2F",
+    ).unwrap();
+
+    let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+    let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+    assert_eq!(sing_box_doc["outbounds"][0]["tls"]["reality"]["enabled"], true);
+    assert_eq!(sing_box_doc["outbounds"][0]["tls"]["reality"]["public_key"], "public-key");
+    assert_eq!(sing_box_doc["outbounds"][0]["tls"]["reality"]["short_id"], "0123456789abcdef");
+
+    let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(xray_doc["outbounds"][0]["streamSettings"]["security"], "reality");
+    assert_eq!(xray_doc["outbounds"][0]["streamSettings"]["realitySettings"]["password"], "public-key");
+    assert_eq!(xray_doc["outbounds"][0]["streamSettings"]["realitySettings"]["fingerprint"], "chrome");
+
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(mihomo_doc["proxies"][0]["reality-opts"]["public-key"], "public-key");
+    assert_eq!(mihomo_doc["proxies"][0]["reality-opts"]["short-id"], "0123456789abcdef");
+    assert_eq!(mihomo_doc["proxies"][0]["client-fingerprint"], "chrome");
+}
+
+#[test]
+fn reality_requires_public_key_fingerprint_and_valid_short_id() {
+    let no_key = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&fp=chrome",
+    ).unwrap();
+    let no_fp = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key",
+    ).unwrap();
+    let bad_sid = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key&fp=chrome&sid=abc",
+    ).unwrap();
+
+    for node in [&no_key, &no_fp, &bad_sid] {
+        assert_eq!(adapter(CoreId::SingBox).compatibility(node).status, CompatibilityStatus::Invalid);
+        assert_eq!(adapter(CoreId::Xray).compatibility(node).status, CompatibilityStatus::Invalid);
+        assert_eq!(adapter(CoreId::Mihomo).compatibility(node).status, CompatibilityStatus::Invalid);
+    }
+}
