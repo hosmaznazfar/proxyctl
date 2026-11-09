@@ -36,11 +36,18 @@ pub(crate) fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Re
 }
 
 
-/// Parse the SIP003 plugin query value into the two supported native representations.
-/// Returns (sing-box plugin, raw plugin options, Mihomo plugin, Mihomo plugin options).
+/// Parsed plugin settings with separate native representations.
+pub(crate) struct ShadowsocksPlugin {
+    pub sing_box_name: String,
+    pub sing_box_options: String,
+    pub mihomo_name: String,
+    pub mihomo_options: Value,
+}
+
+/// Parse the SIP003 plugin query value into the supported native representations.
 pub(crate) fn shadowsocks_plugin(
     node: &ProxyNode,
-) -> Result<Option<(String, String, String, Value)>, String> {
+) -> Result<Option<ShadowsocksPlugin>, String> {
     if node.protocol != Protocol::Shadowsocks {
         return Ok(None);
     }
@@ -122,7 +129,12 @@ pub(crate) fn shadowsocks_plugin(
         }
         _ => return Err("Shadowsocks SIP003 plugin is not supported by this adapter".into()),
     };
-    Ok(Some(((if name == "simple-obfs" { "obfs-local" } else { name }).to_owned(), raw_options, mihomo_name, mihomo_options)))
+    Ok(Some(ShadowsocksPlugin {
+        sing_box_name: (if name == "simple-obfs" { "obfs-local" } else { name }).to_owned(),
+        sing_box_options: raw_options,
+        mihomo_name,
+        mihomo_options,
+    }))
 }
 
 fn split_sip003(input: &str) -> Result<(Vec<String>, String), String> {
