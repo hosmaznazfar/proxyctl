@@ -192,25 +192,24 @@ Do not start reports, sorting, or pruning until the revised benchmark implementa
   
 ### 3.6 Sorting and comparison semantics
 
-Core-independent commands compare each node's best available compatible-core result:
+Metric-specific sorting is being implemented for real ping, direct TCP ping, download, and upload:
 
 ~~~sh
 proxyctl list --sort ping
 proxyctl list --sort download
 proxyctl list --sort upload
-~~~
+proxyctl list --sort tcp-ping
 
-For each node, calculate the median of successful samples for a metric on each core, then choose the best compatible-core median. Display the core responsible for that result. Lower latency is better; higher download/upload throughput is better.
-
-Core-specific comparisons use the same aggregation but restrict results to the selected core:
-
-~~~sh
 proxyctl list --sort ping --core xray
 proxyctl list --sort download --core sing-box
 proxyctl list --sort upload --core mihomo
 ~~~
 
-Only comparable successful results are ranked. Missing results are shown as unavailable/unmeasured rather than assigned fabricated values. Reports identify the benchmark run and methodology used.
+For each node/core pair, use its latest completed run and calculate the median of successful samples. A newer completed run supersedes an older one even if it contains no successful samples; do not fall back to stale measurements. Ignore interrupted, cancelled, and running runs.
+
+Cross-core sorting takes the median of available per-core medians, giving each successful core equal weight rather than selecting only the fastest core. Core-specific sorting restricts the calculation to the selected core. Direct TCP ping uses the reserved `direct` target and is never combined with real ping.
+
+Ping sorts ascending; download and upload sort descending. Nodes without successful comparable measurements remain at the bottom as unmeasured, not zero. Unsupported results do not contribute values. Sorting is read-only and never starts a core or changes network settings.
 
 ### 3.7 Pruning and recovery
 
