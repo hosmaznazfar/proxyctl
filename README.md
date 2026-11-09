@@ -70,9 +70,9 @@ Run the initial sequential benchmark against all active nodes and installed comp
 ~~~sh
 ~~~
 
-Each compatible node/core pair receives three latency, three download, and three upload samples. The initial default endpoints use Cloudflare Speed Test. **Cloudflare states that completed measurements are collected for aggregated Internet-connection insights.** Endpoint URLs, payload sizes, and timeouts are configurable.
+Each node receives three direct TCP-ping samples. Each compatible node/core pair receives three real-ping, download, and upload samples through that core. The revised defaults follow v2rayN where applicable: Google `generate_204` for real ping and CacheFly's 10 MB test file for download. Upload remains separately configurable and initially uses Cloudflare's upload endpoint. All endpoint URLs, payload limits, and timeouts are configurable.
 
-Benchmarking is explicit and sequential. It starts only the selected Proxyctl-managed core, binds its temporary HTTP proxy listener to 127.0.0.1, and does not change system proxy, DNS, routes, firewall, or TUN settings. See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) for the full design and endpoint contract.
+Benchmarking is explicit and sequential. The CLI reports live node/core/metric/sample progress, and Ctrl-C stops the active core so an in-flight request can be interrupted and cleaned up. The temporary HTTP proxy listener binds only to 127.0.0.1. Benchmarking does not change system proxy, DNS, routes, firewall, or TUN settings. See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) for the measurement definitions, endpoint contract, and privacy notes.
 
 ## Planned commands
 
