@@ -204,14 +204,6 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
 
     let xhttp_extra = normalize_xhttp_extra(node, &kind, &headers)?;
 
-    if matches!(&kind, TransportKind::XHttp)
-        && !headers.is_empty()
-        && xhttp_extra.as_ref().and_then(serde_json::Value::as_object)
-            .and_then(|extra| extra.get("headers")).is_some()
-    {
-        return Err("XHTTP headers were supplied both directly and inside extra".into());
-    }
-
     let service_name = if matches!(&kind, TransportKind::Grpc) {
         let service_values = [
             option_string(node, "serviceName"),
