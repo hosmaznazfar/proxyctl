@@ -16,7 +16,7 @@ Proxyctl uses one verified artifact pipeline for its CLI and managed sing-box, X
 | Xray | https://github.com/XTLS/Xray-core/releases |
 | Mihomo | https://github.com/MetaCubeX/mihomo/releases |
 
-Only stable releases are selected. The installer uses GitHub's release asset digest field and requires a sha256 digest. If release metadata does not provide a digest, installation fails closed. No checksum bypass or unofficial mirror is provided.
+Stable releases are the default channel for Proxyctl itself and every managed core. Prereleases (alpha, beta, release candidates, and other GitHub releases marked `prerelease`) are eligible only when the user explicitly passes `--prerelease`. The option applies only to the update target selected by the command: `--app`, `--cores`, or `--core <id>`; with no target selector it applies to the CLI and all installed managed cores. A prerelease for one component must never change the channel for another component unless both are in the selected target set. Draft releases are never eligible. Release selection must enumerate official release metadata and filter by the requested channel; do not assume the GitHub `/releases/latest` endpoint can return prereleases. The installer uses GitHub's release asset digest field and requires a sha256 digest. If release metadata does not provide a digest, installation fails closed. No checksum bypass or unofficial mirror is provided.
 
 ## 3. Initial platform and asset policy
 
@@ -33,7 +33,7 @@ Mihomo's GOAMD64 v1 build is selected for broad x86_64 compatibility rather than
 ## 4. Shared installation pipeline
 
 1. Query the fixed official GitHub Releases API endpoint.
-2. Reject drafts and prereleases.
+2. Reject drafts and, unless explicitly opted in, prereleases.
 3. Select the exact platform-specific asset by name.
 4. Require the release API's SHA-256 digest.
 5. Download and verify the complete archive before parsing it.
@@ -55,9 +55,12 @@ proxyctl update
 proxyctl update --app
 proxyctl update --cores
 proxyctl update --core mihomo
+proxyctl update --prerelease
+proxyctl update --app --prerelease
+proxyctl update --core sing-box --prerelease
 ~~~
 
-Setup installs all three cores by default; --core installs one. Cores displays each managed installation and its reported version. Update without a selector targets the CLI and every installed managed core. Check performs metadata and asset checks without downloading or changing files. App, cores, and core are exclusive selectors.
+Setup installs all three cores by default; --core installs one. Cores displays each managed installation and its reported version. Update without a selector targets the CLI and every installed managed core. Check performs metadata and asset checks without downloading or changing files, using the same release channel requested for installation. Stable is the default. `--prerelease` opts the selected target(s) into prerelease selection; it can be combined with `--app`, `--cores`, or `--core <id>`. App, cores, and core are exclusive selectors. Prerelease selection is independent per component and never silently changes the channel of unselected components.
 
 ## 6. Safety boundaries
 
