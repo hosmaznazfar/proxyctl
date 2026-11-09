@@ -10,7 +10,10 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options, validate_for_core},
+    shared::{
+        Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options,
+        validate_for_core,
+    },
 };
 
 pub struct SingBoxAdapter;
@@ -77,7 +80,11 @@ impl CoreAdapter for SingBoxAdapter {
                 ws.insert("max_early_data".into(), json!(max_early_data));
                 ws.insert(
                     "early_data_header_name".into(),
-                    json!(transport.early_data_header_name.unwrap_or_else(|| "Sec-WebSocket-Protocol".into())),
+                    json!(
+                        transport
+                            .early_data_header_name
+                            .unwrap_or_else(|| "Sec-WebSocket-Protocol".into())
+                    ),
                 );
             }
             outbound["transport"] = serde_json::Value::Object(ws);

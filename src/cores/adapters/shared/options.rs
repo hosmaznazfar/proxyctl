@@ -37,10 +37,31 @@ pub(crate) fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Re
 
 pub(crate) fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
     const STRING_OPTIONS: &[&str] = &[
-        "security", "sni", "encryption", "flow", "type", "host", "path", "serviceName",
-        "service_name", "authority", "mode", "net", "scy", "ed", "eh", "maxEarlyData",
-        "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data",
-        "early-data-header-name", "pcs", "pinSHA256", "vcn", "fp",
+        "security",
+        "sni",
+        "encryption",
+        "flow",
+        "type",
+        "host",
+        "path",
+        "serviceName",
+        "service_name",
+        "authority",
+        "mode",
+        "net",
+        "scy",
+        "ed",
+        "eh",
+        "maxEarlyData",
+        "earlyDataHeaderName",
+        "max_early_data",
+        "early_data_header_name",
+        "max-early-data",
+        "early-data-header-name",
+        "pcs",
+        "pinSHA256",
+        "vcn",
+        "fp",
     ];
     for key in STRING_OPTIONS {
         if let Some(value) = node.option(key)
@@ -57,4 +78,3 @@ pub(crate) fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
     }
     Ok(())
 }
-

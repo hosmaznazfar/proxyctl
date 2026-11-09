@@ -1,7 +1,8 @@
 use crate::domain::{Protocol, ProxyNode, TransportKind};
 
 use super::{
-    alpn_protocols, normalize_transport, option_string, reject_unknown_options, validate_string_options,
+    alpn_protocols, normalize_transport, option_string, reject_unknown_options,
+    validate_string_options,
 };
 
 fn vmess_alter_id(node: &ProxyNode) -> Result<Option<u32>, String> {
@@ -48,25 +49,99 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     const VLESS_OPTIONS: &[&str] = &[
-        "security", "tls", "sni", "encryption", "flow", "type", "host", "path",
-        "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData",
-        "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data",
-        "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp",
+        "security",
+        "tls",
+        "sni",
+        "encryption",
+        "flow",
+        "type",
+        "host",
+        "path",
+        "serviceName",
+        "service_name",
+        "authority",
+        "mode",
+        "ed",
+        "eh",
+        "maxEarlyData",
+        "earlyDataHeaderName",
+        "max_early_data",
+        "early_data_header_name",
+        "max-early-data",
+        "early-data-header-name",
+        "pcs",
+        "insecure",
+        "allowInsecure",
+        "vcn",
+        "alpn",
+        "fp",
     ];
     const VMESS_OPTIONS: &[&str] = &[
-        "security", "tls", "sni", "aid", "scy", "net", "type", "host", "path", "headers",
-        "serviceName", "service_name", "authority", "mode", "ed", "eh", "maxEarlyData",
-        "earlyDataHeaderName", "max_early_data", "early_data_header_name", "max-early-data",
-        "early-data-header-name", "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp",
+        "security",
+        "tls",
+        "sni",
+        "aid",
+        "scy",
+        "net",
+        "type",
+        "host",
+        "path",
+        "headers",
+        "serviceName",
+        "service_name",
+        "authority",
+        "mode",
+        "ed",
+        "eh",
+        "maxEarlyData",
+        "earlyDataHeaderName",
+        "max_early_data",
+        "early_data_header_name",
+        "max-early-data",
+        "early-data-header-name",
+        "pcs",
+        "insecure",
+        "allowInsecure",
+        "vcn",
+        "alpn",
+        "fp",
     ];
     const TROJAN_OPTIONS: &[&str] = &[
-        "security", "tls", "sni", "type", "host", "path", "serviceName", "service_name",
-        "authority", "mode", "ed", "eh", "maxEarlyData", "earlyDataHeaderName",
-        "max_early_data", "early_data_header_name", "max-early-data", "early-data-header-name",
-        "pcs", "insecure", "allowInsecure", "vcn", "alpn", "fp",
+        "security",
+        "tls",
+        "sni",
+        "type",
+        "host",
+        "path",
+        "serviceName",
+        "service_name",
+        "authority",
+        "mode",
+        "ed",
+        "eh",
+        "maxEarlyData",
+        "earlyDataHeaderName",
+        "max_early_data",
+        "early_data_header_name",
+        "max-early-data",
+        "early-data-header-name",
+        "pcs",
+        "insecure",
+        "allowInsecure",
+        "vcn",
+        "alpn",
+        "fp",
     ];
     const HYSTERIA2_OPTIONS: &[&str] = &[
-        "security", "tls", "sni", "insecure", "allowInsecure", "pinSHA256", "pcs", "alpn", "fp",
+        "security",
+        "tls",
+        "sni",
+        "insecure",
+        "allowInsecure",
+        "pinSHA256",
+        "pcs",
+        "alpn",
+        "fp",
     ];
 
     let supported = match node.protocol {
@@ -100,9 +175,19 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
                     && ["auto", "packet-up", "stream-up", "stream-one"].contains(&value))
         })
     {
-        return Err("VMess transport-specific header modes are not implemented for this network".into());
+        return Err(
+            "VMess transport-specific header modes are not implemented for this network".into(),
+        );
     }
-    if !matches!(&transport.kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::XHttp) {
+    if !matches!(
+        &transport.kind,
+        TransportKind::Tcp
+            | TransportKind::WebSocket
+            | TransportKind::Grpc
+            | TransportKind::Http2
+            | TransportKind::HttpUpgrade
+            | TransportKind::XHttp
+    ) {
         return Err("transport is not implemented by this adapter batch".into());
     }
 
@@ -111,7 +196,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
             "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random",
         ];
         if !SUPPORTED_FINGERPRINTS.contains(&fingerprint) {
-            return Err("TLS fingerprint is not supported; use a common browser fingerprint".into());
+            return Err(
+                "TLS fingerprint is not supported; use a common browser fingerprint".into(),
+            );
         }
         if matches!(node.protocol, Protocol::Hysteria2) {
             return Err("TLS client fingerprints are not supported for Hysteria2".into());
@@ -134,12 +221,16 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         if option_string(node, "flow").is_some_and(|value| value != "xtls-rprx-vision") {
             return Err("only VLESS xtls-rprx-vision flow is currently mapped".into());
         }
-        if option_string(node, "type").is_some_and(|value| !["tcp", "raw", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)) {
+        if option_string(node, "type").is_some_and(|value| {
+            !["tcp", "raw", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)
+        }) {
             return Err("only VLESS TCP, WebSocket, gRPC, HTTP/2, HTTP Upgrade, and XHTTP transports are currently mapped".into());
         }
     }
     if node.protocol == Protocol::Vmess {
-        if option_string(node, "net").is_some_and(|value| !["tcp", "raw", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)) {
+        if option_string(node, "net").is_some_and(|value| {
+            !["tcp", "raw", "ws", "grpc", "h2", "httpupgrade", "xhttp"].contains(&value)
+        }) {
             return Err("only VMess TCP, WebSocket, gRPC, HTTP/2, HTTPUpgrade, and XHTTP transports are currently mapped".into());
         }
         let _ = vmess_alter_id(node)?;
@@ -160,4 +251,3 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
     Ok(())
 }
-

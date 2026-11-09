@@ -94,9 +94,7 @@ fn bool_option(node: &ProxyNode, key: &str) -> Result<Option<bool>, String> {
             _ => Err("TLS boolean option must be a boolean".into()),
         };
     }
-    option_string(node, key)
-        .map(parse_bool_string)
-        .transpose()
+    option_string(node, key).map(parse_bool_string).transpose()
 }
 
 fn insecure_option(node: &ProxyNode) -> Result<bool, String> {
@@ -145,7 +143,11 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             .or_else(|| option_string(node, "tls"))
             .map(str::to_ascii_lowercase)
     }
-    .unwrap_or(if default_tls { "tls".into() } else { "none".into() });
+    .unwrap_or(if default_tls {
+        "tls".into()
+    } else {
+        "none".into()
+    });
     match security.as_str() {
         "none" | "" | "false" | "0" => {
             if matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2) {
@@ -167,10 +169,14 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
                 return Err("certificate pin was supplied while TLS is disabled".into());
             }
             if insecure {
-                return Err("insecure certificate verification was requested while TLS is disabled".into());
+                return Err(
+                    "insecure certificate verification was requested while TLS is disabled".into(),
+                );
             }
             if verify_peer_cert_by_name.is_some() {
-                return Err("certificate name verification was supplied while TLS is disabled".into());
+                return Err(
+                    "certificate name verification was supplied while TLS is disabled".into(),
+                );
             }
             Ok(None)
         }
@@ -184,7 +190,10 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
                 if name.chars().any(char::is_control) {
                     return Err("certificate verification name contains control characters".into());
                 }
-                tls.insert("verify_peer_cert_by_name".into(), Value::String(name.into()));
+                tls.insert(
+                    "verify_peer_cert_by_name".into(),
+                    Value::String(name.into()),
+                );
             }
             if let Some(sni) = option_string(node, "sni") {
                 if sni.chars().any(char::is_control) {
@@ -203,10 +212,17 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             }
             if let Some(pin) = certificate_pin {
                 let normalized = pin.replace(':', "");
-                if normalized.len() != 64 || !normalized.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                    return Err("certificate SHA-256 pin must contain exactly 64 hexadecimal digits".into());
+                if normalized.len() != 64
+                    || !normalized.bytes().all(|byte| byte.is_ascii_hexdigit())
+                {
+                    return Err(
+                        "certificate SHA-256 pin must contain exactly 64 hexadecimal digits".into(),
+                    );
                 }
-                tls.insert("certificate_sha256".into(), Value::String(normalized.to_ascii_lowercase()));
+                tls.insert(
+                    "certificate_sha256".into(),
+                    Value::String(normalized.to_ascii_lowercase()),
+                );
             }
             Ok(Some(Value::Object(tls)))
         }

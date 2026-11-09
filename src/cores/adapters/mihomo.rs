@@ -10,7 +10,10 @@ use crate::{
 
 use super::{
     CoreAdapter, json_config,
-    shared::{Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options, validate_for_core},
+    shared::{
+        Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options,
+        validate_for_core,
+    },
 };
 
 pub struct MihomoAdapter;
@@ -74,7 +77,11 @@ impl CoreAdapter for MihomoAdapter {
                 ws.insert("max-early-data".into(), json!(max_early_data));
                 ws.insert(
                     "early-data-header-name".into(),
-                    json!(transport.early_data_header_name.unwrap_or_else(|| "Sec-WebSocket-Protocol".into())),
+                    json!(
+                        transport
+                            .early_data_header_name
+                            .unwrap_or_else(|| "Sec-WebSocket-Protocol".into())
+                    ),
                 );
             }
             proxy["ws-opts"] = serde_json::Value::Object(ws);

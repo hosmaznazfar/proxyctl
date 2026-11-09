@@ -10,8 +10,14 @@ use crate::domain::{Protocol, ProxyNode, Transport, TransportKind};
 use super::option_string;
 
 pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String> {
-    let network_key = if node.protocol == Protocol::Vmess { "net" } else { "type" };
-    let network = option_string(node, network_key).unwrap_or("tcp").to_ascii_lowercase();
+    let network_key = if node.protocol == Protocol::Vmess {
+        "net"
+    } else {
+        "type"
+    };
+    let network = option_string(node, network_key)
+        .unwrap_or("tcp")
+        .to_ascii_lowercase();
 
     let kind = match network.as_str() {
         "" | "tcp" | "raw" => TransportKind::Tcp,
@@ -24,7 +30,15 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         other => TransportKind::Unknown(other.to_owned()),
     };
 
-    if !matches!(&kind, TransportKind::Tcp | TransportKind::WebSocket | TransportKind::Grpc | TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::XHttp) {
+    if !matches!(
+        &kind,
+        TransportKind::Tcp
+            | TransportKind::WebSocket
+            | TransportKind::Grpc
+            | TransportKind::Http2
+            | TransportKind::HttpUpgrade
+            | TransportKind::XHttp
+    ) {
         return Err("transport type is not supported by this adapter batch".into());
     }
 
@@ -53,7 +67,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
-        if authority_values.windows(2).any(|values| values[0] != values[1]) {
+        if authority_values
+            .windows(2)
+            .any(|values| values[0] != values[1])
+        {
             return Err("gRPC authority aliases conflict".into());
         }
         authority = authority_values.first().map(|value| (*value).to_owned());
@@ -62,7 +79,9 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     } else if matches!(&kind, TransportKind::Http2) {
         if let Some(host) = source_host {
             let values = host.split(',').map(str::trim).collect::<Vec<_>>();
-            if values.iter().any(|value| value.is_empty() || value.chars().any(char::is_control))
+            if values
+                .iter()
+                .any(|value| value.is_empty() || value.chars().any(char::is_control))
             {
                 return Err("HTTP/2 host list is invalid".into());
             }
@@ -82,13 +101,26 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             let value = value
                 .as_str()
                 .ok_or_else(|| "transport header values must be strings".to_owned())?;
-            if key.is_empty() || key.chars().any(char::is_control) || value.chars().any(char::is_control) {
-                return Err("transport header names must be non-empty and contain no control characters".into());
+            if key.is_empty()
+                || key.chars().any(char::is_control)
+                || value.chars().any(char::is_control)
+            {
+                return Err(
+                    "transport header names must be non-empty and contain no control characters"
+                        .into(),
+                );
             }
-            if headers.keys().any(|existing| existing.eq_ignore_ascii_case(key)) {
+            if headers
+                .keys()
+                .any(|existing| existing.eq_ignore_ascii_case(key))
+            {
                 return Err("transport Host/header values are ambiguous".into());
             }
-            let key = if key.eq_ignore_ascii_case("host") { "Host".to_owned() } else { key.clone() };
+            let key = if key.eq_ignore_ascii_case("host") {
+                "Host".to_owned()
+            } else {
+                key.clone()
+            };
             if headers.insert(key, value.to_owned()).is_some() {
                 return Err("transport Host/header values are ambiguous".into());
             }
@@ -108,7 +140,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             }
             mode = type_mode.or(mode);
         }
-        if mode.as_deref().is_some_and(|value| !["gun", "multi"].contains(&value)) {
+        if mode
+            .as_deref()
+            .is_some_and(|value| !["gun", "multi"].contains(&value))
+        {
             return Err("gRPC mode must be gun or multi".into());
         }
     }
@@ -117,7 +152,11 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         .or_else(|| option_string(node, "max_early_data"))
         .or_else(|| option_string(node, "max-early-data"));
     let max_early_data = early_data_raw
-        .map(|value| value.parse::<u32>().map_err(|_| "WebSocket early-data size must be a valid unsigned integer".to_owned()))
+        .map(|value| {
+            value.parse::<u32>().map_err(|_| {
+                "WebSocket early-data size must be a valid unsigned integer".to_owned()
+            })
+        })
         .transpose()?;
     let early_data_header_name = option_string(node, "eh")
         .or_else(|| option_string(node, "earlyDataHeaderName"))
@@ -127,7 +166,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     if max_early_data.is_some_and(|value| value > 8192) {
         return Err("WebSocket early-data size must not exceed 8192 bytes".into());
     }
-    if early_data_header_name.as_deref().is_some_and(|value| value.is_empty() || value.chars().any(char::is_control)) {
+    if early_data_header_name
+        .as_deref()
+        .is_some_and(|value| value.is_empty() || value.chars().any(char::is_control))
+    {
         return Err("WebSocket early-data header name is invalid".into());
     }
     if early_data_header_name.is_some() && max_early_data.is_none() {
@@ -149,7 +191,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             }
             mode = type_mode.or(mode);
         }
-        if mode.as_deref().is_some_and(|value| !["auto", "packet-up", "stream-up", "stream-one"].contains(&value)) {
+        if mode
+            .as_deref()
+            .is_some_and(|value| !["auto", "packet-up", "stream-up", "stream-one"].contains(&value))
+        {
             return Err("XHTTP mode is invalid".into());
         }
     } else if mode.is_some() && !matches!(&kind, TransportKind::Grpc) {
@@ -165,7 +210,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
-        if service_values.windows(2).any(|values| values[0] != values[1]) {
+        if service_values
+            .windows(2)
+            .any(|values| values[0] != values[1])
+        {
             return Err("gRPC service-name aliases conflict".into());
         }
         if !headers.is_empty() {
@@ -176,16 +224,28 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         None
     };
 
-    if path.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+    if path
+        .as_deref()
+        .is_some_and(|value| value.chars().any(char::is_control))
+    {
         return Err("transport path contains control characters".into());
     }
-    if host.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+    if host
+        .as_deref()
+        .is_some_and(|value| value.chars().any(char::is_control))
+    {
         return Err("transport host contains control characters".into());
     }
-    if authority.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+    if authority
+        .as_deref()
+        .is_some_and(|value| value.chars().any(char::is_control))
+    {
         return Err("gRPC authority contains control characters".into());
     }
-    if service_name.as_deref().is_some_and(|value| value.chars().any(char::is_control)) {
+    if service_name
+        .as_deref()
+        .is_some_and(|value| value.chars().any(char::is_control))
+    {
         return Err("gRPC service name contains control characters".into());
     }
     if matches!(&kind, TransportKind::HttpUpgrade)
@@ -194,10 +254,14 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     {
         return Err("HTTP Upgrade host and Host header were both supplied".into());
     }
-    if matches!(&kind, TransportKind::Tcp) && (path.is_some() || host.is_some() || !headers.is_empty() || !hosts.is_empty()) {
+    if matches!(&kind, TransportKind::Tcp)
+        && (path.is_some() || host.is_some() || !headers.is_empty() || !hosts.is_empty())
+    {
         return Err("path or host/header was supplied for TCP transport".into());
     }
-    if !matches!(&kind, TransportKind::WebSocket | TransportKind::HttpUpgrade) && !headers.is_empty() {
+    if !matches!(&kind, TransportKind::WebSocket | TransportKind::HttpUpgrade)
+        && !headers.is_empty()
+    {
         return Err("HTTP headers are only mapped for WebSocket in this adapter batch".into());
     }
 
