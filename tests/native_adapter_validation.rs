@@ -1,0 +1,225 @@
+//! Opt-in native conformance checks for the sanitized adapter fixture matrix.
+//!
+//! Run with:
+//! `cargo test --test native_adapter_validation -- --ignored --nocapture`
+//!
+//! The test uses only proxyctl-managed binaries and their config-check modes. It never starts a
+//! proxy core or changes system networking.
+
+use base64::{Engine as _, engine::general_purpose};
+use proxyctl::{
+    cores::{CoreId, adapters, core_binary_path},
+    parser::parse_proxy_url,
+};
+
+struct Fixture {
+    name: &'static str,
+    url: String,
+    supported_by: &'static [CoreId],
+}
+
+#[test]
+#[ignore = "requires all three proxyctl-managed core binaries"]
+fn validates_supported_adapter_fixtures_with_native_core_binaries() {
+    let executables = CoreId::ALL
+        .into_iter()
+        .map(|core| {
+            let path = core_binary_path(core).expect("managed core path should resolve");
+            assert!(
+                path.is_file(),
+                "{core} is not installed at {}; run `proxyctl setup` first",
+                path.display()
+            );
+            (core, path)
+        })
+        .collect::<Vec<_>>();
+
+    let fixtures = fixtures();
+    let mut validated = 0usize;
+
+    for fixture in &fixtures {
+        let node = parse_proxy_url(&fixture.url)
+            .unwrap_or_else(|error| panic!("fixture '{}' failed to parse: {error}", fixture.name));
+
+        for (core, executable) in &executables {
+            let adapter = adapters::adapter(*core);
+            let compatibility = adapter.compatibility(&node);
+            let expected = fixture.supported_by.contains(core);
+
+            assert_eq!(
+                compatibility.is_supported(),
+                expected,
+                "fixture '{}' compatibility mismatch for {core}: {:?}",
+                fixture.name,
+                compatibility.reason
+            );
+
+            if !expected {
+                continue;
+            }
+
+            adapters::validation::validate_node_config(*core, &node, executable)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "native validation failed for fixture '{}' on {core}: {error:#}",
+                        fixture.name
+                    )
+                });
+            validated += 1;
+        }
+    }
+
+    println!(
+        "Native validation succeeded for {validated} fixture/core combinations across {} fixtures.",
+        fixtures.len()
+    );
+}
+
+fn fixtures() -> Vec<Fixture> {
+    use CoreId::{Mihomo, SingBox, Xray};
+
+    let all = &[SingBox, Xray, Mihomo];
+    let sing_box_and_mihomo = &[SingBox, Mihomo];
+    let xray_only = &[Xray];
+    let xray_and_mihomo = &[Xray, Mihomo];
+
+    let vmess = |json: &str| {
+        format!(
+            "vmess://{}",
+            general_purpose::STANDARD.encode(json.as_bytes())
+        )
+    };
+
+    let xhttp_extra = serde_json::json!({
+        "headers": {"User-Agent": "proxyctl-native-test"},
+        "xPaddingBytes": "100-500",
+        "xPaddingObfsMode": true,
+        "noGRPCHeader": false,
+        "xmux": {
+            "maxConcurrency": "16-32",
+            "hMaxReusableSecs": "1800-3000"
+        }
+    });
+    let encoded_extra =
+        url::form_urlencoded::byte_serialize(xhttp_extra.to_string().as_bytes()).collect::<String>();
+
+    vec![
+        Fixture {
+            name: "basic VLESS",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "VLESS TLS, ALPN and fingerprint",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&sni=tls.example.com&alpn=h2,http%2F1.1&fp=chrome".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "VLESS Vision flow",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&flow=xtls-rprx-vision".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "VLESS REALITY",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "REALITY SpiderX",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&spx=%2Fdns-query".into(),
+            supported_by: xray_only,
+        },
+        Fixture {
+            name: "REALITY ML-DSA-65 verification",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&mldsa65Verify=verification-key".into(),
+            supported_by: xray_only,
+        },
+        Fixture {
+            name: "VMess REALITY",
+            url: vmess(r#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"tcp","tls":"reality","sni":"www.example.com","fp":"chrome","pbk":"jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0","sid":"0123456789abcdef"}"#),
+            supported_by: xray_only,
+        },
+        Fixture {
+            name: "WebSocket Host distinct from TLS SNI",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&host=cdn.example.com&path=%2Fsocket&security=tls&sni=tls.example.com".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "WebSocket early data",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fws&ed=2048&eh=Sec-WebSocket-Protocol".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "standard gRPC",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&serviceName=proxy.Service".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "gRPC authority and multi mode",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&serviceName=proxy.Service&authority=grpc.example.com&mode=multi".into(),
+            supported_by: xray_only,
+        },
+        Fixture {
+            name: "HTTP/2 transport",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=http&host=cdn.example.com&path=%2Fh2".into(),
+            supported_by: sing_box_and_mihomo,
+        },
+        Fixture {
+            name: "HTTPUpgrade transport",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=httpupgrade&host=cdn.example.com&path=%2Fupgrade".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "VLESS XHTTP",
+            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&mode=packet-up&host=cdn.example.com&path=%2Fapi".into(),
+            supported_by: xray_and_mihomo,
+        },
+        Fixture {
+            name: "VLESS XHTTP extra settings",
+            url: format!(
+                "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&extra={encoded_extra}"
+            ),
+            supported_by: xray_and_mihomo,
+        },
+        Fixture {
+            name: "VMess XHTTP",
+            url: vmess(r#"{"add":"vmess.example","port":"443","id":"11111111-1111-4111-8111-111111111111","net":"xhttp","type":"stream-one","host":"cdn.example.com","path":"/xhttp","tls":"tls"}"#),
+            supported_by: xray_only,
+        },
+        Fixture {
+            name: "Trojan TLS",
+            url: "trojan://fixture-password@example.com:443?sni=tls.example.com&alpn=h2".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "Shadowsocks basic",
+            url: "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example.com:8388".into(),
+            supported_by: all,
+        },
+        Fixture {
+            name: "Shadowsocks obfs-local",
+            url: "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example.com:8388/?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dcdn.example.com".into(),
+            supported_by: sing_box_and_mihomo,
+        },
+        Fixture {
+            name: "Shadowsocks v2ray-plugin",
+            url: "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example.com:8388/?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Btls%3Bhost%3Dcdn.example.com%3Bpath%3D%2Fws".into(),
+            supported_by: sing_box_and_mihomo,
+        },
+        Fixture {
+            name: "Hysteria2 basic TLS",
+            url: "hysteria2://fixture-password@example.com:443?sni=tls.example.com&alpn=h3".into(),
+            supported_by: sing_box_and_mihomo,
+        },
+        Fixture {
+            name: "Hysteria2 Salamander obfuscation",
+            url: "hysteria2://fixture-password@example.com:443?obfs=salamander&obfs-password=fixture-obfs-password".into(),
+            supported_by: sing_box_and_mihomo,
+        },
+        Fixture {
+            name: "Hysteria2 Gecko packet-size controls",
+            url: "hysteria2://fixture-password@example.com:443?obfs=gecko&obfs-password=fixture-obfs-password&obfs-min-packet-size=512&obfs-max-packet-size=1200".into(),
+            supported_by: sing_box_and_mihomo,
+        },
+    ]
+}
