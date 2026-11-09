@@ -360,8 +360,16 @@ mod tests {
         assert!(Cli::try_parse_from(["proxyctl", "test", "--node", "7"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "test", "--core", "xray"]).is_err());
         assert!(
-            Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--node", "7", "--core", "xray"])
-                .is_err()
+            Cli::try_parse_from([
+                "proxyctl",
+                "test",
+                "--all-cores",
+                "--node",
+                "7",
+                "--core",
+                "xray"
+            ])
+            .is_err()
         );
     }
 
