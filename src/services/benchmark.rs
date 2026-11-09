@@ -337,14 +337,15 @@ fn execute_run(
                             )
                         }
                         Err(error) => {
-                            println!("{label}: {}", error.reason());
+                            let reason = error.reason();
+                            println!("{label}: {reason}");
                             failed_sample(
                                 &context,
                                 metric,
                                 sample_index,
                                 status_for_failure(error),
                                 error.category(),
-                                error.reason(),
+                                &reason,
                             )
                         }
                     };
@@ -398,14 +399,15 @@ fn execute_tcp_ping(database_path: &Path, run_id: u64, record: &NodeRecord) -> a
                 )
             }
             Err(error) => {
-                println!("{label}: {}", error.reason());
+                let reason = error.reason();
+                println!("{label}: {reason}");
                 failed_sample(
                     &context,
                     BenchmarkMetric::TcpPing,
                     sample_index,
                     status_for_failure(error),
                     error.category(),
-                    error.reason(),
+                    &reason,
                 )
             }
         };
@@ -470,6 +472,10 @@ fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSampleStatus {
         MeasurementFailure::Unreachable => BenchmarkSampleStatus::Unreachable,
         MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
         MeasurementFailure::Unavailable
+        | MeasurementFailure::ProxyTunnelFailed
+        | MeasurementFailure::TlsFailed
+        | MeasurementFailure::HttpStatus(_)
+        | MeasurementFailure::ProtocolFailed
         | MeasurementFailure::IncompleteResponse
         | MeasurementFailure::ReadFailed => BenchmarkSampleStatus::Unavailable,
         MeasurementFailure::Cancelled => BenchmarkSampleStatus::Cancelled,
