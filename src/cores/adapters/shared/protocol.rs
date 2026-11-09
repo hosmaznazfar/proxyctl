@@ -75,6 +75,11 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "vcn",
         "alpn",
         "fp",
+        "pbk",
+        "publicKey",
+        "sid",
+        "spx",
+        "mldsa65Verify",
     ];
     const VMESS_OPTIONS: &[&str] = &[
         "security",
@@ -105,6 +110,11 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "vcn",
         "alpn",
         "fp",
+        "pbk",
+        "publicKey",
+        "sid",
+        "spx",
+        "mldsa65Verify",
     ];
     const TROJAN_OPTIONS: &[&str] = &[
         "security",
@@ -131,6 +141,11 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "vcn",
         "alpn",
         "fp",
+        "pbk",
+        "publicKey",
+        "sid",
+        "spx",
+        "mldsa65Verify",
     ];
     const HYSTERIA2_OPTIONS: &[&str] = &[
         "security",
