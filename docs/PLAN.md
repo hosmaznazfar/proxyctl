@@ -175,24 +175,22 @@ This work does not start cores, activate proxies, or modify system networking. A
 
 ### 3.5 Benchmark execution and persistence
 
-A full benchmark checks each node against every core that can represent it. For each node/core:
+**Design baseline:** see [BENCHMARK_DESIGN.md](BENCHMARK_DESIGN.md). The first benchmark command is explicit and sequential:
 
-1. Parse and validate the URL and core-specific configuration.
-2. Generate temporary configuration and validate it with the selected core.
-3. Start the core with isolated local proxy listeners.
-4. Measure HTTP latency through the proxy.
-5. Measure download throughput through the proxy.
-6. Measure upload throughput through the proxy.
-7. Stop the child process and remove temporary files.
-8. Persist results.
+```sh
+proxyctl test --all-cores
+proxyctl test --node 12 --core sing-box
+```
 
-The database is not held open while a core process or network test is running. The benchmark service reads required node data, closes the database, performs tests, then reopens it to persist completed samples. If interrupted, completed samples are retained and the run is marked incomplete where possible.
+For each compatible installed node/core pair, Proxyctl validates a generated config, starts one managed core with a loopback-only HTTP inbound, probes readiness, measures latency/download/upload, then stops and waits for the child and removes the private config. The selected core is the only process started. No TUN, system proxy, DNS, route, or firewall changes are involved.
 
-Collect three samples per metric per node/core: three latency, three download, and three upload samples. Store failures as a status with no numeric value, never as zero or a magic negative number. A failure in one metric must not erase successful measurements from other metrics.
+The database is never held open while a core process or HTTP request is active. Read node data and close redb before execution; persist the run before starting; commit each completed sample in a short transaction; and reopen only for persistence/finalization. A run interrupted by cancellation retains completed samples and is marked incomplete. Stale running records are recovered on the next benchmark invocation.
 
-Latency is application-level HTTP latency through the proxy, not merely ICMP ping. Test endpoints, payload sizes, timeouts, and methodology must be configurable and recorded with each run. Results describe the end-to-end route and test conditions, not isolated core CPU performance.
+Collect three independent samples per metric per compatible node/core pair: three latency, three download, and three upload samples. A failed sample has a status and no numeric value. A failure in one metric does not erase successful samples from another. Unsupported/invalid/missing-core preflight outcomes are recorded without starting a process and are not fabricated as attempted network samples.
 
-Initial sample statuses: success, unreachable, unsupported, invalid, timeout, unavailable, and cancelled.
+Latency is application-level HTTP response-header latency through the proxy, not ICMP ping. Throughput is measured from bounded HTTP download/upload transfers and stored in bits per second. The initial default endpoint is Cloudflare Speed Test (`/__down` and `/__up`); endpoints, payload sizes, and timeouts are configurable and recorded with the run. Cloudflare's published speed-test documentation states that completed measurement results are collected for aggregated insights; the CLI and README must disclose this before benchmark execution. Results describe the end-to-end route and test conditions, not isolated core CPU performance.
+
+Initial sample statuses: `success`, `unreachable`, `unsupported`, `invalid`, `timeout`, `unavailable`, and `cancelled`.
 
 ### 3.6 Sorting and comparison semantics
 
@@ -377,7 +375,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 4. Node management: import, add, list, show, remove, restore, and duplicate handling.
 5. Core management and unified updater: official-source metadata, pinned versions, checksum verification, setup, detection, and a single update workflow for the proxyctl CLI plus managed cores.
 6. Core adapters: **complete for the documented initial subset**; 97 unit tests, formatting, Clippy, release build, and the 23-fixture native matrix (51 supported fixture/core combinations) pass. Version-aware capability predicates and additional protocol/option coverage remain future enhancements. Benchmark implementation is the next stage, subject to explicit approval.
-7. Benchmark engine: isolated process lifecycle, HTTP latency/download/upload measurement, three samples, cancellation, and persistence.
+7. Benchmark engine: implement the approved design in `docs/BENCHMARK_DESIGN.md` incrementally—typed records and migration, per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cancellation, and persistence.
 8. Reports and sorting: latest/history/compare views and core-independent/core-specific sorting.
 9. Pruning: dry-run previews, compatible-core evaluation rules, soft deletion, and restore.
 10. Activation: managed process lifecycle and safe stop behavior.
