@@ -2,7 +2,7 @@
 use crate::{
     cores::CoreId,
     database::{AddNodeOutcome, NodeRecord, default_database_path},
-    services::nodes,
+    services::{nodes, sorting::{self, SortMetric}},
     updates::release::ReleaseChannel,
 };
 use clap::{ArgGroup, Parser, Subcommand};
@@ -30,6 +30,12 @@ enum Command {
     List {
         #[arg(long)]
         include_deleted: bool,
+        /// Sort by real ping, direct TCP ping, download, or upload.
+        #[arg(long, value_name = "METRIC", value_parser = ["ping", "tcp-ping", "download", "upload"])]
+        sort: Option<String>,
+        /// Restrict benchmark sorting to one managed core; requires --sort.
+        #[arg(long, value_name = "CORE", requires = "sort")]
+        core: Option<String>,
     },
     Show {
         id: u64,
@@ -179,8 +185,19 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 eprintln!("Line {}: {}", failure.line_number, failure.reason);
             }
         }
-        Command::List { include_deleted } => {
-            print_node_list(&nodes::list_nodes(&database_path, include_deleted)?)
+        Command::List { include_deleted, sort, core } => {
+            let records = nodes::list_nodes(&database_path, include_deleted)?;
+            if let Some(metric) = sort {
+                let metric: SortMetric = metric.parse()?;
+                let core = parse_core(core.as_deref())?;
+                if metric == SortMetric::TcpPing && core.is_some() {
+                    anyhow::bail!("--core cannot be used with --sort tcp-ping because TCP ping is measured directly");
+                }
+                let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
+                print_sorted_node_list(&ranked, metric);
+            } else {
+                print_node_list(&records);
+            }
         }
         Command::Show { id } => {
             let record = nodes::get_node(&database_path, id)?
@@ -275,6 +292,36 @@ fn print_node_list(records: &[NodeRecord]) {
                 .node
                 .name
                 .as_deref()
+                .map(|name| safe_field(name, 32))
+                .unwrap_or_else(|| "-".to_owned())
+        );
+    }
+}
+
+fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
+    if records.is_empty() {
+        println!("No proxy nodes found.");
+        return;
+    }
+    println!(
+        "{:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  NAME",
+        "ID", "PROTOCOL", "SERVER", "PORT", metric.label(), "CORE(S)"
+    );
+    for (index, record) in records.iter().enumerate() {
+        let value = match record.value {
+            Some(value) if record.unit == "ms" => format!("{value:.2} ms"),
+            Some(value) => format!("{:.2} Mbps", value / 1_000_000.0),
+            None => "unmeasured".to_owned(),
+        };
+        println!(
+            "{:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  {}",
+            if record.value.is_some() { (index + 1).to_string() } else { "-".into() },
+            record.node.node.protocol,
+            safe_field(&record.node.node.server, 32),
+            record.node.node.port,
+            value,
+            safe_field(&record.cores, 20),
+            record.node.node.name.as_deref()
                 .map(|name| safe_field(name, 32))
                 .unwrap_or_else(|| "-".to_owned())
         );
