@@ -34,6 +34,7 @@ pub fn ping(
                 return Ok(Measurement {
                     value: duration.as_secs_f64() * 1_000.0,
                     duration,
+                    transferred_bytes: None,
                 });
             }
             Err(error) if error.kind() == std::io::ErrorKind::TimedOut => timed_out = true,
