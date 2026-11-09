@@ -94,7 +94,7 @@ Before starting a core:
 
 Unsupported or invalid node/core combinations do not start a core. A selected but missing managed core is reported as unavailable. Incompatible combinations are recorded as unsupported or invalid. Compatible combinations that cannot connect are recorded as unreachable; bounded request failures are recorded as timeout or unavailable as appropriate.
 
-For a compatible, installed core, each metric has three independently persisted sample outcomes. Preflight outcomes (unsupported, invalid, or missing core) are recorded as a single non-measurement outcome per metric with no numeric value; they are not represented as three attempted network samples.
+For a compatible, installed core, each metric has three separately recorded sample outcomes. Preflight outcomes (unsupported, invalid, or missing core) are recorded as a single non-measurement outcome per metric with no numeric value; they are not represented as three attempted network samples.
 
 The initial sample status vocabulary is: `success`, `unreachable`, `unsupported`, `invalid`, `timeout`, `unavailable`, and `cancelled`.
 
@@ -117,7 +117,7 @@ A sample records:
 
 Persist the run as running before tests begin. Keep the database closed while a core is active or a network request is running. After stopping a core, persist its completed node/core sample batch in short write transactions. Finalize the run after all work. Never keep a redb handle open while a core process or HTTP request is active.
 
-If Ctrl-C is received, stop the active child, persist the current node/core's completed sample batch and finalize the run as cancelled. If the process is killed without cleanup, the next benchmark invocation detects stale running records and marks them interrupted; only the unflushed active node/core batch may be lost. Never delete prior runs or samples when a new run begins. Never delete prior runs or samples when a new run begins.
+If Ctrl-C is received, stop the active child, persist the current node/core's completed sample batch and finalize the run as cancelled. If the process is killed without cleanup, the next benchmark invocation detects stale running records and marks them interrupted; only the unflushed active node/core batch may be lost. Never delete prior runs or samples when a new run begins.
 
 Schema migration: advance the current schema version and initialize benchmark ID counters through an explicit migration. Existing node records and fingerprints must remain unchanged.
 
