@@ -184,7 +184,7 @@ proxyctl test --node 12 --core sing-box
 
 For each compatible installed node/core pair, Proxyctl validates a generated config, starts one managed core with a loopback-only HTTP inbound, probes readiness, measures latency/download/upload, then stops and waits for the child and removes the private config. The selected core is the only process started. No TUN, system proxy, DNS, route, or firewall changes are involved.
 
-The database is never held open while a core process or HTTP request is active. Read node data and close redb before execution; persist the run before starting; commit each completed sample in a short transaction; and reopen only for persistence/finalization. A run interrupted by cancellation retains completed samples and is marked incomplete. Stale running records are recovered on the next benchmark invocation.
+The database is never held open while a core process or HTTP request is active. Read node data and close redb before execution; persist the run before starting; commit each completed sample in a short transaction; and reopen only for persistence/finalization. A run interrupted by cancellation retains completed samples and is marked incomplete. Stale running records are recovered on the next benchmark invocation. Typed run/sample records, median/throughput calculations, schema version 2, incremental sample persistence, finalization, and stale-run recovery are now implemented; process and measurement execution remain pending.
 
 Collect three independent samples per metric per compatible node/core pair: three latency, three download, and three upload samples. A failed sample has a status and no numeric value. A failure in one metric does not erase successful samples from another. Unsupported/invalid/missing-core preflight outcomes are recorded without starting a process and are not fabricated as attempted network samples.
 
@@ -375,7 +375,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 4. Node management: import, add, list, show, remove, restore, and duplicate handling.
 5. Core management and unified updater: official-source metadata, pinned versions, checksum verification, setup, detection, and a single update workflow for the proxyctl CLI plus managed cores.
 6. Core adapters: **complete for the documented initial subset**; 97 unit tests, formatting, Clippy, release build, and the 23-fixture native matrix (51 supported fixture/core combinations) pass. Version-aware capability predicates and additional protocol/option coverage remain future enhancements. Benchmark implementation is the next stage, subject to explicit approval.
-7. Benchmark engine: implement the approved design in `docs/BENCHMARK_DESIGN.md` incrementally—typed records and migration, per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cancellation, and persistence.
+7. Benchmark engine: **in progress**. Typed records, schema migration, incremental persistence, aggregation primitives, and stale-run recovery are implemented. Remaining work: per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cancellation, and CLI orchestration.
 8. Reports and sorting: latest/history/compare views and core-independent/core-specific sorting.
 9. Pruning: dry-run previews, compatible-core evaluation rules, soft deletion, and restore.
 10. Activation: managed process lifecycle and safe stop behavior.
