@@ -42,7 +42,7 @@ The initial default measurement service is Cloudflare Speed Test:
 - Download: `GET https://speed.cloudflare.com/__down?bytes=<configured-bytes>`.
 - Upload: `POST https://speed.cloudflare.com/__up` with a deterministic synthetic body of the configured size.
 
-Cloudflare documents these download/upload endpoints and states that completed speed-test measurements are collected for aggregated Internet-connection insights. Proxyctl must disclose this in `proxyctl test --help`, README, and benchmark documentation. The endpoint URLs are configurable so users can select another compatible measurement service they trust. Custom endpoints must use HTTPS, contain no URL credentials or fragments, and implement the same request contract. Local HTTP endpoints may be used only by tests.
+Cloudflare documents these download/upload endpoints and states that completed speed-test measurements are collected for aggregated Internet-connection insights. Proxyctl must disclose this in `proxyctl test --help`, README, and benchmark documentation. The endpoint URLs are configurable so users can select another compatible measurement service they trust. Custom endpoints must use HTTPS, contain no URL credentials, query parameters, or fragments, and implement the same request contract. Configure base endpoint URLs; Proxyctl adds the `bytes` query parameter to the latency/download requests. Local HTTP endpoints may be used only by tests.
 
 No user files or proxy credentials are sent to measurement endpoints. The upload body is generated in memory and contains no user data. Only the test requests and normal network metadata reach the endpoint.
 
