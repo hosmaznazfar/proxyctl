@@ -16,7 +16,7 @@ Proxyctl uses one verified artifact pipeline for its CLI and managed sing-box, X
 | Xray | https://github.com/XTLS/Xray-core/releases |
 | Mihomo | https://github.com/MetaCubeX/mihomo/releases |
 
-If the Proxyctl repository has no published GitHub Releases yet, self-update reports that no app release is published and skips that target without failing core updates. Stable releases are the default channel for Proxyctl itself and every managed core. Prereleases (alpha, beta, release candidates, and other GitHub releases marked `prerelease`) are eligible only when the user explicitly passes `--prerelease`. The option applies only to the update target selected by the command: `--app`, `--cores`, or `--core <id>`; with no target selector it applies to the CLI and all installed managed cores. A prerelease for one component must never change the channel for another component unless both are in the selected target set. Draft releases are never eligible. Release selection must enumerate official release metadata and filter by the requested channel; do not assume the GitHub `/releases/latest` endpoint can return prereleases. The installer uses GitHub's release asset digest field and requires a sha256 digest. If release metadata does not provide a digest, installation fails closed. No checksum bypass or unofficial mirror is provided.
+If the Proxyctl repository has no published release eligible for the selected channel (including a repository with no releases yet), self-update reports that no app update is available and skips that target without failing core updates. Stable releases are the default channel for Proxyctl itself and every managed core. Prereleases (alpha, beta, release candidates, and other GitHub releases marked `prerelease`) are eligible only when the user explicitly passes `--prerelease`. The option applies only to the update target selected by the command: `--app`, `--cores`, or `--core <id>`; with no target selector it applies to the CLI and all installed managed cores. A prerelease for one component must never change the channel for another component unless both are in the selected target set. Draft releases are never eligible. Release selection must enumerate official release metadata and filter by the requested channel; do not assume the GitHub `/releases/latest` endpoint can return prereleases. The installer uses GitHub's release asset digest field and requires a sha256 digest. If release metadata does not provide a digest, installation fails closed. No checksum bypass or unofficial mirror is provided.
 
 ## 3. Initial platform and asset policy
 
@@ -90,7 +90,7 @@ Each module has one narrow responsibility. Core-specific policy is not duplicate
 
 ## 8. Tests
 
-Unit tests cover core-name parsing, archive rejection, checksum mismatch, URL host validation, and staged installation. Network-dependent release tests are not part of ordinary CI. An empty release list is a normal 'no update published' state for the self-updater, not a fatal error. Local checks:
+Unit tests cover core-name parsing, archive rejection, checksum mismatch, URL host validation, and staged installation. Network-dependent release tests are not part of ordinary CI. An empty release list or a list with no eligible SemVer release is a normal 'no update published for this channel' state for the self-updater, not a fatal error. Local checks:
 
 ~~~sh
 cargo fmt --all -- --check
