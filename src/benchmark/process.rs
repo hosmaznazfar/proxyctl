@@ -172,12 +172,17 @@ fn spawn_core(
 ) -> anyhow::Result<Child> {
     let mut command = Command::new(executable);
     append_core_arguments(core, &mut command, config);
+    // Some cores emit runtime diagnostics on stdout while others use stderr.
+    // Clone the same file handle so both streams are captured in one private log.
     let stderr = log
         .reopen()
-        .context("could not open private core startup log")?;
+        .context("could not open private core diagnostic log")?;
+    let stdout = stderr
+        .try_clone()
+        .context("could not duplicate private core diagnostic log handle")?;
     command
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn()
         .with_context(|| format!("could not start managed {core} process"))
