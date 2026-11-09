@@ -54,15 +54,15 @@ enum Command {
         core: Option<String>,
     },
     /// Run direct TCP ping and real-ping/download/upload tests through managed proxy cores.
-    #[command(group(ArgGroup::new("test_scope").args(["all_cores", "node"]).required(true).multiple(false)))]
+    #[command(group(ArgGroup::new("test_scope").args(["all_cores", "core"]).required(true).multiple(false)))]
     Test {
-        /// Test every active node against all installed compatible managed cores.
+        /// Test all active nodes, or only --node, against all installed compatible managed cores.
         #[arg(long)]
         all_cores: bool,
-        /// Test one stored node; requires --core.
-        #[arg(long, requires = "core")]
+        /// Restrict --all-cores to one stored node; otherwise use with --core.
+        #[arg(long)]
         node: Option<u64>,
-        /// Managed core to use with --node.
+        /// Test --node with one selected managed core (mutually exclusive with --all-cores).
         #[arg(long, value_name = "CORE", requires = "node")]
         core: Option<String>,
         /// HTTPS URL used for real HTTP ping through the selected core.
@@ -359,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn test_command_requires_node_and_core_together() {
+    fn test_command_requires_a_valid_scope_and_rejects_conflicting_core() {
         assert!(Cli::try_parse_from(["proxyctl", "test", "--node", "7"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "test", "--core", "xray"]).is_err());
         assert!(
@@ -374,6 +374,21 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn test_command_accepts_one_node_with_all_cores() {
+        let cli = Cli::try_parse_from(["proxyctl", "test", "--node", "18", "--all-cores"])
+            .unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Test {
+                all_cores: true,
+                node: Some(18),
+                core: None,
+                ..
+            })
+        ));
     }
 
     #[test]
