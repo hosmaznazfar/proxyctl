@@ -169,12 +169,19 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
         ));
     }
     let reality = reality_options(node).map_err(compatibility_failure)?;
-    if reality.is_some() {
+    if let Some(reality) = reality.as_ref() {
         if node.protocol != Protocol::Vless
             && !(core == CoreId::Xray && node.protocol == Protocol::Vmess)
         {
             return Err(compatibility_failure(format!(
                 "{core} does not support REALITY for this protocol"
+            )));
+        }
+        if core != CoreId::Xray
+            && (reality.get("spider_x").is_some() || reality.get("mldsa65_verify").is_some())
+        {
+            return Err(compatibility_failure(format!(
+                "{core} does not support the supplied optional REALITY fields"
             )));
         }
         let transport = normalize_transport(node).map_err(compatibility_failure)?;
@@ -185,7 +192,9 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
                 "Xray REALITY supports only TCP/RAW, gRPC, and XHTTP transports".into(),
             ));
         }
-        if matches!(transport.kind, TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket) {
+        if core != CoreId::Xray
+            && matches!(transport.kind, TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket)
+        {
             return Err(compatibility_failure(
                 "REALITY is not supported with this transport mapping".into(),
             ));
