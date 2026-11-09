@@ -146,6 +146,53 @@ impl CoreAdapter for MihomoAdapter {
             if let Some(mode) = transport.mode {
                 xhttp.insert("mode".into(), json!(mode));
             }
+            if let Some(extra) = transport.xhttp_extra {
+                let extra = extra.as_object().expect("validated XHTTP extra object");
+                const KEYS: &[(&str, &str)] = &[
+                    ("headers", "headers"),
+                    ("xPaddingBytes", "x-padding-bytes"),
+                    ("xPaddingObfsMode", "x-padding-obfs-mode"),
+                    ("xPaddingKey", "x-padding-key"),
+                    ("xPaddingHeader", "x-padding-header"),
+                    ("xPaddingPlacement", "x-padding-placement"),
+                    ("xPaddingMethod", "x-padding-method"),
+                    ("uplinkHTTPMethod", "uplink-http-method"),
+                    ("sessionIDPlacement", "session-placement"),
+                    ("sessionIDKey", "session-key"),
+                    ("sessionIDTable", "session-table"),
+                    ("sessionIDLength", "session-length"),
+                    ("seqPlacement", "seq-placement"),
+                    ("seqKey", "seq-key"),
+                    ("uplinkDataPlacement", "uplink-data-placement"),
+                    ("uplinkDataKey", "uplink-data-key"),
+                    ("uplinkChunkSize", "uplink-chunk-size"),
+                    ("noGRPCHeader", "no-grpc-header"),
+                    ("scMaxEachPostBytes", "sc-max-each-post-bytes"),
+                    ("scMinPostsIntervalMs", "sc-min-posts-interval-ms"),
+                ];
+                for (source, target) in KEYS {
+                    if let Some(value) = extra.get(*source) {
+                        xhttp.insert((*target).into(), value.clone());
+                    }
+                }
+                if let Some(xmux) = extra.get("xmux").and_then(serde_json::Value::as_object) {
+                    let mut reuse = serde_json::Map::new();
+                    const XMUX_KEYS: &[(&str, &str)] = &[
+                        ("maxConcurrency", "max-concurrency"),
+                        ("maxConnections", "max-connections"),
+                        ("cMaxReuseTimes", "c-max-reuse-times"),
+                        ("hMaxRequestTimes", "h-max-request-times"),
+                        ("hMaxReusableSecs", "h-max-reusable-secs"),
+                        ("hKeepAlivePeriod", "h-keep-alive-period"),
+                    ];
+                    for (source, target) in XMUX_KEYS {
+                        if let Some(value) = xmux.get(*source) {
+                            reuse.insert((*target).into(), value.clone());
+                        }
+                    }
+                    xhttp.insert("reuse-settings".into(), serde_json::Value::Object(reuse));
+                }
+            }
             proxy["xhttp-opts"] = serde_json::Value::Object(xhttp);
         }
         if let Some(reality) = reality_options(node).map_err(anyhow::Error::msg)? {
