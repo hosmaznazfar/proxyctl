@@ -2,8 +2,6 @@
 
 use std::{cmp::Ordering, path::Path};
 
-use anyhow::Context;
-
 use crate::{
     cores::CoreId,
     database::{NodeDatabase, NodeRecord},
@@ -200,4 +198,97 @@ fn samples_for(
         })
         .cloned()
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{BenchmarkSettings, BenchmarkSampleStatus};
+
+    fn run(id: u64, status: BenchmarkRunStatus, completed_at: u64, cores: &[&str]) -> BenchmarkRun {
+        BenchmarkRun {
+            id,
+            status,
+            started_at: id * 10,
+            completed_at: Some(completed_at),
+            node_ids: vec![1],
+            cores: cores.iter().map(|core| (*core).to_owned()).collect(),
+            settings: BenchmarkSettings {
+                methodology: "test".into(),
+                latency_url: "https://example.test/ping".into(),
+                download_url: "https://example.test/file".into(),
+                upload_url: "https://example.test/upload".into(),
+                download_bytes: 1024,
+                upload_bytes: 1024,
+                request_timeout_ms: 1000,
+                startup_timeout_ms: 1000,
+            },
+            core_versions: Default::default(),
+            summary: None,
+        }
+    }
+
+    fn sample(run_id: u64, core: &str, metric: BenchmarkMetric, index: u8, value: f64) -> BenchmarkSample {
+        BenchmarkSample {
+            id: run_id * 10 + u64::from(index),
+            run_id,
+            node_id: 1,
+            core: core.into(),
+            core_version: None,
+            metric,
+            sample_index: index,
+            status: BenchmarkSampleStatus::Success,
+            value: Some(value),
+            unit: metric.unit().into(),
+            failure_category: None,
+            failure_reason: None,
+            timestamp: run_id * 10,
+            duration_ms: Some(10),
+        }
+    }
+
+    #[test]
+    fn cross_core_ranking_uses_equal_weight_median_of_latest_core_medians() {
+        let runs = [
+            run(1, BenchmarkRunStatus::Completed, 100, &["direct", "sing-box"]),
+            run(2, BenchmarkRunStatus::Completed, 200, &["direct", "xray"]),
+            run(3, BenchmarkRunStatus::Cancelled, 300, &["direct", "sing-box"]),
+        ];
+        let samples = [
+            sample(1, "sing-box", BenchmarkMetric::Latency, 1, 100.0),
+            sample(1, "sing-box", BenchmarkMetric::Latency, 2, 200.0),
+            sample(1, "sing-box", BenchmarkMetric::Latency, 3, 300.0),
+            sample(2, "xray", BenchmarkMetric::Latency, 1, 400.0),
+            sample(2, "xray", BenchmarkMetric::Latency, 2, 500.0),
+            sample(2, "xray", BenchmarkMetric::Latency, 3, 600.0),
+            sample(3, "sing-box", BenchmarkMetric::Latency, 1, 1.0),
+        ];
+        let (value, cores) = aggregate_node(1, &runs, &samples, SortMetric::Ping, None);
+        assert_eq!(value, Some(350.0));
+        assert_eq!(cores, "sing-box, xray");
+    }
+
+    #[test]
+    fn latest_completed_failed_run_does_not_fall_back_to_stale_success() {
+        let runs = [
+            run(1, BenchmarkRunStatus::Completed, 100, &["direct", "mihomo"]),
+            run(2, BenchmarkRunStatus::Completed, 200, &["direct", "mihomo"]),
+        ];
+        let samples = [sample(1, "mihomo", BenchmarkMetric::Download, 1, 8_000_000.0)];
+        let (value, _) = aggregate_node(1, &runs, &samples, SortMetric::Download, Some("mihomo"));
+        assert_eq!(value, None);
+    }
+
+    #[test]
+    fn direct_tcp_ping_uses_only_the_direct_target() {
+        let runs = [run(1, BenchmarkRunStatus::Completed, 100, &["direct", "sing-box"])];
+        let samples = [
+            sample(1, "direct", BenchmarkMetric::TcpPing, 1, 25.0),
+            sample(1, "direct", BenchmarkMetric::TcpPing, 2, 15.0),
+            sample(1, "sing-box", BenchmarkMetric::Latency, 1, 1.0),
+        ];
+        let (value, target) = aggregate_node(1, &runs, &samples, SortMetric::TcpPing, None);
+        assert_eq!(value, Some(20.0));
+        assert_eq!(target, "direct");
+    }
 }
