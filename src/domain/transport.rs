@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use serde_json::Value;
+
 /// Transport selected by a source protocol configuration.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportKind {
@@ -31,6 +33,8 @@ pub struct Transport {
     pub mode: Option<String>,
     pub max_early_data: Option<u32>,
     pub early_data_header_name: Option<String>,
+    /// Structured XHTTP extra settings retained from share-link metadata.
+    pub xhttp_extra: Option<Value>,
 }
 
 impl Transport {
@@ -46,6 +50,7 @@ impl Transport {
             mode: None,
             max_early_data: None,
             early_data_header_name: None,
+            xhttp_extra: None,
         }
     }
 }
