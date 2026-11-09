@@ -496,3 +496,13 @@ fn vmess_xhttp_headers_map_to_xray_direct_headers_field() {
         CompatibilityStatus::Unsupported
     );
 }
+
+
+#[test]
+fn xhttp_auto_mode_is_supported_by_xray_but_not_mihomo() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&mode=auto",
+    ).unwrap();
+    assert_eq!(adapter(CoreId::Xray).compatibility(&node).status, CompatibilityStatus::Supported);
+    assert_eq!(adapter(CoreId::Mihomo).compatibility(&node).status, CompatibilityStatus::Unsupported);
+}
