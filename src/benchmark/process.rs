@@ -77,8 +77,7 @@ impl ManagedCoreProcess {
                 .validate_config(executable, config.path())
                 .with_context(|| format!("{core} rejected the benchmark configuration"))?;
 
-            let log = NamedTempFile::new()
-                .context("could not create private core startup log")?;
+            let log = NamedTempFile::new().context("could not create private core startup log")?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -161,33 +160,61 @@ fn spawn_core(
 ) -> anyhow::Result<Child> {
     let mut command = Command::new(executable);
     append_core_arguments(core, &mut command, config);
-    let stderr = log.reopen().context("could not open private core startup log")?;
-    command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::from(stderr))
-        .spawn().with_context(|| format!("could not start managed {core} process"))
+    let stderr = log
+        .reopen()
+        .context("could not open private core startup log")?;
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(stderr))
+        .spawn()
+        .with_context(|| format!("could not start managed {core} process"))
 }
 
 fn summarize_startup_failure(fallback: &str, log_path: &Path) -> String {
-    let Ok(mut file) = fs::File::open(log_path) else { return fallback.to_owned(); };
+    let Ok(mut file) = fs::File::open(log_path) else {
+        return fallback.to_owned();
+    };
     let mut contents = String::new();
-    if file.read_to_string(&mut contents).is_err() { return fallback.to_owned(); }
+    if file.read_to_string(&mut contents).is_err() {
+        return fallback.to_owned();
+    }
     let diagnostic = contents.to_ascii_lowercase();
-    let category = if diagnostic.contains("address already in use") || diagnostic.contains("address in use") {
-        Some("the local listener port is already in use")
-    } else if diagnostic.contains("permission denied") {
-        Some("the core was denied permission to open a required resource")
-    } else if diagnostic.contains("failed to listen") || diagnostic.contains("listen tcp") || diagnostic.contains("bind:") {
-        Some("the core could not bind its local listener")
-    } else if diagnostic.contains("unknown field") || diagnostic.contains("invalid config") || diagnostic.contains("failed to parse") {
-        Some("the core rejected a runtime configuration field")
-    } else if diagnostic.contains("tls") || diagnostic.contains("certificate") || diagnostic.contains("x509") {
-        Some("the core failed while initializing TLS or certificate settings")
-    } else if diagnostic.contains("failed to initialize") || diagnostic.contains("failed to start") || diagnostic.contains("fatal") {
-        Some("the core reported an initialization failure")
-    } else { None };
+    let category =
+        if diagnostic.contains("address already in use") || diagnostic.contains("address in use") {
+            Some("the local listener port is already in use")
+        } else if diagnostic.contains("permission denied") {
+            Some("the core was denied permission to open a required resource")
+        } else if diagnostic.contains("failed to listen")
+            || diagnostic.contains("listen tcp")
+            || diagnostic.contains("bind:")
+        {
+            Some("the core could not bind its local listener")
+        } else if diagnostic.contains("unknown field")
+            || diagnostic.contains("invalid config")
+            || diagnostic.contains("failed to parse")
+        {
+            Some("the core rejected a runtime configuration field")
+        } else if diagnostic.contains("tls")
+            || diagnostic.contains("certificate")
+            || diagnostic.contains("x509")
+        {
+            Some("the core failed while initializing TLS or certificate settings")
+        } else if diagnostic.contains("failed to initialize")
+            || diagnostic.contains("failed to start")
+            || diagnostic.contains("fatal")
+        {
+            Some("the core reported an initialization failure")
+        } else {
+            None
+        };
     match category {
         Some(category) => format!("{fallback}; {category}"),
         None if contents.is_empty() => fallback.to_owned(),
-        None => format!("{fallback}; core emitted {} bytes of startup diagnostics (details withheld)", contents.len()),
+        None => format!(
+            "{fallback}; core emitted {} bytes of startup diagnostics (details withheld)",
+            contents.len()
+        ),
     }
 }
 
@@ -268,7 +295,11 @@ mod tests {
     #[test]
     fn startup_diagnostic_summary_never_exposes_raw_log_lines() {
         let log = NamedTempFile::new().unwrap();
-        fs::write(log.path(), "failed to listen tcp 127.0.0.1:1234: address already in use; password=secret").unwrap();
+        fs::write(
+            log.path(),
+            "failed to listen tcp 127.0.0.1:1234: address already in use; password=secret",
+        )
+        .unwrap();
         let summary = summarize_startup_failure("core exited", log.path());
         assert!(summary.contains("local listener port is already in use"));
         assert!(!summary.contains("secret"));

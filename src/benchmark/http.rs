@@ -54,7 +54,9 @@ impl MeasurementFailure {
             Self::Unreachable => "the measurement endpoint could not be reached",
             Self::InvalidResponse => "the measurement endpoint returned an invalid payload",
             Self::Unavailable => "the measurement request failed",
-            Self::IncompleteResponse => "the download connection closed before the response completed",
+            Self::IncompleteResponse => {
+                "the download connection closed before the response completed"
+            }
             Self::ReadFailed => "the response stream could not be read",
             Self::Cancelled => "measurement cancelled by user",
         }
@@ -133,10 +135,7 @@ impl BenchmarkHttpClient {
             .header("Accept-Encoding", "identity")
             .call()
             .map_err(classify_error)?;
-        let mut reader = response
-            .body_mut()
-            .as_reader()
-            .take(max_bytes);
+        let mut reader = response.body_mut().as_reader().take(max_bytes);
         let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
         let mut received = 0_u64;
         let mut last_progress = Instant::now();
