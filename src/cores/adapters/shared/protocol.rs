@@ -167,7 +167,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         Protocol::Vmess => VMESS_OPTIONS,
         Protocol::Trojan => TROJAN_OPTIONS,
         Protocol::Hysteria2 => HYSTERIA2_OPTIONS,
-        Protocol::Shadowsocks => &[],
+        Protocol::Shadowsocks => &["plugin"],
     };
     reject_unknown_options(node, supported)?;
     validate_string_options(node)?;
