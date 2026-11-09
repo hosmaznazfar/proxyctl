@@ -398,7 +398,7 @@ mod tests {
                 node: Some(7),
                 core: Some(ref core),
                 download_bytes: 2_097_152,
-                upload_bytes: 262_144,
+                upload_bytes: 1_048_576,
                 ..
             }) if core == "sing-box"
         ));
