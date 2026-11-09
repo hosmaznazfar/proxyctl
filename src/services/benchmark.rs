@@ -426,8 +426,14 @@ fn install_cancellation_handler() {
         }
         // The handler only performs an atomic store, which is signal-safe.
         unsafe {
-            libc::signal(libc::SIGINT, handle_signal as *const () as libc::sighandler_t);
-            libc::signal(libc::SIGTERM, handle_signal as libc::sighandler_t);
+            libc::signal(
+                libc::SIGINT,
+                handle_signal as *const () as libc::sighandler_t,
+            );
+            libc::signal(
+                libc::SIGTERM,
+                handle_signal as *const () as libc::sighandler_t,
+            );
         }
     }
 }
