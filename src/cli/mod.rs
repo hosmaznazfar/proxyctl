@@ -333,3 +333,62 @@ fn safe_field(value: &str, max_chars: usize) -> String {
         .take(max_chars)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::{Cli, Command};
+
+    #[test]
+    fn test_command_accepts_all_cores_scope() {
+        let cli = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Test {
+                all_cores: true,
+                node: None,
+                core: None,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn test_command_requires_node_and_core_together() {
+        assert!(Cli::try_parse_from(["proxyctl", "test", "--node", "7"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "test", "--core", "xray"]).is_err());
+        assert!(
+            Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--node", "7", "--core", "xray"])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_command_accepts_one_node_and_core_with_custom_payloads() {
+        let cli = Cli::try_parse_from([
+            "proxyctl",
+            "test",
+            "--node",
+            "7",
+            "--core",
+            "sing-box",
+            "--download-bytes",
+            "2097152",
+            "--upload-bytes",
+            "1048576",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Test {
+                all_cores: false,
+                node: Some(7),
+                core: Some(ref core),
+                download_bytes: 2_097_152,
+                upload_bytes: 1_048_576,
+                ..
+            }) if core == "sing-box"
+        ));
+    }
+}
