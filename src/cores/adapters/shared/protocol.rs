@@ -142,6 +142,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "pcs",
         "alpn",
         "fp",
+        "obfs",
+        "obfs-password",
+        "obfs_password",
     ];
 
     let supported = match node.protocol {
