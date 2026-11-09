@@ -201,6 +201,70 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         return Err("mode is only mapped for gRPC and XHTTP transports".into());
     }
 
+    let xhttp_extra = if matches!(&kind, TransportKind::XHttp) {
+        node.option("extra")
+            .map(|value| {
+                let raw = value.as_str()
+                    .ok_or_else(|| "XHTTP extra settings must be a JSON string".to_owned())?;
+                let parsed: serde_json::Value = serde_json::from_str(raw)
+                    .map_err(|_| "XHTTP extra settings contain malformed JSON".to_owned())?;
+                let object = parsed.as_object()
+                    .ok_or_else(|| "XHTTP extra settings must be a JSON object".to_owned())?;
+                const ALLOWED: &[&str] = &[
+                    "headers", "xPaddingBytes", "xPaddingObfsMode", "xPaddingKey",
+                    "xPaddingHeader", "xPaddingPlacement", "xPaddingMethod",
+                    "uplinkHTTPMethod", "sessionIDPlacement", "sessionIDKey",
+                    "sessionIDTable", "sessionIDLength", "seqPlacement", "seqKey",
+                    "uplinkDataPlacement", "uplinkDataKey", "uplinkChunkSize",
+                    "noGRPCHeader", "scMaxEachPostBytes", "scMinPostsIntervalMs", "xmux",
+                ];
+                if let Some(key) = object.keys().find(|key| !ALLOWED.contains(&key.as_str())) {
+                    return Err(format!("XHTTP extra option '{key}' is not supported by this adapter batch"));
+                }
+                if let Some(headers) = object.get("headers") {
+                    let headers = headers.as_object()
+                        .ok_or_else(|| "XHTTP extra headers must be an object".to_owned())?;
+                    for (key, value) in headers {
+                        let value = value.as_str()
+                            .ok_or_else(|| "XHTTP extra header values must be strings".to_owned())?;
+                        if key.is_empty() || key.chars().any(char::is_control)
+                            || value.chars().any(char::is_control)
+                        {
+                            return Err("XHTTP extra header name or value is invalid".into());
+                        }
+                    }
+                }
+                if let Some(value) = object.get("xPaddingObfsMode")
+                    && !value.is_boolean()
+                {
+                    return Err("XHTTP xPaddingObfsMode must be a boolean".into());
+                }
+                if let Some(value) = object.get("noGRPCHeader")
+                    && !value.is_boolean()
+                {
+                    return Err("XHTTP noGRPCHeader must be a boolean".into());
+                }
+                if let Some(xmux) = object.get("xmux") {
+                    let xmux = xmux.as_object()
+                        .ok_or_else(|| "XHTTP xmux settings must be an object".to_owned())?;
+                    const XMUX_ALLOWED: &[&str] = &[
+                        "maxConcurrency", "maxConnections", "cMaxReuseTimes",
+                        "hMaxRequestTimes", "hMaxReusableSecs", "hKeepAlivePeriod",
+                    ];
+                    if xmux.keys().any(|key| !XMUX_ALLOWED.contains(&key.as_str())) {
+                        return Err("XHTTP xmux contains an unsupported setting".into());
+                    }
+                }
+                Ok(parsed)
+            })
+            .transpose()?
+    } else {
+        if node.option("extra").is_some() {
+            return Err("extra settings are only supported for XHTTP transport".into());
+        }
+        None
+    };
+
     let service_name = if matches!(&kind, TransportKind::Grpc) {
         let service_values = [
             option_string(node, "serviceName"),
@@ -276,5 +340,6 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         mode,
         max_early_data,
         early_data_header_name,
+        xhttp_extra,
     })
 }
