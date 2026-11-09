@@ -47,6 +47,14 @@ pub struct GeneratedConfig {
     pub content: Vec<u8>,
 }
 
+/// Core-specific representations of a parsed Shadowsocks SIP003 plugin.
+pub(crate) struct ShadowsocksPlugin {
+    pub sing_box_name: String,
+    pub sing_box_options: String,
+    pub mihomo_name: String,
+    pub mihomo_options: serde_json::Value,
+}
+
 mod capabilities;
 mod options;
 mod protocol;
