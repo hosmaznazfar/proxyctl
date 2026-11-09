@@ -103,8 +103,7 @@ impl BenchmarkSample {
             return Err("sample unit does not match its metric");
         }
         match (self.status, self.value) {
-            (BenchmarkSampleStatus::Success, Some(value))
-                if value.is_finite() && value >= 0.0 => {}
+            (BenchmarkSampleStatus::Success, Some(value)) if value.is_finite() && value >= 0.0 => {}
             (BenchmarkSampleStatus::Success, _) => {
                 return Err("successful samples require a finite non-negative value");
             }
@@ -210,10 +209,7 @@ mod tests {
 
     #[test]
     fn throughput_uses_bits_and_rejects_zero_duration() {
-        assert_eq!(
-            throughput_bps(1_000, Duration::from_secs(2)),
-            Some(4_000.0)
-        );
+        assert_eq!(throughput_bps(1_000, Duration::from_secs(2)), Some(4_000.0));
         assert_eq!(throughput_bps(1_000, Duration::ZERO), None);
         assert_eq!(throughput_bps(0, Duration::from_secs(1)), None);
     }
