@@ -282,7 +282,7 @@ mod tests {
                 let (_method, target, request_body) = if method == "CONNECT" {
                     reader
                         .get_mut()
-                        .write_all(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
+                        .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
                         .unwrap();
                     reader.get_mut().flush().unwrap();
                     read_fake_request(&mut reader)
@@ -353,7 +353,7 @@ mod tests {
         loop {
             let mut header = String::new();
             reader.read_line(&mut header).unwrap();
-            if header == "\\r\\n" || header.is_empty() {
+            if header == "\r\n" || header.is_empty() {
                 break;
             }
             if let Some((name, value)) = header.split_once(':')
