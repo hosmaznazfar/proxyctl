@@ -122,7 +122,7 @@ pub(crate) fn shadowsocks_plugin(
         }
         _ => return Err("Shadowsocks SIP003 plugin is not supported by this adapter".into()),
     };
-    Ok(Some((name.to_owned(), raw_options, mihomo_name, mihomo_options)))
+    Ok(Some(((if name == "simple-obfs" { "obfs-local" } else { name }).to_owned(), raw_options, mihomo_name, mihomo_options)))
 }
 
 fn split_sip003(input: &str) -> Result<(Vec<String>, String), String> {
@@ -132,12 +132,12 @@ fn split_sip003(input: &str) -> Result<(Vec<String>, String), String> {
     let mut raw_first_separator = None;
     for (index, ch) in input.char_indices() {
         if escaped {
-            if ![':', ';', '=', '\\\\'].contains(&ch) {
+            if ![':', ';', '=', '\\'].contains(&ch) {
                 return Err("Shadowsocks plugin escape sequence is invalid".into());
             }
             current.push(ch);
             escaped = false;
-        } else if ch == '\\\\' {
+        } else if ch == '\\' {
             escaped = true;
         } else if ch == ';' {
             if raw_first_separator.is_none() {
