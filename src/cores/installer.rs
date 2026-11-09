@@ -6,16 +6,20 @@ use crate::{
     updates::{
         artifact::{download, verify_sha256},
         installer::replace_executable,
-        release::latest_release,
+        release::{latest_release, ReleaseChannel},
     },
 };
 
-pub fn install_or_update(core: CoreId, check_only: bool) -> anyhow::Result<()> {
+pub fn install_or_update(
+    core: CoreId,
+    check_only: bool,
+    channel: ReleaseChannel,
+) -> anyhow::Result<()> {
     ensure!(
         cfg!(all(target_os = "linux", target_arch = "x86_64")),
         "managed core installation currently supports Linux x86_64 only"
     );
-    let release = latest_release(core.release_api())?;
+    let release = latest_release(core.release_api(), channel)?;
     let spec = releases::resolve(core, &release.tag_name)?;
     let asset = release.asset(&spec.name)?;
     let digest = asset
