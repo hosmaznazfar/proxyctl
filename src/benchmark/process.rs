@@ -77,7 +77,7 @@ impl ManagedCoreProcess {
                 .validate_config(executable, config.path())
                 .with_context(|| format!("{core} rejected the benchmark configuration"))?;
 
-            let mut log = NamedTempFile::new()
+            let log = NamedTempFile::new()
                 .context("could not create private core startup log")?;
             #[cfg(unix)]
             {
