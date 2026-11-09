@@ -578,8 +578,8 @@ mod tests {
             {
                 let mut metadata = write_txn.open_table(METADATA).unwrap();
                 metadata.insert("schema_version", &1).unwrap();
-                metadata.remove("next_benchmark_run_id").unwrap();
-                metadata.remove("next_benchmark_sample_id").unwrap();
+                drop(metadata.remove("next_benchmark_run_id").unwrap());
+                drop(metadata.remove("next_benchmark_sample_id").unwrap());
             }
             write_txn.commit().unwrap();
         }
