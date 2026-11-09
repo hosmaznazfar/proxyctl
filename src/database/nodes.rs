@@ -361,6 +361,21 @@ impl NodeDatabase {
         Ok(records)
     }
 
+    /// List all persisted benchmark samples in stable insertion order.
+    pub fn list_all_benchmark_samples(&self) -> anyhow::Result<Vec<BenchmarkSample>> {
+        let read_txn = self.inner.begin_read()?;
+        let samples = read_txn.open_table(BENCHMARK_SAMPLES)?;
+        let mut records = Vec::new();
+        for entry in samples.iter()? {
+            let (key, value) = entry?;
+            let sample: BenchmarkSample = serde_json::from_slice(value.value())?;
+            debug_assert_eq!(sample.id, key.value());
+            records.push(sample);
+        }
+        records.sort_by_key(|sample| sample.id);
+        Ok(records)
+    }
+
     /// Mark runs left in the running state by an uncatchable termination as interrupted.
     pub fn recover_interrupted_benchmark_runs(&self) -> anyhow::Result<usize> {
         let stale = self
