@@ -2,6 +2,8 @@ use serde_json::{Map, Value};
 
 use crate::domain::{Protocol, ProxyNode};
 
+use super::ShadowsocksPlugin;
+
 pub(crate) fn option_string<'a>(node: &'a ProxyNode, key: &str) -> Option<&'a str> {
     node.option(key)
         .and_then(Value::as_str)
@@ -35,14 +37,6 @@ pub(crate) fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Re
     Ok(())
 }
 
-
-/// Parsed plugin settings with separate native representations.
-pub(crate) struct ShadowsocksPlugin {
-    pub sing_box_name: String,
-    pub sing_box_options: String,
-    pub mihomo_name: String,
-    pub mihomo_options: Value,
-}
 
 /// Parse the SIP003 plugin query value into the supported native representations.
 pub(crate) fn shadowsocks_plugin(
