@@ -94,7 +94,7 @@ pub fn sort_nodes(
                 &completed,
                 &samples,
                 metric,
-                selected_core.as_ref().map(CoreId::as_str),
+                selected_core.as_ref().map(|core| core.as_str()),
             );
             RankedNode {
                 node,
