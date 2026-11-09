@@ -21,7 +21,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 | TLS skip verification (`insecure`) | Implemented; native validation pending | Implemented; deprecated upstream | Implemented; native validation pending |
 | Certificate SHA-256 pin (`pcs` / `pinSHA256`) | Unsupported in managed sing-box 1.14.4 | Implemented; native validation pending | Implemented; native validation pending |
 | Separate certificate-name verification (`vcn`) | Unsupported | Implemented; native validation pending | Implemented; native validation pending |
-| REALITY | Not yet | Not yet | Not yet |
+| REALITY (VLESS) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
 | WebSocket (VLESS, VMess, Trojan) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
 | gRPC (standard mode) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending* |
 | gRPC authority / multi mode | Unsupported | Implemented; native validation pending | Unsupported |
@@ -47,6 +47,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 - `vcn` is separate certificate-name verification, not SNI. It maps to Xray `verifyPeerCertByName` and Mihomo `name-cert-verify`; sing-box 1.14.4 has no equivalent field and rejects it.
 - `insecure` / `allowInsecure` is parsed as a boolean and maps to sing-box `insecure`, Xray `allowInsecure` (deprecated upstream), and Mihomo `skip-cert-verify`. Empty optional VMess JSON fields are treated as absent, while non-empty unknown fields remain explicit incompatibilities.
 - An unrecognized or unmapped option produces an unsupported result; it is never silently discarded.
+- VLESS REALITY requires pbk (or publicKey), fp, and an optional even-length hexadecimal sid up to 16 characters. It maps to sing-box tls.reality + tls.utls, Xray streamSettings.realitySettings (the client public key uses the current password field), and Mihomo reality-opts. Xray additionally accepts VMess REALITY; this batch deliberately keeps sing-box and Mihomo REALITY limited to VLESS. Xray transport restrictions are enforced. Native binary validation remains pending.
 - Hysteria2 obfuscation accepts `obfs=salamander` or `obfs=gecko` only when a matching `obfs-password` is supplied. It maps to sing-box `obfs.type/password` and Mihomo `obfs/obfs-password`; Xray does not implement Hysteria2. Native validation against the managed sing-box 1.14.4 and Mihomo 1.19.33 binaries remains required.
 - The generated document is serialized as JSON. For Mihomo this relies on JSON being accepted as a YAML-compatible configuration document.
 - Validation is delegated to the selected managed binary:
