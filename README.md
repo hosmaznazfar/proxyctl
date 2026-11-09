@@ -79,6 +79,8 @@ proxyctl tun on
 proxyctl tun off
 ~~~
 
+Benchmark design and external measurement-service disclosure: see [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md). The initial benchmark defaults to Cloudflare Speed Test; Cloudflare states that completed measurements are collected for aggregated Internet-connection insights. Endpoint URLs and payload sizes will be configurable. Benchmarking is explicit, sequential, and uses a loopback-only local proxy listener; it does not change system proxy or network settings.
+
 See docs/PLAN.md, docs/REQUIREMENTS.md, and docs/UPDATE_DESIGN.md.
 
 ## Development
