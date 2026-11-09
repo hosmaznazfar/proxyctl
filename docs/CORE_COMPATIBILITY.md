@@ -1,6 +1,6 @@
-# Core compatibility: initial adapter subset
+# Core compatibility: validated adapter subset
 
-This matrix describes only the currently implemented adapter subset. It is not a claim that every transport or security mode for a protocol is supported.
+This matrix describes the implemented and tested adapter subset. The opt-in native conformance matrix has passed against the managed binaries listed below; this does not imply support for every transport or security mode.
 
 Compatibility outcomes are distinct: **Supported** means every retained option was mapped for that core; **Unsupported** means the input is valid but the core or adapter cannot implement a feature; **Invalid** means the input is malformed, contradictory, or semantically invalid. Unknown options are preserved in the source node and reported as unsupported rather than silently dropped.
 
@@ -10,7 +10,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 | VLESS, TLS + SNI | Yes | Yes | Yes |
 | VLESS, TLS + ALPN | Yes | Yes | Yes |
 | VLESS, TLS + client fingerprint | Yes | Yes | Yes |
-| VLESS, TLS + Vision flow | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
+| VLESS, TLS + Vision flow | Native validated | Native validated | Native validated |
 | VMess, basic TCP | Yes | Yes | Yes |
 | VMess, TLS + SNI | Yes | Yes | Yes |
 | VMess, TLS + ALPN | Yes | Yes | Yes |
@@ -18,21 +18,21 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 | Trojan, TCP + TLS (including ALPN and client fingerprint) | Yes | Yes | Yes |
 | Shadowsocks, basic TCP | Yes | Yes | Yes |
 | Hysteria2, basic TLS (including ALPN) | Yes | No | Yes |
-| TLS skip verification (`insecure`) | Implemented; native validation pending | Implemented; deprecated upstream | Implemented; native validation pending |
-| Certificate SHA-256 pin (`pcs` / `pinSHA256`) | Unsupported in managed sing-box 1.14.4 | Implemented; native validation pending | Implemented; native validation pending |
-| Separate certificate-name verification (`vcn`) | Unsupported | Implemented; native validation pending | Implemented; native validation pending |
-| REALITY (VLESS) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
-| REALITY (VMess) | Unsupported | Implemented; native validation pending | Unsupported |
-| WebSocket (VLESS, VMess, Trojan) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
-| gRPC (standard mode) | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending* |
-| gRPC authority / multi mode | Unsupported | Implemented; native validation pending | Unsupported |
-| HTTP/2 (VLESS/VMess) | Implemented; native validation pending | Unsupported in current Xray schema | Implemented; native validation pending |
-| HTTPUpgrade | Implemented; native validation pending | Implemented; native validation pending | Implemented; native validation pending |
-| XHTTP (VLESS) | Unsupported | Implemented; native validation pending | Implemented; native validation pending |
-| XHTTP (VMess) | Unsupported | Implemented; native validation pending | Unsupported |
+| TLS skip verification (`insecure`) | Unit-tested; not in native fixture matrix | Unit-tested; deprecated upstream | Unit-tested; not in native fixture matrix |
+| Certificate SHA-256 pin (`pcs` / `pinSHA256`) | Unsupported in managed sing-box 1.14.4 | Unit-tested; not in native fixture matrix | Unit-tested; not in native fixture matrix |
+| Separate certificate-name verification (`vcn`) | Unsupported | Unit-tested; not in native fixture matrix | Unit-tested; not in native fixture matrix |
+| REALITY (VLESS) | Native validated | Native validated | Native validated |
+| REALITY (VMess) | Unsupported | Native validated | Unsupported |
+| WebSocket (VLESS, VMess, Trojan) | Native validated* | Native validated* | Native validated* |
+| gRPC (standard mode) | Native validated | Native validated | Native validated* |
+| gRPC authority / multi mode | Unsupported | Native validated | Unsupported |
+| HTTP/2 (VLESS/VMess) | Native validated | Unsupported in current Xray schema | Native validated |
+| HTTPUpgrade | Native validated | Native validated | Native validated |
+| XHTTP (VLESS) | Unsupported | Native validated | Native validated |
+| XHTTP (VMess) | Unsupported | Native validated | Unsupported |
 | VMess transport coverage | Partial; see transport matrix | Partial; see transport matrix | Partial; see transport matrix |
-| Shadowsocks SIP003 obfs-local / v2ray-plugin | Implemented; native validation pending | Unsupported | Implemented; native validation pending |
-| Hysteria2 obfuscation (Salamander, Gecko) | Implemented; native validation pending | Unsupported | Implemented; native validation pending |
+| Shadowsocks SIP003 obfs-local / v2ray-plugin | Native validated | Unsupported | Native validated |
+| Hysteria2 obfuscation (Salamander, Gecko) | Native validated | Unsupported | Native validated |
 
 ## Safety contract
 
@@ -61,14 +61,14 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
   - Mihomo: `mihomo -t -f CONFIG`
 - Run `proxyctl check <NODE_ID>` to validate against every installed compatible core, or add `--core sing-box|xray|mihomo` to select one.
 - Validation uses a private temporary file with mode 0600 on Unix and removes it on success or failure.
-- The opt-in native fixture matrix is run with `cargo test --test native_adapter_validation -- --ignored --nocapture`. It requires all three proxyctl-managed core binaries to be installed. The matrix checks expected per-core compatibility and validates every supported fixture using only each core's config-check mode; unsupported combinations are asserted but not sent to the binary. It never starts a proxy or changes system networking.
+- The opt-in native fixture matrix is run with `cargo test --test native_adapter_validation -- --ignored --nocapture`. It requires all three proxyctl-managed core binaries to be installed. **The matrix passed: 51 supported fixture/core combinations across 23 sanitized fixtures**, checking expected per-core compatibility and validating every supported fixture using only each core's config-check mode; unsupported combinations are asserted but not sent to the binary. The validated local managed versions were sing-box 1.14.4, Xray 26.11.9, and Mihomo 1.19.33. It never starts a proxy or changes system networking.
 - The validation command invokes only the core's config-check mode; it never starts a proxy process or changes system networking.
 
 ## Current limitations
 
-The adapters are an initial conservative implementation. The `check` command now owns the temporary config lifecycle and invokes the installed managed binary's validation mode. The command does not start a core. The compatibility table must be expanded only alongside fixtures and successful validation against the supported managed core versions.
+The adapters provide a conservative, tested initial implementation. The `check` command owns the temporary config lifecycle and invokes the installed managed binary's validation mode. The command does not start a core. Expand the compatibility table only alongside fixtures and successful validation against the relevant managed core versions.
 
-WebSocket (including early data), standard gRPC, HTTP/2, HTTPUpgrade, XHTTP (including the validated shared subset of Xray/Mihomo extra settings), and VLESS Vision flow now have shared normalized representations and adapter mappings. VMess JSON is normalized according to its own field meanings: `net` selects transport, `type` can describe gRPC/XHTTP mode, `host` is gRPC authority or transport host, and `path` is the gRPC service name or transport path. Xray alone currently maps gRPC authority and multi mode. sing-box HTTP/2 uses its HTTP transport; current Xray schemas have removed the legacy HTTP/2 transport, so Proxyctl rejects it there; Mihomo uses its `h2` transport. HTTPUpgrade maps to sing-box/Xray native transports and Mihomo's WebSocket transport with `v2ray-http-upgrade: true`. XHTTP is rejected by sing-box, mapped for VLESS by Xray/Mihomo, and mapped for VMess by Xray only. URI host/path values are normalized without conflating WebSocket Host, HTTP/2 hosts, gRPC authority, or TLS SNI. Unit fixtures cover all implemented transports and security options. Mihomo requires an explicit gRPC service name; sing-box and Xray allow it to be omitted. Native validation against installed managed binaries is still required before treating these mappings as verified. Non-standard gRPC modes outside `gun`/`multi` remain unsupported. REALITY is mapped explicitly per core and is never approximated as ordinary TLS.
+WebSocket (including early data), standard gRPC, HTTP/2, HTTPUpgrade, XHTTP (including the validated shared subset of Xray/Mihomo extra settings), and VLESS Vision flow now have shared normalized representations and adapter mappings. VMess JSON is normalized according to its own field meanings: `net` selects transport, `type` can describe gRPC/XHTTP mode, `host` is gRPC authority or transport host, and `path` is the gRPC service name or transport path. Xray alone currently maps gRPC authority and multi mode. sing-box HTTP/2 uses its HTTP transport; current Xray schemas have removed the legacy HTTP/2 transport, so Proxyctl rejects it there; Mihomo uses its `h2` transport. HTTPUpgrade maps to sing-box/Xray native transports and Mihomo's WebSocket transport with `v2ray-http-upgrade: true`. XHTTP is rejected by sing-box, mapped for VLESS by Xray/Mihomo, and mapped for VMess by Xray only. URI host/path values are normalized without conflating WebSocket Host, HTTP/2 hosts, gRPC authority, or TLS SNI. Unit fixtures cover all implemented transports and security options. Mihomo requires an explicit gRPC service name; sing-box and Xray allow it to be omitted. The opt-in native fixture matrix has validated the mappings represented by its 23 fixtures against the managed core versions recorded above. Non-standard gRPC modes outside `gun`/`multi` remain unsupported. REALITY is mapped explicitly per core and is never approximated as ordinary TLS.
 
 
 ## Compatibility evaluation rules
@@ -90,22 +90,22 @@ The compatibility matrix describes the current implementation only. The long-ter
 
 ## Transport capability status
 
-The following table records the current implementation state. All `implemented` entries still require native validation against the supported managed core versions:
+The following table records implementation and native-fixture status. `Native validated` means the corresponding fixture/core combination passed the opt-in matrix against the managed versions recorded above; it does not certify untested option combinations:
 
 | Normalized transport | sing-box | Xray | Mihomo | Implementation status |
 |---|---|---|---|---|
 | TCP | Existing basic subset | Existing basic subset | Existing basic subset | Implemented baseline |
-| WebSocket | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
-| WebSocket early data | Implemented; validation pending | Implemented via path `ed` query; custom header unsupported | Implemented; validation pending | Core-specific fixtures added |
-| VLESS Vision flow | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
-| gRPC (standard) | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending* | Unit fixtures added |
-| gRPC authority / multi | Unsupported | Implemented; validation pending | Unsupported | Xray-specific fixtures added |
-| HTTP/2 | Implemented; validation pending | Unsupported in current schema | Implemented; validation pending | Unit fixtures added |
-| HTTPUpgrade | Implemented; validation pending | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
-| XHTTP (VLESS) | Unsupported | Implemented; validation pending | Implemented; validation pending | Unit fixtures added |
-| XHTTP (VMess) | Unsupported | Implemented; validation pending | Unsupported | VMess fixture added |
+| WebSocket | Native validated | Native validated | Native validated | Native fixture passed |
+| WebSocket early data | Native validated | Native validated; custom header unsupported | Native validated | Native fixture passed |
+| VLESS Vision flow | Native validated | Native validated | Native validated | Native fixture passed |
+| gRPC (standard) | Native validated | Native validated | Native validated* | Native fixture passed |
+| gRPC authority / multi | Unsupported | Native validated | Unsupported | Xray native fixture passed |
+| HTTP/2 | Native validated | Unsupported in current schema | Native validated | Native fixture passed |
+| HTTPUpgrade | Native validated | Native validated | Native validated | Native fixture passed |
+| XHTTP (VLESS) | Unsupported | Native validated | Native validated | Native fixture passed |
+| XHTTP (VMess) | Unsupported | Native validated | Unsupported | Native fixture passed |
 
-Each cell must be updated only after schema research, adapter tests, and native validation against the supported managed core version. Core/version differences are expected.
+Update each cell only after schema research, adapter tests, and native validation against the relevant managed core version. Core/version differences are expected.
 
 ## Reference projects and research use
 
