@@ -265,6 +265,87 @@ mod tests {
     }
 
     #[test]
+    fn measurements_work_through_a_local_fake_http_proxy() {
+        use std::{
+            io::{BufRead, BufReader, Read, Write},
+            net::TcpListener,
+            thread,
+        };
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let proxy_port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            for _ in 0..3 {
+                let (stream, _) = listener.accept().unwrap();
+                let mut reader = BufReader::new(stream);
+                let mut request_line = String::new();
+                reader.read_line(&mut request_line).unwrap();
+                let mut content_length = 0usize;
+                loop {
+                    let mut header = String::new();
+                    reader.read_line(&mut header).unwrap();
+                    if header == "\r\n" || header.is_empty() {
+                        break;
+                    }
+                    if let Some((name, value)) = header.split_once(':')
+                        && name.eq_ignore_ascii_case("content-length")
+                    {
+                        content_length = value.trim().parse().unwrap();
+                    }
+                }
+                let mut request_body = vec![0; content_length];
+                reader.read_exact(&mut request_body).unwrap();
+
+                let target = request_line.split_whitespace().nth(1).unwrap();
+                let url = Url::parse(target).unwrap();
+                let response_body = match url.path() {
+                    "/__down" => {
+                        let bytes = url
+                            .query_pairs()
+                            .find(|(key, _)| key == "bytes")
+                            .unwrap()
+                            .1
+                            .parse::<usize>()
+                            .unwrap();
+                        vec![0x33; bytes]
+                    }
+                    "/__up" => {
+                        assert_eq!(request_body, vec![0x5a; 8]);
+                        b"ok".to_vec()
+                    }
+                    path => panic!("unexpected fake endpoint path: {path}"),
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    response_body.len()
+                );
+                let stream = reader.get_mut();
+                stream.write_all(response.as_bytes()).unwrap();
+                stream.write_all(&response_body).unwrap();
+                stream.flush().unwrap();
+            }
+        });
+
+        let proxy_url = format!("http://127.0.0.1:{proxy_port}");
+        let proxy = Proxy::new(&proxy_url).unwrap();
+        let config = Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_secs(2)))
+            .build();
+        let client = BenchmarkHttpClient {
+            agent: config.into(),
+            latency_url: Url::parse("http://measurement.invalid/__down").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/__down").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/__up").unwrap(),
+        };
+
+        assert!(client.latency().unwrap().value >= 0.0);
+        assert!(client.download(8).unwrap().value > 0.0);
+        assert!(client.upload(8).unwrap().value > 0.0);
+        server.join().unwrap();
+    }
+
+    #[test]
     fn throughput_is_bits_per_second() {
         assert_eq!(throughput_bps(1_000, Duration::from_secs(2)), Some(4_000.0));
         assert_eq!(throughput_bps(0, Duration::from_secs(1)), None);
