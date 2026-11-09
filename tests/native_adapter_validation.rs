@@ -36,6 +36,7 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
 
     let fixtures = fixtures();
     let mut validated = 0usize;
+    let mut benchmark_configs_validated = 0usize;
 
     for fixture in &fixtures {
         let node = parse_proxy_url(&fixture.url)
@@ -58,10 +59,14 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 continue;
             }
 
-            if let Err(error) = adapters::validation::validate_node_config(*core, &node, executable)
+            let generated = adapter
+                .generate_config(&node)
+                .unwrap_or_else(|error| panic!("fixture '{}' config generation failed for {core}: {error:#}", fixture.name));
+            if let Err(error) =
+                adapters::validation::validate_generated_config(*core, &generated, executable)
             {
                 let diagnostic = if *core == CoreId::Xray {
-                    xray_validation_diagnostic(&node, executable)
+                    xray_validation_diagnostic(&generated, executable)
                 } else {
                     String::new()
                 };
@@ -71,11 +76,31 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 );
             }
             validated += 1;
+
+            let benchmark_generated = adapter
+                .generate_benchmark_config(&node, 43127)
+                .unwrap_or_else(|error| panic!("fixture '{}' benchmark config generation failed for {core}: {error:#}", fixture.name));
+            if let Err(error) = adapters::validation::validate_generated_config(
+                *core,
+                &benchmark_generated,
+                executable,
+            ) {
+                let diagnostic = if *core == CoreId::Xray {
+                    xray_validation_diagnostic(&benchmark_generated, executable)
+                } else {
+                    String::new()
+                };
+                panic!(
+                    "native benchmark config validation failed for fixture '{}' on {core}: {error:#}\\n{diagnostic}",
+                    fixture.name
+                );
+            }
+            benchmark_configs_validated += 1;
         }
     }
 
     println!(
-        "Native validation succeeded for {validated} fixture/core combinations across {} fixtures.",
+        "Native validation succeeded for {validated} standard configs and {benchmark_configs_validated} loopback benchmark configs across {} fixtures.",
         fixtures.len()
     );
 }
@@ -84,14 +109,10 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
 /// limited to this integration test: its fixtures contain synthetic credentials only.
 /// Production validation errors must never include core output or generated config content.
 fn xray_validation_diagnostic(
-    node: &proxyctl::domain::ProxyNode,
+    generated: &adapters::GeneratedConfig,
     executable: &std::path::Path,
 ) -> String {
     use std::{io::Write, process::Command};
-
-    let generated = adapters::adapter(CoreId::Xray)
-        .generate_config(node)
-        .expect("Xray fixture config should generate");
     let mut config = tempfile::Builder::new()
         .suffix(".json")
         .tempfile()
