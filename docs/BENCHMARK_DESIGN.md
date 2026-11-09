@@ -136,11 +136,11 @@ Schema migration: advance the current schema version and initialize benchmark ID
 
 1. **Implemented:** typed benchmark run/sample/metric/status models, validation invariants, and pure median/throughput calculations.
 2. **Implemented:** schema version 2 migration, independent run/sample ID counters, incremental sample transactions, run finalization, and stale-running-run recovery.
-3. Add per-core benchmark config generation with loopback HTTP inbounds and native validation.
-4. Add an isolated core process guard, readiness probe, bounded shutdown, and cancellation handling.
-5. Add the HTTP measurement client with explicit local proxy configuration and bounded request/body handling.
-6. Add the benchmark service orchestration and `test` CLI command.
-7. Add deterministic unit tests and local fake-core/fake-endpoint integration tests. Tests must not contact Cloudflare or start real proxy cores.
+3. **Implemented:** per-core benchmark config generation with loopback HTTP inbounds and native config validation.
+4. **Implemented:** isolated child-process ownership, bounded readiness, termination/wait, and temporary-config cleanup; Unix SIGINT/SIGTERM are converted into cooperative cancellation requests.
+5. **Implemented:** explicit local HTTP proxy client, HTTPS endpoint validation, bounded download/upload bodies, and throughput calculation.
+6. **Implemented:** sequential service orchestration and the `proxyctl test` CLI command, including preflight outcomes and per-sample persistence.
+7. **Next:** add deterministic service-level tests and local fake-core/fake-endpoint integration tests. Tests must not contact Cloudflare or start real proxy cores.
 8. Add reports and sorting only after benchmark persistence is verified.
 
 Keep each step buildable and update this document and `docs/PLAN.md` as implementation decisions are refined.
