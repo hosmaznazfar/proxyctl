@@ -93,6 +93,7 @@ pub(crate) fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'st
     } else if diagnostic.contains("failed to parse")
         || diagnostic.contains("invalid character")
         || diagnostic.contains("unexpected end of json")
+        || diagnostic.contains("invalid json")
         || diagnostic.contains("yaml:")
     {
         "the core could not parse the generated configuration; raw diagnostics withheld"
