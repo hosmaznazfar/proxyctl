@@ -248,6 +248,14 @@ impl NodeDatabase {
                 run.status == BenchmarkRunStatus::Running,
                 "cannot append a sample to a finalized benchmark run"
             );
+            ensure!(
+                run.node_ids.contains(&sample.node_id),
+                "benchmark sample references a node outside the run scope"
+            );
+            ensure!(
+                run.cores.iter().any(|core| core == &sample.core),
+                "benchmark sample references a core outside the run scope"
+            );
         }
         {
             let nodes = write_txn.open_table(NODES)?;
