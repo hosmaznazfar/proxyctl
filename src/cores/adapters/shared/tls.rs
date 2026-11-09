@@ -151,7 +151,7 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
         .ok_or_else(|| "REALITY client fingerprint is required".to_owned())?;
     let short_id = option_string(node, "sid").unwrap_or_default();
     if short_id.len() > 16
-        || short_id.len() % 2 != 0
+        || !short_id.len().is_multiple_of(2)
         || !short_id.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
         return Err("REALITY short ID must be an even-length hexadecimal value of at most 16 characters".into());
