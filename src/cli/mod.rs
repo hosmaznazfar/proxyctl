@@ -75,7 +75,11 @@ enum Command {
         #[arg(long, default_value = "https://speed.cloudflare.com/__up")]
         upload_url: String,
         /// Maximum accepted download size per sample (safety limit; default 16 MiB).
-        #[arg(long = "download-max-bytes", alias = "download-bytes", default_value_t = 16_777_216)]
+        #[arg(
+            long = "download-max-bytes",
+            alias = "download-bytes",
+            default_value_t = 16_777_216
+        )]
         download_bytes: u64,
         /// Upload payload size for each sample.
         #[arg(long, default_value_t = 1_048_576)]
