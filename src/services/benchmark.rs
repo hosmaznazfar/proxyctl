@@ -59,7 +59,7 @@ pub fn default_settings() -> BenchmarkSettings {
         latency_url: "https://www.google.com/generate_204".into(),
         download_url: "https://cachefly.cachefly.net/10mb.test".into(),
         upload_url: "https://speed.cloudflare.com/__up".into(),
-        download_bytes: 16 * 1024 * 1024,
+        download_bytes: 2 * 1024 * 1024,
         upload_bytes: 1_048_576,
         request_timeout_ms: 15_000,
         startup_timeout_ms: 10_000,
@@ -264,7 +264,8 @@ fn execute_run(
                 Duration::from_millis(settings.startup_timeout_ms),
             ) {
                 Ok(process) => process,
-                Err(_) => {
+                Err(error) => {
+                    let diagnostic = format!("{error:#}");
                     record_preflight(
                         database_path,
                         &context,
@@ -272,7 +273,7 @@ fn execute_run(
                         "core_startup",
                         "the managed core failed to start or open its local listener",
                     )?;
-                    println!("run #{run_id} node #{} {core}: startup failed", record.id);
+                    println!("run #{run_id} node #{} {core}: startup failed ({diagnostic})", record.id);
                     continue;
                 }
             };
