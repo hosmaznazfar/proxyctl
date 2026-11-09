@@ -217,6 +217,32 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         );
     }
 
+    if node.protocol == Protocol::Hysteria2 {
+        let obfs = option_string(node, "obfs");
+        let obfs_password = option_string(node, "obfs-password")
+            .or_else(|| option_string(node, "obfs_password"));
+        if obfs.is_some_and(|value| !["salamander", "gecko"].contains(&value)) {
+            return Err("Hysteria2 obfuscation type must be salamander or gecko".into());
+        }
+        if obfs.is_some() != obfs_password.is_some() {
+            return Err("Hysteria2 obfuscation type and password must be supplied together".into());
+        }
+        if obfs_password.is_some_and(|value| value.chars().any(char::is_control)) {
+            return Err("Hysteria2 obfuscation password contains control characters".into());
+        }
+        if option_string(node, "obfs-password").is_some()
+            && option_string(node, "obfs_password").is_some()
+            && option_string(node, "obfs-password") != option_string(node, "obfs_password")
+        {
+            return Err("Hysteria2 obfuscation password aliases conflict".into());
+        }
+    } else if option_string(node, "obfs").is_some()
+        || option_string(node, "obfs-password").is_some()
+        || option_string(node, "obfs_password").is_some()
+    {
+        return Err("Hysteria2 obfuscation options are only valid for Hysteria2".into());
+    }
+
     if node.protocol == Protocol::Vless {
         if option_string(node, "encryption").is_some_and(|value| value != "none") {
             return Err("only VLESS encryption=none is currently mapped".into());
