@@ -3,7 +3,6 @@
 use std::{
     collections::BTreeMap,
     io::Write,
-    net::ToSocketAddrs,
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -307,6 +306,9 @@ fn execute_run(
                         &mut process,
                         &label,
                     );
+                    if metric == BenchmarkMetric::Download {
+                        println!();
+                    }
                     let sample = match outcome {
                         Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
                             println!(
@@ -413,6 +415,12 @@ fn measure_interruptibly(
     process: &mut Option<ManagedCoreProcess>,
     label: &str,
 ) -> Result<Measurement, MeasurementFailure> {
+    if CANCELLED.load(Ordering::Relaxed) {
+        if let Some(process) = process.take() {
+            let _ = process.stop();
+        }
+        return Err(MeasurementFailure::Cancelled);
+    }
     let (sender, receiver) = mpsc::channel();
     let label = label.to_owned();
 
