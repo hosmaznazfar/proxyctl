@@ -466,7 +466,9 @@ fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSampleStatus {
         MeasurementFailure::Timeout => BenchmarkSampleStatus::Timeout,
         MeasurementFailure::Unreachable => BenchmarkSampleStatus::Unreachable,
         MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
-        MeasurementFailure::Unavailable => BenchmarkSampleStatus::Unavailable,
+        MeasurementFailure::Unavailable
+        | MeasurementFailure::IncompleteResponse
+        | MeasurementFailure::ReadFailed => BenchmarkSampleStatus::Unavailable,
         MeasurementFailure::Cancelled => BenchmarkSampleStatus::Cancelled,
     }
 }
