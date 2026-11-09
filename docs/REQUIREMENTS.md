@@ -349,7 +349,7 @@ Acceptance criteria:
 - Unit tests cover parsers, normalization, fingerprints, compatibility, aggregation, and prune eligibility.
 - Database tests cover migrations, transactions, uniqueness, lifecycle states, and benchmark history.
 - Core adapter tests use checked-in sanitized fixtures and validation tests where practical.
-- Service tests use fake core/process and benchmark interfaces.
+- Service tests use fake core/process and benchmark interfaces; no unit or integration test contacts the default external measurement service.
 - CLI tests cover help, argument validation, output masking, and exit codes.
 - Network-dependent tests are opt-in and must not be required for ordinary CI.
 - CI runs formatting, linting, tests, and dependency/build checks.
