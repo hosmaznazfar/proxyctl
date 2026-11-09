@@ -10,7 +10,6 @@ pub enum TransportKind {
     Tcp,
     WebSocket,
     Grpc,
-    Http,
     Http2,
     HttpUpgrade,
     XHttp,
