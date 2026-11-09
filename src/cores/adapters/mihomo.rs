@@ -60,11 +60,9 @@ impl CoreAdapter for MihomoAdapter {
                 json!({"name":name,"type":"hysteria2","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()})
             }
         };
-        if let Some((_, _, plugin, plugin_opts)) =
-            shadowsocks_plugin(node).map_err(anyhow::Error::msg)?
-        {
-            proxy["plugin"] = json!(plugin);
-            proxy["plugin-opts"] = plugin_opts;
+        if let Some(plugin) = shadowsocks_plugin(node).map_err(anyhow::Error::msg)? {
+            proxy["plugin"] = json!(plugin.mihomo_name);
+            proxy["plugin-opts"] = plugin.mihomo_options;
         }
         if let Some(flow) = option_string(node, "flow") {
             proxy["flow"] = json!(flow);
