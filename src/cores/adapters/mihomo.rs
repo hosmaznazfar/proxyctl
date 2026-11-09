@@ -78,6 +78,12 @@ impl CoreAdapter for MihomoAdapter {
                     .or_else(|| option_string(node, "obfs_password"))
                     .unwrap_or_default()
             );
+            if let Some(value) = option_string(node, "obfs-min-packet-size") {
+                proxy["obfs-min-packet-size"] = json!(value.parse::<u16>().expect("validated Gecko minimum packet size"));
+            }
+            if let Some(value) = option_string(node, "obfs-max-packet-size") {
+                proxy["obfs-max-packet-size"] = json!(value.parse::<u16>().expect("validated Gecko maximum packet size"));
+            }
         }
 
         let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
