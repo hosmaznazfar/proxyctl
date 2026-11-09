@@ -144,35 +144,37 @@ fn fixtures() -> Vec<Fixture> {
     let encoded_extra = url::form_urlencoded::byte_serialize(xhttp_extra.to_string().as_bytes())
         .collect::<String>();
 
+    // Xray 26.7.11+ rejects unencrypted VLESS to public addresses. Use the reserved
+    // private `.local` test domain for fixtures that intentionally omit TLS/REALITY.
     vec![
         Fixture {
             name: "basic VLESS",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443".into(),
             supported_by: all,
         },
         Fixture {
             name: "VLESS TLS, ALPN and fingerprint",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&sni=tls.example.com&alpn=h2,http%2F1.1&fp=chrome".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?security=tls&sni=tls.example.com&alpn=h2,http%2F1.1&fp=chrome".into(),
             supported_by: all,
         },
         Fixture {
             name: "VLESS Vision flow",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&flow=xtls-rprx-vision".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?security=tls&flow=xtls-rprx-vision".into(),
             supported_by: all,
         },
         Fixture {
             name: "VLESS REALITY",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef".into(),
             supported_by: all,
         },
         Fixture {
             name: "REALITY SpiderX",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&spx=%2Fdns-query".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&spx=%2Fdns-query".into(),
             supported_by: xray_only,
         },
         Fixture {
             name: "REALITY ML-DSA-65 verification",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&mldsa65Verify=verification-key".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&mldsa65Verify=verification-key".into(),
             supported_by: xray_only,
         },
         Fixture {
@@ -182,43 +184,43 @@ fn fixtures() -> Vec<Fixture> {
         },
         Fixture {
             name: "WebSocket Host distinct from TLS SNI",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&host=cdn.example.com&path=%2Fsocket&security=tls&sni=tls.example.com".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=ws&host=cdn.example.com&path=%2Fsocket&security=tls&sni=tls.example.com".into(),
             supported_by: all,
         },
         Fixture {
             name: "WebSocket early data",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fws&ed=2048&eh=Sec-WebSocket-Protocol".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=ws&path=%2Fws&ed=2048&eh=Sec-WebSocket-Protocol".into(),
             supported_by: all,
         },
         Fixture {
             name: "standard gRPC",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&serviceName=proxy.Service".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=grpc&serviceName=proxy.Service".into(),
             supported_by: all,
         },
         Fixture {
             name: "gRPC authority and multi mode",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&serviceName=proxy.Service&authority=grpc.example.com&mode=multi".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=grpc&serviceName=proxy.Service&authority=grpc.example.com&mode=multi".into(),
             supported_by: xray_only,
         },
         Fixture {
             name: "HTTP/2 transport",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=http&host=cdn.example.com&path=%2Fh2".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=http&host=cdn.example.com&path=%2Fh2".into(),
             supported_by: sing_box_and_mihomo,
         },
         Fixture {
             name: "HTTPUpgrade transport",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=httpupgrade&host=cdn.example.com&path=%2Fupgrade".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=httpupgrade&host=cdn.example.com&path=%2Fupgrade".into(),
             supported_by: all,
         },
         Fixture {
             name: "VLESS XHTTP",
-            url: "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&mode=packet-up&host=cdn.example.com&path=%2Fapi".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=xhttp&mode=packet-up&host=cdn.example.com&path=%2Fapi".into(),
             supported_by: xray_and_mihomo,
         },
         Fixture {
             name: "VLESS XHTTP extra settings",
             url: format!(
-                "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&extra={encoded_extra}"
+                "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=xhttp&extra={encoded_extra}"
             ),
             supported_by: xray_and_mihomo,
         },
@@ -229,7 +231,7 @@ fn fixtures() -> Vec<Fixture> {
         },
         Fixture {
             name: "Trojan TLS",
-            url: "trojan://fixture-password@example.com:443?sni=tls.example.com&alpn=h2".into(),
+            url: "trojan://fixture-password@proxy.local:443?sni=tls.example.com&alpn=h2".into(),
             supported_by: all,
         },
         Fixture {
@@ -249,17 +251,17 @@ fn fixtures() -> Vec<Fixture> {
         },
         Fixture {
             name: "Hysteria2 basic TLS",
-            url: "hysteria2://fixture-password@example.com:443?sni=tls.example.com&alpn=h3".into(),
+            url: "hysteria2://fixture-password@proxy.local:443?sni=tls.example.com&alpn=h3".into(),
             supported_by: sing_box_and_mihomo,
         },
         Fixture {
             name: "Hysteria2 Salamander obfuscation",
-            url: "hysteria2://fixture-password@example.com:443?obfs=salamander&obfs-password=fixture-obfs-password".into(),
+            url: "hysteria2://fixture-password@proxy.local:443?obfs=salamander&obfs-password=fixture-obfs-password".into(),
             supported_by: sing_box_and_mihomo,
         },
         Fixture {
             name: "Hysteria2 Gecko packet-size controls",
-            url: "hysteria2://fixture-password@example.com:443?obfs=gecko&obfs-password=fixture-obfs-password&obfs-min-packet-size=512&obfs-max-packet-size=1200".into(),
+            url: "hysteria2://fixture-password@proxy.local:443?obfs=gecko&obfs-password=fixture-obfs-password&obfs-min-packet-size=512&obfs-max-packet-size=1200".into(),
             supported_by: sing_box_and_mihomo,
         },
     ]
