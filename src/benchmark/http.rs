@@ -115,9 +115,9 @@ impl BenchmarkHttpClient {
         })
     }
 
-    /// Stream a download until EOF, reporting throttled byte progress.
+    /// Measure up to `max_bytes` from a download response, reporting throttled byte progress.
     ///
-    /// `max_bytes` is a safety ceiling. Different providers may return different object sizes.
+    /// Larger remote objects are intentionally cut short; smaller objects are measured to EOF.
     pub fn download<F>(
         &self,
         max_bytes: u64,
@@ -135,8 +135,6 @@ impl BenchmarkHttpClient {
             .map_err(classify_error)?;
         let mut reader = response
             .body_mut()
-            .with_config()
-            .limit(max_bytes)
             .reader()
             .take(max_bytes);
         let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
