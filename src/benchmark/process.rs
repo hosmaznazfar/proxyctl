@@ -363,6 +363,67 @@ mod tests {
         assert_eq!(classify_runtime_diagnostic("normal startup message"), None);
     }
 
+    #[test]
+    fn runtime_diagnostic_patterns_cover_outbound_failures_without_leaking_details() {
+        let cases = [
+            (
+                "sing-box: websocket: bad handshake; url=https://secret.invalid/path",
+                "the remote server rejected the WebSocket handshake",
+            ),
+            (
+                "xray: failed to verify certificate: certificate verify failed",
+                "the core could not verify the remote TLS certificate",
+            ),
+            (
+                "mihomo: x509: certificate signed by unknown authority",
+                "the core could not verify the remote TLS certificate",
+            ),
+            (
+                "sing-box: TLS handshake timeout",
+                "the outbound TLS handshake failed",
+            ),
+            (
+                "xray: handshake failure",
+                "the outbound TLS handshake failed",
+            ),
+            (
+                "mihomo: lookup proxy.example: no such host",
+                "the core could not resolve the remote server hostname",
+            ),
+            (
+                "sing-box: dial tcp proxy.example:443: connection refused",
+                "the remote server refused the outbound connection",
+            ),
+            (
+                "xray: dial tcp: i/o timeout",
+                "the outbound connection timed out",
+            ),
+            (
+                "mihomo: context deadline exceeded",
+                "the outbound connection timed out",
+            ),
+            (
+                "sing-box: read tcp: connection reset by peer",
+                "the remote server reset the outbound connection",
+            ),
+            (
+                "xray: read: unexpected EOF",
+                "the remote side closed the outbound connection unexpectedly",
+            ),
+            (
+                "mihomo: transport closed: \"EOF\"",
+                "the remote side closed the outbound connection unexpectedly",
+            ),
+        ];
+
+        for (log, expected) in cases {
+            let summary = classify_runtime_diagnostic(log);
+            assert_eq!(summary, Some(expected), "log pattern: {log}");
+            assert!(!summary.unwrap().contains("secret"));
+            assert!(!summary.unwrap().contains("proxy.example"));
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn captures_runtime_diagnostics_from_stdout_and_stderr() {
