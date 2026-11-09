@@ -2,9 +2,15 @@
 
 use std::{
     collections::BTreeMap,
+    io::Write,
+    net::ToSocketAddrs,
     path::Path,
-    sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    thread,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, ensure};
@@ -13,6 +19,7 @@ use crate::{
     benchmark::{
         http::{BenchmarkHttpClient, Measurement, MeasurementFailure, validate_settings},
         process::ManagedCoreProcess,
+        tcp,
     },
     cores::{CoreId, adapters, core_binary_path, installer::current_version},
     database::{NodeDatabase, NodeRecord},
@@ -24,7 +31,9 @@ use crate::{
 
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 const SAMPLES_PER_METRIC: u8 = 3;
-const METHODOLOGY: &str = "proxyctl-benchmark-v1";
+const METHODOLOGY: &str = "proxyctl-benchmark-v2";
+const DIRECT_TARGET: &str = "direct";
+const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
 pub struct BenchmarkOptions {
@@ -48,10 +57,10 @@ impl Default for BenchmarkOptions {
 pub fn default_settings() -> BenchmarkSettings {
     BenchmarkSettings {
         methodology: METHODOLOGY.into(),
-        latency_url: "https://speed.cloudflare.com/__down".into(),
-        download_url: "https://speed.cloudflare.com/__down".into(),
+        latency_url: "https://www.google.com/generate_204".into(),
+        download_url: "https://cachefly.cachefly.net/10mb.test".into(),
         upload_url: "https://speed.cloudflare.com/__up".into(),
-        download_bytes: 1_048_576,
+        download_bytes: 16 * 1024 * 1024,
         upload_bytes: 1_048_576,
         request_timeout_ms: 15_000,
         startup_timeout_ms: 10_000,
@@ -71,13 +80,15 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
 
     let (nodes, cores) = load_scope(database_path, &options)?;
     let core_versions = installed_core_versions(&cores);
+    let mut targets = vec![DIRECT_TARGET.to_owned()];
+    targets.extend(cores.iter().map(|core| core.as_str().to_owned()));
     let run = BenchmarkRun {
         id: 0,
         status: BenchmarkRunStatus::Running,
         started_at: unix_timestamp(),
         completed_at: None,
         node_ids: nodes.iter().map(|record| record.id).collect(),
-        cores: cores.iter().map(|core| core.as_str().to_owned()).collect(),
+        cores: targets,
         settings: options.settings.clone(),
         core_versions: core_versions.clone(),
         summary: None,
@@ -89,6 +100,8 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         database.start_benchmark_run(run)?
     };
 
+    println!("Benchmark run #{run_id}: {} node(s), {} core(s)", nodes.len(), cores.len());
+    println!("Direct TCP ping runs once per node; HTTP tests run through each compatible core.");
     let execution = execute_run(
         database_path,
         run_id,
@@ -171,12 +184,12 @@ fn installed_core_versions(cores: &[CoreId]) -> BTreeMap<String, String> {
         .collect()
 }
 
-#[derive(Clone, Copy)]
-struct SampleContext<'a> {
+#[derive(Clone)]
+struct SampleContext {
     run_id: u64,
     node_id: u64,
-    core: CoreId,
-    version: Option<&'a str>,
+    target: String,
+    version: Option<String>,
 }
 
 fn execute_run(
@@ -188,22 +201,26 @@ fn execute_run(
     settings: &BenchmarkSettings,
 ) -> anyhow::Result<()> {
     for record in nodes {
+        if CANCELLED.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        execute_tcp_ping(database_path, run_id, record)?;
+
         for core in cores {
             if CANCELLED.load(Ordering::Relaxed) {
                 return Ok(());
             }
             let executable = core_binary_path(*core)?;
-            let version = core_versions.get(core.as_str()).cloned();
             let context = SampleContext {
                 run_id,
                 node_id: record.id,
-                core: *core,
-                version: version.as_deref(),
+                target: core.as_str().to_owned(),
+                version: core_versions.get(core.as_str()).cloned(),
             };
             if !executable.is_file() {
                 record_preflight(
                     database_path,
-                    context,
+                    &context,
                     BenchmarkSampleStatus::Unavailable,
                     "core_missing",
                     "the selected managed core is not installed",
@@ -211,6 +228,7 @@ fn execute_run(
                 continue;
             }
 
+            println!("run #{run_id} node #{}: validating {core} configuration...", record.id);
             let adapter = adapters::adapter(*core);
             let compatibility = adapter.compatibility(&record.node);
             if !compatibility.is_supported() {
@@ -227,10 +245,12 @@ fn execute_run(
                     ),
                     crate::cores::adapters::CompatibilityStatus::Supported => unreachable!(),
                 };
-                record_preflight(database_path, context, status, category, reason)?;
+                record_preflight(database_path, &context, status, category, reason)?;
+                println!("run #{run_id} node #{} {core}: {category}", record.id);
                 continue;
             }
 
+            println!("run #{run_id} node #{}: starting {core}...", record.id);
             let process = match ManagedCoreProcess::start(
                 *core,
                 &record.node,
@@ -241,11 +261,12 @@ fn execute_run(
                 Err(_) => {
                     record_preflight(
                         database_path,
-                        context,
+                        &context,
                         BenchmarkSampleStatus::Unavailable,
                         "core_startup",
                         "the managed core failed to start or open its local listener",
                     )?;
+                    println!("run #{run_id} node #{} {core}: startup failed", record.id);
                     continue;
                 }
             };
@@ -256,7 +277,7 @@ fn execute_run(
                     process.stop()?;
                     record_preflight(
                         database_path,
-                        context,
+                        &context,
                         BenchmarkSampleStatus::Invalid,
                         "measurement_settings",
                         "the configured measurement endpoint settings are invalid",
@@ -265,6 +286,7 @@ fn execute_run(
                 }
             };
 
+            let mut process = Some(process);
             let mut completed_samples = Vec::with_capacity(usize::from(SAMPLES_PER_METRIC) * 3);
             for metric in [
                 BenchmarkMetric::Latency,
@@ -272,28 +294,50 @@ fn execute_run(
                 BenchmarkMetric::Upload,
             ] {
                 for sample_index in 1..=SAMPLES_PER_METRIC {
-                    let sample = if CANCELLED.load(Ordering::Relaxed) {
-                        failed_sample(
-                            context,
-                            metric,
-                            sample_index,
-                            BenchmarkSampleStatus::Cancelled,
-                            "cancelled",
-                            "measurement cancelled by user",
-                        )
-                    } else {
-                        match measure(&client, metric, settings) {
-                            Ok(measurement) => {
-                                successful_sample(context, metric, sample_index, measurement)
-                            }
-                            Err(error) => failed_sample(
-                                context,
+                    let label = format!(
+                        "run #{run_id} node #{} {core} {} sample {sample_index}/{SAMPLES_PER_METRIC}",
+                        record.id,
+                        metric.label()
+                    );
+                    println!("{label}: starting...");
+                    let outcome = measure_interruptibly(
+                        &client,
+                        metric,
+                        settings,
+                        &mut process,
+                        &label,
+                    );
+                    let sample = match outcome {
+                        Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
+                            println!(
+                                "{label}: {:.2} {} ({:.2}s)",
+                                measurement.value,
+                                metric.unit(),
+                                measurement.duration.as_secs_f64()
+                            );
+                            successful_sample(&context, metric, sample_index, measurement)
+                        }
+                        Ok(_) | Err(MeasurementFailure::Cancelled) => {
+                            println!("{label}: cancelled");
+                            failed_sample(
+                                &context,
+                                metric,
+                                sample_index,
+                                BenchmarkSampleStatus::Cancelled,
+                                "cancelled",
+                                "measurement cancelled by user",
+                            )
+                        }
+                        Err(error) => {
+                            println!("{label}: {}", error.reason());
+                            failed_sample(
+                                &context,
                                 metric,
                                 sample_index,
                                 status_for_failure(error),
                                 error.category(),
                                 error.reason(),
-                            ),
+                            )
                         }
                     };
                     completed_samples.push(sample);
@@ -302,7 +346,11 @@ fn execute_run(
 
             // Keep redb closed for the entire child-process lifetime. Flush this node/core
             // batch only after the child has exited, including when cancellation was requested.
-            let stop_result = process.stop();
+            let stop_result = if let Some(process) = process {
+                process.stop()
+            } else {
+                Ok(())
+            };
             for sample in completed_samples {
                 persist_sample(database_path, sample)?;
             }
@@ -311,16 +359,95 @@ fn execute_run(
     }
     Ok(())
 }
-fn measure(
+
+fn execute_tcp_ping(
+    database_path: &Path,
+    run_id: u64,
+    record: &NodeRecord,
+) -> anyhow::Result<()> {
+    let context = SampleContext {
+        run_id,
+        node_id: record.id,
+        target: DIRECT_TARGET.to_owned(),
+        version: None,
+    };
+    for sample_index in 1..=SAMPLES_PER_METRIC {
+        if CANCELLED.load(Ordering::Relaxed) {
+            break;
+        }
+        let label = format!(
+            "run #{run_id} node #{} direct TCP ping sample {sample_index}/{SAMPLES_PER_METRIC}",
+            record.id
+        );
+        println!("{label}: connecting to {}:{}...", record.node.server, record.node.port);
+        let sample = match tcp::ping(
+            &record.node.server,
+            record.node.port,
+            TCP_CONNECT_TIMEOUT,
+        ) {
+            Ok(measurement) => {
+                println!("{label}: {:.2} ms", measurement.value);
+                successful_sample(&context, BenchmarkMetric::TcpPing, sample_index, measurement)
+            }
+            Err(error) => {
+                println!("{label}: {}", error.reason());
+                failed_sample(
+                    &context,
+                    BenchmarkMetric::TcpPing,
+                    sample_index,
+                    status_for_failure(error),
+                    error.category(),
+                    error.reason(),
+                )
+            }
+        };
+        persist_sample(database_path, sample)?;
+    }
+    Ok(())
+}
+
+fn measure_interruptibly(
     client: &BenchmarkHttpClient,
     metric: BenchmarkMetric,
     settings: &BenchmarkSettings,
+    process: &mut Option<ManagedCoreProcess>,
+    label: &str,
 ) -> Result<Measurement, MeasurementFailure> {
-    match metric {
-        BenchmarkMetric::Latency => client.latency(),
-        BenchmarkMetric::Download => client.download(settings.download_bytes),
-        BenchmarkMetric::Upload => client.upload(settings.upload_bytes),
-    }
+    let (sender, receiver) = mpsc::channel();
+    let label = label.to_owned();
+
+    thread::scope(|scope| {
+        scope.spawn(move || {
+            let result = match metric {
+                BenchmarkMetric::TcpPing => Err(MeasurementFailure::InvalidResponse),
+                BenchmarkMetric::Latency => client.latency(),
+                BenchmarkMetric::Download => client.download(settings.download_bytes, |bytes| {
+                    print!("\r{label}: {bytes} bytes received");
+                    let _ = std::io::stdout().flush();
+                }),
+                BenchmarkMetric::Upload => client.upload(settings.upload_bytes),
+            };
+            let _ = sender.send(result);
+        });
+
+        loop {
+            if CANCELLED.load(Ordering::Relaxed) {
+                if let Some(process) = process.take() {
+                    let _ = process.stop();
+                }
+                let _ = receiver.recv();
+                return Err(MeasurementFailure::Cancelled);
+            }
+
+            match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(result) => return result,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(MeasurementFailure::Unavailable);
+                }
+            }
+        }
+    })
 }
 
 fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSampleStatus {
@@ -329,11 +456,12 @@ fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSampleStatus {
         MeasurementFailure::Unreachable => BenchmarkSampleStatus::Unreachable,
         MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
         MeasurementFailure::Unavailable => BenchmarkSampleStatus::Unavailable,
+        MeasurementFailure::Cancelled => BenchmarkSampleStatus::Cancelled,
     }
 }
 
 fn successful_sample(
-    context: SampleContext<'_>,
+    context: &SampleContext,
     metric: BenchmarkMetric,
     sample_index: u8,
     measurement: Measurement,
@@ -342,8 +470,8 @@ fn successful_sample(
         id: 0,
         run_id: context.run_id,
         node_id: context.node_id,
-        core: context.core.as_str().into(),
-        core_version: context.version.map(str::to_owned),
+        core: context.target.clone(),
+        core_version: context.version.clone(),
         metric,
         sample_index,
         status: BenchmarkSampleStatus::Success,
@@ -357,7 +485,7 @@ fn successful_sample(
 }
 
 fn failed_sample(
-    context: SampleContext<'_>,
+    context: &SampleContext,
     metric: BenchmarkMetric,
     sample_index: u8,
     status: BenchmarkSampleStatus,
@@ -368,8 +496,8 @@ fn failed_sample(
         id: 0,
         run_id: context.run_id,
         node_id: context.node_id,
-        core: context.core.as_str().into(),
-        core_version: context.version.map(str::to_owned),
+        core: context.target.clone(),
+        core_version: context.version.clone(),
         metric,
         sample_index,
         status,
@@ -384,7 +512,7 @@ fn failed_sample(
 
 fn record_preflight(
     database_path: &Path,
-    context: SampleContext<'_>,
+    context: &SampleContext,
     status: BenchmarkSampleStatus,
     category: &str,
     reason: &str,
@@ -443,12 +571,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_settings_are_bounded_and_use_https() {
+    fn default_settings_match_v2rayn_style_targets_and_are_bounded() {
         let settings = default_settings();
-        assert!(settings.latency_url.starts_with("https://"));
-        assert!(settings.download_url.starts_with("https://"));
-        assert!(settings.upload_url.starts_with("https://"));
-        assert_eq!(settings.download_bytes, 1_048_576);
+        assert_eq!(
+            settings.latency_url,
+            "https://www.google.com/generate_204"
+        );
+        assert_eq!(
+            settings.download_url,
+            "https://cachefly.cachefly.net/10mb.test"
+        );
+        assert_eq!(settings.upload_url, "https://speed.cloudflare.com/__up");
+        assert_eq!(settings.download_bytes, 16 * 1024 * 1024);
         assert_eq!(settings.upload_bytes, 1_048_576);
         assert_eq!(settings.request_timeout_ms, 15_000);
     }
