@@ -1,5 +1,6 @@
 //! Core application entry point and module boundaries for proxyctl.
 
+pub mod benchmark;
 pub mod cli;
 pub mod cores;
 pub mod database;
