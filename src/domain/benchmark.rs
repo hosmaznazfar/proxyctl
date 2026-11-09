@@ -6,15 +6,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BenchmarkMetric {
+    TcpPing,
     Latency,
     Download,
     Upload,
 }
 
 impl BenchmarkMetric {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::TcpPing => "TCP ping",
+            Self::Latency => "real ping",
+            Self::Download => "download",
+            Self::Upload => "upload",
+        }
+    }
+
     pub const fn unit(self) -> &'static str {
         match self {
-            Self::Latency => "ms",
+            Self::TcpPing | Self::Latency => "ms",
             Self::Download | Self::Upload => "bps",
         }
     }
