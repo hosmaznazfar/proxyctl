@@ -5,7 +5,7 @@ use crate::{
     domain::{Protocol, ProxyNode, TransportKind},
 };
 
-use super::{Compatibility, normalize_transport, option_string, reality_options, tls_options, validate_common};
+use super::{Compatibility, normalize_transport, option_string, reality_options, shadowsocks_plugin, tls_options, validate_common};
 
 #[derive(Clone, Copy, Debug)]
 struct CoreCapabilities {
@@ -161,6 +161,13 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
 
     validate_common(node).map_err(compatibility_failure)?;
     tls_options(node).map_err(compatibility_failure)?;
+    if shadowsocks_plugin(node).map_err(compatibility_failure)?.is_some()
+        && core == CoreId::Xray
+    {
+        return Err(compatibility_failure(
+            "Xray does not implement Shadowsocks SIP003 plugins".into(),
+        ));
+    }
     let reality = reality_options(node).map_err(compatibility_failure)?;
     if reality.is_some() {
         if node.protocol != Protocol::Vless
