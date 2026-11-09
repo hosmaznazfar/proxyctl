@@ -63,11 +63,9 @@ impl CoreAdapter for SingBoxAdapter {
                 "password": node.secret.as_ref().map(|v| v.expose()).unwrap_or_default()
             }),
         };
-        if let Some((plugin, plugin_opts, _, _)) =
-            shadowsocks_plugin(node).map_err(anyhow::Error::msg)?
-        {
-            outbound["plugin"] = json!(plugin);
-            outbound["plugin_opts"] = json!(plugin_opts);
+        if let Some(plugin) = shadowsocks_plugin(node).map_err(anyhow::Error::msg)? {
+            outbound["plugin"] = json!(plugin.sing_box_name);
+            outbound["plugin_opts"] = json!(plugin.sing_box_options);
         }
         if let Some(flow) = option_string(node, "flow") {
             outbound["flow"] = json!(flow);
