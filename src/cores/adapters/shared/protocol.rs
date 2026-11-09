@@ -151,7 +151,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         Protocol::Hysteria2 => HYSTERIA2_OPTIONS,
         Protocol::Shadowsocks => &[],
     };
-    reject_unknown_options(node, &supported)?;
+    reject_unknown_options(node, supported)?;
     validate_string_options(node)?;
     if !node.option_entries.is_empty() {
         let mut seen = std::collections::BTreeSet::new();
