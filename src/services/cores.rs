@@ -1,5 +1,8 @@
 //! Managed-core setup, update, and inventory use cases.
-use crate::cores::{CoreId, core_binary_path, installer};
+use crate::{
+    cores::{CoreId, core_binary_path, installer},
+    updates::release::ReleaseChannel,
+};
 
 #[derive(Debug)]
 pub struct CoreStatus {
@@ -29,7 +32,7 @@ pub fn setup(selected: Option<CoreId>) -> anyhow::Result<()> {
     let cores = selected.map_or_else(|| CoreId::ALL.to_vec(), |core| vec![core]);
     let mut failures = Vec::new();
     for core in cores {
-        if let Err(error) = installer::install_or_update(core, false) {
+        if let Err(error) = installer::install_or_update(core, false, ReleaseChannel::Stable) {
             eprintln!("{core}: {error:#}");
             failures.push(core);
         }
@@ -48,7 +51,11 @@ pub fn setup(selected: Option<CoreId>) -> anyhow::Result<()> {
     }
 }
 
-pub fn update_installed(check_only: bool, selected: Option<CoreId>) -> anyhow::Result<()> {
+pub fn update_installed(
+    check_only: bool,
+    selected: Option<CoreId>,
+    channel: ReleaseChannel,
+) -> anyhow::Result<()> {
     let candidates = match selected {
         Some(core) => {
             if !core_binary_path(core)?.is_file() {
@@ -68,7 +75,7 @@ pub fn update_installed(check_only: bool, selected: Option<CoreId>) -> anyhow::R
     }
     let mut failures = Vec::new();
     for core in candidates {
-        if let Err(error) = installer::install_or_update(core, check_only) {
+        if let Err(error) = installer::install_or_update(core, check_only, channel) {
             eprintln!("{core}: {error:#}");
             failures.push(core);
         }
