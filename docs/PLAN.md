@@ -175,23 +175,21 @@ This work does not start cores, activate proxies, or modify system networking. A
 
 ### 3.5 Benchmark execution and persistence
 
-**Design baseline:** see [BENCHMARK_DESIGN.md](BENCHMARK_DESIGN.md). The first benchmark command is explicit and sequential:
+**Revised methodology:** see [BENCHMARK_DESIGN.md](BENCHMARK_DESIGN.md). Proxyctl will follow the useful separation used by v2rayN:
 
-```sh
-proxyctl test --all-cores
-proxyctl test --node 12 --core sing-box
-```
+- Direct TCP ping to the node server/port (does not start a core).
+- Real HTTP ping through the selected core (configurable small-response URL).
+- Download throughput through the selected core (configurable bounded file URL).
+- Upload throughput through the selected core (configurable upload endpoint; separate from v2rayN's current download-only speed test).
 
-For each compatible installed node/core pair, Proxyctl validates a generated config, starts one managed core with a loopback-only HTTP inbound, probes readiness, measures latency/download/upload, then stops and waits for the child and removes the private config. The selected core is the only process started. No TUN, system proxy, DNS, route, or firewall changes are involved.
+The initial HTTP defaults follow v2rayN's current defaults where applicable: Google `generate_204` for real ping and CacheFly's 10 MB test file for download. Upload remains separately configurable and initially uses Cloudflare's upload endpoint because v2rayN does not provide an equivalent upload metric. Cloudflare is therefore not the universal latency/download provider. Public LibreSpeed endpoints may be configured, but Proxyctl must not silently choose a public server with operator-dependent telemetry/privacy behavior.
 
-The database is never held open while a core process or HTTP request is active. Read node data and close redb before execution; persist the run before starting; keep the database closed for each core-process lifetime; after stopping a core, persist that node/core's samples in short transactions; and reopen for finalization. A run interrupted by cancellation retains completed samples and is marked incomplete. Stale running records are recovered on the next benchmark invocation. Typed run/sample records, median/throughput calculations, schema version 2, short sample transactions, finalization, stale-run recovery, loopback-only per-core configs, bounded child-process lifecycle, HTTPS measurement client, and the sequential `proxyctl test` service/CLI are implemented. The fake-core startup/cleanup and local fake HTTP-proxy measurement tests are implemented; service orchestration tests remain pending.
+TCP ping runs once per node and is stored under the reserved `direct` target. HTTP tests run for each compatible node/core pair. The CLI prints node/core/metric/sample progress; downloads report bounded, throttled byte progress. Ctrl-C must be observed during a running request: stop the active managed core to break the loopback proxy connection, wait for the measurement worker and child to exit, persist completed/cancelled samples, and finalize the run as cancelled. A global HTTP timeout alone is not an acceptable cancellation strategy.
 
-Collect three independent samples per metric per compatible node/core pair: three latency, three download, and three upload samples. A failed sample has a status and no numeric value. A failure in one metric does not erase successful samples from another. Unsupported/invalid/missing-core preflight outcomes are recorded without starting a process and are not fabricated as attempted network samples.
+The first implementation batch already has typed records, schema version 2, sample persistence, median/throughput helpers, stale-run recovery, loopback-only per-core configs, native config validation, bounded child-process lifecycle, and a local fake HTTP-proxy test. The first real smoke test exposed a usability defect: no progress was printed while synchronous requests were running, and Ctrl-C only set a flag that was checked between requests. The benchmark methodology and implementation are being revised before asking for another real run. Service-level orchestration tests must cover cancellation during each metric and verify child/config cleanup and persisted samples.
 
-Latency is application-level HTTP response-header latency through the proxy, not ICMP ping. Throughput is measured from bounded HTTP download/upload transfers and stored in bits per second. The initial default endpoint is Cloudflare Speed Test (`/__down` and `/__up`); endpoints, payload sizes, and timeouts are configurable and recorded with the run. Cloudflare's published speed-test documentation states that completed measurement results are collected for aggregated insights; the CLI and README must disclose this before benchmark execution. Results describe the end-to-end route and test conditions, not isolated core CPU performance.
-
-Initial sample statuses: `success`, `unreachable`, `unsupported`, `invalid`, `timeout`, `unavailable`, and `cancelled`.
-
+Do not start reports, sorting, or pruning until the revised benchmark implementation passes local unit/Clippy/build checks, the expanded native config matrix, and a real single-node smoke test.
+  
 ### 3.6 Sorting and comparison semantics
 
 Core-independent commands compare each node's best available compatible-core result:
