@@ -248,3 +248,14 @@ fn hysteria2_packet_size_controls_require_gecko_and_valid_ranges() {
         assert_eq!(adapter(CoreId::Mihomo).compatibility(node).status, CompatibilityStatus::Invalid);
     }
 }
+
+
+#[test]
+fn empty_shadowsocks_plugin_value_is_invalid_not_ignored() {
+    let node = parse_proxy_url(
+        "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=",
+    ).unwrap();
+    for core in [CoreId::SingBox, CoreId::Mihomo, CoreId::Xray] {
+        assert_eq!(adapter(core).compatibility(&node).status, CompatibilityStatus::Invalid);
+    }
+}
