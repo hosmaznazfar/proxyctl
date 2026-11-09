@@ -392,6 +392,19 @@ mod tests {
     use super::{Cli, Command};
 
     #[test]
+    fn list_command_accepts_metric_sorting_and_optional_core() {
+        assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "ping"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl", "list", "--sort", "download", "--core", "xray"
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["proxyctl", "list", "--core", "xray"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "unknown"]).is_err());
+    }
+
+    #[test]
     fn test_command_accepts_all_cores_scope() {
         let cli = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
         assert!(matches!(
