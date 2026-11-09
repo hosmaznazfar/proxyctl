@@ -66,6 +66,17 @@ impl CoreAdapter for SingBoxAdapter {
         if let Some(flow) = option_string(node, "flow") {
             outbound["flow"] = json!(flow);
         }
+        if node.protocol == Protocol::Hysteria2
+            && let Some(obfs) = option_string(node, "obfs")
+        {
+            outbound["obfs"] = json!({
+                "type": obfs,
+                "password": option_string(node, "obfs-password")
+                    .or_else(|| option_string(node, "obfs_password"))
+                    .unwrap_or_default()
+            });
+        }
+
         let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
         if matches!(&transport.kind, crate::domain::TransportKind::WebSocket) {
             let mut ws = serde_json::Map::new();
