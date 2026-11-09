@@ -151,7 +151,29 @@ Persist the run before testing. Keep redb closed while any core process or measu
 4. **In progress:** add direct TCP ping as a distinct metric/target.
 5. **In progress:** add live metric/sample/download progress and cancellation that stops the active core while a request is in flight.
 6. Add service-level orchestration tests for normal completion, per-metric failure, Ctrl-C during each metric, child cleanup, and sample persistence.
-7. Run the expanded native config matrix and one real single-node smoke test before implementing reports, sorting, or pruning.
+7. **Complete:** the expanded native config matrix and real single-node benchmark smoke tests passed. Metric-specific sorting is now being implemented before reports and pruning.
+
+## 11. Metric-specific sorting and comparison
+
+Sorting is independent for each metric. Real HTTP ping, direct TCP ping, download, and upload are separate measurements:
+
+~~~sh
+proxyctl list --sort ping
+proxyctl list --sort download
+proxyctl list --sort upload
+
+proxyctl list --sort ping --core xray
+proxyctl list --sort download --core sing-box
+proxyctl list --sort upload --core mihomo
+
+proxyctl list --sort tcp-ping
+~~~
+
+For each node/core pair, use that pair's latest completed benchmark run and calculate the median from successful samples in that run. A newer completed run supersedes an older result even if the newer run has no successful samples; never fall back to stale measurements. Interrupted, cancelled, and running records are ignored.
+
+Cross-core comparisons take the median of the available per-core medians, giving every core with a successful result equal weight. They do not select only the fastest core. Core-specific sorting uses only the selected core's latest completed run. Direct TCP ping uses the reserved `direct` target and is never combined with real ping or proxy-core results.
+
+Ping metrics sort ascending; download and upload sort descending. Nodes without a successful comparable measurement remain at the bottom as unmeasured, never as zero. Unsupported core outcomes do not contribute a value. Sorting is read-only and does not start cores or change network settings.
 
 Sources:
 - v2rayN implementation: https://github.com/2dust/v2rayN
