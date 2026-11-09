@@ -6,5 +6,6 @@
 pub mod benchmark;
 pub mod cores;
 pub mod nodes;
+pub mod sorting;
 pub mod updates;
 pub mod validation;
