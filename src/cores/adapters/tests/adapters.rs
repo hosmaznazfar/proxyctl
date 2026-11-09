@@ -215,3 +215,36 @@ fn unsupported_shadowsocks_plugin_options_are_not_dropped() {
         );
     }
 }
+
+
+#[test]
+fn hysteria2_gecko_packet_size_controls_map_to_both_supported_cores() {
+    let node = parse_proxy_url(
+        "hysteria2://secret@example.com:443?obfs=gecko&obfs-password=secret&obfs-min-packet-size=512&obfs-max-packet-size=1200",
+    ).unwrap();
+
+    let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+    let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+    assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["min_packet_size"], 512);
+    assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["max_packet_size"], 1200);
+
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(mihomo_doc["proxies"][0]["obfs-min-packet-size"], 512);
+    assert_eq!(mihomo_doc["proxies"][0]["obfs-max-packet-size"], 1200);
+}
+
+#[test]
+fn hysteria2_packet_size_controls_require_gecko_and_valid_ranges() {
+    let salamander = parse_proxy_url(
+        "hysteria2://secret@example.com:443?obfs=salamander&obfs-password=secret&obfs-min-packet-size=512",
+    ).unwrap();
+    let invalid_range = parse_proxy_url(
+        "hysteria2://secret@example.com:443?obfs=gecko&obfs-password=secret&obfs-min-packet-size=1200&obfs-max-packet-size=512",
+    ).unwrap();
+
+    for node in [&salamander, &invalid_range] {
+        assert_eq!(adapter(CoreId::SingBox).compatibility(node).status, CompatibilityStatus::Invalid);
+        assert_eq!(adapter(CoreId::Mihomo).compatibility(node).status, CompatibilityStatus::Invalid);
+    }
+}
