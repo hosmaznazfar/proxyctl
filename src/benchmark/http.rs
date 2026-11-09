@@ -151,8 +151,7 @@ impl BenchmarkHttpClient {
         }
         let duration = started.elapsed();
         Ok(Measurement {
-            value: throughput_bps(bytes, duration)
-                .ok_or(MeasurementFailure::InvalidResponse)?,
+            value: throughput_bps(bytes, duration).ok_or(MeasurementFailure::InvalidResponse)?,
             duration,
         })
     }
