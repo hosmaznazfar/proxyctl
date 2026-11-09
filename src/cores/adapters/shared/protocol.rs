@@ -80,6 +80,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "sid",
         "spx",
         "mldsa65Verify",
+        "extra",
     ];
     const VMESS_OPTIONS: &[&str] = &[
         "security",
@@ -115,6 +116,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "sid",
         "spx",
         "mldsa65Verify",
+        "extra",
     ];
     const TROJAN_OPTIONS: &[&str] = &[
         "security",
