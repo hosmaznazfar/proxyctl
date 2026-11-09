@@ -74,14 +74,23 @@ pub fn latest_release_optional(
         .context("could not read GitHub release metadata")?;
     let releases: Vec<Release> =
         serde_json::from_str(&body).context("GitHub returned invalid release metadata")?;
-    if releases.is_empty() {
+    let Some(release) = select_available_release(releases, channel)? else {
         return Ok(None);
-    }
-    let release = select_release(releases, channel)?;
+    };
     for asset in &release.assets {
         validate_github_download_url(&asset.browser_download_url)?;
     }
     Ok(Some(release))
+}
+
+fn select_available_release(
+    releases: Vec<Release>,
+    channel: ReleaseChannel,
+) -> anyhow::Result<Option<Release>> {
+    if releases.is_empty() {
+        return Ok(None);
+    }
+    select_release(releases, channel).map(Some)
 }
 
 fn select_release(releases: Vec<Release>, channel: ReleaseChannel) -> anyhow::Result<Release> {
@@ -119,6 +128,16 @@ mod tests {
             prerelease,
             assets: Vec::new(),
         }
+    }
+
+    #[test]
+    fn empty_repository_release_list_is_a_normal_no_update_state() {
+        assert!(select_available_release(Vec::new(), ReleaseChannel::Stable)
+            .unwrap()
+            .is_none());
+        assert!(select_available_release(Vec::new(), ReleaseChannel::Prerelease)
+            .unwrap()
+            .is_none());
     }
 
     #[test]
