@@ -194,6 +194,8 @@ pub(crate) fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
         "obfs",
         "obfs-password",
         "obfs_password",
+        "obfs-min-packet-size",
+        "obfs-max-packet-size",
     ];
     for key in STRING_OPTIONS {
         if let Some(value) = node.option(key)
