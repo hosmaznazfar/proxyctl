@@ -68,6 +68,7 @@ The self-updater requires a published proxyctl GitHub Release. Core updates use 
 ~~~sh
 proxyctl test --all-cores
 proxyctl test --node 12 --core sing-box
+proxyctl test --node 12 --core xray --download-bytes 2097152 --upload-bytes 1048576
 proxyctl report
 proxyctl list --sort ping
 proxyctl list --sort download
@@ -79,7 +80,7 @@ proxyctl tun on
 proxyctl tun off
 ~~~
 
-Benchmark design and external measurement-service disclosure: see [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md). The initial benchmark defaults to Cloudflare Speed Test; Cloudflare states that completed measurements are collected for aggregated Internet-connection insights. Endpoint URLs and payload sizes will be configurable. Benchmarking is explicit, sequential, and uses a loopback-only local proxy listener; it does not change system proxy or network settings.
+Benchmark design and external measurement-service disclosure: see [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md). `proxyctl test --all-cores` tests active nodes against installed compatible managed cores; `--node ID --core CORE` selects one pair. The initial defaults use Cloudflare Speed Test endpoints. Cloudflare states that completed measurements are collected for aggregated Internet-connection insights. Endpoint URLs, payload sizes, and timeouts are configurable. Benchmarking is explicit and sequential, uses a loopback-only local HTTP proxy listener, and does not change system proxy or network settings.
 
 See docs/PLAN.md, docs/REQUIREMENTS.md, and docs/UPDATE_DESIGN.md.
 
