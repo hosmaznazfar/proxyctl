@@ -255,6 +255,21 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         {
             return Err("Hysteria2 obfuscation password aliases conflict".into());
         }
+        let min_size = option_string(node, "obfs-min-packet-size")
+            .map(|value| value.parse::<u16>().map_err(|_| "Hysteria2 Gecko minimum packet size is invalid".to_owned()))
+            .transpose()?;
+        let max_size = option_string(node, "obfs-max-packet-size")
+            .map(|value| value.parse::<u16>().map_err(|_| "Hysteria2 Gecko maximum packet size is invalid".to_owned()))
+            .transpose()?;
+        if (min_size.is_some() || max_size.is_some()) && obfs != Some("gecko") {
+            return Err("Hysteria2 packet-size options are only valid with Gecko obfuscation".into());
+        }
+        if min_size.is_some_and(|value| value == 0 || value > 2048)
+            || max_size.is_some_and(|value| value == 0 || value > 2048)
+            || matches!((min_size, max_size), (Some(min), Some(max)) if max < min)
+        {
+            return Err("Hysteria2 Gecko packet-size range is invalid".into());
+        }
     } else if option_string(node, "obfs").is_some()
         || option_string(node, "obfs-password").is_some()
         || option_string(node, "obfs_password").is_some()
