@@ -1,146 +1,159 @@
 # Benchmark design
 
-> Status: approved implementation baseline
+> Status: revised methodology approved; implementation in progress
 > Last updated: 2026-11-09
 
-## 1. Scope and non-goals
+## 1. Goals and scope
 
-The first benchmark implementation measures the end-to-end route through each compatible managed proxy core. It does not attempt to isolate core CPU performance, test TUN mode, change system proxy settings, or modify DNS, routes, firewall rules, or interfaces.
+Proxyctl reports four distinct measurements for each node:
 
-Initial metrics are:
-- Unloaded HTTP request latency, in milliseconds.
-- Download throughput, in bits per second.
-- Upload throughput, in bits per second.
+1. **TCP ping (direct):** connect to the node's advertised server and port without starting a proxy core. This is a reachability/transport measurement, not a measurement through a proxy.
+2. **Real ping (through proxy):** send HTTP requests through the selected managed core to a configurable small-response URL. This is application-level response latency, not ICMP.
+3. **Download (through proxy):** download a bounded test object through the selected managed core and measure bytes received over elapsed time.
+4. **Upload (through proxy):** send a bounded synthetic payload through the selected managed core to a configurable upload endpoint.
 
-Each compatible node/core pair receives three samples per metric. Runs are sequential: one core process and one node test at a time. A failure for one node or metric does not stop the remaining work.
+Do not combine TCP ping and real ping into one value. Their paths and meanings differ. These results measure the complete route, remote endpoint, and current test conditions; they do not isolate core CPU performance.
 
-## 2. CLI contract
+The command remains sequential by default: one node/core process at a time. The direct TCP test runs once per node in a run, not once for every core. Each metric keeps three individual samples; summaries use successful samples only.
 
-Initial commands:
+## 2. v2rayN-inspired endpoint defaults
+
+Use the same practical separation as v2rayN:
+
+- Real-ping default: `https://www.google.com/generate_204`.
+- Download default: `https://cachefly.cachefly.net/10mb.test`.
+- Upload default: `https://speed.cloudflare.com/__up` because v2rayN's current speed-test workflow does not provide an equivalent upload measurement.
+
+These are defaults, not hard dependencies. Provide CLI overrides for all three HTTP endpoints. Keep TCP ping independent of HTTP endpoint selection.
+
+The v2rayN reference implementation uses a direct TCP connect to the node host/port for TCPing, an HTTP response-time request through its local proxy for real ping, and a configurable download URL (including CacheFly and Cloudflare options). Its real-ping defaults include Google, YouTube, and Apple small-response URLs. Proxyctl uses three retained samples and a median rather than silently keeping only the fastest of two requests.
+
+LibreSpeed remains a supported endpoint family when a user supplies a compatible server. Do not silently select a public LibreSpeed server: operators and locations vary, and the public librespeed.org service currently discloses telemetry collection including IP address, ISP/location estimates, and test results. No public speed-test provider is assumed to be privacy-neutral.
+
+## 3. CLI contract
 
 ```sh
-# Test all active nodes against all installed compatible managed cores
+# Test all active nodes against installed compatible cores
 proxyctl test --all-cores
 
-# Test one node using one explicitly selected core
+# Test one node through one selected core
 proxyctl test --node 12 --core sing-box
+
+# Override the HTTP measurement endpoints
+proxyctl test --node 12 --core sing-box \
+  --latency-url https://www.google.com/generate_204 \
+  --download-url https://cachefly.cachefly.net/10mb.test \
+  --upload-url https://speed.cloudflare.com/__up
 ```
 
-The selectors are mutually exclusive. The all-cores form discovers installed managed cores and checks every active node against each installed core. The explicit form reports a missing or incompatible selected core instead of silently skipping it. Deleted nodes are excluded from all-node runs; an explicitly selected deleted node is rejected.
+The all-cores and explicit node/core selectors remain mutually exclusive. The direct TCP test runs once for each selected node. The HTTP tests run once for each supported node/core pair.
 
-Initial configurable settings:
-- Latency URL, download URL, and upload URL.
-- Download and upload payload sizes.
-- Per-request timeout and core startup/readiness timeout.
+The run stores effective endpoint URLs, payload limits, timeout values, and methodology version. The default download object is 10 MB; the upload body remains a bounded 1 MiB synthetic payload. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
 
-The command records the effective settings and methodology version in the run. Defaults are conservative and bounded; no automatic retries are hidden inside a sample. One request is one sample. The first implementation uses 1 MiB download and 1 MiB upload payloads per sample, three samples per metric, and a 15-second request timeout. These defaults are overridable and can be tuned after real-world test evidence.
+## 4. Measurement semantics
 
-## 3. Measurement endpoint and disclosure
+### 4.1 Direct TCP ping
 
-The initial default measurement service is Cloudflare Speed Test:
-- Latency: `GET https://speed.cloudflare.com/__down?bytes=0`.
-- Download: `GET https://speed.cloudflare.com/__down?bytes=<configured-bytes>`.
-- Upload: `POST https://speed.cloudflare.com/__up` with a deterministic synthetic body of the configured size.
+Resolve the node hostname and attempt a TCP connection to its configured port. Time from immediately before connection until the connection succeeds. Use a bounded connect timeout and three independent samples. Do not send proxy credentials or application data. This test does not use the selected core and may use the machine's normal DNS resolver; it must not modify DNS configuration.
 
-Cloudflare documents these download/upload endpoints and states that completed speed-test measurements are collected for aggregated Internet-connection insights. Proxyctl must disclose this in `proxyctl test --help`, README, and benchmark documentation. The endpoint URLs are configurable so users can select another compatible measurement service they trust. Custom endpoints must use HTTPS, contain no URL credentials, query parameters, or fragments, and implement the same request contract. Configure base endpoint URLs; Proxyctl adds the `bytes` query parameter to the latency/download requests. Local HTTP endpoints may be used only by tests.
+### 4.2 Real ping through the selected core
 
-No user files or proxy credentials are sent to measurement endpoints. The upload body is generated in memory and contains no user data. Only the test requests and normal network metadata reach the endpoint.
+Use the explicit loopback HTTP proxy created for the selected core. Send a GET request to the configured real-ping URL and measure until response headers arrive. Accept successful HTTP responses including 204 No Content; do not require a special query parameter or a zero-length response body. Read/discard only a small bounded response body. Three samples are retained.
 
-Sources:
-- Cloudflare Speed Test API defaults and measurement behavior: https://github.com/cloudflare/speedtest
-- Cloudflare's README notes that completed results are collected for aggregated insights.
+### 4.3 Download through the selected core
 
-## 4. Proxy process isolation
+GET the configured download URL exactly as supplied. Do not append provider-specific query parameters. Stream the response body in bounded chunks, count the actual bytes received, and calculate throughput from bytes received and elapsed time. Stop and report invalid response if the configured maximum byte limit is exceeded. Emit progress updates while bytes are arriving. The configured limit is a safety ceiling, not a requirement that every provider return an identical byte count.
 
-All three cores expose a local HTTP proxy inbound for the benchmark:
-- Bind only to `127.0.0.1`.
-- Select an ephemeral port for each node/core attempt.
-- Never listen on a LAN or wildcard address.
-- Do not use SOCKS or rely on system proxy environment variables.
+### 4.4 Upload through the selected core
 
-Each adapter will expose a benchmark-config generation path that adds the local HTTP inbound to the already validated outbound config and routes traffic to the node's `proxy` outbound. The generated config is validated with the selected core's native config-check command before startup.
+POST a deterministic in-memory payload containing no user data. Measure until the endpoint returns a successful response. Bound payload and response sizes. Report the upload stage and its completion/failure; do not imply byte-level progress if the HTTP library cannot expose it.
 
-Core startup commands:
+### 4.5 Units and aggregation
+
+- TCP ping and real ping: milliseconds (`ms`).
+- Download and upload: bits per second (`bps`).
+- Throughput = `transferred_bytes * 8 / elapsed_seconds`.
+- Use a monotonic clock.
+- Never turn a failed request into zero.
+- Keep all individual samples and calculate medians from successful samples only.
+
+A failure in one metric must not erase successful samples from another metric.
+
+## 5. Progress and cancellation
+
+The CLI must never remain silent during a long benchmark. Print the run ID, node ID/name, core, current metric, sample index, and stage transitions. For downloads, report received bytes and current/overall progress at a throttled interval (for example, no more often than every 200 ms) to avoid excessive terminal output. Print a final result or safe failure reason for every sample.
+
+Ctrl-C must be cooperative but prompt:
+1. The signal handler only sets an atomic cancellation flag.
+2. The orchestration loop observes the flag while a request is active, not only between requests.
+3. On cancellation, stop the active managed core to break its loopback proxy connection, allow the measurement worker to exit, then wait for and reap the child.
+4. Persist completed samples and explicit cancelled outcomes for remaining scheduled samples; finalize the run as cancelled.
+5. Never leave a core process or temporary config behind.
+
+The synchronous HTTP client must not make cancellation wait for the full global request timeout. Use a worker/coordination design that lets the orchestration thread stop the core when cancellation is requested. Keep the configured timeout as a final bound for network operations.
+
+## 6. Proxy process isolation
+
+All three cores expose a temporary HTTP inbound bound only to `127.0.0.1` on an ephemeral port. The generated config routes requests to the selected node's proxy outbound and is validated with the exact installed core before startup.
+
+Startup commands:
 - sing-box: `sing-box run -c CONFIG`.
 - Xray: `xray run -c CONFIG`.
 - Mihomo: `mihomo -f CONFIG`.
 
-The runner writes the generated config to a private temporary file (0600 on Unix), starts one managed child process, suppresses raw child stdout/stderr from normal output, and waits for the local listener to become ready. Readiness is bounded by a timeout. The port is reserved by asking the OS for an ephemeral local port; because the reservation must be released before the core binds, startup/readiness retry is bounded to handle a rare port collision.
+Write secret-bearing generated configs to private temporary files (0600 on Unix). Start the core directly without a shell; suppress raw child stdout/stderr. Probe readiness with a bounded timeout. The HTTP client must use an explicit proxy URL for the loopback listener and must not inherit `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, or `NO_PROXY`.
 
-The HTTP client uses an explicit proxy URL for the local listener. It must not inherit `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, or `NO_PROXY` settings from the user's shell. This prevents tests from accidentally routing around the selected core or through an unrelated proxy application.
+The process guard owns the child and config. Every normal error, timeout, and cancellation path stops and waits for the child and removes the config. Benchmarking never changes system proxy settings, DNS, routes, firewall rules, interfaces, or TUN state.
 
-A process guard owns the child and temporary config. Every normal error, timeout, and cancellation path stops and waits for the child and removes the config. The runner never invokes a shell and never changes global networking. Ctrl-C requests cancellation; the active request is bounded by its timeout, then cleanup runs and the run is finalized as cancelled/incomplete.
-
-## 5. Measurement semantics
-
-For each compatible node/core pair, after config validation and readiness:
-
-1. Send three latency requests, sequentially. Measure from immediately before the HTTP request until response headers arrive. The zero-byte endpoint minimizes payload transfer.
-2. Send three download requests. Measure until exactly the configured response body bytes have been read; reject short or oversized responses.
-3. Send three upload requests with a deterministic in-memory body. Measure until the successful response is received.
-
-Use a monotonic clock for durations. Throughput is calculated as `transferred_bytes * 8 / elapsed_seconds` and stored as bits per second (`bps`). Latency is stored as milliseconds (`ms`). Do not convert failures to zero. HTTP status errors, DNS/connect failures, request timeouts, malformed responses, and cancellation map to typed safe failure categories. Error details must not include full URLs, credentials, response bodies, or generated config content.
-
-These are end-to-end measurements of the proxy route, endpoint, and test conditions—not isolated core performance. Three samples are retained individually; medians are calculated for reporting/sorting from successful samples only.
-
-## 6. Compatibility and outcome handling
+## 7. Compatibility and outcomes
 
 Before starting a core:
-1. Load the node record and close the database.
-2. Evaluate the adapter compatibility result.
-3. Confirm the managed core binary exists and capture its version.
-4. Generate and native-validate the benchmark config.
+1. Load node data and close the database.
+2. Evaluate adapter compatibility.
+3. Confirm the managed core exists and capture its version.
+4. Generate and native-validate the loopback benchmark config.
 5. Start the core and probe readiness.
 
-Unsupported or invalid node/core combinations do not start a core. A selected but missing managed core is reported as unavailable. Incompatible combinations are recorded as unsupported or invalid. Compatible combinations that cannot connect are recorded as unreachable; bounded request failures are recorded as timeout or unavailable as appropriate.
+TCP ping is independent of core compatibility. An unsupported or invalid node/core pair must not start a core; its real-ping/download/upload metrics receive explicit preflight outcomes. Missing selected cores are unavailable, not silently skipped.
 
-For a compatible, installed core, each metric has three separately recorded sample outcomes. Preflight outcomes (unsupported, invalid, or missing core) are recorded as a single non-measurement outcome per metric with no numeric value; they are not represented as three attempted network samples.
+Keep distinct outcomes for success, unreachable, unsupported, invalid, timeout, unavailable, and cancelled. Never store a numeric value for a failed sample. Store the direct TCP metric under a reserved `direct` target rather than pretending it belongs to a proxy core; the run scope must explicitly include that target.
 
-The initial sample status vocabulary is: `success`, `unreachable`, `unsupported`, `invalid`, `timeout`, `unavailable`, and `cancelled`.
+## 8. Persistence and crash recovery
 
-## 7. Persistence and crash recovery
+Use the existing redb benchmark run/sample tables. A run records:
+- Run ID, status, timestamps, selected node IDs, and selected targets (including the reserved `direct` target).
+- Methodology version and effective endpoint/payload/timeout settings.
+- Installed core versions and a safe final summary.
 
-Use the existing redb `benchmark_runs` and `benchmark_samples` tables. Add typed domain records and repository methods; keep redb-specific encoding inside the database module.
+A sample records node, target, optional core version, metric, sample index, status, optional value/unit, safe failure category/reason, timestamp, and elapsed duration.
 
-A run records:
-- Monotonic run ID, status, start/end timestamps.
-- Selected node/core scope and methodology version.
-- Configured endpoint URLs, payload sizes, timeouts, and retry policy.
-- Managed core versions observed during the run.
-- Safe interruption/error summary.
+Persist the run before testing. Keep redb closed while any core process or measurement request is active. Flush completed samples after the relevant child exits; direct TCP samples can be persisted without starting a core. On handled cancellation, stop the child and flush completed/cancelled samples. On uncatchable termination, the next invocation marks stale running records interrupted; only the active unflushed batch may be lost.
 
-A sample records:
-- Sample ID, run ID, node ID, core ID and core version.
-- Metric, sample index (1–3 for attempted measurements).
-- Status, optional value, unit, safe failure category/reason.
-- Start timestamp and elapsed duration.
+## 9. Failure isolation and safety
 
-Persist the run as running before tests begin. Keep the database closed while a core is active or a network request is running. After stopping a core, persist its completed node/core sample batch in short write transactions. Finalize the run after all work. Never keep a redb handle open while a core process or HTTP request is active.
-
-If Ctrl-C is received, stop the active child, persist the current node/core's completed sample batch and finalize the run as cancelled. If the process is killed without cleanup, the next benchmark invocation detects stale running records and marks them interrupted; only the unflushed active node/core batch may be lost. Never delete prior runs or samples when a new run begins.
-
-Schema migration: advance the current schema version and initialize benchmark ID counters through an explicit migration. Existing node records and fingerprints must remain unchanged.
-
-## 8. Failure isolation and safety
-
-- One node/core failure does not prevent later node/core attempts.
-- A metric failure does not erase successful samples from other metrics.
-- A core startup, readiness, or shutdown failure is reported without leaking credentials.
-- The runner owns exactly one child process at a time and always waits for it after termination.
+- One node/target failure does not stop unrelated tests.
+- One metric failure does not erase other metrics.
+- One core failure does not prevent later selected cores from being tested.
+- Credentials, raw URLs with secrets, response bodies, and generated configs never appear in progress output or errors.
+- Local listeners bind only to loopback.
 - Temporary configs are private and removed on every handled exit path.
-- Local listeners bind only to loopback and are closed when the core exits.
-- No system proxy, DNS, route, firewall, or TUN state is read-modified or changed.
-- No core is started by `check`, `setup`, `update`, or other existing commands; only the explicit `test` command starts a core.
+- Only the explicit `test` command starts a managed core.
+- Direct TCP ping opens only an outbound TCP connection to the node endpoint; it does not alter networking state.
 
-## 9. Implementation sequence
+## 10. Implementation sequence
 
-1. **Implemented:** typed benchmark run/sample/metric/status models, validation invariants, and pure median/throughput calculations.
-2. **Implemented:** schema version 2 migration, independent run/sample ID counters, short sample transactions, run finalization, and stale-running-run recovery.
-3. **Implemented:** per-core benchmark config generation with loopback HTTP inbounds and native config validation.
-4. **Implemented:** isolated child-process ownership, bounded readiness, termination/wait, and temporary-config cleanup; Unix SIGINT/SIGTERM are converted into cooperative cancellation requests.
-5. **Implemented:** explicit local HTTP proxy client, HTTPS endpoint validation, bounded download/upload bodies, and throughput calculation.
-6. **Implemented:** sequential service orchestration and the `proxyctl test` CLI command, including preflight outcomes and post-process node/core sample-batch persistence.
-7. **In progress:** local fake-core startup/cleanup and fake HTTP-proxy measurement tests are implemented without contacting external services. Add end-to-end service orchestration tests using injected fake process/measurement interfaces before treating the benchmark stage as fully verified.
-8. Add reports and sorting only after benchmark persistence is verified.
+1. **Complete:** typed run/sample records, redb schema version 2, persistence, median/throughput helpers, and stale-run recovery.
+2. **Complete:** per-core loopback benchmark configs, native config validation, and managed process lifecycle.
+3. **In progress:** replace provider-specific Cloudflare download/latency assumptions with v2rayN-style real-ping and download URL semantics; keep upload separately configurable.
+4. **In progress:** add direct TCP ping as a distinct metric/target.
+5. **In progress:** add live metric/sample/download progress and cancellation that stops the active core while a request is in flight.
+6. Add service-level orchestration tests for normal completion, per-metric failure, Ctrl-C during each metric, child cleanup, and sample persistence.
+7. Run the expanded native config matrix and one real single-node smoke test before implementing reports, sorting, or pruning.
 
-Keep each step buildable and update this document and `docs/PLAN.md` as implementation decisions are refined.
+Sources:
+- v2rayN implementation: https://github.com/2dust/v2rayN
+- v2rayN's configurable real-ping and download defaults are in `ServiceLib/Global.cs`; TCPing, real ping, and download orchestration are in `ServiceLib/Services/SpeedtestService.cs` and `ServiceLib/Handler/ConnectionHandler.cs`.
+- LibreSpeed endpoint and server-list contract: https://github.com/librespeed/speedtest/blob/master/doc.md
+- LibreSpeed public service privacy disclosure: https://librespeed.org/
+
+Keep this document and `docs/PLAN.md` synchronized as implementation evidence changes.
