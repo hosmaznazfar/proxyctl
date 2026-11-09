@@ -23,11 +23,11 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 | Separate certificate-name verification (`vcn`) | Unsupported | Unit-tested; not in native fixture matrix | Unit-tested; not in native fixture matrix |
 | REALITY (VLESS) | Native validated | Native validated | Native validated |
 | REALITY (VMess) | Unsupported | Native validated | Unsupported |
-| WebSocket (VLESS, VMess, Trojan) | Native validated* | Native validated* | Native validated* |
-| gRPC (standard mode) | Native validated | Native validated | Native validated* |
+| WebSocket (VLESS, VMess, Trojan) | VLESS fixture native-validated | VLESS fixture native-validated | VLESS fixture native-validated |
+| gRPC (standard mode) | VLESS fixture native-validated | VLESS fixture native-validated | VLESS fixture native-validated* |
 | gRPC authority / multi mode | Unsupported | Native validated | Unsupported |
-| HTTP/2 (VLESS/VMess) | Native validated | Unsupported in current Xray schema | Native validated |
-| HTTPUpgrade | Native validated | Native validated | Native validated |
+| HTTP/2 (VLESS/VMess) | VLESS fixture native-validated | Unsupported in current Xray schema | VLESS fixture native-validated |
+| HTTPUpgrade | VLESS fixture native-validated | VLESS fixture native-validated | VLESS fixture native-validated |
 | XHTTP (VLESS) | Unsupported | Native validated | Native validated |
 | XHTTP (VMess) | Unsupported | Native validated | Unsupported |
 | VMess transport coverage | Partial; see transport matrix | Partial; see transport matrix | Partial; see transport matrix |
@@ -95,13 +95,13 @@ The following table records implementation and native-fixture status. `Native va
 | Normalized transport | sing-box | Xray | Mihomo | Implementation status |
 |---|---|---|---|---|
 | TCP | Existing basic subset | Existing basic subset | Existing basic subset | Implemented baseline |
-| WebSocket | Native validated | Native validated | Native validated | Native fixture passed |
+| WebSocket | VLESS fixture native-validated | VLESS fixture native-validated | VLESS fixture native-validated | Native fixture passed |
 | WebSocket early data | Native validated | Native validated; custom header unsupported | Native validated | Native fixture passed |
 | VLESS Vision flow | Native validated | Native validated | Native validated | Native fixture passed |
-| gRPC (standard) | Native validated | Native validated | Native validated* | Native fixture passed |
+| gRPC (standard) | VLESS fixture native-validated | VLESS fixture native-validated | VLESS fixture native-validated* | Native fixture passed |
 | gRPC authority / multi | Unsupported | Native validated | Unsupported | Xray native fixture passed |
-| HTTP/2 | Native validated | Unsupported in current schema | Native validated | Native fixture passed |
-| HTTPUpgrade | Native validated | Native validated | Native validated | Native fixture passed |
+| HTTP/2 | VLESS fixture native-validated | Unsupported in current schema | VLESS fixture native-validated | Native fixture passed |
+| HTTPUpgrade | VLESS fixture native-validated | VLESS fixture native-validated | VLESS fixture native-validated | Native fixture passed |
 | XHTTP (VLESS) | Unsupported | Native validated | Native validated | Native fixture passed |
 | XHTTP (VMess) | Unsupported | Native validated | Unsupported | Native fixture passed |
 
