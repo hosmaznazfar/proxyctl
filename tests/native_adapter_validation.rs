@@ -58,13 +58,14 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 continue;
             }
 
-            adapters::validation::validate_node_config(*core, &node, executable)
-                .unwrap_or_else(|error| {
+            adapters::validation::validate_node_config(*core, &node, executable).unwrap_or_else(
+                |error| {
                     panic!(
                         "native validation failed for fixture '{}' on {core}: {error:#}",
                         fixture.name
                     )
-                });
+                },
+            );
             validated += 1;
         }
     }
@@ -100,8 +101,8 @@ fn fixtures() -> Vec<Fixture> {
             "hMaxReusableSecs": "1800-3000"
         }
     });
-    let encoded_extra =
-        url::form_urlencoded::byte_serialize(xhttp_extra.to_string().as_bytes()).collect::<String>();
+    let encoded_extra = url::form_urlencoded::byte_serialize(xhttp_extra.to_string().as_bytes())
+        .collect::<String>();
 
     vec![
         Fixture {
