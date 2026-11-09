@@ -81,6 +81,12 @@ impl CoreAdapter for SingBoxAdapter {
                     .or_else(|| option_string(node, "obfs_password"))
                     .unwrap_or_default()
             });
+            if let Some(value) = option_string(node, "obfs-min-packet-size") {
+                outbound["obfs"]["min_packet_size"] = json!(value.parse::<u16>().expect("validated Gecko minimum packet size"));
+            }
+            if let Some(value) = option_string(node, "obfs-max-packet-size") {
+                outbound["obfs"]["max_packet_size"] = json!(value.parse::<u16>().expect("validated Gecko maximum packet size"));
+            }
         }
 
         let transport = normalize_transport(node).map_err(anyhow::Error::msg)?;
