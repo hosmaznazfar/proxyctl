@@ -485,7 +485,37 @@ fn classify_core_start_failure(
         .join(" ")
         .to_ascii_lowercase();
 
-    if chain.contains("rejected the benchmark configuration")
+    if chain.contains("unrecognized configuration field") {
+        (
+            BenchmarkSampleStatus::Invalid,
+            "core_config_field_invalid",
+            "the selected core rejected a configuration field it does not recognize",
+        )
+    } else if chain.contains("loopback http inbound") {
+        (
+            BenchmarkSampleStatus::Invalid,
+            "core_config_inbound_invalid",
+            "the selected core rejected the generated loopback HTTP inbound",
+        )
+    } else if chain.contains("proxy outbound settings") {
+        (
+            BenchmarkSampleStatus::Invalid,
+            "core_config_outbound_invalid",
+            "the selected core rejected the generated proxy outbound settings",
+        )
+    } else if chain.contains("tls or certificate") {
+        (
+            BenchmarkSampleStatus::Invalid,
+            "core_config_tls_invalid",
+            "the selected core rejected the generated TLS or certificate settings",
+        )
+    } else if chain.contains("reality settings") {
+        (
+            BenchmarkSampleStatus::Invalid,
+            "core_config_reality_invalid",
+            "the selected core rejected the generated REALITY settings",
+        )
+    } else if chain.contains("rejected the benchmark configuration")
         || chain.contains("could not generate benchmark config")
     {
         (
