@@ -60,7 +60,7 @@ pub fn default_settings() -> BenchmarkSettings {
         download_url: "https://cachefly.cachefly.net/10mb.test".into(),
         upload_url: "https://speed.cloudflare.com/__up".into(),
         download_bytes: 2 * 1024 * 1024,
-        upload_bytes: 1_048_576,
+        upload_bytes: 262_144,
         request_timeout_ms: 15_000,
         startup_timeout_ms: 10_000,
     }
@@ -596,7 +596,7 @@ mod tests {
         );
         assert_eq!(settings.upload_url, "https://speed.cloudflare.com/__up");
         assert_eq!(settings.download_bytes, 2 * 1024 * 1024);
-        assert_eq!(settings.upload_bytes, 1_048_576);
+        assert_eq!(settings.upload_bytes, 262_144);
         assert_eq!(settings.request_timeout_ms, 15_000);
     }
 }
