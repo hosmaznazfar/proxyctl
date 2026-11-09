@@ -11,7 +11,7 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, tls_options,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, shadowsocks_plugin, tls_options,
         validate_for_core,
     },
 };
@@ -63,6 +63,12 @@ impl CoreAdapter for SingBoxAdapter {
                 "password": node.secret.as_ref().map(|v| v.expose()).unwrap_or_default()
             }),
         };
+        if let Some((plugin, plugin_opts, _, _)) =
+            shadowsocks_plugin(node).map_err(anyhow::Error::msg)?
+        {
+            outbound["plugin"] = json!(plugin);
+            outbound["plugin_opts"] = json!(plugin_opts);
+        }
         if let Some(flow) = option_string(node, "flow") {
             outbound["flow"] = json!(flow);
         }
