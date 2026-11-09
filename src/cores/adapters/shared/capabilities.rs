@@ -186,14 +186,14 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
         }
         let transport = normalize_transport(node).map_err(compatibility_failure)?;
         if core == CoreId::Xray
-            && !matches!(transport.kind, TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp)
+            && !matches!(&transport.kind, TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp)
         {
             return Err(compatibility_failure(
                 "Xray REALITY supports only TCP/RAW, gRPC, and XHTTP transports".into(),
             ));
         }
         if core != CoreId::Xray
-            && matches!(transport.kind, TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket)
+            && matches!(&transport.kind, TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket)
         {
             return Err(compatibility_failure(
                 "REALITY is not supported with this transport mapping".into(),
