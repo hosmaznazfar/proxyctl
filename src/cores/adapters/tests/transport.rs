@@ -426,3 +426,51 @@ fn adapters_support_websocket_for_vless_and_vmess() {
         }
     }
 }
+
+
+#[test]
+fn xhttp_extra_settings_map_to_xray_and_mihomo_native_schemas() {
+    let extra = r#"{"headers":{"User-Agent":"proxyctl-test"},"xPaddingBytes":"100-500","xPaddingObfsMode":true,"noGRPCHeader":false,"xmux":{"maxConcurrency":"16-32","hMaxReusableSecs":"1800-3000"}}"#;
+    let encoded = url::form_urlencoded::byte_serialize(extra.as_bytes()).collect::<String>();
+    let node = parse_proxy_url(&format!(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&extra={encoded}"
+    )).unwrap();
+
+    let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(
+        xray_doc["outbounds"][0]["streamSettings"]["xhttpSettings"]["extra"]["xPaddingBytes"],
+        "100-500"
+    );
+    assert_eq!(
+        xray_doc["outbounds"][0]["streamSettings"]["xhttpSettings"]["extra"]["xmux"]["maxConcurrency"],
+        "16-32"
+    );
+
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(mihomo_doc["proxies"][0]["xhttp-opts"]["x-padding-bytes"], "100-500");
+    assert_eq!(mihomo_doc["proxies"][0]["xhttp-opts"]["x-padding-obfs-mode"], true);
+    assert_eq!(
+        mihomo_doc["proxies"][0]["xhttp-opts"]["reuse-settings"]["max-concurrency"],
+        "16-32"
+    );
+    assert_eq!(
+        adapter(CoreId::SingBox).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+}
+
+#[test]
+fn xhttp_extra_rejects_malformed_or_unknown_fields() {
+    let malformed = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&extra=not-json"
+    ).unwrap();
+    let unknown_extra = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&extra=%7B%22unknown%22%3Atrue%7D"
+    ).unwrap();
+    for node in [&malformed, &unknown_extra] {
+        assert_eq!(adapter(CoreId::Xray).compatibility(node).status, CompatibilityStatus::Invalid);
+        assert_eq!(adapter(CoreId::Mihomo).compatibility(node).status, CompatibilityStatus::Invalid);
+    }
+}
