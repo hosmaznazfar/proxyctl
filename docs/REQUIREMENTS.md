@@ -182,6 +182,8 @@ Acceptance criteria:
 - The default endpoint is Cloudflare Speed Test (`speed.cloudflare.com/__down` and `/__up`); the CLI and README disclose that Cloudflare collects completed measurement results for aggregated insights. Endpoints and payload sizes are configurable.
 - Test endpoints, payload sizes, timeouts, and relevant settings are recorded with the run.
 - Each sample stores node ID, run ID, core, metric, sample index, status, optional numeric value, unit, error category, and timestamp.
+- Successful samples require a finite non-negative value and the metric's canonical unit; failed samples must have no numeric value.
+- A reserved sample index of 0 represents a preflight outcome (unsupported, invalid, or missing core), not a network measurement.
 - A failed sample has no numeric value; it is never stored as zero or a magic negative number.
 - Successful samples for one metric remain stored even if another metric fails.
 - A run interrupted partway retains completed samples and is marked incomplete.
