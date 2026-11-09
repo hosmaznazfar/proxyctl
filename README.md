@@ -68,9 +68,17 @@ The self-updater requires a published proxyctl GitHub Release. Core updates use 
 Run the initial sequential benchmark against all active nodes and installed compatible cores, or select one node/core pair:
 
 ~~~sh
+# Test every active node against all installed compatible cores
+proxyctl test --all-cores
+
+# Test one node against one selected core
+proxyctl test --node 12 --core sing-box
+
+# Test one node against every installed compatible core
+proxyctl test --node 12 --all-cores
 ~~~
 
-Each node receives three direct TCP-ping samples. Each compatible node/core pair receives three real-ping, download, and upload samples through that core. The revised defaults follow v2rayN where applicable: Google `generate_204` for real ping and CacheFly's 10 MB test file for download, sampling only the first 2 MiB per sample to keep data use modest. Upload remains separately configurable and initially uses Cloudflare's upload endpoint, with a 256 KiB synthetic payload per sample to keep the default usable on slower upstream links. Cloudflare documents aggregated measurement collection; Proxyctl sends only a generated synthetic body, not user files or proxy credentials. All endpoint URLs, payload limits, and timeouts are configurable.
+Each selected node receives three direct TCP-ping samples. Each compatible node/core pair receives three real-ping, download, and upload samples through that core. The revised defaults follow v2rayN where applicable: Google `generate_204` for real ping and CacheFly's 10 MB test file for download, sampling only the first 2 MiB per sample to keep data use modest. Upload remains separately configurable and initially uses Cloudflare's upload endpoint, with a 256 KiB synthetic payload per sample to keep the default usable on slower upstream links. Cloudflare documents aggregated measurement collection; Proxyctl sends only a generated synthetic body, not user files or proxy credentials. All endpoint URLs, payload limits, and timeouts are configurable.
 
 Benchmarking is explicit and sequential. The CLI reports live node/core/metric/sample progress, and Ctrl-C stops the active core so an in-flight request can be interrupted and cleaned up. The temporary HTTP proxy listener binds only to 127.0.0.1. Benchmarking does not change system proxy, DNS, routes, firewall, or TUN settings. See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) for the measurement definitions, endpoint contract, and privacy notes.
 
@@ -78,6 +86,7 @@ Benchmarking is explicit and sequential. The CLI reports live node/core/metric/s
 
 ~~~sh
 proxyctl test --all-cores
+proxyctl test --node 12 --all-cores
 proxyctl test --node 12 --core sing-box
 proxyctl test --node 12 --core xray --download-bytes 2097152 --upload-bytes 1048576
 proxyctl report
