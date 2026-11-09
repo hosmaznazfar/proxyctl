@@ -157,8 +157,7 @@ impl BenchmarkHttpClient {
             return Err(MeasurementFailure::InvalidResponse);
         }
         Ok(Measurement {
-            value: throughput_bps(received, duration)
-                .ok_or(MeasurementFailure::InvalidResponse)?,
+            value: throughput_bps(received, duration).ok_or(MeasurementFailure::InvalidResponse)?,
             duration,
             transferred_bytes: Some(received),
         })
