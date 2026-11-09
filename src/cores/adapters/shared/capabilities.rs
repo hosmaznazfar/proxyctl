@@ -10,6 +10,9 @@ use super::{Compatibility, normalize_transport, option_string, reality_options, 
 #[derive(Clone, Copy, Debug)]
 struct CoreCapabilities {
     hysteria2: bool,
+    reality_vless: bool,
+    reality_vmess: bool,
+    reality_optional_fields: bool,
     tcp: bool,
     websocket: bool,
     grpc: bool,
@@ -39,6 +42,9 @@ impl CoreCapabilities {
 
 const SING_BOX: CoreCapabilities = CoreCapabilities {
     hysteria2: true,
+    reality_vless: true,
+    reality_vmess: false,
+    reality_optional_fields: false,
     tcp: true,
     websocket: true,
     grpc: true,
@@ -54,6 +60,9 @@ const SING_BOX: CoreCapabilities = CoreCapabilities {
 
 const XRAY: CoreCapabilities = CoreCapabilities {
     hysteria2: false,
+    reality_vless: true,
+    reality_vmess: true,
+    reality_optional_fields: true,
     tcp: true,
     websocket: true,
     grpc: true,
@@ -70,6 +79,9 @@ const XRAY: CoreCapabilities = CoreCapabilities {
 
 const MIHOMO: CoreCapabilities = CoreCapabilities {
     hysteria2: true,
+    reality_vless: true,
+    reality_vmess: false,
+    reality_optional_fields: false,
     tcp: true,
     websocket: true,
     grpc: true,
@@ -166,14 +178,17 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
     }
     let reality = reality_options(node).map_err(compatibility_failure)?;
     if let Some(reality) = reality.as_ref() {
-        if node.protocol != Protocol::Vless
-            && !(core == CoreId::Xray && node.protocol == Protocol::Vmess)
-        {
+        let protocol_supported = match node.protocol {
+            Protocol::Vless => capabilities.reality_vless,
+            Protocol::Vmess => capabilities.reality_vmess,
+            _ => false,
+        };
+        if !protocol_supported {
             return Err(compatibility_failure(format!(
                 "{core} does not support REALITY for this protocol"
             )));
         }
-        if core != CoreId::Xray
+        if !capabilities.reality_optional_fields
             && (reality.get("spider_x").is_some() || reality.get("mldsa65_verify").is_some())
         {
             return Err(compatibility_failure(format!(
@@ -285,6 +300,11 @@ mod tests {
 
     #[test]
     fn capability_registry_keeps_core_differences_explicit() {
+        assert!(capabilities(CoreId::SingBox).reality_vless);
+        assert!(!capabilities(CoreId::SingBox).reality_vmess);
+        assert!(capabilities(CoreId::Xray).reality_vmess);
+        assert!(capabilities(CoreId::Xray).reality_optional_fields);
+        assert!(!capabilities(CoreId::Mihomo).reality_optional_fields);
         assert!(!capabilities(CoreId::SingBox).xhttp);
         assert!(capabilities(CoreId::Xray).xhttp);
         assert!(!capabilities(CoreId::Xray).http2);
