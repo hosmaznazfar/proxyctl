@@ -87,12 +87,15 @@ impl BenchmarkHttpClient {
             .call()
             .map_err(classify_error)?;
         let duration = started.elapsed();
-        response
+        let response_body = response
             .body_mut()
             .with_config()
             .limit(1_024)
             .read_to_vec()
             .map_err(classify_error)?;
+        if !response_body.is_empty() {
+            return Err(MeasurementFailure::InvalidResponse);
+        }
         Ok(Measurement {
             value: duration.as_secs_f64() * 1_000.0,
             duration,
