@@ -99,7 +99,11 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         database.start_benchmark_run(run)?
     };
 
-    println!("Benchmark run #{run_id}: {} node(s), {} core(s)", nodes.len(), cores.len());
+    println!(
+        "Benchmark run #{run_id}: {} node(s), {} core(s)",
+        nodes.len(),
+        cores.len()
+    );
     println!("Direct TCP ping runs once per node; HTTP tests run through each compatible core.");
     let execution = execute_run(
         database_path,
@@ -227,7 +231,10 @@ fn execute_run(
                 continue;
             }
 
-            println!("run #{run_id} node #{}: validating {core} configuration...", record.id);
+            println!(
+                "run #{run_id} node #{}: validating {core} configuration...",
+                record.id
+            );
             let adapter = adapters::adapter(*core);
             let compatibility = adapter.compatibility(&record.node);
             if !compatibility.is_supported() {
@@ -299,13 +306,8 @@ fn execute_run(
                         metric.label()
                     );
                     println!("{label}: starting...");
-                    let outcome = measure_interruptibly(
-                        &client,
-                        metric,
-                        settings,
-                        &mut process,
-                        &label,
-                    );
+                    let outcome =
+                        measure_interruptibly(&client, metric, settings, &mut process, &label);
                     if metric == BenchmarkMetric::Download {
                         println!();
                     }
@@ -362,11 +364,7 @@ fn execute_run(
     Ok(())
 }
 
-fn execute_tcp_ping(
-    database_path: &Path,
-    run_id: u64,
-    record: &NodeRecord,
-) -> anyhow::Result<()> {
+fn execute_tcp_ping(database_path: &Path, run_id: u64, record: &NodeRecord) -> anyhow::Result<()> {
     let context = SampleContext {
         run_id,
         node_id: record.id,
@@ -381,15 +379,19 @@ fn execute_tcp_ping(
             "run #{run_id} node #{} direct TCP ping sample {sample_index}/{SAMPLES_PER_METRIC}",
             record.id
         );
-        println!("{label}: connecting to {}:{}...", record.node.server, record.node.port);
-        let sample = match tcp::ping(
-            &record.node.server,
-            record.node.port,
-            TCP_CONNECT_TIMEOUT,
-        ) {
+        println!(
+            "{label}: connecting to {}:{}...",
+            record.node.server, record.node.port
+        );
+        let sample = match tcp::ping(&record.node.server, record.node.port, TCP_CONNECT_TIMEOUT) {
             Ok(measurement) => {
                 println!("{label}: {:.2} ms", measurement.value);
-                successful_sample(&context, BenchmarkMetric::TcpPing, sample_index, measurement)
+                successful_sample(
+                    &context,
+                    BenchmarkMetric::TcpPing,
+                    sample_index,
+                    measurement,
+                )
             }
             Err(error) => {
                 println!("{label}: {}", error.reason());
@@ -581,10 +583,7 @@ mod tests {
     #[test]
     fn default_settings_match_v2rayn_style_targets_and_are_bounded() {
         let settings = default_settings();
-        assert_eq!(
-            settings.latency_url,
-            "https://www.google.com/generate_204"
-        );
+        assert_eq!(settings.latency_url, "https://www.google.com/generate_204");
         assert_eq!(
             settings.download_url,
             "https://cachefly.cachefly.net/10mb.test"
