@@ -134,7 +134,7 @@ Persist the run before testing. Keep redb closed while any core process or measu
 - One node/target failure does not stop unrelated tests.
 - One metric failure does not erase other metrics.
 - One core failure does not prevent later selected cores from being tested.
-- Credentials, raw URLs with secrets, response bodies, generated configs, and raw core log lines never appear in progress output or errors. Startup diagnostics expose only allowlisted safe categories.
+- Credentials, raw URLs with secrets, response bodies, generated configs, raw core log lines, and raw HTTP-library diagnostics never appear in progress output or errors. HTTP failures are classified into safe categories (timeout, unreachable endpoint, proxy tunnel, TLS, HTTP status, protocol, and response-read failures); HTTP status codes may be shown, but raw transport details are withheld. Startup diagnostics expose only allowlisted safe categories.
 - Local listeners bind only to loopback.
 - Temporary configs are private and removed on every handled exit path.
 - Only the explicit `test` command starts a managed core.
