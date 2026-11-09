@@ -9,7 +9,7 @@ use super::{
     artifact::{checksum_for_asset, download, download_text, verify_sha256},
     installer::replace_executable,
     platform::application_asset_name,
-    release::{ReleaseChannel, latest_release},
+    release::{ReleaseChannel, latest_release_optional},
 };
 
 const RELEASE_API: &str =
@@ -18,7 +18,10 @@ const RELEASES_PAGE: &str = "https://github.com/hosmaznazfar/proxyctl/releases";
 
 pub fn update_application(check_only: bool, channel: ReleaseChannel) -> anyhow::Result<()> {
     let current = Version::parse(env!("CARGO_PKG_VERSION"))?;
-    let release = latest_release(RELEASE_API, channel)?;
+    let Some(release) = latest_release_optional(RELEASE_API, channel)? else {
+        println!("proxyctl: no published releases are available yet; skipping self-update.");
+        return Ok(());
+    };
     let latest_text = release
         .tag_name
         .strip_prefix('v')
