@@ -42,8 +42,15 @@ impl ManagedCoreProcess {
         );
         let adapter = adapters::adapter(core);
         let mut last_failure = "the core did not open its local HTTP listener".to_owned();
+        let overall_started = Instant::now();
 
-        for _ in 0..STARTUP_ATTEMPTS {
+        for attempt in 0..STARTUP_ATTEMPTS {
+            let remaining = startup_timeout.saturating_sub(overall_started.elapsed());
+            if remaining.is_zero() {
+                break;
+            }
+            let attempts_left = u32::try_from(STARTUP_ATTEMPTS - attempt).unwrap_or(1);
+            let attempt_timeout = remaining / attempts_left;
             let port = reserve_loopback_port()?;
             let generated = adapter
                 .generate_benchmark_config(node, port)
@@ -71,7 +78,7 @@ impl ManagedCoreProcess {
                 .with_context(|| format!("{core} rejected the benchmark configuration"))?;
 
             let mut child = spawn_core(core, executable, config.path())?;
-            match wait_for_listener(&mut child, port, startup_timeout) {
+            match wait_for_listener(&mut child, port, attempt_timeout) {
                 Ok(()) => {
                     return Ok(Self {
                         child,
