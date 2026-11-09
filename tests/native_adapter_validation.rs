@@ -209,7 +209,7 @@ fn fixtures() -> Vec<Fixture> {
         },
         Fixture {
             name: "HTTP/2 transport",
-            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=http&host=cdn.example.com&path=%2Fh2".into(),
+            url: "vless://11111111-1111-4111-8111-111111111111@proxy.local:443?type=http&host=cdn.example.com&path=%2Fh2&security=tls&sni=tls.example.com".into(),
             supported_by: sing_box_and_mihomo,
         },
         Fixture {
