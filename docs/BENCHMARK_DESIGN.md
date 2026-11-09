@@ -21,7 +21,7 @@ The command remains sequential by default: one node/core process at a time. The 
 Use the same practical separation as v2rayN:
 
 - Real-ping default: `https://www.google.com/generate_204`.
-- Download default: `https://cachefly.cachefly.net/10mb.test`.
+- Download default: `https://cachefly.cachefly.net/10mb.test`, sampling only the first 2 MiB per measurement.
 - Upload default: `https://speed.cloudflare.com/__up` because v2rayN's current speed-test workflow does not provide an equivalent upload measurement.
 
 These are defaults, not hard dependencies. Provide CLI overrides for all three HTTP endpoints. Keep TCP ping independent of HTTP endpoint selection.
@@ -48,7 +48,7 @@ proxyctl test --node 12 --core sing-box \
 
 The all-cores and explicit node/core selectors remain mutually exclusive. The direct TCP test runs once for each selected node. The HTTP tests run once for each supported node/core pair.
 
-The run stores effective endpoint URLs, payload limits, timeout values, and methodology version. The default download object is 10 MB; the upload body remains a bounded 1 MiB synthetic payload. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
+The run stores effective endpoint URLs, payload limits, timeout values, and methodology version. The default download sample is 2 MiB even though the static CacheFly object is 10 MB; Proxyctl stops reading once the sample target is reached and closes the response rather than downloading the full object. The upload body remains a bounded 1 MiB synthetic payload. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
 
 ## 4. Measurement semantics
 
@@ -62,7 +62,7 @@ Use the explicit loopback HTTP proxy created for the selected core. Send a GET r
 
 ### 4.3 Download through the selected core
 
-GET the configured download URL exactly as supplied. Do not append provider-specific query parameters. Stream the response body in bounded chunks, count the actual bytes received, and calculate throughput from bytes received and elapsed time. Stop and report invalid response if the configured maximum byte limit is exceeded. Emit progress updates while bytes are arriving. The configured limit is a safety ceiling, not a requirement that every provider return an identical byte count.
+GET the configured download URL exactly as supplied. Do not append provider-specific query parameters. Stream the response body in bounded chunks, count the actual bytes received, and calculate throughput from bytes received and elapsed time. Stop reading once the configured sample byte count is reached, even if the remote object is larger; close the response without downloading the remainder. If the server ends the response earlier, measure the bytes actually received. Emit progress updates while bytes are arriving. The configured count is the target sample size and hard transfer ceiling, not a requirement that every provider return an identical object size.
 
 ### 4.4 Upload through the selected core
 
@@ -101,7 +101,7 @@ Startup commands:
 - Xray: `xray run -c CONFIG`.
 - Mihomo: `mihomo -f CONFIG`.
 
-Write secret-bearing generated configs to private temporary files (0600 on Unix). Start the core directly without a shell; suppress raw child stdout/stderr. Probe readiness with a bounded timeout. The HTTP client must use an explicit proxy URL for the loopback listener and must not inherit `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, or `NO_PROXY`.
+Write secret-bearing generated configs to private temporary files (0600 on Unix). Start the core directly without a shell; capture child stderr in a private temporary log (0600 on Unix), never print raw log lines, and surface only allowlisted diagnostic categories on startup failure. Remove the log after the attempt. Probe readiness with a bounded timeout. The HTTP client must use an explicit proxy URL for the loopback listener and must not inherit `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, or `NO_PROXY`.
 
 The process guard owns the child and config. Every normal error, timeout, and cancellation path stops and waits for the child and removes the config. Benchmarking never changes system proxy settings, DNS, routes, firewall rules, interfaces, or TUN state.
 
@@ -134,7 +134,7 @@ Persist the run before testing. Keep redb closed while any core process or measu
 - One node/target failure does not stop unrelated tests.
 - One metric failure does not erase other metrics.
 - One core failure does not prevent later selected cores from being tested.
-- Credentials, raw URLs with secrets, response bodies, and generated configs never appear in progress output or errors.
+- Credentials, raw URLs with secrets, response bodies, generated configs, and raw core log lines never appear in progress output or errors. Startup diagnostics expose only allowlisted safe categories.
 - Local listeners bind only to loopback.
 - Temporary configs are private and removed on every handled exit path.
 - Only the explicit `test` command starts a managed core.
