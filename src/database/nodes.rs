@@ -203,8 +203,14 @@ impl NodeDatabase {
             run.status == BenchmarkRunStatus::Running,
             "new benchmark run must have running status"
         );
-        ensure!(!run.node_ids.is_empty(), "benchmark run must select at least one node");
-        ensure!(!run.cores.is_empty(), "benchmark run must select at least one core");
+        ensure!(
+            !run.node_ids.is_empty(),
+            "benchmark run must select at least one node"
+        );
+        ensure!(
+            !run.cores.is_empty(),
+            "benchmark run must select at least one core"
+        );
 
         let write_txn = self.inner.begin_write()?;
         let id = {
@@ -230,11 +236,11 @@ impl NodeDatabase {
     }
 
     /// Persist one completed sample in its own short write transaction.
-    pub fn record_benchmark_sample(
-        &self,
-        mut sample: BenchmarkSample,
-    ) -> anyhow::Result<u64> {
-        ensure!(sample.id == 0, "new benchmark sample must not already have an ID");
+    pub fn record_benchmark_sample(&self, mut sample: BenchmarkSample) -> anyhow::Result<u64> {
+        ensure!(
+            sample.id == 0,
+            "new benchmark sample must not already have an ID"
+        );
         sample.validate().map_err(anyhow::Error::msg)?;
 
         let write_txn = self.inner.begin_write()?;
@@ -341,10 +347,7 @@ impl NodeDatabase {
         Ok(records)
     }
 
-    pub fn list_benchmark_samples(
-        &self,
-        run_id: u64,
-    ) -> anyhow::Result<Vec<BenchmarkSample>> {
+    pub fn list_benchmark_samples(&self, run_id: u64) -> anyhow::Result<Vec<BenchmarkSample>> {
         let read_txn = self.inner.begin_read()?;
         let samples = read_txn.open_table(BENCHMARK_SAMPLES)?;
         let mut records = Vec::new();
@@ -536,9 +539,7 @@ mod tests {
         {
             let database = NodeDatabase::open(&path).unwrap();
             database.add_node(&sample_node()).unwrap();
-            run_id = database
-                .start_benchmark_run(sample_run())
-                .unwrap();
+            run_id = database.start_benchmark_run(sample_run()).unwrap();
             assert_eq!(run_id, 1);
             let sample_id = database
                 .record_benchmark_sample(sample_value(run_id))
@@ -550,26 +551,20 @@ mod tests {
         let samples = database.list_benchmark_samples(run_id).unwrap();
         assert_eq!(samples.len(), 1);
         assert_eq!(samples[0].value, Some(25.0));
-        assert!(database
-            .finish_benchmark_run(
-                run_id,
-                BenchmarkRunStatus::Completed,
-                2,
-                None
-            )
-            .unwrap());
+        assert!(
+            database
+                .finish_benchmark_run(run_id, BenchmarkRunStatus::Completed, 2, None)
+                .unwrap()
+        );
         assert_eq!(
             database.get_benchmark_run(run_id).unwrap().unwrap().status,
             BenchmarkRunStatus::Completed
         );
-        assert!(!database
-            .finish_benchmark_run(
-                run_id,
-                BenchmarkRunStatus::Completed,
-                3,
-                None
-            )
-            .unwrap());
+        assert!(
+            !database
+                .finish_benchmark_run(run_id, BenchmarkRunStatus::Completed, 3, None)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -593,7 +588,10 @@ mod tests {
         }
 
         let database = NodeDatabase::open(&path).unwrap();
-        assert_eq!(database.get_node(1).unwrap().unwrap().node.server, "example.com");
+        assert_eq!(
+            database.get_node(1).unwrap().unwrap().node.server,
+            "example.com"
+        );
         assert_eq!(database.start_benchmark_run(sample_run()).unwrap(), 1);
     }
 
@@ -622,7 +620,11 @@ mod tests {
         database
             .finish_benchmark_run(run_id, BenchmarkRunStatus::Completed, 2, None)
             .unwrap();
-        assert!(database.record_benchmark_sample(sample_value(run_id)).is_err());
+        assert!(
+            database
+                .record_benchmark_sample(sample_value(run_id))
+                .is_err()
+        );
     }
 
     #[cfg(unix)]
