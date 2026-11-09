@@ -392,7 +392,6 @@ fn adapters_reject_alpn_without_tls_and_malformed_alpn() {
     }
 }
 
-
 #[test]
 fn vless_reality_maps_to_each_core_native_schema() {
     let node = parse_proxy_url(
@@ -401,20 +400,44 @@ fn vless_reality_maps_to_each_core_native_schema() {
 
     let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
     let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
-    assert_eq!(sing_box_doc["outbounds"][0]["tls"]["reality"]["enabled"], true);
-    assert_eq!(sing_box_doc["outbounds"][0]["tls"]["reality"]["public_key"], "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0");
-    assert_eq!(sing_box_doc["outbounds"][0]["tls"]["reality"]["short_id"], "0123456789abcdef");
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["tls"]["reality"]["enabled"],
+        true
+    );
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["tls"]["reality"]["public_key"],
+        "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0"
+    );
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["tls"]["reality"]["short_id"],
+        "0123456789abcdef"
+    );
 
     let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
     let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
-    assert_eq!(xray_doc["outbounds"][0]["streamSettings"]["security"], "reality");
-    assert_eq!(xray_doc["outbounds"][0]["streamSettings"]["realitySettings"]["password"], "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0");
-    assert_eq!(xray_doc["outbounds"][0]["streamSettings"]["realitySettings"]["fingerprint"], "chrome");
+    assert_eq!(
+        xray_doc["outbounds"][0]["streamSettings"]["security"],
+        "reality"
+    );
+    assert_eq!(
+        xray_doc["outbounds"][0]["streamSettings"]["realitySettings"]["password"],
+        "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0"
+    );
+    assert_eq!(
+        xray_doc["outbounds"][0]["streamSettings"]["realitySettings"]["fingerprint"],
+        "chrome"
+    );
 
     let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
     let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
-    assert_eq!(mihomo_doc["proxies"][0]["reality-opts"]["public-key"], "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0");
-    assert_eq!(mihomo_doc["proxies"][0]["reality-opts"]["short-id"], "0123456789abcdef");
+    assert_eq!(
+        mihomo_doc["proxies"][0]["reality-opts"]["public-key"],
+        "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0"
+    );
+    assert_eq!(
+        mihomo_doc["proxies"][0]["reality-opts"]["short-id"],
+        "0123456789abcdef"
+    );
     assert_eq!(mihomo_doc["proxies"][0]["client-fingerprint"], "chrome");
 }
 
@@ -422,21 +445,31 @@ fn vless_reality_maps_to_each_core_native_schema() {
 fn reality_requires_public_key_fingerprint_and_valid_short_id() {
     let no_key = parse_proxy_url(
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&fp=chrome",
-    ).unwrap();
+    )
+    .unwrap();
     let no_fp = parse_proxy_url(
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key",
-    ).unwrap();
+    )
+    .unwrap();
     let bad_sid = parse_proxy_url(
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key&fp=chrome&sid=abc",
     ).unwrap();
 
     for node in [&no_key, &no_fp, &bad_sid] {
-        assert_eq!(adapter(CoreId::SingBox).compatibility(node).status, CompatibilityStatus::Invalid);
-        assert_eq!(adapter(CoreId::Xray).compatibility(node).status, CompatibilityStatus::Invalid);
-        assert_eq!(adapter(CoreId::Mihomo).compatibility(node).status, CompatibilityStatus::Invalid);
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(node).status,
+            CompatibilityStatus::Invalid
+        );
+        assert_eq!(
+            adapter(CoreId::Xray).compatibility(node).status,
+            CompatibilityStatus::Invalid
+        );
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(node).status,
+            CompatibilityStatus::Invalid
+        );
     }
 }
-
 
 #[test]
 fn reality_spider_x_is_supported_only_by_xray_in_this_adapter_set() {
@@ -444,9 +477,18 @@ fn reality_spider_x_is_supported_only_by_xray_in_this_adapter_set() {
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123456789abcdef&spx=%2Fdns-query",
     ).unwrap();
 
-    assert_eq!(adapter(CoreId::Xray).compatibility(&node).status, CompatibilityStatus::Supported);
-    assert_eq!(adapter(CoreId::SingBox).compatibility(&node).status, CompatibilityStatus::Unsupported);
-    assert_eq!(adapter(CoreId::Mihomo).compatibility(&node).status, CompatibilityStatus::Unsupported);
+    assert_eq!(
+        adapter(CoreId::Xray).compatibility(&node).status,
+        CompatibilityStatus::Supported
+    );
+    assert_eq!(
+        adapter(CoreId::SingBox).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+    assert_eq!(
+        adapter(CoreId::Mihomo).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
 
     let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
     let doc: Value = serde_json::from_slice(&xray.content).unwrap();
@@ -456,17 +498,18 @@ fn reality_spider_x_is_supported_only_by_xray_in_this_adapter_set() {
     );
 }
 
-
 #[test]
 fn reality_parameters_without_reality_security_are_invalid() {
     let node = parse_proxy_url(
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&fp=chrome",
     ).unwrap();
     for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-        assert_eq!(adapter(core).compatibility(&node).status, CompatibilityStatus::Invalid);
+        assert_eq!(
+            adapter(core).compatibility(&node).status,
+            CompatibilityStatus::Invalid
+        );
     }
 }
-
 
 #[test]
 fn vmess_reality_maps_only_to_xray() {
@@ -477,9 +520,18 @@ fn vmess_reality_maps_only_to_xray() {
     );
     let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
 
-    assert_eq!(adapter(CoreId::Xray).compatibility(&node).status, CompatibilityStatus::Supported);
-    assert_eq!(adapter(CoreId::SingBox).compatibility(&node).status, CompatibilityStatus::Unsupported);
-    assert_eq!(adapter(CoreId::Mihomo).compatibility(&node).status, CompatibilityStatus::Unsupported);
+    assert_eq!(
+        adapter(CoreId::Xray).compatibility(&node).status,
+        CompatibilityStatus::Supported
+    );
+    assert_eq!(
+        adapter(CoreId::SingBox).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
+    assert_eq!(
+        adapter(CoreId::Mihomo).compatibility(&node).status,
+        CompatibilityStatus::Unsupported
+    );
 
     let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
     let doc: Value = serde_json::from_slice(&xray.content).unwrap();

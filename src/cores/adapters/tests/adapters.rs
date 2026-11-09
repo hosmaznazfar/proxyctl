@@ -110,7 +110,6 @@ fn adapters_reject_repeated_or_ambiguous_options() {
     }
 }
 
-
 #[test]
 fn hysteria2_obfuscation_maps_to_sing_box_and_mihomo() {
     let node = parse_proxy_url(
@@ -121,7 +120,10 @@ fn hysteria2_obfuscation_maps_to_sing_box_and_mihomo() {
     let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
     let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
     assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["type"], "salamander");
-    assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["password"], "obfs-secret");
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["obfs"]["password"],
+        "obfs-secret"
+    );
 
     let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
     let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
@@ -136,18 +138,13 @@ fn hysteria2_obfuscation_maps_to_sing_box_and_mihomo() {
 
 #[test]
 fn hysteria2_obfuscation_requires_a_supported_type_and_password() {
-    let missing_password = parse_proxy_url(
-        "hysteria2://secret@example.com:443?obfs=salamander",
-    )
-    .unwrap();
-    let missing_type = parse_proxy_url(
-        "hysteria2://secret@example.com:443?obfs-password=secret",
-    )
-    .unwrap();
-    let unknown_type = parse_proxy_url(
-        "hysteria2://secret@example.com:443?obfs=unknown&obfs-password=secret",
-    )
-    .unwrap();
+    let missing_password =
+        parse_proxy_url("hysteria2://secret@example.com:443?obfs=salamander").unwrap();
+    let missing_type =
+        parse_proxy_url("hysteria2://secret@example.com:443?obfs-password=secret").unwrap();
+    let unknown_type =
+        parse_proxy_url("hysteria2://secret@example.com:443?obfs=unknown&obfs-password=secret")
+            .unwrap();
 
     for node in [&missing_password, &missing_type, &unknown_type] {
         assert_eq!(
@@ -161,7 +158,6 @@ fn hysteria2_obfuscation_requires_a_supported_type_and_password() {
     }
 }
 
-
 #[test]
 fn shadowsocks_obfs_local_plugin_maps_to_sing_box_and_mihomo() {
     let node = parse_proxy_url(
@@ -171,13 +167,19 @@ fn shadowsocks_obfs_local_plugin_maps_to_sing_box_and_mihomo() {
     let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
     let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
     assert_eq!(sing_box_doc["outbounds"][0]["plugin"], "obfs-local");
-    assert_eq!(sing_box_doc["outbounds"][0]["plugin_opts"], "obfs=http;obfs-host=cdn.example");
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["plugin_opts"],
+        "obfs=http;obfs-host=cdn.example"
+    );
 
     let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
     let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
     assert_eq!(mihomo_doc["proxies"][0]["plugin"], "obfs");
     assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["mode"], "http");
-    assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["host"], "cdn.example");
+    assert_eq!(
+        mihomo_doc["proxies"][0]["plugin-opts"]["host"],
+        "cdn.example"
+    );
 
     assert_eq!(
         adapter(CoreId::Xray).compatibility(&node).status,
@@ -199,15 +201,18 @@ fn shadowsocks_v2ray_plugin_maps_to_sing_box_and_mihomo() {
     let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
     assert_eq!(mihomo_doc["proxies"][0]["plugin"], "v2ray-plugin");
     assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["tls"], true);
-    assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["host"], "cdn.example");
+    assert_eq!(
+        mihomo_doc["proxies"][0]["plugin-opts"]["host"],
+        "cdn.example"
+    );
     assert_eq!(mihomo_doc["proxies"][0]["plugin-opts"]["path"], "/ws");
 }
 
 #[test]
 fn unsupported_shadowsocks_plugin_options_are_not_dropped() {
-    let node = parse_proxy_url(
-        "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=unknown-plugin",
-    ).unwrap();
+    let node =
+        parse_proxy_url("ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=unknown-plugin")
+            .unwrap();
     for core in [CoreId::SingBox, CoreId::Mihomo] {
         assert_eq!(
             adapter(core).compatibility(&node).status,
@@ -215,7 +220,6 @@ fn unsupported_shadowsocks_plugin_options_are_not_dropped() {
         );
     }
 }
-
 
 #[test]
 fn hysteria2_gecko_packet_size_controls_map_to_both_supported_cores() {
@@ -226,7 +230,10 @@ fn hysteria2_gecko_packet_size_controls_map_to_both_supported_cores() {
     let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
     let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
     assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["min_packet_size"], 512);
-    assert_eq!(sing_box_doc["outbounds"][0]["obfs"]["max_packet_size"], 1200);
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["obfs"]["max_packet_size"],
+        1200
+    );
 
     let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
     let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
@@ -244,18 +251,24 @@ fn hysteria2_packet_size_controls_require_gecko_and_valid_ranges() {
     ).unwrap();
 
     for node in [&salamander, &invalid_range] {
-        assert_eq!(adapter(CoreId::SingBox).compatibility(node).status, CompatibilityStatus::Invalid);
-        assert_eq!(adapter(CoreId::Mihomo).compatibility(node).status, CompatibilityStatus::Invalid);
+        assert_eq!(
+            adapter(CoreId::SingBox).compatibility(node).status,
+            CompatibilityStatus::Invalid
+        );
+        assert_eq!(
+            adapter(CoreId::Mihomo).compatibility(node).status,
+            CompatibilityStatus::Invalid
+        );
     }
 }
 
-
 #[test]
 fn empty_shadowsocks_plugin_value_is_invalid_not_ignored() {
-    let node = parse_proxy_url(
-        "ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=",
-    ).unwrap();
+    let node = parse_proxy_url("ss://YWVzLTI1Ni1nY206cGFzcw@ss.example:8388/?plugin=").unwrap();
     for core in [CoreId::SingBox, CoreId::Mihomo, CoreId::Xray] {
-        assert_eq!(adapter(core).compatibility(&node).status, CompatibilityStatus::Invalid);
+        assert_eq!(
+            adapter(core).compatibility(&node).status,
+            CompatibilityStatus::Invalid
+        );
     }
 }

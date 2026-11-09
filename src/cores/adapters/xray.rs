@@ -11,8 +11,8 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, tls_options,
-        validate_for_core,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
+        tls_options, validate_for_core,
     },
 };
 

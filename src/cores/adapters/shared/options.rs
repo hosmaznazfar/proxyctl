@@ -37,11 +37,8 @@ pub(crate) fn reject_unknown_options(node: &ProxyNode, supported: &[&str]) -> Re
     Ok(())
 }
 
-
 /// Parse the SIP003 plugin query value into the supported native representations.
-pub(crate) fn shadowsocks_plugin(
-    node: &ProxyNode,
-) -> Result<Option<ShadowsocksPlugin>, String> {
+pub(crate) fn shadowsocks_plugin(node: &ProxyNode) -> Result<Option<ShadowsocksPlugin>, String> {
     if node.protocol != Protocol::Shadowsocks {
         return Ok(None);
     }
@@ -68,19 +65,29 @@ pub(crate) fn shadowsocks_plugin(
         if key.is_empty() || key.chars().any(char::is_control) {
             return Err("Shadowsocks plugin option name is invalid".into());
         }
-        if options.insert(key.to_owned(), value.map(str::to_owned)).is_some() {
+        if options
+            .insert(key.to_owned(), value.map(str::to_owned))
+            .is_some()
+        {
             return Err("Shadowsocks plugin option is repeated".into());
         }
     }
 
     let (mihomo_name, mihomo_options) = match name {
         "obfs-local" | "simple-obfs" => {
-            let mode = options.get("obfs").and_then(|value| value.as_deref())
-                .ok_or_else(|| "Shadowsocks obfs-local requires obfs=http or obfs=tls".to_owned())?;
+            let mode = options
+                .get("obfs")
+                .and_then(|value| value.as_deref())
+                .ok_or_else(|| {
+                    "Shadowsocks obfs-local requires obfs=http or obfs=tls".to_owned()
+                })?;
             if !["http", "tls"].contains(&mode) {
                 return Err("Shadowsocks obfs-local mode must be http or tls".into());
             }
-            if options.keys().any(|key| !["obfs", "obfs-host"].contains(&key.as_str())) {
+            if options
+                .keys()
+                .any(|key| !["obfs", "obfs-host"].contains(&key.as_str()))
+            {
                 return Err("Shadowsocks obfs-local contains an unsupported plugin option".into());
             }
             let mut mapped = Map::new();
@@ -94,19 +101,31 @@ pub(crate) fn shadowsocks_plugin(
             ("obfs".to_owned(), Value::Object(mapped))
         }
         "v2ray-plugin" => {
-            let mode = options.get("mode").and_then(|value| value.as_deref()).unwrap_or("websocket");
+            let mode = options
+                .get("mode")
+                .and_then(|value| value.as_deref())
+                .unwrap_or("websocket");
             if mode != "websocket" {
-                return Err("Shadowsocks v2ray-plugin supports websocket mode only in this adapter".into());
+                return Err(
+                    "Shadowsocks v2ray-plugin supports websocket mode only in this adapter".into(),
+                );
             }
-            if options.keys().any(|key| !["mode", "tls", "host", "path", "mux"].contains(&key.as_str())) {
-                return Err("Shadowsocks v2ray-plugin contains an unsupported plugin option".into());
+            if options
+                .keys()
+                .any(|key| !["mode", "tls", "host", "path", "mux"].contains(&key.as_str()))
+            {
+                return Err(
+                    "Shadowsocks v2ray-plugin contains an unsupported plugin option".into(),
+                );
             }
             let mut mapped = Map::new();
             mapped.insert("mode".into(), Value::String("websocket".into()));
             for key in ["host", "path"] {
                 if let Some(value) = options.get(key).and_then(|value| value.as_deref()) {
                     if value.chars().any(char::is_control) {
-                        return Err("Shadowsocks v2ray-plugin option contains control characters".into());
+                        return Err(
+                            "Shadowsocks v2ray-plugin option contains control characters".into(),
+                        );
                     }
                     mapped.insert(key.into(), Value::String(value.to_owned()));
                 }
@@ -130,7 +149,12 @@ pub(crate) fn shadowsocks_plugin(
         _ => return Err("Shadowsocks SIP003 plugin is not supported by this adapter".into()),
     };
     Ok(Some(ShadowsocksPlugin {
-        sing_box_name: (if name == "simple-obfs" { "obfs-local" } else { name }).to_owned(),
+        sing_box_name: (if name == "simple-obfs" {
+            "obfs-local"
+        } else {
+            name
+        })
+        .to_owned(),
         sing_box_options: raw_options,
         mihomo_name,
         mihomo_options,

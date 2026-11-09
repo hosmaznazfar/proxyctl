@@ -11,8 +11,8 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, shadowsocks_plugin, tls_options,
-        validate_for_core,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
+        shadowsocks_plugin, tls_options, validate_for_core,
     },
 };
 
@@ -77,10 +77,18 @@ impl CoreAdapter for MihomoAdapter {
                     .unwrap_or_default()
             );
             if let Some(value) = option_string(node, "obfs-min-packet-size") {
-                proxy["obfs-min-packet-size"] = json!(value.parse::<u16>().expect("validated Gecko minimum packet size"));
+                proxy["obfs-min-packet-size"] = json!(
+                    value
+                        .parse::<u16>()
+                        .expect("validated Gecko minimum packet size")
+                );
             }
             if let Some(value) = option_string(node, "obfs-max-packet-size") {
-                proxy["obfs-max-packet-size"] = json!(value.parse::<u16>().expect("validated Gecko maximum packet size"));
+                proxy["obfs-max-packet-size"] = json!(
+                    value
+                        .parse::<u16>()
+                        .expect("validated Gecko maximum packet size")
+                );
             }
         }
 

@@ -11,8 +11,8 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, shadowsocks_plugin, tls_options,
-        validate_for_core,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
+        shadowsocks_plugin, tls_options, validate_for_core,
     },
 };
 
@@ -80,10 +80,18 @@ impl CoreAdapter for SingBoxAdapter {
                     .unwrap_or_default()
             });
             if let Some(value) = option_string(node, "obfs-min-packet-size") {
-                outbound["obfs"]["min_packet_size"] = json!(value.parse::<u16>().expect("validated Gecko minimum packet size"));
+                outbound["obfs"]["min_packet_size"] = json!(
+                    value
+                        .parse::<u16>()
+                        .expect("validated Gecko minimum packet size")
+                );
             }
             if let Some(value) = option_string(node, "obfs-max-packet-size") {
-                outbound["obfs"]["max_packet_size"] = json!(value.parse::<u16>().expect("validated Gecko maximum packet size"));
+                outbound["obfs"]["max_packet_size"] = json!(
+                    value
+                        .parse::<u16>()
+                        .expect("validated Gecko maximum packet size")
+                );
             }
         }
 

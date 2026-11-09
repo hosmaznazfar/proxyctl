@@ -5,7 +5,10 @@ use crate::{
     domain::{Protocol, ProxyNode, TransportKind},
 };
 
-use super::{Compatibility, normalize_transport, option_string, reality_options, shadowsocks_plugin, tls_options, validate_common};
+use super::{
+    Compatibility, normalize_transport, option_string, reality_options, shadowsocks_plugin,
+    tls_options, validate_common,
+};
 
 #[derive(Clone, Copy, Debug)]
 struct CoreCapabilities {
@@ -170,7 +173,9 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
             "{core} does not implement Hysteria2"
         )));
     }
-    if shadowsocks_plugin(node).map_err(compatibility_failure)?.is_some()
+    if shadowsocks_plugin(node)
+        .map_err(compatibility_failure)?
+        .is_some()
         && core == CoreId::Xray
     {
         return Err(compatibility_failure(
@@ -198,14 +203,20 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
         }
         let transport = normalize_transport(node).map_err(compatibility_failure)?;
         if core == CoreId::Xray
-            && !matches!(&transport.kind, TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp)
+            && !matches!(
+                &transport.kind,
+                TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp
+            )
         {
             return Err(compatibility_failure(
                 "Xray REALITY supports only TCP/RAW, gRPC, and XHTTP transports".into(),
             ));
         }
         if core != CoreId::Xray
-            && matches!(&transport.kind, TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket)
+            && matches!(
+                &transport.kind,
+                TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket
+            )
         {
             return Err(compatibility_failure(
                 "REALITY is not supported with this transport mapping".into(),

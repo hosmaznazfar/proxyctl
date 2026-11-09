@@ -262,8 +262,10 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
     {
         return Err("path or host/header was supplied for TCP transport".into());
     }
-    if !matches!(&kind, TransportKind::WebSocket | TransportKind::HttpUpgrade | TransportKind::XHttp)
-        && !headers.is_empty()
+    if !matches!(
+        &kind,
+        TransportKind::WebSocket | TransportKind::HttpUpgrade | TransportKind::XHttp
+    ) && !headers.is_empty()
     {
         return Err("HTTP headers are only mapped for WebSocket in this adapter batch".into());
     }

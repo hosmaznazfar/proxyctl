@@ -154,20 +154,26 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
         || !short_id.len().is_multiple_of(2)
         || !short_id.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
-        return Err("REALITY short ID must be an even-length hexadecimal value of at most 16 characters".into());
+        return Err(
+            "REALITY short ID must be an even-length hexadecimal value of at most 16 characters"
+                .into(),
+        );
     }
-    if public_key.chars().any(char::is_control)
-        || fingerprint.chars().any(char::is_control)
-    {
-        return Err("REALITY public key and fingerprint must not contain control characters".into());
+    if public_key.chars().any(char::is_control) || fingerprint.chars().any(char::is_control) {
+        return Err(
+            "REALITY public key and fingerprint must not contain control characters".into(),
+        );
     }
     if node.option("pbk").is_some_and(|value| !value.is_null())
-        && node.option("publicKey").is_some_and(|value| !value.is_null())
+        && node
+            .option("publicKey")
+            .is_some_and(|value| !value.is_null())
         && node.option("pbk") != node.option("publicKey")
     {
         return Err("REALITY public-key aliases conflict".into());
     }
-    if insecure_option(node)? || option_string(node, "vcn").is_some()
+    if insecure_option(node)?
+        || option_string(node, "vcn").is_some()
         || option_string(node, "pcs").is_some()
         || option_string(node, "pinSHA256").is_some()
         || alpn_protocols(node)?.is_some()
