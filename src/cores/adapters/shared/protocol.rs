@@ -264,9 +264,9 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         if (min_size.is_some() || max_size.is_some()) && obfs != Some("gecko") {
             return Err("Hysteria2 packet-size options are only valid with Gecko obfuscation".into());
         }
-        if min_size.is_some_and(|value| value == 0 || value > 2048)
-            || max_size.is_some_and(|value| value == 0 || value > 2048)
-            || matches!((min_size, max_size), (Some(min), Some(max)) if max < min)
+        if min_size.is_some_and(|value| value == 0)
+            || max_size.is_some_and(|value| value == 0)
+            || max_size.unwrap_or(1200) < min_size.unwrap_or(512)
         {
             return Err("Hysteria2 Gecko packet-size range is invalid".into());
         }
