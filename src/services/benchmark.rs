@@ -265,16 +265,16 @@ fn execute_run(
             ) {
                 Ok(process) => process,
                 Err(error) => {
-                    let diagnostic = format!("{error:#}");
+                    let (status, category, reason) = classify_core_start_failure(&error);
                     record_preflight(
                         database_path,
                         &context,
-                        BenchmarkSampleStatus::Unavailable,
-                        "core_startup",
-                        "the managed core failed to start or open its local listener",
+                        status,
+                        category,
+                        reason,
                     )?;
                     println!(
-                        "run #{run_id} node #{} {core}: startup failed ({diagnostic})",
+                        "run #{run_id} node #{} {core}: {reason}",
                         record.id
                     );
                     continue;
@@ -474,6 +474,52 @@ fn measure_interruptibly(
     })
 }
 
+/// Map process preparation failures to stable, credential-free benchmark outcomes.
+fn classify_core_start_failure(
+    error: &anyhow::Error,
+) -> (BenchmarkSampleStatus, &'static str, &'static str) {
+    let chain = error
+        .chain()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+
+    if chain.contains("rejected the benchmark configuration")
+        || chain.contains("could not generate benchmark config")
+    {
+        (
+            BenchmarkSampleStatus::Invalid,
+            "core_config_invalid",
+            "the adapter-generated configuration was rejected by the selected core",
+        )
+    } else if chain.contains("did not become ready")
+        || chain.contains("local http listener readiness timed out")
+    {
+        (
+            BenchmarkSampleStatus::Timeout,
+            "core_readiness_timeout",
+            "the core did not open its loopback HTTP listener before the startup deadline",
+        )
+    } else if chain.contains("could not run")
+        || chain.contains("could not start managed")
+        || chain.contains("could not create private")
+        || chain.contains("could not write benchmark configuration")
+    {
+        (
+            BenchmarkSampleStatus::Unavailable,
+            "core_execution_unavailable",
+            "the selected core could not be executed or its configuration could not be validated",
+        )
+    } else {
+        (
+            BenchmarkSampleStatus::Unavailable,
+            "core_startup_failed",
+            "the selected core could not be prepared or started",
+        )
+    }
+}
+
 fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSampleStatus {
     match failure {
         MeasurementFailure::Timeout => BenchmarkSampleStatus::Timeout,
@@ -599,6 +645,31 @@ fn install_cancellation_handler() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn core_start_failures_distinguish_invalid_config_from_runtime_startup() {
+        let invalid = anyhow::anyhow!("native validator exit status 23")
+            .context("mihomo rejected the benchmark configuration");
+        assert_eq!(
+            classify_core_start_failure(&invalid),
+            (
+                BenchmarkSampleStatus::Invalid,
+                "core_config_invalid",
+                "the adapter-generated configuration was rejected by the selected core",
+            )
+        );
+
+        let startup = anyhow::anyhow!("the core did not open its local HTTP listener")
+            .context("mihomo did not become ready after 3 attempts");
+        assert_eq!(
+            classify_core_start_failure(&startup),
+            (
+                BenchmarkSampleStatus::Timeout,
+                "core_readiness_timeout",
+                "the core did not open its loopback HTTP listener before the startup deadline",
+            )
+        );
+    }
 
     #[test]
     fn default_settings_match_v2rayn_style_targets_and_are_bounded() {
