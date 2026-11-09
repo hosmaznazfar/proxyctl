@@ -273,7 +273,10 @@ fn execute_run(
                         "core_startup",
                         "the managed core failed to start or open its local listener",
                     )?;
-                    println!("run #{run_id} node #{} {core}: startup failed ({diagnostic})", record.id);
+                    println!(
+                        "run #{run_id} node #{} {core}: startup failed ({diagnostic})",
+                        record.id
+                    );
                     continue;
                 }
             };
