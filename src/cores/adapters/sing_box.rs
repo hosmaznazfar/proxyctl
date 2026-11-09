@@ -152,9 +152,6 @@ impl CoreAdapter for SingBoxAdapter {
             if let Some(server_name) = reality.get("server_name") {
                 tls["server_name"] = server_name.clone();
             }
-            if let Some(spider_x) = reality.get("spider_x") {
-                tls["reality"]["spider_x"] = spider_x.clone();
-            }
             outbound["tls"] = tls;
         } else if let Some(mut tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             if let Some(fingerprint) = tls
