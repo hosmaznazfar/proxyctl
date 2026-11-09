@@ -595,7 +595,7 @@ mod tests {
             "https://cachefly.cachefly.net/10mb.test"
         );
         assert_eq!(settings.upload_url, "https://speed.cloudflare.com/__up");
-        assert_eq!(settings.download_bytes, 16 * 1024 * 1024);
+        assert_eq!(settings.download_bytes, 2 * 1024 * 1024);
         assert_eq!(settings.upload_bytes, 1_048_576);
         assert_eq!(settings.request_timeout_ms, 15_000);
     }
