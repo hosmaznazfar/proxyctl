@@ -124,6 +124,7 @@ pub fn median_successful_samples(samples: &[BenchmarkSample]) -> Option<f64> {
         .iter()
         .filter(|sample| sample.status == BenchmarkSampleStatus::Success)
         .filter_map(|sample| sample.value)
+        .filter(|value| value.is_finite() && *value >= 0.0)
         .collect::<Vec<_>>();
     if values.is_empty() {
         return None;
