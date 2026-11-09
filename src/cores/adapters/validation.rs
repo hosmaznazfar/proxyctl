@@ -29,6 +29,37 @@ fn validate_node_config_in(
         .generate_config(node)
         .with_context(|| format!("could not generate {core} configuration"))?;
 
+    validate_generated_config_in(core, &generated, executable, temporary_directory)
+}
+
+/// Generate and validate a benchmark configuration with a loopback HTTP inbound.
+pub fn validate_benchmark_config(
+    core: CoreId,
+    node: &ProxyNode,
+    executable: &Path,
+    listen_port: u16,
+) -> anyhow::Result<()> {
+    let generated = adapters::adapter(core)
+        .generate_benchmark_config(node, listen_port)
+        .with_context(|| format!("could not generate {core} benchmark configuration"))?;
+    validate_generated_config(core, &generated, executable)
+}
+
+/// Validate an already generated native document using a private temporary file.
+pub fn validate_generated_config(
+    core: CoreId,
+    generated: &super::GeneratedConfig,
+    executable: &Path,
+) -> anyhow::Result<()> {
+    validate_generated_config_in(core, generated, executable, &std::env::temp_dir())
+}
+
+fn validate_generated_config_in(
+    core: CoreId,
+    generated: &super::GeneratedConfig,
+    executable: &Path,
+    temporary_directory: &Path,
+) -> anyhow::Result<()> {
     let mut temporary_file = tempfile::Builder::new()
         .prefix("proxyctl-config-")
         .suffix(".json")
@@ -53,7 +84,7 @@ fn validate_node_config_in(
         .sync_all()
         .context("could not flush temporary core configuration")?;
 
-    adapter
+    adapters::adapter(core)
         .validate_config(executable, temporary_file.path())
         .with_context(|| format!("{core} rejected the generated configuration"))?;
 
