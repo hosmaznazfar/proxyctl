@@ -702,6 +702,54 @@ mod tests {
     }
 
     #[test]
+    fn measurement_failures_map_to_stable_sample_statuses() {
+        let cases = [
+            (MeasurementFailure::Timeout, BenchmarkSampleStatus::Timeout),
+            (MeasurementFailure::Unreachable, BenchmarkSampleStatus::Unreachable),
+            (
+                MeasurementFailure::InvalidResponse,
+                BenchmarkSampleStatus::Invalid,
+            ),
+            (
+                MeasurementFailure::Unavailable,
+                BenchmarkSampleStatus::Unavailable,
+            ),
+            (
+                MeasurementFailure::ProxyTunnelFailed,
+                BenchmarkSampleStatus::Unavailable,
+            ),
+            (
+                MeasurementFailure::TlsFailed,
+                BenchmarkSampleStatus::Unavailable,
+            ),
+            (
+                MeasurementFailure::HttpStatus(502),
+                BenchmarkSampleStatus::Unavailable,
+            ),
+            (
+                MeasurementFailure::ProtocolFailed,
+                BenchmarkSampleStatus::Unavailable,
+            ),
+            (
+                MeasurementFailure::IncompleteResponse,
+                BenchmarkSampleStatus::Unavailable,
+            ),
+            (
+                MeasurementFailure::ReadFailed,
+                BenchmarkSampleStatus::Unavailable,
+            ),
+            (
+                MeasurementFailure::Cancelled,
+                BenchmarkSampleStatus::Cancelled,
+            ),
+        ];
+
+        for (failure, expected) in cases {
+            assert_eq!(status_for_failure(failure), expected, "{failure:?}");
+        }
+    }
+
+    #[test]
     fn default_settings_match_v2rayn_style_targets_and_are_bounded() {
         let settings = default_settings();
         assert_eq!(settings.latency_url, "https://www.google.com/generate_204");
