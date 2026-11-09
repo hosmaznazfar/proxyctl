@@ -138,6 +138,7 @@ fn compatibility_failure(reason: String) -> Compatibility {
         "not supported",
         "not implemented",
         "does not support",
+        "does not implement",
         "unsupported",
         "removed",
         "currently mapped",
