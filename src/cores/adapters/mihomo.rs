@@ -11,7 +11,7 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, tls_options,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, tls_options,
         validate_for_core,
     },
 };
@@ -142,7 +142,17 @@ impl CoreAdapter for MihomoAdapter {
             }
             proxy["xhttp-opts"] = serde_json::Value::Object(xhttp);
         }
-        if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
+        if let Some(reality) = reality_options(node).map_err(anyhow::Error::msg)? {
+            proxy["tls"] = json!(true);
+            proxy["reality-opts"] = json!({
+                "public-key": reality["public_key"],
+                "short-id": reality["short_id"]
+            });
+            proxy["client-fingerprint"] = reality["fingerprint"].clone();
+            if let Some(server_name) = reality.get("server_name") {
+                proxy["servername"] = server_name.clone();
+            }
+        } else if let Some(tls) = tls_options(node).map_err(anyhow::Error::msg)? {
             proxy["tls"] = json!(true);
             if let Some(sni) = tls.get("server_name") {
                 proxy["servername"] = sni.clone();
