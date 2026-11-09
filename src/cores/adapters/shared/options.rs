@@ -65,7 +65,7 @@ pub(crate) fn shadowsocks_plugin(
     let mut options = std::collections::BTreeMap::new();
     for segment in segments.iter().skip(1) {
         if segment.is_empty() {
-            continue;
+            return Err("Shadowsocks plugin contains an empty option segment".into());
         }
         let (key, value) = segment
             .split_once('=')
@@ -81,7 +81,7 @@ pub(crate) fn shadowsocks_plugin(
 
     let (mihomo_name, mihomo_options) = match name {
         "obfs-local" | "simple-obfs" => {
-            let mode = options.get("obfs").and_then(Option::as_deref)
+            let mode = options.get("obfs").and_then(|value| value.as_deref())
                 .ok_or_else(|| "Shadowsocks obfs-local requires obfs=http or obfs=tls".to_owned())?;
             if !["http", "tls"].contains(&mode) {
                 return Err("Shadowsocks obfs-local mode must be http or tls".into());
@@ -91,7 +91,7 @@ pub(crate) fn shadowsocks_plugin(
             }
             let mut mapped = Map::new();
             mapped.insert("mode".into(), Value::String(mode.to_owned()));
-            if let Some(host) = options.get("obfs-host").and_then(Option::as_deref) {
+            if let Some(host) = options.get("obfs-host").and_then(|value| value.as_deref()) {
                 if host.is_empty() || host.chars().any(char::is_control) {
                     return Err("Shadowsocks obfs host is invalid".into());
                 }
@@ -100,7 +100,7 @@ pub(crate) fn shadowsocks_plugin(
             ("obfs".to_owned(), Value::Object(mapped))
         }
         "v2ray-plugin" => {
-            let mode = options.get("mode").and_then(Option::as_deref).unwrap_or("websocket");
+            let mode = options.get("mode").and_then(|value| value.as_deref()).unwrap_or("websocket");
             if mode != "websocket" {
                 return Err("Shadowsocks v2ray-plugin supports websocket mode only in this adapter".into());
             }
@@ -110,7 +110,7 @@ pub(crate) fn shadowsocks_plugin(
             let mut mapped = Map::new();
             mapped.insert("mode".into(), Value::String("websocket".into()));
             for key in ["host", "path"] {
-                if let Some(value) = options.get(key).and_then(Option::as_deref) {
+                if let Some(value) = options.get(key).and_then(|value| value.as_deref()) {
                     if value.chars().any(char::is_control) {
                         return Err("Shadowsocks v2ray-plugin option contains control characters".into());
                     }
@@ -118,7 +118,7 @@ pub(crate) fn shadowsocks_plugin(
                 }
             }
             if options.contains_key("tls") {
-                if options.get("tls").is_some_and(Option::is_some) {
+                if options.get("tls").is_some_and(|value| value.is_some()) {
                     return Err("Shadowsocks v2ray-plugin tls flag must not have a value".into());
                 }
                 mapped.insert("tls".into(), Value::Bool(true));
