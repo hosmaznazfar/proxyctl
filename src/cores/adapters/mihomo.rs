@@ -11,7 +11,7 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, tls_options,
+        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options, shadowsocks_plugin, tls_options,
         validate_for_core,
     },
 };
@@ -60,6 +60,12 @@ impl CoreAdapter for MihomoAdapter {
                 json!({"name":name,"type":"hysteria2","server":node.server,"port":node.port,"password":node.secret.as_ref().map(|v|v.expose()).unwrap_or_default()})
             }
         };
+        if let Some((_, _, plugin, plugin_opts)) =
+            shadowsocks_plugin(node).map_err(anyhow::Error::msg)?
+        {
+            proxy["plugin"] = json!(plugin);
+            proxy["plugin-opts"] = plugin_opts;
+        }
         if let Some(flow) = option_string(node, "flow") {
             proxy["flow"] = json!(flow);
         }
