@@ -58,8 +58,7 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 continue;
             }
 
-            if let Err(error) =
-                adapters::validation::validate_node_config(*core, &node, executable)
+            if let Err(error) = adapters::validation::validate_node_config(*core, &node, executable)
             {
                 let diagnostic = if *core == CoreId::Xray {
                     xray_validation_diagnostic(&node, executable)
@@ -84,7 +83,10 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
 /// Re-run a failed Xray check and expose its native diagnostic. This is deliberately
 /// limited to this integration test: its fixtures contain synthetic credentials only.
 /// Production validation errors must never include core output or generated config content.
-fn xray_validation_diagnostic(node: &proxyctl::domain::ProxyNode, executable: &std::path::Path) -> String {
+fn xray_validation_diagnostic(
+    node: &proxyctl::domain::ProxyNode,
+    executable: &std::path::Path,
+) -> String {
     use std::{io::Write, process::Command};
 
     let generated = adapters::adapter(CoreId::Xray)
