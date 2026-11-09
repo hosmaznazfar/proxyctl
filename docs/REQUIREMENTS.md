@@ -167,7 +167,7 @@ Acceptance criteria:
 - Temporary configurations and listeners are cleaned up after success, failure, timeout, or cancellation.
 - A failed node does not prevent the remaining nodes from being tested unless the user explicitly requests fail-fast behavior.
 - The run records its start/end state, methodology version, core versions, endpoints, payload sizes, and timeouts.
-- Completed samples are committed incrementally; the database is closed during process execution and network requests.
+- Completed samples are committed in short transactions after each node/core child process has stopped; the database is closed during process execution and network requests.
 - Cancellation stops and waits for the child process, cleans temporary files, and retains completed samples.
 
 ### FR-009 — Benchmark metrics and sample persistence (P1)
