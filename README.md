@@ -50,6 +50,7 @@ The initial installer supports Linux x86_64. It selects stable assets from each 
 
 ~~~sh
 proxyctl update --check
+proxyctl update --check --prerelease
 proxyctl update
 proxyctl update --app
 proxyctl update --cores
