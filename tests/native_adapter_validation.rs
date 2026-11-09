@@ -58,14 +58,19 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 continue;
             }
 
-            adapters::validation::validate_node_config(*core, &node, executable).unwrap_or_else(
-                |error| {
-                    panic!(
-                        "native validation failed for fixture '{}' on {core}: {error:#}",
-                        fixture.name
-                    )
-                },
-            );
+            if let Err(error) =
+                adapters::validation::validate_node_config(*core, &node, executable)
+            {
+                let diagnostic = if *core == CoreId::Xray {
+                    xray_validation_diagnostic(&node, executable)
+                } else {
+                    String::new()
+                };
+                panic!(
+                    "native validation failed for fixture '{}' on {core}: {error:#}\\n{diagnostic}",
+                    fixture.name
+                );
+            }
             validated += 1;
         }
     }
@@ -74,6 +79,36 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
         "Native validation succeeded for {validated} fixture/core combinations across {} fixtures.",
         fixtures.len()
     );
+}
+
+/// Re-run a failed Xray check and expose its native diagnostic. This is deliberately
+/// limited to this integration test: its fixtures contain synthetic credentials only.
+/// Production validation errors must never include core output or generated config content.
+fn xray_validation_diagnostic(node: &proxyctl::domain::ProxyNode, executable: &std::path::Path) -> String {
+    use std::{io::Write, process::Command};
+
+    let generated = adapters::adapter(CoreId::Xray)
+        .generate_config(node)
+        .expect("Xray fixture config should generate");
+    let mut config = tempfile::NamedTempFile::new().expect("temporary config should be created");
+    config
+        .write_all(&generated.content)
+        .expect("temporary config should be written");
+
+    match Command::new(executable)
+        .arg("run")
+        .arg("-test")
+        .arg("-c")
+        .arg(config.path())
+        .output()
+    {
+        Ok(output) => format!(
+            "Xray diagnostic (stdout):\\n{}\\nXray diagnostic (stderr):\\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+        Err(error) => format!("Could not collect Xray diagnostic: {error}"),
+    }
 }
 
 fn fixtures() -> Vec<Fixture> {
