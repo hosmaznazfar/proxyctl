@@ -65,7 +65,7 @@ enum Command {
         #[arg(long, value_name = "CORE")]
         core: Option<String>,
         /// Include prereleases instead of selecting stable releases only.
-        #[arg(long, conflicts_with = "check", action = clap::ArgAction::SetTrue)]
+        #[arg(long)]
         prerelease: bool,
     },
 }
