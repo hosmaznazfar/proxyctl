@@ -295,16 +295,40 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
             return Err("only VLESS xtls-rprx-vision flow is currently mapped".into());
         }
         if option_string(node, "type").is_some_and(|value| {
-            !["tcp", "raw", "ws", "websocket", "grpc", "http", "h2", "http2", "httpupgrade", "http-upgrade", "xhttp"]
-                .contains(&value.to_ascii_lowercase().as_str())
+            ![
+                "tcp",
+                "raw",
+                "ws",
+                "websocket",
+                "grpc",
+                "http",
+                "h2",
+                "http2",
+                "httpupgrade",
+                "http-upgrade",
+                "xhttp",
+            ]
+            .contains(&value.to_ascii_lowercase().as_str())
         }) {
             return Err("only VLESS TCP, WebSocket, gRPC, HTTP/2, HTTP Upgrade, and XHTTP transports are currently mapped".into());
         }
     }
     if node.protocol == Protocol::Vmess {
         if option_string(node, "net").is_some_and(|value| {
-            !["tcp", "raw", "ws", "websocket", "grpc", "http", "h2", "http2", "httpupgrade", "http-upgrade", "xhttp"]
-                .contains(&value.to_ascii_lowercase().as_str())
+            ![
+                "tcp",
+                "raw",
+                "ws",
+                "websocket",
+                "grpc",
+                "http",
+                "h2",
+                "http2",
+                "httpupgrade",
+                "http-upgrade",
+                "xhttp",
+            ]
+            .contains(&value.to_ascii_lowercase().as_str())
         }) {
             return Err("only VMess TCP, WebSocket, gRPC, HTTP/2, HTTPUpgrade, and XHTTP transports are currently mapped".into());
         }

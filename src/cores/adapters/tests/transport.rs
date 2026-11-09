@@ -562,7 +562,11 @@ fn http_transport_alias_normalizes_to_http2_for_vless_and_vmess() {
             };
             assert_eq!(
                 transport,
-                Some(if core == CoreId::SingBox { "http" } else { "h2" }),
+                Some(if core == CoreId::SingBox {
+                    "http"
+                } else {
+                    "h2"
+                }),
                 "{core}"
             );
             assert_eq!(path, Some("/h2"), "{core}");
