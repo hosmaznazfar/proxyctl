@@ -82,6 +82,25 @@ Each selected node receives three direct TCP-ping samples. Each compatible node/
 
 Benchmarking is explicit and sequential. The CLI reports live node/core/metric/sample progress, and Ctrl-C stops the active core so an in-flight request can be interrupted and cleaned up. The temporary HTTP proxy listener binds only to 127.0.0.1. Benchmarking does not change system proxy, DNS, routes, firewall, or TUN settings. See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) for the measurement definitions, endpoint contract, and privacy notes.
 
+Sort nodes independently by each benchmark metric:
+
+~~~sh
+# Cross-core comparison: median of the latest completed per-core medians
+proxyctl list --sort ping
+proxyctl list --sort download
+proxyctl list --sort upload
+
+# Restrict comparison to one managed core
+proxyctl list --sort ping --core sing-box
+proxyctl list --sort download --core xray
+proxyctl list --sort upload --core mihomo
+
+# Direct TCP ping is a separate metric and does not use a proxy core
+proxyctl list --sort tcp-ping
+~~~
+
+Real ping and direct TCP ping are separate measurements. Cross-core sorting gives each core with a successful latest completed result equal weight by taking the median of those per-core medians. Core-specific sorting uses only that core. Interrupted and cancelled runs are ignored; a newer completed run supersedes an older result even if its samples failed. Missing measurements remain unranked at the bottom, never as zero.
+
 ## Planned commands
 
 ~~~sh
