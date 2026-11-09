@@ -126,6 +126,9 @@ impl CoreAdapter for XrayAdapter {
             if let Some(mode) = transport.mode {
                 xhttp.insert("mode".into(), json!(mode));
             }
+            if let Some(extra) = transport.xhttp_extra {
+                xhttp.insert("extra".into(), extra);
+            }
             outbound["streamSettings"]["xhttpSettings"] = serde_json::Value::Object(xhttp);
         }
         if let Some(reality) = reality_options(node).map_err(anyhow::Error::msg)? {
