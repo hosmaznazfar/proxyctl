@@ -62,6 +62,45 @@ pub trait CoreAdapter {
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()>;
 }
 
+/// Reduce native validator output to a fixed, credential-free diagnostic category.
+pub(crate) fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'static str {
+    let diagnostic = format!(
+        "{} {}",
+        String::from_utf8_lossy(stdout),
+        String::from_utf8_lossy(stderr)
+    )
+    .to_ascii_lowercase();
+
+    if diagnostic.contains("unknown field")
+        || diagnostic.contains("unknown config field")
+        || diagnostic.contains("unknown configuration field")
+    {
+        "the core rejected an unrecognized configuration field; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to build inbound")
+        || diagnostic.contains("invalid inbound")
+        || diagnostic.contains("inbound config")
+    {
+        "the core rejected the loopback HTTP inbound; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to build outbound")
+        || diagnostic.contains("invalid outbound")
+        || diagnostic.contains("proxy outbound")
+    {
+        "the core rejected the proxy outbound settings; raw diagnostics withheld"
+    } else if diagnostic.contains("reality") {
+        "the core rejected the proxy REALITY settings; raw diagnostics withheld"
+    } else if diagnostic.contains("tls") || diagnostic.contains("certificate") {
+        "the core rejected the proxy TLS or certificate settings; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to parse")
+        || diagnostic.contains("invalid character")
+        || diagnostic.contains("unexpected end of json")
+        || diagnostic.contains("yaml:")
+    {
+        "the core could not parse the generated configuration; raw diagnostics withheld"
+    } else {
+        "the core returned a native configuration validation error; raw diagnostics withheld"
+    }
+}
+
 pub fn adapter(core: CoreId) -> &'static dyn CoreAdapter {
     match core {
         CoreId::SingBox => &sing_box::SingBoxAdapter,
@@ -81,3 +120,42 @@ pub(crate) fn json_config(value: Value) -> anyhow::Result<GeneratedConfig> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod validation_diagnostic_tests {
+    use super::summarize_validation_failure;
+
+    #[test]
+    fn native_validation_diagnostics_are_allowlisted() {
+        let cases = [
+            (
+                b"unknown field secret-value".as_slice(),
+                "unrecognized configuration field",
+            ),
+            (
+                b"failed to build inbound with private-address".as_slice(),
+                "loopback HTTP inbound",
+            ),
+            (
+                b"failed to build outbound with credential".as_slice(),
+                "proxy outbound settings",
+            ),
+            (
+                b"TLS certificate verification setting".as_slice(),
+                "TLS or certificate",
+            ),
+            (
+                b"invalid JSON document".as_slice(),
+                "parse the generated configuration",
+            ),
+        ];
+
+        for (diagnostic, expected) in cases {
+            let summary = summarize_validation_failure(diagnostic, b"");
+            assert!(summary.contains(expected));
+            assert!(!summary.contains("secret-value"));
+            assert!(!summary.contains("private-address"));
+            assert!(!summary.contains("credential"));
+        }
+    }
+}
