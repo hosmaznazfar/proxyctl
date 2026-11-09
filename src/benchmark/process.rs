@@ -55,8 +55,8 @@ impl ManagedCoreProcess {
             let generated = adapter
                 .generate_benchmark_config(node, port)
                 .with_context(|| format!("could not generate benchmark config for {core}"))?;
-            let mut config = NamedTempFile::new()
-                .context("could not create private benchmark configuration")?;
+            let mut config =
+                NamedTempFile::new().context("could not create private benchmark configuration")?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -104,7 +104,9 @@ impl ManagedCoreProcess {
     /// Stop the child and wait for process exit before removing its config.
     pub fn stop(mut self) -> anyhow::Result<()> {
         if self.child.try_wait()?.is_none() {
-            self.child.kill().context("could not stop managed benchmark core")?;
+            self.child
+                .kill()
+                .context("could not stop managed benchmark core")?;
         }
         self.child
             .wait()
@@ -153,11 +155,7 @@ fn spawn_core(core: CoreId, executable: &Path, config: &Path) -> anyhow::Result<
         .with_context(|| format!("could not start managed {core} process"))
 }
 
-fn wait_for_listener(
-    child: &mut Child,
-    port: u16,
-    timeout: Duration,
-) -> Result<(), String> {
+fn wait_for_listener(child: &mut Child, port: u16, timeout: Duration) -> Result<(), String> {
     let started = Instant::now();
     let address = ("127.0.0.1", port);
     loop {
@@ -240,11 +238,30 @@ mod tests {
         append_core_arguments(CoreId::SingBox, &mut sing_box, config);
         append_core_arguments(CoreId::Xray, &mut xray, config);
         append_core_arguments(CoreId::Mihomo, &mut mihomo, config);
-        let sing_box_args = sing_box.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
-        let xray_args = xray.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
-        let mihomo_args = mihomo.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
-        assert_eq!(sing_box_args, vec!["run".to_owned(), "-c".to_owned(), "/tmp/proxyctl-test.json".to_owned()]);
+        let sing_box_args = sing_box
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let xray_args = xray
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let mihomo_args = mihomo
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            sing_box_args,
+            vec![
+                "run".to_owned(),
+                "-c".to_owned(),
+                "/tmp/proxyctl-test.json".to_owned()
+            ]
+        );
         assert_eq!(xray_args, vec!["run", "-c", "/tmp/proxyctl-test.json"]);
-        assert_eq!(mihomo_args, vec!["-f".to_owned(), "/tmp/proxyctl-test.json".to_owned()]);
+        assert_eq!(
+            mihomo_args,
+            vec!["-f".to_owned(), "/tmp/proxyctl-test.json".to_owned()]
+        );
     }
 }
