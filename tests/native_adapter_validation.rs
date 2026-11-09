@@ -92,7 +92,10 @@ fn xray_validation_diagnostic(
     let generated = adapters::adapter(CoreId::Xray)
         .generate_config(node)
         .expect("Xray fixture config should generate");
-    let mut config = tempfile::NamedTempFile::new().expect("temporary config should be created");
+    let mut config = tempfile::Builder::new()
+        .suffix(".json")
+        .tempfile()
+        .expect("temporary JSON config should be created");
     config
         .write_all(&generated.content)
         .expect("temporary config should be written");
