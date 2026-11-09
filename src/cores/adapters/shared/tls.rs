@@ -125,6 +125,75 @@ fn vmess_tls_mode(node: &ProxyNode) -> Result<Option<String>, String> {
     Ok(option_string(node, "tls").map(str::to_ascii_lowercase))
 }
 
+/// Normalize client-side REALITY options without conflating them with ordinary TLS.
+pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String> {
+    let security = if node.protocol == Protocol::Vmess {
+        vmess_tls_mode(node)?
+    } else {
+        option_string(node, "security")
+            .or_else(|| option_string(node, "tls"))
+            .map(str::to_ascii_lowercase)
+    };
+    if security.as_deref() != Some("reality") {
+        return Ok(None);
+    }
+
+    let public_key = option_string(node, "pbk")
+        .or_else(|| option_string(node, "publicKey"))
+        .ok_or_else(|| "REALITY public key is missing".to_owned())?;
+    let fingerprint = option_string(node, "fp")
+        .ok_or_else(|| "REALITY client fingerprint is required".to_owned())?;
+    let short_id = option_string(node, "sid").unwrap_or_default();
+    if short_id.len() > 16
+        || short_id.len() % 2 != 0
+        || !short_id.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("REALITY short ID must be an even-length hexadecimal value of at most 16 characters".into());
+    }
+    if public_key.chars().any(char::is_control)
+        || fingerprint.chars().any(char::is_control)
+    {
+        return Err("REALITY public key and fingerprint must not contain control characters".into());
+    }
+    if option_string(node, "pbk").is_some()
+        && option_string(node, "publicKey").is_some()
+        && option_string(node, "pbk") != option_string(node, "publicKey")
+    {
+        return Err("REALITY public-key aliases conflict".into());
+    }
+    if insecure_option(node)? || option_string(node, "vcn").is_some()
+        || option_string(node, "pcs").is_some()
+        || option_string(node, "pinSHA256").is_some()
+        || alpn_protocols(node)?.is_some()
+    {
+        return Err("ordinary TLS verification, certificate pin, and ALPN options cannot be combined with REALITY".into());
+    }
+
+    let mut reality = Map::new();
+    reality.insert("public_key".into(), Value::String(public_key.into()));
+    reality.insert("short_id".into(), Value::String(short_id.into()));
+    reality.insert("fingerprint".into(), Value::String(fingerprint.into()));
+    if let Some(server_name) = option_string(node, "sni") {
+        if server_name.chars().any(char::is_control) {
+            return Err("REALITY server name contains control characters".into());
+        }
+        reality.insert("server_name".into(), Value::String(server_name.into()));
+    }
+    if let Some(spider_x) = option_string(node, "spx") {
+        if !spider_x.starts_with('/') || spider_x.chars().any(char::is_control) {
+            return Err("REALITY SpiderX must be a path beginning with '/'".into());
+        }
+        reality.insert("spider_x".into(), Value::String(spider_x.into()));
+    }
+    if let Some(verify) = option_string(node, "mldsa65Verify") {
+        if verify.chars().any(char::is_control) {
+            return Err("REALITY ML-DSA verification key contains control characters".into());
+        }
+        reality.insert("mldsa65_verify".into(), Value::String(verify.into()));
+    }
+    Ok(Some(Value::Object(reality)))
+}
+
 pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
     let default_tls = matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2);
     let insecure = insecure_option(node)?;
@@ -226,9 +295,7 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             }
             Ok(Some(Value::Object(tls)))
         }
-        "reality" => {
-            Err("REALITY is not enabled in this adapter batch; refusing partial conversion".into())
-        }
+        "reality" => Ok(None)
         _ => Err("unsupported TLS/security mode".into()),
     }
 }
