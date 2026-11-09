@@ -209,9 +209,9 @@ mod tests {
         append_core_arguments(CoreId::SingBox, &mut sing_box, config);
         append_core_arguments(CoreId::Xray, &mut xray, config);
         append_core_arguments(CoreId::Mihomo, &mut mihomo, config);
-        let sing_box_args = sing_box.get_args().map(|arg| arg.to_string_lossy()).collect::<Vec<_>>();
-        let xray_args = xray.get_args().map(|arg| arg.to_string_lossy()).collect::<Vec<_>>();
-        let mihomo_args = mihomo.get_args().map(|arg| arg.to_string_lossy()).collect::<Vec<_>>();
+        let sing_box_args = sing_box.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        let xray_args = xray.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        let mihomo_args = mihomo.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
         assert_eq!(sing_box_args, ["run", "-c", "/tmp/proxyctl-test.json"]);
         assert_eq!(xray_args, ["run", "-c", "/tmp/proxyctl-test.json"]);
         assert_eq!(mihomo_args, ["-f", "/tmp/proxyctl-test.json"]);
