@@ -80,14 +80,19 @@ impl BenchmarkHttpClient {
     pub fn latency(&self) -> Result<Measurement, MeasurementFailure> {
         let started = Instant::now();
         let url = with_bytes_parameter(&self.latency_url, 0);
-        let response = self
+        let mut response = self
             .agent
             .get(url.as_str())
             .header("Accept-Encoding", "identity")
             .call()
             .map_err(classify_error)?;
         let duration = started.elapsed();
-        drop(response);
+        response
+            .body_mut()
+            .with_config()
+            .limit(1_024)
+            .read_to_vec()
+            .map_err(classify_error)?;
         Ok(Measurement {
             value: duration.as_secs_f64() * 1_000.0,
             duration,
@@ -133,12 +138,15 @@ impl BenchmarkHttpClient {
             .header("Accept-Encoding", "identity")
             .send(body.as_slice())
             .map_err(classify_error)?;
-        response
+        let response_body = response
             .body_mut()
             .with_config()
-            .limit(64 * 1024)
+            .limit(64 * 1024 + 1)
             .read_to_vec()
             .map_err(classify_error)?;
+        if response_body.len() > 64 * 1024 {
+            return Err(MeasurementFailure::InvalidResponse);
+        }
         let duration = started.elapsed();
         Ok(Measurement {
             value: throughput_bps(bytes, duration)
