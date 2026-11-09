@@ -89,6 +89,8 @@ Rust edition 2024; Rust 1.99.1 toolchain pinned. Run:
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
+# Requires all three proxyctl-managed cores to be installed
+cargo test --test native_adapter_validation -- --ignored --nocapture
 cargo build --release
 ~~~
 
