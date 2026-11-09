@@ -145,15 +145,22 @@ fn compatibility_failure(reason: String) -> Compatibility {
 
 /// Validate the shared semantic node against one core's explicit capability set.
 pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Compatibility> {
-    validate_common(node).map_err(compatibility_failure)?;
-    tls_options(node).map_err(compatibility_failure)?;
     let capabilities = capabilities(core);
 
+    // Protocol-level incompatibility is independent of the core's transport/TLS schema.
+    // Check the endpoint's basic shape first, then report a valid Hysteria2 node as
+    // unsupported by Xray instead of misclassifying it based on unrelated adapter rules.
     if node.protocol == Protocol::Hysteria2 && !capabilities.hysteria2 {
-        return Err(compatibility_failure(format!(
+        if node.server.is_empty() || node.port == 0 {
+            return Err(Compatibility::invalid("server and port must be valid"));
+        }
+        return Err(Compatibility::unsupported(format!(
             "{core} does not implement Hysteria2"
         )));
     }
+
+    validate_common(node).map_err(compatibility_failure)?;
+    tls_options(node).map_err(compatibility_failure)?;
 
     if option_string(node, "vcn").is_some() && !capabilities.verify_peer_cert_by_name {
         return Err(compatibility_failure(format!(
