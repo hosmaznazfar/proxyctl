@@ -646,7 +646,7 @@ mod tests {
             cores: vec!["sing-box".into()],
             settings: BenchmarkSettings {
                 methodology: "proxyctl-benchmark-v1".into(),
-                latency_url: "https://speed.cloudflare.com/__down?bytes=0".into(),
+                latency_url: "https://speed.cloudflare.com/__down".into(),
                 download_url: "https://speed.cloudflare.com/__down".into(),
                 upload_url: "https://speed.cloudflare.com/__up".into(),
                 download_bytes: 1_048_576,
