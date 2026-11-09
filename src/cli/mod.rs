@@ -68,17 +68,17 @@ enum Command {
         /// HTTPS URL used for real HTTP ping through the selected core.
         #[arg(long, default_value = "https://www.google.com/generate_204")]
         latency_url: String,
-        /// HTTPS URL of a bounded download test object (default: CacheFly 10 MB).
+        /// HTTPS URL of a download test object (only the first 2 MiB are measured by default).
         #[arg(long, default_value = "https://cachefly.cachefly.net/10mb.test")]
         download_url: String,
         /// HTTPS endpoint accepting a POST body for uploads.
         #[arg(long, default_value = "https://speed.cloudflare.com/__up")]
         upload_url: String,
-        /// Maximum accepted download size per sample (safety limit; default 16 MiB).
+        /// Number of bytes to sample per download (default 2 MiB; larger responses are cut short).
         #[arg(
             long = "download-max-bytes",
             alias = "download-bytes",
-            default_value_t = 16_777_216
+            default_value_t = 2_097_152
         )]
         download_bytes: u64,
         /// Upload payload size for each sample.
