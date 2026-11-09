@@ -119,7 +119,7 @@ impl BenchmarkHttpClient {
             .with_config()
             .limit(64 * 1024)
             .read_to_vec()
-            .map_err(classify_error)?;
+            .map_err(classify_response_error)?;
         Ok(Measurement {
             value: duration.as_secs_f64() * 1_000.0,
             duration,
@@ -151,7 +151,7 @@ impl BenchmarkHttpClient {
         let mut last_progress = Instant::now();
 
         loop {
-            let count = reader.read(&mut buffer).map_err(classify_io_error)?;
+            let count = reader.read(&mut buffer).map_err(classify_body_io_error)?;
             if count == 0 {
                 break;
             }
@@ -194,7 +194,7 @@ impl BenchmarkHttpClient {
             .with_config()
             .limit(64 * 1024 + 1)
             .read_to_vec()
-            .map_err(classify_error)?;
+            .map_err(classify_response_error)?;
         if response_body.len() > 64 * 1024 {
             return Err(MeasurementFailure::InvalidResponse);
         }
@@ -265,26 +265,43 @@ fn classify_error(error: ureq::Error) -> MeasurementFailure {
         ureq::Error::Tls(_) | ureq::Error::Rustls(_) => MeasurementFailure::TlsFailed,
         ureq::Error::StatusCode(status) => MeasurementFailure::HttpStatus(status),
         ureq::Error::Protocol(_) => MeasurementFailure::ProtocolFailed,
-        ureq::Error::Io(error) => classify_io_error(error),
+        ureq::Error::Io(error) => classify_request_io_error(error),
         _ => MeasurementFailure::Unavailable,
     }
 }
 
-fn classify_io_error(error: std::io::Error) -> MeasurementFailure {
-    if error.kind() == std::io::ErrorKind::TimedOut {
-        MeasurementFailure::Timeout
-    } else if matches!(
-        error.kind(),
-        std::io::ErrorKind::ConnectionAborted
-            | std::io::ErrorKind::ConnectionRefused
-            | std::io::ErrorKind::ConnectionReset
-            | std::io::ErrorKind::NotConnected
-    ) {
-        MeasurementFailure::Unreachable
-    } else if error.kind() == std::io::ErrorKind::UnexpectedEof {
-        MeasurementFailure::IncompleteResponse
-    } else {
-        MeasurementFailure::ReadFailed
+fn classify_response_error(error: ureq::Error) -> MeasurementFailure {
+    match error {
+        ureq::Error::Io(error) => classify_body_io_error(error),
+        other => classify_error(other),
+    }
+}
+
+/// Errors before response headers are received are connection/request failures.
+fn classify_request_io_error(error: std::io::Error) -> MeasurementFailure {
+    match error.kind() {
+        std::io::ErrorKind::TimedOut => MeasurementFailure::Timeout,
+        std::io::ErrorKind::ConnectionRefused
+        | std::io::ErrorKind::NotConnected
+        | std::io::ErrorKind::AddrNotAvailable => MeasurementFailure::Unreachable,
+        std::io::ErrorKind::UnexpectedEof
+        | std::io::ErrorKind::ConnectionAborted
+        | std::io::ErrorKind::ConnectionReset
+        | std::io::ErrorKind::BrokenPipe => MeasurementFailure::IncompleteResponse,
+        _ => MeasurementFailure::ReadFailed,
+    }
+}
+
+/// Once a response has started, a reset/EOF means that the HTTP exchange was truncated,
+/// not that the endpoint was unreachable.
+fn classify_body_io_error(error: std::io::Error) -> MeasurementFailure {
+    match error.kind() {
+        std::io::ErrorKind::TimedOut => MeasurementFailure::Timeout,
+        std::io::ErrorKind::UnexpectedEof
+        | std::io::ErrorKind::ConnectionAborted
+        | std::io::ErrorKind::ConnectionReset
+        | std::io::ErrorKind::BrokenPipe => MeasurementFailure::IncompleteResponse,
+        _ => MeasurementFailure::ReadFailed,
     }
 }
 
@@ -409,13 +426,21 @@ mod tests {
     }
 
     #[test]
-    fn classifies_interrupted_download_streams_separately() {
+    fn classifies_request_and_response_failures_by_phase() {
         assert_eq!(
-            classify_io_error(std::io::Error::from(std::io::ErrorKind::UnexpectedEof)),
+            classify_request_io_error(std::io::Error::from(std::io::ErrorKind::ConnectionRefused)),
+            MeasurementFailure::Unreachable
+        );
+        assert_eq!(
+            classify_body_io_error(std::io::Error::from(std::io::ErrorKind::UnexpectedEof)),
             MeasurementFailure::IncompleteResponse
         );
         assert_eq!(
-            classify_io_error(std::io::Error::other("socket read failed")),
+            classify_body_io_error(std::io::Error::from(std::io::ErrorKind::ConnectionReset)),
+            MeasurementFailure::IncompleteResponse
+        );
+        assert_eq!(
+            classify_body_io_error(std::io::Error::other("socket read failed")),
             MeasurementFailure::ReadFailed
         );
     }
