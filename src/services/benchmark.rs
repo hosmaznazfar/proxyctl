@@ -353,6 +353,14 @@ fn execute_run(
                 }
             }
 
+            // Core stderr is private and retained only for this process lifetime. If HTTP
+            // requests failed, surface only a recognized, credential-free diagnostic category.
+            if let Some(process) = process.as_ref()
+                && let Some(diagnostic) = process.runtime_diagnostic()
+            {
+                println!("run #{run_id} node #{} {core}: runtime diagnostic: {diagnostic}", record.id);
+            }
+
             // Keep redb closed for the entire child-process lifetime. Flush this node/core
             // batch only after the child has exited, including when cancellation was requested.
             let stop_result = if let Some(process) = process {
