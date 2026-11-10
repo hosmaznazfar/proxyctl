@@ -391,7 +391,7 @@ mod tests {
             ],
         );
         let mut missing = missing;
-        missing.pop();
+        let _ = missing.pop();
         assert!(matches!(
             evaluate_core(1, CoreId::SingBox, &runs, &missing),
             CoreConnectivity::Incomplete(_)
