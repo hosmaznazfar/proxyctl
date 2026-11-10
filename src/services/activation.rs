@@ -880,6 +880,13 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
             systemd_main_pid(&context)?.is_none(),
             "TUN systemd service still has a running process after stop"
         );
+        if state.pid != 0 && state.start_ticks != 0 {
+            wait_exit(state.pid, state.start_ticks, Duration::from_secs(10));
+            ensure!(
+                !matches_process(state.pid, &state.executable, state.start_ticks),
+                "the recorded TUN core process is still running after systemd stop"
+            );
+        }
     } else {
         ensure!(
             load_state == "not-found",
