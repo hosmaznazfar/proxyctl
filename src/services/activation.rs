@@ -403,7 +403,13 @@ fn launch_tun_managed(
         return Err(error);
     }
     // If replacing an existing TUN core, snapshot only after its owned routes are gone.
-    context.baseline = TunBaseline::capture()?;
+    context.baseline = match TunBaseline::capture() {
+        Ok(baseline) => baseline,
+        Err(error) => {
+            let _ = fs::remove_file(config);
+            return Err(error);
+        }
+    };
     let mut state = ActiveProcess {
         pid: 0, start_ticks: 0, executable: executable.to_path_buf(),
         config: config.to_path_buf(), node_id, core: core.as_str().to_owned(), port,
