@@ -60,7 +60,11 @@ enum Command {
     /// Show managed core status and versions.
     Cores,
     /// Activate one node using one Proxyctl-managed core (loopback only).
-    Use { id: u64, #[arg(long, value_name = "CORE", required = true)] core: String },
+    Use {
+        id: u64,
+        #[arg(long, value_name = "CORE", required = true)]
+        core: String,
+    },
     /// Stop only the exact process tracked by Proxyctl.
     Stop,
     /// Install all supported cores, or one selected core.
@@ -393,7 +397,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 },
             )?;
         }
-        Command::Cores | Command::Setup { .. } | Command::Update { .. } | Command::Use { .. } | Command::Stop => {
+        Command::Cores
+        | Command::Setup { .. }
+        | Command::Update { .. }
+        | Command::Use { .. }
+        | Command::Stop => {
             unreachable!("management commands are dispatched before database access")
         }
     }

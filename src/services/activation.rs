@@ -1,4 +1,10 @@
 //! Linux single-core activation with private state and identity-checked shutdown.
+use crate::{
+    cores::{CoreId, adapters, core_binary_path, managed_cores_path},
+    database::{NodeDatabase, default_database_path},
+};
+use anyhow::{Context, ensure};
+use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -8,12 +14,6 @@ use std::{
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
-};
-use anyhow::{Context, ensure};
-use serde::{Deserialize, Serialize};
-use crate::{
-    cores::{CoreId, adapters, core_binary_path, managed_cores_path},
-    database::{NodeDatabase, default_database_path},
 };
 
 const WAIT: Duration = Duration::from_secs(10);
@@ -34,18 +34,27 @@ impl RuntimeLock {
     fn acquire(dir: &Path) -> anyhow::Result<Self> {
         fs::create_dir_all(dir)?;
         private_dir(dir)?;
-        let file = OpenOptions::new().create(true).truncate(false).read(true).write(true)
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
             .open(dir.join("activation.lock"))?;
         private_fd(file.as_raw_fd())?;
         // SAFETY: file is a live descriptor owned by this guard.
-        ensure!(unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0, "could not lock activation state");
+        ensure!(
+            unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0,
+            "could not lock activation state"
+        );
         Ok(Self(file))
     }
 }
 impl Drop for RuntimeLock {
     fn drop(&mut self) {
         // SAFETY: file remains open while this guard is dropped.
-        unsafe { libc::flock(self.0.as_raw_fd(), libc::LOCK_UN); }
+        unsafe {
+            libc::flock(self.0.as_raw_fd(), libc::LOCK_UN);
+        }
     }
 }
 
@@ -57,22 +66,41 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
         let (runtime, state_path) = paths()?;
         let _lock = RuntimeLock::acquire(&runtime)?;
         let db = NodeDatabase::open(default_database_path()?)?;
-        let record = db.get_node(node_id)?.with_context(|| format!("node #{node_id} not found"))?;
-        ensure!(!record.is_deleted(), "node #{node_id} is deleted; restore it first");
+        let record = db
+            .get_node(node_id)?
+            .with_context(|| format!("node #{node_id} not found"))?;
+        ensure!(
+            !record.is_deleted(),
+            "node #{node_id} is deleted; restore it first"
+        );
         let node = record.node;
         drop(db);
 
         let executable = core_binary_path(core)?;
-        ensure!(executable.is_file(), "{core} is not installed by Proxyctl; run setup --core {core}");
+        ensure!(
+            executable.is_file(),
+            "{core} is not installed by Proxyctl; run setup --core {core}"
+        );
         let executable = fs::canonicalize(executable)?;
         let managed = fs::canonicalize(managed_cores_path()?)?;
-        ensure!(executable.starts_with(managed), "refusing to run a core outside Proxyctl's managed directory");
+        ensure!(
+            executable.starts_with(managed),
+            "refusing to run a core outside Proxyctl's managed directory"
+        );
         let adapter = adapters::adapter(core);
         let compatibility = adapter.compatibility(&node);
-        ensure!(compatibility.is_supported(), "{core} does not support this node: {}", compatibility.reason.as_deref().unwrap_or("unsupported configuration"));
+        ensure!(
+            compatibility.is_supported(),
+            "{core} does not support this node: {}",
+            compatibility
+                .reason
+                .as_deref()
+                .unwrap_or("unsupported configuration")
+        );
 
         let port = reserve_port()?;
-        let generated = adapter.generate_benchmark_config(&node, port)
+        let generated = adapter
+            .generate_benchmark_config(&node, port)
             .with_context(|| format!("could not generate loopback-only {core} config"))?;
         adapters::validation::validate_generated_config(core, &generated, &executable)
             .with_context(|| format!("{core} rejected the activation config"))?;
@@ -83,10 +111,19 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
         write_atomic(&config, &generated.content)?;
         let mut command = Command::new(&executable);
         match core {
-            CoreId::SingBox | CoreId::Xray => { command.arg("run").arg("-c").arg(&config); }
-            CoreId::Mihomo => { command.arg("-f").arg(&config); }
+            CoreId::SingBox | CoreId::Xray => {
+                command.arg("run").arg("-c").arg(&config);
+            }
+            CoreId::Mihomo => {
+                command.arg("-f").arg(&config);
+            }
         }
-        let mut child = match command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
+        let mut child = match command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
             Ok(child) => child,
             Err(error) => {
                 let _ = fs::remove_file(&config);
@@ -105,7 +142,15 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
                 return Err(error);
             }
         };
-        let state = ActiveProcess { pid, start_ticks, executable, config, node_id, core: core.to_string(), port };
+        let state = ActiveProcess {
+            pid,
+            start_ticks,
+            executable,
+            config,
+            node_id,
+            core: core.to_string(),
+            port,
+        };
         if let Err(error) = write_atomic(&state_path, &serde_json::to_vec(&state)?) {
             let _ = child.kill();
             let _ = child.wait();
@@ -120,7 +165,9 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
             return Err(error);
         }
         println!("Activated node #{node_id} with {core}.");
-        println!("Local HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually).");
+        println!(
+            "Local HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
+        );
         println!("System proxy, DNS, routes, firewall, and TUN were not changed.");
         Ok(())
     }
@@ -171,11 +218,14 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let parent = path.parent().context("runtime file has no parent")?;
     fs::create_dir_all(parent)?;
     private_dir(parent)?;
-    let mut file = tempfile::Builder::new().prefix(".proxyctl-runtime-").tempfile_in(parent)?;
+    let mut file = tempfile::Builder::new()
+        .prefix(".proxyctl-runtime-")
+        .tempfile_in(parent)?;
     private_fd(file.as_file().as_raw_fd())?;
     file.write_all(bytes)?;
     file.as_file().sync_all()?;
-    file.persist(path).context("could not atomically publish private runtime file")?;
+    file.persist(path)
+        .context("could not atomically publish private runtime file")?;
     Ok(())
 }
 #[cfg(target_os = "linux")]
@@ -186,25 +236,49 @@ fn stop_locked(runtime: &Path, state_path: &Path) -> anyhow::Result<()> {
     }
     let state: ActiveProcess = serde_json::from_slice(&fs::read(state_path)?)
         .context("activation state is corrupt; refusing to signal any process")?;
-    ensure!(state.config.parent() == Some(runtime)
-        && state.config.file_name().is_some_and(|n| n.to_string_lossy().starts_with("active-")),
-        "activation config path is outside the private runtime directory; refusing cleanup");
+    ensure!(
+        state.config.parent() == Some(runtime)
+            && state
+                .config
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("active-")),
+        "activation config path is outside the private runtime directory; refusing cleanup"
+    );
     let managed_root = fs::canonicalize(managed_cores_path()?)
         .context("Proxyctl managed-core directory is unavailable; refusing to signal")?;
-    ensure!(state.executable.starts_with(managed_root),
-        "recorded executable is outside Proxyctl's managed-core directory; refusing to signal");
+    ensure!(
+        state.executable.starts_with(managed_root),
+        "recorded executable is outside Proxyctl's managed-core directory; refusing to signal"
+    );
     if matches_process(state.pid, &state.executable, state.start_ticks) {
-        signal_verified(state.pid, &state.executable, state.start_ticks, libc::SIGTERM)?;
+        signal_verified(
+            state.pid,
+            &state.executable,
+            state.start_ticks,
+            libc::SIGTERM,
+        )?;
         wait_exit(state.pid, state.start_ticks, Duration::from_secs(5));
         if matches_process(state.pid, &state.executable, state.start_ticks) {
-            signal_verified(state.pid, &state.executable, state.start_ticks, libc::SIGKILL)?;
+            signal_verified(
+                state.pid,
+                &state.executable,
+                state.start_ticks,
+                libc::SIGKILL,
+            )?;
             wait_exit(state.pid, state.start_ticks, Duration::from_secs(5));
         }
-        ensure!(!matches_process(state.pid, &state.executable, state.start_ticks),
-            "tracked core did not exit; state/config retained");
-        println!("Stopped Proxyctl-managed {} for node #{}.", state.core, state.node_id);
+        ensure!(
+            !matches_process(state.pid, &state.executable, state.start_ticks),
+            "tracked core did not exit; state/config retained"
+        );
+        println!(
+            "Stopped Proxyctl-managed {} for node #{}.",
+            state.core, state.node_id
+        );
     } else {
-        println!("Recorded process is stale or has a different identity; no process was signalled.");
+        println!(
+            "Recorded process is stale or has a different identity; no process was signalled."
+        );
     }
     let _ = fs::remove_file(state.config);
     fs::remove_file(state_path)?;
@@ -213,10 +287,16 @@ fn stop_locked(runtime: &Path, state_path: &Path) -> anyhow::Result<()> {
 #[cfg(target_os = "linux")]
 fn start_ticks(pid: u32) -> Option<u64> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    stat.get(stat.rfind(')')? + 2..)?.split_whitespace().nth(19)?.parse().ok()
+    stat.get(stat.rfind(')')? + 2..)?
+        .split_whitespace()
+        .nth(19)?
+        .parse()
+        .ok()
 }
 #[cfg(target_os = "linux")]
-fn executable(pid: u32) -> Option<PathBuf> { fs::canonicalize(format!("/proc/{pid}/exe")).ok() }
+fn executable(pid: u32) -> Option<PathBuf> {
+    fs::canonicalize(format!("/proc/{pid}/exe")).ok()
+}
 #[cfg(target_os = "linux")]
 fn matches_process(pid: u32, expected: &Path, ticks: u64) -> bool {
     start_ticks(pid) == Some(ticks) && executable(pid).as_deref() == Some(expected)
@@ -226,9 +306,14 @@ fn await_identity(pid: u32, expected: &Path, timeout: Duration) -> anyhow::Resul
     let start = Instant::now();
     loop {
         if let (Some(ticks), Some(actual)) = (start_ticks(pid), executable(pid)) {
-            if actual == expected { return Ok(ticks); }
+            if actual == expected {
+                return Ok(ticks);
+            }
         }
-        ensure!(start.elapsed() < timeout, "could not verify the managed process identity");
+        ensure!(
+            start.elapsed() < timeout,
+            "could not verify the managed process identity"
+        );
         thread::sleep(POLL);
     }
 }
@@ -236,28 +321,51 @@ fn await_identity(pid: u32, expected: &Path, timeout: Duration) -> anyhow::Resul
 fn await_listener(pid: u32, ticks: u64, port: u16, timeout: Duration) -> anyhow::Result<()> {
     let start = Instant::now();
     loop {
-        ensure!(start_ticks(pid) == Some(ticks), "managed core exited before listener readiness");
-        if TcpStream::connect(("127.0.0.1", port)).is_ok() { return Ok(()); }
-        ensure!(start.elapsed() < timeout, "managed core did not open its loopback listener");
+        ensure!(
+            start_ticks(pid) == Some(ticks),
+            "managed core exited before listener readiness"
+        );
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return Ok(());
+        }
+        ensure!(
+            start.elapsed() < timeout,
+            "managed core did not open its loopback listener"
+        );
         thread::sleep(POLL);
     }
 }
 #[cfg(target_os = "linux")]
 fn wait_exit(pid: u32, ticks: u64, timeout: Duration) {
     let start = Instant::now();
-    while start_ticks(pid) == Some(ticks) && start.elapsed() < timeout { thread::sleep(POLL); }
+    while start_ticks(pid) == Some(ticks) && start.elapsed() < timeout {
+        thread::sleep(POLL);
+    }
 }
 #[cfg(target_os = "linux")]
 fn signal_verified(pid: u32, expected: &Path, ticks: u64, signal: i32) -> anyhow::Result<()> {
-    ensure!(matches_process(pid, expected, ticks), "process identity changed; refusing signal");
+    ensure!(
+        matches_process(pid, expected, ticks),
+        "process identity changed; refusing signal"
+    );
     // pidfd pins the signal target to this process instance and prevents PID-reuse races.
     // SAFETY: scalar PID/flags; successful result is an owned descriptor.
     let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0) as i32 };
     ensure!(fd >= 0, "could not obtain pidfd; refusing to signal by PID");
     // SAFETY: fd is a valid pidfd and siginfo is unused for this syscall.
-    let result = unsafe { libc::syscall(libc::SYS_pidfd_send_signal, fd, signal, std::ptr::null::<libc::siginfo_t>(), 0) };
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            fd,
+            signal,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        )
+    };
     // SAFETY: fd was opened above and is owned here.
-    unsafe { libc::close(fd); }
+    unsafe {
+        libc::close(fd);
+    }
     ensure!(result == 0, "could not signal tracked process");
     Ok(())
 }
@@ -268,15 +376,22 @@ fn private_dir(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 #[cfg(not(unix))]
-fn private_dir(_path: &Path) -> anyhow::Result<()> { Ok(()) }
+fn private_dir(_path: &Path) -> anyhow::Result<()> {
+    Ok(())
+}
 #[cfg(unix)]
 fn private_fd(fd: i32) -> anyhow::Result<()> {
     // SAFETY: fchmod receives a live descriptor and scalar permission bits.
-    ensure!(unsafe { libc::fchmod(fd, 0o600) } == 0, "could not secure private runtime file");
+    ensure!(
+        unsafe { libc::fchmod(fd, 0o600) } == 0,
+        "could not secure private runtime file"
+    );
     Ok(())
 }
 #[cfg(not(unix))]
-fn private_fd(_fd: i32) -> anyhow::Result<()> { Ok(()) }
+fn private_fd(_fd: i32) -> anyhow::Result<()> {
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -308,8 +423,15 @@ mod tests {
 
     #[test]
     fn persisted_state_contains_no_node_secret_fields() {
-        let state = ActiveProcess { pid: 1, start_ticks: 2, executable: "/managed/xray".into(),
-            config: "/runtime/active-1-xray.json".into(), node_id: 1, core: "xray".into(), port: 1234 };
+        let state = ActiveProcess {
+            pid: 1,
+            start_ticks: 2,
+            executable: "/managed/xray".into(),
+            config: "/runtime/active-1-xray.json".into(),
+            node_id: 1,
+            core: "xray".into(),
+            port: 1234,
+        };
         let json = serde_json::to_string(&state).unwrap();
         assert!(!json.contains("uuid"));
         assert!(!json.contains("password"));
