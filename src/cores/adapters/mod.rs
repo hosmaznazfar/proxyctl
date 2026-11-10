@@ -21,6 +21,49 @@ pub trait CoreAdapter {
     fn compatibility(&self, node: &ProxyNode) -> Compatibility;
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig>;
 
+    /// Add a loopback-only shared SOCKS5 + HTTP listener for interactive activation.
+    fn generate_activation_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
+        use serde_json::json;
+
+        let generated = self.generate_config(node)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        match self.core() {
+            CoreId::SingBox => {
+                document["inbounds"] = json!([{
+                    "type": "mixed",
+                    "tag": "proxy-in",
+                    "listen": "127.0.0.1",
+                    "listen_port": listen_port
+                }]);
+                document["route"] = json!({"final": "proxy"});
+            }
+            CoreId::Xray => {
+                // Xray's SOCKS inbound also accepts HTTP proxy requests.
+                document["inbounds"] = json!([{
+                    "listen": "127.0.0.1",
+                    "port": listen_port,
+                    "protocol": "socks",
+                    "settings": {
+                        "auth": "noauth",
+                        "udp": true,
+                        "ip": "127.0.0.1"
+                    },
+                    "tag": "proxy-in"
+                }]);
+            }
+            CoreId::Mihomo => {
+                document["mixed-port"] = json!(listen_port);
+                document["bind-address"] = json!("127.0.0.1");
+                document["allow-lan"] = json!(false);
+            }
+        }
+        json_config(document)
+    }
+
     /// Add a loopback-only HTTP inbound for isolated benchmark traffic.
     fn generate_benchmark_config(
         &self,
