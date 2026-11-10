@@ -117,8 +117,17 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
             }
         }
         launch_managed(
-            &runtime, &state_path, &managed, &executable, &config, &generated.content,
-            node_id, core.as_str(), port, command, WAIT,
+            &runtime,
+            &state_path,
+            &managed,
+            &executable,
+            &config,
+            &generated.content,
+            node_id,
+            core.as_str(),
+            port,
+            command,
+            WAIT,
         )?;
         println!("Activated node #{node_id} with {core}.");
         println!(
@@ -209,8 +218,13 @@ fn launch_managed(
         }
     };
     let state = ActiveProcess {
-        pid, start_ticks, executable: executable.to_path_buf(), config: config.to_path_buf(),
-        node_id, core: core.to_owned(), port,
+        pid,
+        start_ticks,
+        executable: executable.to_path_buf(),
+        config: config.to_path_buf(),
+        node_id,
+        core: core.to_owned(),
+        port,
     };
     if let Err(error) = write_atomic(state_path, &serde_json::to_vec(&state)?) {
         let _ = child.kill();
@@ -488,21 +502,36 @@ mod tests {
             let mut command = Command::new(&fake);
             command.arg("30");
             launch_managed(
-                &runtime, &state_path, &managed, &fake, &config, b"{}",
-                node_id, core, port, command, Duration::from_secs(2),
-            ).unwrap();
+                &runtime,
+                &state_path,
+                &managed,
+                &fake,
+                &config,
+                b"{}",
+                node_id,
+                core,
+                port,
+                command,
+                Duration::from_secs(2),
+            )
+            .unwrap();
             let state: ActiveProcess =
                 serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
             assert_eq!(state.node_id, node_id);
             assert_eq!(state.core, core);
             assert!(matches_process(state.pid, &fake, state.start_ticks));
             if let Some((pid, executable, ticks)) = previous_process.take() {
-                assert!(!matches_process(pid, &executable, ticks),
-                    "switching must stop the previously active process");
+                assert!(
+                    !matches_process(pid, &executable, ticks),
+                    "switching must stop the previously active process"
+                );
             }
             previous_process = Some((state.pid, fake.clone(), state.start_ticks));
             if let Some(previous) = previous_config.take() {
-                assert!(!previous.exists(), "previous activation config must be removed");
+                assert!(
+                    !previous.exists(),
+                    "previous activation config must be removed"
+                );
             }
             previous_config = Some(config);
         }
@@ -510,7 +539,11 @@ mod tests {
         let final_state: ActiveProcess =
             serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
         stop_locked(&runtime, &state_path, &managed).unwrap();
-        assert!(!matches_process(final_state.pid, &fake, final_state.start_ticks));
+        assert!(!matches_process(
+            final_state.pid,
+            &fake,
+            final_state.start_ticks
+        ));
         assert!(!state_path.exists());
         assert!(!runtime.join("active-3-mihomo.json").exists());
     }
@@ -533,10 +566,22 @@ mod tests {
         let mut command = Command::new(&fake);
         command.arg("30");
 
-        assert!(launch_managed(
-            &runtime, &state_path, &managed, &fake, &config, b"{}",
-            4, "sing-box", port, command, Duration::from_millis(150),
-        ).is_err());
+        assert!(
+            launch_managed(
+                &runtime,
+                &state_path,
+                &managed,
+                &fake,
+                &config,
+                b"{}",
+                4,
+                "sing-box",
+                port,
+                command,
+                Duration::from_millis(150),
+            )
+            .is_err()
+        );
         assert!(!state_path.exists());
         assert!(!config.exists());
     }
@@ -555,10 +600,22 @@ mod tests {
         let config = runtime.join("active-6-mihomo.json");
         let command = Command::new(dir.path().join("does-not-exist"));
 
-        assert!(launch_managed(
-            &runtime, &state_path, &managed, &managed.join("fake-core"), &config, b"{}",
-            6, "mihomo", 12347, command, Duration::from_millis(100),
-        ).is_err());
+        assert!(
+            launch_managed(
+                &runtime,
+                &state_path,
+                &managed,
+                &managed.join("fake-core"),
+                &config,
+                b"{}",
+                6,
+                "mihomo",
+                12347,
+                command,
+                Duration::from_millis(100),
+            )
+            .is_err()
+        );
         assert!(!state_path.exists());
         assert!(!config.exists());
     }
@@ -579,10 +636,22 @@ mod tests {
         let config = runtime.join("active-5-xray.json");
         let command = Command::new(&outside);
 
-        assert!(launch_managed(
-            &runtime, &state_path, &managed, &outside, &config, b"{}",
-            5, "xray", 12345, command, Duration::from_millis(100),
-        ).is_err());
+        assert!(
+            launch_managed(
+                &runtime,
+                &state_path,
+                &managed,
+                &outside,
+                &config,
+                b"{}",
+                5,
+                "xray",
+                12345,
+                command,
+                Duration::from_millis(100),
+            )
+            .is_err()
+        );
         assert!(!state_path.exists());
         assert!(!config.exists());
     }
