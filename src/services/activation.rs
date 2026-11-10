@@ -1073,6 +1073,7 @@ mod tests {
             node_id: 1,
             core: "xray".into(),
             port: 1234,
+            tun: None,
         };
         let json = serde_json::to_string(&state).unwrap();
         assert!(!json.contains("uuid"));
