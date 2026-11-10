@@ -193,7 +193,7 @@ fn parse_dns_servers(contents: &str) -> Vec<String> {
 fn find_tool(candidates: &[&str]) -> Option<PathBuf> {
     candidates
         .iter()
-        .map(PathBuf::from)
+        .map(|candidate| PathBuf::from(*candidate))
         .find(|path| path.is_file())
 }
 
