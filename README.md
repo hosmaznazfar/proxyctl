@@ -124,6 +124,11 @@ proxyctl report --compare
 proxyctl report --compare --node 18
 proxyctl report --compare --core xray
 proxyctl report --compare --node 18 --core mihomo
+
+# Full version/build metadata
+proxyctl report --verbose
+proxyctl report --history --verbose
+proxyctl report --compare --verbose
 ~~~
 
 Reports retain the distinction between direct TCP ping and measurements through a proxy core. Each metric displays its median of successful samples, the successful count out of three, and failure or not-run counts. A partial median is explicitly marked partial. A newer completed run supersedes older results even if all of its samples failed; cancelled and interrupted runs appear in history but do not replace a core's latest completed comparison. Reports are read-only and never start proxy cores or change system networking. Core versions are concise by default (for example, `sing-box (1.14.4)`); `--verbose` preserves the full version/build metadata recorded with the run.
