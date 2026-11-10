@@ -121,12 +121,7 @@ pub fn build_report(path: &Path, options: ReportOptions) -> anyhow::Result<Bench
                 .iter()
                 .filter(|run| run.node_ids.contains(&node.id))
                 .collect::<Vec<_>>();
-            node_runs.sort_by_key(|run| {
-                (
-                    run.completed_at.unwrap_or(run.started_at),
-                    run.id,
-                )
-            });
+            node_runs.sort_by_key(|run| (run.completed_at.unwrap_or(run.started_at), run.id));
             node_runs.reverse();
             if options.mode == ReportMode::Latest {
                 node_runs.truncate(1);
@@ -285,10 +280,7 @@ fn metrics_for_target(target: &str) -> Vec<BenchmarkMetric> {
     }
 }
 
-fn summarize_metric(
-    metric: BenchmarkMetric,
-    samples: &[&BenchmarkSample],
-) -> MetricSummary {
+fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> MetricSummary {
     let metric_samples = samples
         .iter()
         .copied()
