@@ -86,28 +86,32 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
             CoreId::SingBox | CoreId::Xray => { command.arg("run").arg("-c").arg(&config); }
             CoreId::Mihomo => { command.arg("-f").arg(&config); }
         }
-        let child = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+        let mut child = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
             .spawn().with_context(|| format!("could not start managed {core}"))?;
         let pid = child.id();
-        drop(child); // Detached; future commands manage it using the recorded process identity.
-
         let start_ticks = match await_identity(pid, &executable, WAIT) {
             Ok(ticks) => ticks,
             Err(error) => {
-                let _ = signal_verified(pid, &executable, None, libc::SIGTERM);
+                // Child::kill targets the exact Child handle, so it is safe even when procfs
+                // identity could not be established.
+                let _ = child.kill();
+                let _ = child.wait();
                 let _ = fs::remove_file(&config);
                 return Err(error);
             }
         };
-        if let Err(error) = await_listener(pid, start_ticks, port, WAIT) {
-            let _ = signal_verified(pid, &executable, Some(start_ticks), libc::SIGTERM);
-            let _ = fs::remove_file(&config);
-            return Err(error);
-        }
         let state = ActiveProcess { pid, start_ticks, executable, config, node_id, core: core.to_string(), port };
         if let Err(error) = write_atomic(&state_path, &serde_json::to_vec(&state)?) {
-            let _ = signal_verified(pid, &state.executable, Some(start_ticks), libc::SIGTERM);
+            let _ = child.kill();
+            let _ = child.wait();
             let _ = fs::remove_file(&state.config);
+            return Err(error);
+        }
+        // Persist ownership before the readiness wait, so interruption cannot orphan an
+        // untracked core during the full startup timeout.
+        drop(child);
+        if let Err(error) = await_listener(pid, start_ticks, port, WAIT) {
+            let _ = stop_locked(&runtime, &state_path);
             return Err(error);
         }
         println!("Activated node #{node_id} with {core}.");
@@ -142,12 +146,11 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let parent = path.parent().context("runtime file has no parent")?;
     fs::create_dir_all(parent)?;
     private_dir(parent)?;
-    let temp = parent.join(format!(".tmp-{}-{}", std::process::id(), path.file_name().unwrap_or_default().to_string_lossy()));
-    let mut file = OpenOptions::new().create_new(true).write(true).open(&temp)?;
-    private_fd(file.as_raw_fd())?;
+    let mut file = tempfile::Builder::new().prefix(".proxyctl-runtime-").tempfile_in(parent)?;
+    private_fd(file.as_file().as_raw_fd())?;
     file.write_all(bytes)?;
-    file.sync_all()?;
-    fs::rename(temp, path)?;
+    file.as_file().sync_all()?;
+    file.persist(path).context("could not atomically publish private runtime file")?;
     Ok(())
 }
 #[cfg(target_os = "linux")]
@@ -161,6 +164,10 @@ fn stop_locked(runtime: &Path, state_path: &Path) -> anyhow::Result<()> {
     ensure!(state.config.parent() == Some(runtime)
         && state.config.file_name().is_some_and(|n| n.to_string_lossy().starts_with("active-")),
         "activation config path is outside the private runtime directory; refusing cleanup");
+    let managed_root = fs::canonicalize(managed_cores_path()?)
+        .context("Proxyctl managed-core directory is unavailable; refusing to signal")?;
+    ensure!(state.executable.starts_with(managed_root),
+        "recorded executable is outside Proxyctl's managed-core directory; refusing to signal");
     if matches_process(state.pid, &state.executable, state.start_ticks) {
         signal_verified(state.pid, &state.executable, Some(state.start_ticks), libc::SIGTERM)?;
         wait_exit(state.pid, state.start_ticks, Duration::from_secs(5));
@@ -216,12 +223,8 @@ fn wait_exit(pid: u32, ticks: u64, timeout: Duration) {
     while start_ticks(pid) == Some(ticks) && start.elapsed() < timeout { thread::sleep(POLL); }
 }
 #[cfg(target_os = "linux")]
-fn signal_verified(pid: u32, expected: &Path, ticks: Option<u64>, signal: i32) -> anyhow::Result<()> {
-    if let Some(ticks) = ticks {
-        ensure!(matches_process(pid, expected, ticks), "process identity changed; refusing signal");
-    } else {
-        ensure!(executable(pid).as_deref() == Some(expected), "executable identity mismatch; refusing signal");
-    }
+fn signal_verified(pid: u32, expected: &Path, ticks: u64, signal: i32) -> anyhow::Result<()> {
+    ensure!(matches_process(pid, expected, ticks), "process identity changed; refusing signal");
     // pidfd pins the signal target to this process instance and prevents PID-reuse races.
     // SAFETY: scalar PID/flags; successful result is an owned descriptor.
     let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0) as i32 };
