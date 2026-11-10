@@ -1,6 +1,6 @@
 # Linux TUN design
 
-> Status: opt-in Linux TUN activation implemented for sing-box, Xray, and Mihomo; native config validation and guarded systemd lifecycle are covered by automated tests. No live TUN test was run against the host network.  
+> Status: opt-in Linux TUN activation implemented for sing-box, Xray, and Mihomo. Automated tests cover generated configs, systemd command policy, capability checks, and baseline comparison; live systemd/TUN lifecycle testing has not yet been run against the host network.  
 > Scope: first implementation target is Linux  
 > Goal: use the selected proxy core's native TUN implementation with minimal additional resource use
 
