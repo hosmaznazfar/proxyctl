@@ -116,6 +116,9 @@ enum Command {
         /// Restrict --compare to one managed core.
         #[arg(long, value_name = "CORE", requires = "compare")]
         core: Option<String>,
+        /// Show full core build/version metadata instead of concise versions.
+        #[arg(long)]
+        verbose: bool,
     },
     /// Check for and install proxyctl and managed-core updates.
     #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
@@ -256,6 +259,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             history,
             compare,
             core,
+            verbose,
         } => {
             let mode = if compare {
                 ReportMode::Compare
@@ -270,9 +274,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     mode,
                     node_id: node,
                     core: parse_core(core.as_deref())?,
+                    verbose,
                 },
             )?;
-            print_benchmark_report(&report);
+            print_benchmark_report(&report, verbose);
         }
         Command::Test {
             all_cores,
@@ -317,7 +322,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_benchmark_report(report: &reporting::BenchmarkReport) {
+fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
     use reporting::ReportMode;
 
     if report.mode == ReportMode::Compare {
@@ -336,7 +341,7 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport) {
                 comparison
                     .core_version
                     .as_deref()
-                    .map(|version| format!(" ({version})"))
+                    .map(|version| format!(" ({})", display_core_version(&comparison.target, version, verbose)))
                     .unwrap_or_default()
             );
             for metric in &comparison.metrics {
@@ -390,7 +395,7 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport) {
                     target
                         .core_version
                         .as_deref()
-                        .map(|version| format!(" ({version})"))
+                        .map(|version| format!(" ({})", display_core_version(&target.target, version, verbose)))
                         .unwrap_or_default()
                 );
                 for metric in &target.metrics {
@@ -399,6 +404,30 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport) {
             }
         }
         println!();
+    }
+}
+
+fn display_core_version(target: &str, version: &str, verbose: bool) -> String {
+    if verbose {
+        return version.to_owned();
+    }
+    let short_version = version
+        .chars()
+        .skip_while(|character| !character.is_ascii_digit())
+        .take_while(|character| character.is_ascii_digit() || *character == '.')
+        .collect::<String>()
+        .trim_end_matches('.')
+        .to_owned();
+    if short_version.is_empty() {
+        version.to_owned()
+    } else {
+        let core = match target {
+            "sing-box" => "sing-box",
+            "xray" => "Xray",
+            "mihomo" => "Mihomo",
+            _ => target,
+        };
+        format!("{core} {short_version}")
     }
 }
 
@@ -632,6 +661,7 @@ mod tests {
         assert!(Cli::try_parse_from(["proxyctl", "report", "--node", "18", "--history"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--compare"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--compare", "--core", "xray"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "report", "--verbose"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--core", "xray"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--history", "--compare"]).is_err());
     }
