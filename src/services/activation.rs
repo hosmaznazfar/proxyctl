@@ -285,6 +285,22 @@ mod tests {
         assert!(matches_process(pid, &exe, ticks));
         assert!(!matches_process(pid, &exe, ticks + 1));
     }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pidfd_stop_signals_only_the_verified_fake_process_instance() {
+        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+        let pid = child.id();
+        let exe = executable(pid).unwrap();
+        let ticks = start_ticks(pid).unwrap();
+
+        assert!(signal_verified(pid, &exe, ticks.saturating_add(1), libc::SIGTERM).is_err());
+        assert!(matches_process(pid, &exe, ticks));
+
+        signal_verified(pid, &exe, ticks, libc::SIGTERM).unwrap();
+        child.wait().unwrap();
+        assert!(!matches_process(pid, &exe, ticks));
+    }
+
     #[test]
     fn persisted_state_contains_no_node_secret_fields() {
         let state = ActiveProcess { pid: 1, start_ticks: 2, executable: "/managed/xray".into(),
