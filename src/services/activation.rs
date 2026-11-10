@@ -34,27 +34,43 @@ struct ActiveProcess {
     tun: Option<TunProcess>,
 }
 #[derive(Debug, Serialize, Deserialize)]
-struct TunProcess { unit: String, uid: u32, baseline: TunBaseline }
+struct TunProcess {
+    unit: String,
+    uid: u32,
+    baseline: TunBaseline,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct TunBaseline {
-    interfaces: Vec<String>, tun_interfaces: Vec<String>, default_routes: Vec<String>,
-    dns_servers: Vec<String>, resolv_conf_target: Option<String>, ipv4_routes: Vec<String>, ipv6_routes: Vec<String>,
-    ipv4_rules: Vec<String>, ipv6_rules: Vec<String>,
+    interfaces: Vec<String>,
+    tun_interfaces: Vec<String>,
+    default_routes: Vec<String>,
+    dns_servers: Vec<String>,
+    resolv_conf_target: Option<String>,
+    ipv4_routes: Vec<String>,
+    ipv6_routes: Vec<String>,
+    ipv4_rules: Vec<String>,
+    ipv6_rules: Vec<String>,
 }
+
 impl TunBaseline {
     #[cfg(target_os = "linux")]
     fn capture() -> anyhow::Result<Self> {
         let status = crate::tun::inspect()?;
-        ensure!(status.routes_inspected && status.dns_inspected,
-            "TUN activation requires readable baseline route and DNS state; no changes were made");
+        ensure!(
+            status.routes_inspected && status.dns_inspected,
+            "TUN activation requires readable baseline route and DNS state; no changes were made"
+        );
         Ok(Self {
-            interfaces: status.interfaces, tun_interfaces: status.tun_interfaces,
-            default_routes: status.default_routes, dns_servers: status.dns_servers,
+            interfaces: status.interfaces,
+            tun_interfaces: status.tun_interfaces,
+            default_routes: status.default_routes,
+            dns_servers: status.dns_servers,
             resolv_conf_target: status.resolv_conf_target,
-            ipv4_routes: ip_json_snapshot(&["-j","-4","route","show","table","all"] )?,
-            ipv6_routes: ip_json_snapshot(&["-j","-6","route","show","table","all"] )?,
-            ipv4_rules: ip_json_snapshot(&["-j","-4","rule","show"] )?,
-            ipv6_rules: ip_json_snapshot(&["-j","-6","rule","show"] )?,
+            ipv4_routes: ip_json_snapshot(&["-j", "-4", "route", "show", "table", "all"])?,
+            ipv6_routes: ip_json_snapshot(&["-j", "-6", "route", "show", "table", "all"])?,
+            ipv4_rules: ip_json_snapshot(&["-j", "-4", "rule", "show"])?,
+            ipv6_rules: ip_json_snapshot(&["-j", "-6", "rule", "show"])?,
         })
     }
     #[cfg(target_os = "linux")]
@@ -81,8 +97,13 @@ impl TunBaseline {
 }
 #[cfg(target_os = "linux")]
 struct TunLaunchContext {
-    sudo: PathBuf, systemd_run: PathBuf, systemctl: PathBuf, unit: String,
-    uid: u32, gid: u32, baseline: TunBaseline,
+    sudo: PathBuf,
+    systemd_run: PathBuf,
+    systemctl: PathBuf,
+    unit: String,
+    uid: u32,
+    gid: u32,
+    baseline: TunBaseline,
 }
 struct RuntimeLock(File);
 impl RuntimeLock {
@@ -391,20 +412,28 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
 #[cfg(target_os = "linux")]
 fn ip_json_snapshot(arguments: &[&str]) -> anyhow::Result<Vec<String>> {
     let ip = find_program("ip")?;
-    let output = Command::new(ip).args(arguments).output()
+    let output = Command::new(ip)
+        .args(arguments)
+        .output()
         .context("could not inspect Linux route tables")?;
-    ensure!(output.status.success(),
-        "could not capture the complete Linux route/rule baseline; TUN activation was not started");
+    ensure!(
+        output.status.success(),
+        "could not capture the complete Linux route/rule baseline; TUN activation was not started"
+    );
     let mut value: serde_json::Value = serde_json::from_slice(&output.stdout)
         .context("iproute2 returned an invalid JSON route/rule snapshot")?;
-    let entries = value.as_array_mut().context("iproute2 route/rule snapshot was not a JSON array")?;
+    let entries = value
+        .as_array_mut()
+        .context("iproute2 route/rule snapshot was not a JSON array")?;
     // IPv6 route lifetimes count down continuously; they are not route-ownership changes.
     for entry in entries.iter_mut() {
         if let Some(object) = entry.as_object_mut() {
             object.remove("expires");
         }
     }
-    let mut snapshot = entries.iter().map(serde_json::to_string)
+    let mut snapshot = entries
+        .iter()
+        .map(serde_json::to_string)
         .collect::<Result<Vec<_>, _>>()?;
     snapshot.sort();
     Ok(snapshot)
@@ -413,12 +442,22 @@ fn ip_json_snapshot(arguments: &[&str]) -> anyhow::Result<Vec<String>> {
 #[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
 fn launch_tun_managed(
-    runtime: &Path, state_path: &Path, managed_root: &Path, executable: &Path,
-    config: &Path, config_content: &[u8], node_id: u64, core: CoreId, port: u16,
-    mut context: TunLaunchContext, timeout: Duration,
+    runtime: &Path,
+    state_path: &Path,
+    managed_root: &Path,
+    executable: &Path,
+    config: &Path,
+    config_content: &[u8],
+    node_id: u64,
+    core: CoreId,
+    port: u16,
+    mut context: TunLaunchContext,
+    timeout: Duration,
 ) -> anyhow::Result<()> {
-    ensure!(executable.starts_with(managed_root),
-        "refusing to run a core outside Proxyctl's managed directory");
+    ensure!(
+        executable.starts_with(managed_root),
+        "refusing to run a core outside Proxyctl's managed directory"
+    );
     write_atomic(config, config_content)?;
     if let Err(error) = stop_locked(runtime, state_path, managed_root) {
         let _ = fs::remove_file(config);
@@ -429,7 +468,9 @@ fn launch_tun_managed(
         Ok(baseline) if baseline.tun_interfaces.is_empty() => baseline,
         Ok(_) => {
             let _ = fs::remove_file(config);
-            anyhow::bail!("another TUN/TAP interface remains after stopping Proxyctl's previous activation; refusing to start a second TUN");
+            anyhow::bail!(
+                "another TUN/TAP interface remains after stopping Proxyctl's previous activation; refusing to start a second TUN"
+            );
         }
         Err(error) => {
             let _ = fs::remove_file(config);
@@ -437,10 +478,17 @@ fn launch_tun_managed(
         }
     };
     let mut state = ActiveProcess {
-        pid: 0, start_ticks: 0, executable: executable.to_path_buf(),
-        config: config.to_path_buf(), node_id, core: core.as_str().to_owned(), port,
+        pid: 0,
+        start_ticks: 0,
+        executable: executable.to_path_buf(),
+        config: config.to_path_buf(),
+        node_id,
+        core: core.as_str().to_owned(),
+        port,
         tun: Some(TunProcess {
-            unit: context.unit.clone(), uid: context.uid, baseline: context.baseline.clone()
+            unit: context.unit.clone(),
+            uid: context.uid,
+            baseline: context.baseline.clone(),
         }),
     };
     if let Err(error) = write_atomic(state_path, &serde_json::to_vec(&state)?) {
@@ -451,8 +499,10 @@ fn launch_tun_managed(
         start_tun_service(&context, executable, core, config)?;
         let pid = await_systemd_main_pid(&context, timeout)?;
         let ticks = await_identity(pid, executable, timeout)?;
-        ensure!(process_has_only_tun_capability(pid, context.uid),
-            "TUN service did not start with the expected unprivileged UID and CAP_NET_ADMIN-only capability set");
+        ensure!(
+            process_has_only_tun_capability(pid, context.uid),
+            "TUN service did not start with the expected unprivileged UID and CAP_NET_ADMIN-only capability set"
+        );
         state.pid = pid;
         state.start_ticks = ticks;
         write_atomic(state_path, &serde_json::to_vec(&state)?)?;
@@ -478,23 +528,35 @@ fn tun_interfaces_are_safe(interfaces: &[String], active_proxyctl_tun: bool) -> 
 }
 
 #[cfg(target_os = "linux")]
-fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLaunchContext> {
-    ensure!(Path::new("/run/systemd/system").is_dir(),
-        "TUN activation requires a running systemd system manager; ordinary activation remains available");
-    let _tun_device = OpenOptions::new().read(true).write(true).open("/dev/net/tun")
+fn prepare_tun_launch(
+    runtime: &Path,
+    state_path: &Path,
+) -> anyhow::Result<TunLaunchContext> {
+    ensure!(
+        Path::new("/run/systemd/system").is_dir(),
+        "TUN activation requires a running systemd system manager; ordinary activation remains available"
+    );
+    let _tun_device = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/net/tun")
         .context("TUN activation requires readable/writable /dev/net/tun")?;
     let active_proxyctl_tun = if state_path.exists() {
         let state: ActiveProcess = serde_json::from_slice(&fs::read(state_path)?)
             .context("activation state is corrupt; refusing TUN preflight")?;
-        ensure!(state.config.parent() == Some(runtime),
-            "activation state config path is outside the private runtime directory");
+        ensure!(
+            state.config.parent() == Some(runtime),
+            "activation state config path is outside the private runtime directory"
+        );
         state.tun.is_some()
     } else {
         false
     };
     let status = crate::tun::inspect()?;
-    ensure!(status.routes_inspected && status.dns_inspected,
-        "TUN activation requires readable baseline route and DNS state; no changes were made");
+    ensure!(
+        status.routes_inspected && status.dns_inspected,
+        "TUN activation requires readable baseline route and DNS state; no changes were made"
+    );
     ensure!(
         tun_interfaces_are_safe(&status.tun_interfaces, active_proxyctl_tun),
         "a foreign TUN/TAP interface is already present; stop that VPN before enabling Proxyctl TUN mode"
@@ -505,15 +567,25 @@ fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLa
     let systemctl = find_program("systemctl")?;
     // Let sudo prompt through the user's terminal. Proxyctl never reads or stores the password.
     let authorization = Command::new(&sudo).arg("-v").status()?;
-    ensure!(authorization.success(),
-        "sudo authorization was not granted; no TUN service or network changes were made");
+    ensure!(
+        authorization.success(),
+        "sudo authorization was not granted; no TUN service or network changes were made"
+    );
     let mut token = [0u8; 16];
     File::open("/dev/urandom")?.read_exact(&mut token)?;
-    let suffix = token.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    let suffix = token
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     let unit = format!("proxyctl-tun-{suffix}.service");
     let context = TunLaunchContext {
-        sudo, systemd_run, systemctl, unit,
-        uid: unsafe { libc::getuid() }, gid: unsafe { libc::getgid() }, baseline
+        sudo,
+        systemd_run,
+        systemctl,
+        unit,
+        uid: unsafe { libc::getuid() },
+        gid: unsafe { libc::getgid() },
+        baseline,
     };
     // Verify that systemd accepts the exact unprivileged-user/CAP_NET_ADMIN policy before
     // stopping any existing activation. The one-shot command is /usr/bin/true and changes no
@@ -524,7 +596,10 @@ fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLa
 }
 
 #[cfg(target_os = "linux")]
-fn build_tun_preflight_command(context: &TunLaunchContext, true_executable: &Path) -> Command {
+fn build_tun_preflight_command(
+    context: &TunLaunchContext,
+    true_executable: &Path,
+) -> Command {
     let unit = format!("{}-preflight.service", context.unit.trim_end_matches(".service"));
     let mut command = Command::new(&context.sudo);
     command
@@ -546,7 +621,10 @@ fn build_tun_preflight_command(context: &TunLaunchContext, true_executable: &Pat
 }
 
 #[cfg(target_os = "linux")]
-fn preflight_tun_service(context: &TunLaunchContext, true_executable: &Path) -> anyhow::Result<()> {
+fn preflight_tun_service(
+    context: &TunLaunchContext,
+    true_executable: &Path,
+) -> anyhow::Result<()> {
     let output = build_tun_preflight_command(context, true_executable)
         .output()
         .context("could not preflight the isolated TUN systemd service")?;
@@ -572,11 +650,18 @@ fn find_program(name: &str) -> anyhow::Result<PathBuf> {
 
 #[cfg(target_os = "linux")]
 fn build_tun_service_command(
-    context: &TunLaunchContext, executable: &Path, core: CoreId, config: &Path,
+    context: &TunLaunchContext,
+    executable: &Path,
+    core: CoreId,
+    config: &Path,
 ) -> Command {
     let mut command = Command::new(&context.sudo);
-    command.args(["-n","--"]).arg(&context.systemd_run)
-        .arg("--system").arg("--quiet").arg("--collect")
+    command
+        .args(["-n", "--"])
+        .arg(&context.systemd_run)
+        .arg("--system")
+        .arg("--quiet")
+        .arg("--collect")
         .arg(format!("--unit={}", context.unit))
         .arg(format!("--property=User={}", context.uid))
         .arg(format!("--property=Group={}", context.gid))
@@ -592,69 +677,110 @@ fn build_tun_service_command(
         .arg("--property=PrivateTmp=yes")
         .arg("--property=StandardOutput=null")
         .arg("--property=StandardError=null")
-        .arg("--").arg(executable);
+        .arg("--")
+        .arg(executable);
     match core {
-        CoreId::SingBox | CoreId::Xray => { command.arg("run").arg("-c").arg(config); }
-        CoreId::Mihomo => { command.arg("-f").arg(config); }
+        CoreId::SingBox | CoreId::Xray => {
+            command.arg("run").arg("-c").arg(config);
+        }
+        CoreId::Mihomo => {
+            command.arg("-f").arg(config);
+        }
     }
     command
 }
 
 #[cfg(target_os = "linux")]
 fn start_tun_service(
-    context: &TunLaunchContext, executable: &Path, core: CoreId, config: &Path,
+    context: &TunLaunchContext,
+    executable: &Path,
+    core: CoreId,
+    config: &Path,
 ) -> anyhow::Result<()> {
     let output = build_tun_service_command(context, executable, core, config)
-        .output().context("could not invoke systemd-run")?;
-    ensure!(output.status.success(),
-        "systemd refused to start the isolated TUN service; raw privileged command output withheld");
+        .output()
+        .context("could not invoke systemd-run")?;
+    ensure!(
+        output.status.success(),
+        "systemd refused to start the isolated TUN service; raw privileged command output withheld"
+    );
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn systemd_property(context: &TunLaunchContext, property: &str) -> anyhow::Result<String> {
-    let output = Command::new(&context.sudo).args(["-n","--"]).arg(&context.systemctl)
-        .arg("show").arg(format!("--property={property}")).arg("--value")
-        .arg(&context.unit).output().context("could not inspect the Proxyctl TUN service")?;
-    ensure!(output.status.success(),
-        "could not inspect the Proxyctl TUN service; refusing to signal a process");
+fn systemd_property(
+    context: &TunLaunchContext,
+    property: &str,
+) -> anyhow::Result<String> {
+    let output = Command::new(&context.sudo)
+        .args(["-n", "--"])
+        .arg(&context.systemctl)
+        .arg("show")
+        .arg(format!("--property={property}"))
+        .arg("--value")
+        .arg(&context.unit)
+        .output()
+        .context("could not inspect the Proxyctl TUN service")?;
+    ensure!(
+        output.status.success(),
+        "could not inspect the Proxyctl TUN service; refusing to signal a process"
+    );
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 #[cfg(target_os = "linux")]
 fn systemd_main_pid(context: &TunLaunchContext) -> anyhow::Result<Option<u32>> {
     let load_state = systemd_property(context, "LoadState")?;
-    if load_state == "not-found" { return Ok(None); }
-    ensure!(load_state == "loaded",
-        "Proxyctl TUN service has an unexpected systemd state; refusing to signal a process");
+    if load_state == "not-found" {
+        return Ok(None);
+    }
+    ensure!(
+        load_state == "loaded",
+        "Proxyctl TUN service has an unexpected systemd state; refusing to signal a process"
+    );
     let pid = systemd_property(context, "MainPID")?.parse::<u32>()
         .context("systemd returned an invalid TUN service PID")?;
     Ok((pid != 0).then_some(pid))
 }
 
 #[cfg(target_os = "linux")]
-fn await_systemd_main_pid(context: &TunLaunchContext, timeout: Duration) -> anyhow::Result<u32> {
+fn await_systemd_main_pid(
+    context: &TunLaunchContext,
+    timeout: Duration,
+) -> anyhow::Result<u32> {
     let start = Instant::now();
     loop {
-        if let Some(pid) = systemd_main_pid(context)? { return Ok(pid); }
-        ensure!(start.elapsed() < timeout, "TUN service did not publish a running core process");
+        if let Some(pid) = systemd_main_pid(context)? {
+            return Ok(pid);
+        }
+        ensure!(
+            start.elapsed() < timeout,
+            "TUN service did not publish a running core process"
+        );
         thread::sleep(POLL);
     }
 }
 
 #[cfg(target_os = "linux")]
 fn process_status_has_only_tun_capability(status: &str, expected_uid: u32) -> bool {
-    let field = |name: &str| status.lines()
-        .find_map(|line| line.strip_prefix(name)).map(str::trim);
+    let field = |name: &str| {
+        status
+            .lines()
+            .find_map(|line| line.strip_prefix(name))
+            .map(str::trim)
+    };
     let uid_matches = field("Uid:").is_some_and(|value| {
         let values = value.split_whitespace().filter_map(|uid| uid.parse::<u32>().ok())
             .collect::<Vec<_>>();
         values.len() == 4 && values.iter().all(|uid| *uid == expected_uid)
     });
     const NET_ADMIN: u64 = 1 << 12;
-    let capability_matches = ["CapEff:","CapPrm:","CapBnd:","CapAmb:"].into_iter().all(|name| {
-        field(name).and_then(|value| u64::from_str_radix(value, 16).ok()) == Some(NET_ADMIN)
-    });
+    let capability_matches = ["CapEff:", "CapPrm:", "CapBnd:", "CapAmb:"]
+        .into_iter()
+        .all(|name| {
+            field(name).and_then(|value| u64::from_str_radix(value, 16).ok())
+                == Some(NET_ADMIN)
+        });
     uid_matches && capability_matches
 }
 
@@ -665,66 +791,105 @@ fn process_has_only_tun_capability(pid: u32, expected_uid: u32) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn await_tun_interface(pid: u32, ticks: u64, timeout: Duration) -> anyhow::Result<()> {
+fn await_tun_interface(
+    pid: u32,
+    ticks: u64,
+    timeout: Duration,
+) -> anyhow::Result<()> {
     let interface = Path::new("/sys/class/net/tun-proxyctl");
     let start = Instant::now();
     loop {
-        ensure!(start_ticks(pid) == Some(ticks),
-            "managed TUN core exited before its interface became ready");
+        ensure!(
+            start_ticks(pid) == Some(ticks),
+            "managed TUN core exited before its interface became ready"
+        );
         if interface.join("tun_flags").exists() { return Ok(()); }
-        ensure!(start.elapsed() < timeout,
-            "managed core did not create the expected tun-proxyctl interface");
+        ensure!(
+            start.elapsed() < timeout,
+            "managed core did not create the expected tun-proxyctl interface"
+        );
         thread::sleep(POLL);
     }
 }
 
 #[cfg(target_os = "linux")]
 fn stop_systemd_unit(context: &TunLaunchContext) -> anyhow::Result<()> {
-    let output = Command::new(&context.sudo).args(["-n","--"]).arg(&context.systemctl)
-        .arg("stop").arg(&context.unit).output()?;
-    ensure!(output.status.success(), "systemd could not stop the exact Proxyctl TUN service");
+    let output = Command::new(&context.sudo)
+        .args(["-n", "--"])
+        .arg(&context.systemctl)
+        .arg("stop")
+        .arg(&context.unit)
+        .output()?;
+    ensure!(
+        output.status.success(),
+        "systemd could not stop the exact Proxyctl TUN service"
+    );
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> anyhow::Result<()> {
     let tun = state.tun.as_ref().context("missing TUN ownership manifest")?;
-    ensure!(tun.unit.starts_with("proxyctl-tun-") && tun.unit.ends_with(".service"),
-        "recorded TUN service name is outside Proxyctl's namespace; refusing systemd operation");
+    ensure!(
+        tun.unit.starts_with("proxyctl-tun-") && tun.unit.ends_with(".service"),
+        "recorded TUN service name is outside Proxyctl's namespace; refusing systemd operation"
+    );
     let sudo = find_program("sudo")?;
     let systemctl = find_program("systemctl")?;
     let authorization = Command::new(&sudo).arg("-v").status()?;
-    ensure!(authorization.success(), "sudo authorization was not granted; TUN service was not stopped");
+    ensure!(
+        authorization.success(),
+        "sudo authorization was not granted; TUN service was not stopped"
+    );
     let context = TunLaunchContext {
-        sudo, systemd_run: PathBuf::new(), systemctl, unit: tun.unit.clone(),
-        uid: tun.uid, gid: unsafe { libc::getgid() }, baseline: tun.baseline.clone(),
+        sudo,
+        systemd_run: PathBuf::new(),
+        systemctl,
+        unit: tun.unit.clone(),
+        uid: tun.uid,
+        gid: unsafe { libc::getgid() },
+        baseline: tun.baseline.clone(),
     };
     let load_state = systemd_property(&context, "LoadState")?;
     if load_state == "loaded" {
-        let pid = systemd_property(&context, "MainPID")?.parse::<u32>()
+        let pid = systemd_property(&context, "MainPID")?
+            .parse::<u32>()
             .context("systemd returned an invalid TUN service PID")?;
         let tracked = if pid == 0 { None } else {
-            ensure!(state.pid == 0 || state.pid == pid,
-                "TUN service PID differs from the recorded process; refusing to stop it");
+            ensure!(
+                state.pid == 0 || state.pid == pid,
+                "TUN service PID differs from the recorded process; refusing to stop it"
+            );
             let ticks = if state.start_ticks == 0 { await_identity(pid, &state.executable, WAIT)? }
                 else { state.start_ticks };
-            ensure!(matches_process(pid, &state.executable, ticks),
-                "TUN process identity changed; refusing systemd stop");
+            ensure!(
+                matches_process(pid, &state.executable, ticks),
+                "TUN process identity changed; refusing systemd stop"
+            );
             Some((pid, ticks))
         };
         stop_systemd_unit(&context)?;
         if let Some((pid, ticks)) = tracked {
             wait_exit(pid, ticks, Duration::from_secs(10));
-            ensure!(!matches_process(pid, &state.executable, ticks),
-                "TUN core did not exit; activation state and config were retained");
+            ensure!(
+                !matches_process(pid, &state.executable, ticks),
+                "TUN core did not exit; activation state and config were retained"
+            );
         }
-        ensure!(systemd_main_pid(&context)?.is_none(),
-            "TUN systemd service still has a running process after stop");
+        ensure!(
+            systemd_main_pid(&context)?.is_none(),
+            "TUN systemd service still has a running process after stop"
+        );
     } else {
-        ensure!(load_state == "not-found",
-            "Proxyctl TUN service has an unexpected load state; refusing cleanup");
-        ensure!(state.pid == 0 || !matches_process(state.pid, &state.executable, state.start_ticks),
-            "the recorded TUN core is still running but its systemd unit is unavailable; refusing to signal it directly");
+        ensure!(
+            load_state == "not-found",
+            "Proxyctl TUN service has an unexpected load state; refusing cleanup"
+        );
+        ensure!(
+            state.pid == 0
+                || !matches_process(state.pid, &state.executable, state.start_ticks),
+            "the recorded TUN core is still running but its systemd unit is unavailable; refusing to signal it directly"
+        );
     }
     let current_baseline = TunBaseline::capture()?;
     let differences = tun.baseline.differences(&current_baseline);
@@ -733,8 +898,10 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
         "TUN cleanup did not restore the baseline ({}) ; state/config retained for manual inspection, no routes or interfaces were deleted",
         differences.join(", ")
     );
-    ensure!(state.config.parent() == Some(runtime),
-        "TUN config path is outside the private runtime directory; refusing cleanup");
+    ensure!(
+        state.config.parent() == Some(runtime),
+        "TUN config path is outside the private runtime directory; refusing cleanup"
+    );
     for path in [state.config.as_path(), state_path] {
         match fs::remove_file(path) {
             Ok(()) => {}
