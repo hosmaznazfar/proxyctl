@@ -182,7 +182,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         return Ok(());
     };
     let command = match command {
-        Command::Tun { command: TunCommand::Status } => {
+        Command::Tun {
+            command: TunCommand::Status,
+        } => {
             crate::tun::inspect()?.print();
             return Ok(());
         }
