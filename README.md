@@ -2,7 +2,7 @@
 
 A lightweight Rust CLI for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> Project status: node management, managed-core inventory, initial core installation, the shared verified artifact pipeline, and the initial sequential benchmark command are implemented. Reports, sorting, pruning, activation, and TUN are being developed in stages.
+> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, and benchmark reports/history are implemented. Pruning, activation, and TUN remain staged follow-up work.
 
 ## Goals
 
@@ -101,6 +101,33 @@ proxyctl list --sort tcp-ping
 
 Real ping and direct TCP ping are separate measurements. Cross-core sorting gives each core with a successful latest completed result equal weight by taking the median of those per-core medians. Core-specific sorting uses only that core. Interrupted and cancelled runs are ignored; a newer completed run supersedes an older result even if its samples failed. Missing measurements remain unranked at the bottom, never as zero.
 
+## Benchmark reports and history
+
+Show the latest run for every active node, or inspect one node:
+
+~~~sh
+proxyctl report
+proxyctl report --node 18
+~~~
+
+Show the full run history (newest first), including cancelled and interrupted runs:
+
+~~~sh
+proxyctl report --history
+proxyctl report --node 18 --history
+~~~
+
+Compare each core independently using its latest completed run:
+
+~~~sh
+proxyctl report --compare
+proxyctl report --compare --node 18
+proxyctl report --compare --core xray
+proxyctl report --compare --node 18 --core mihomo
+~~~
+
+Reports retain the distinction between direct TCP ping and measurements through a proxy core. Each metric displays its median of successful samples, the successful count out of three, and failure or not-run counts. A partial median is explicitly marked partial. A newer completed run supersedes older results even if all of its samples failed; cancelled and interrupted runs appear in history but do not replace a core's latest completed comparison. Reports are read-only and never start proxy cores or change system networking.
+
 ## Planned commands
 
 ~~~sh
@@ -109,6 +136,8 @@ proxyctl test --node 12 --all-cores
 proxyctl test --node 12 --core sing-box
 proxyctl test --node 12 --core xray --download-bytes 2097152 --upload-bytes 1048576
 proxyctl report
+proxyctl report --node 18 --history
+proxyctl report --compare
 proxyctl list --sort ping
 proxyctl list --sort download
 proxyctl list --sort upload
