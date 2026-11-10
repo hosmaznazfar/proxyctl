@@ -476,9 +476,10 @@ fn prepare_tun_launch() -> anyhow::Result<TunLaunchContext> {
 }
 
 #[cfg(target_os = "linux")]
-fn preflight_tun_service(context: &TunLaunchContext, true_executable: &Path) -> anyhow::Result<()> {
+fn build_tun_preflight_command(context: &TunLaunchContext, true_executable: &Path) -> Command {
     let unit = format!("{}-preflight.service", context.unit.trim_end_matches(".service"));
-    let output = Command::new(&context.sudo)
+    let mut command = Command::new(&context.sudo);
+    command
         .args(["-n", "--"])
         .arg(&context.systemd_run)
         .arg("--system")
@@ -492,7 +493,13 @@ fn preflight_tun_service(context: &TunLaunchContext, true_executable: &Path) -> 
         .arg("--property=AmbientCapabilities=CAP_NET_ADMIN")
         .arg("--property=NoNewPrivileges=yes")
         .arg("--")
-        .arg(true_executable)
+        .arg(true_executable);
+    command
+}
+
+#[cfg(target_os = "linux")]
+fn preflight_tun_service(context: &TunLaunchContext, true_executable: &Path) -> anyhow::Result<()> {
+    let output = build_tun_preflight_command(context, true_executable)
         .output()
         .context("could not preflight the isolated TUN systemd service")?;
     ensure!(
@@ -848,6 +855,19 @@ mod tests {
         }
         assert!(!args.iter().any(|arg| arg.contains("CAP_SYS_ADMIN")));
         assert!(!args.iter().any(|arg| arg.contains("CAP_NET_RAW")));
+
+        let preflight = build_tun_preflight_command(&context, Path::new("/usr/bin/true"));
+        let preflight_args = preflight.get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        for expected in [
+            "--wait", "--collect", "--property=User=1000",
+            "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
+            "--property=AmbientCapabilities=CAP_NET_ADMIN",
+            "--property=NoNewPrivileges=yes", "/usr/bin/true"
+        ] {
+            assert!(preflight_args.iter().any(|arg| arg == expected), "missing preflight {expected}");
+        }
     }
 
     #[cfg(target_os = "linux")]
