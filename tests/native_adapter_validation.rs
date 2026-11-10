@@ -131,11 +131,26 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 );
             }
             activation_configs_validated += 1;
-            let tun_generated = adapter.generate_tun_activation_config(&node, 43129)
-                .unwrap_or_else(|error| panic!("fixture '{}' TUN config generation failed for {core}: {error:#}", fixture.name));
-            if let Err(error) = adapters::validation::validate_generated_config(*core, &tun_generated, executable) {
-                let diagnostic = if *core == CoreId::Xray { xray_validation_diagnostic(&tun_generated, executable) } else { String::new() };
-                panic!("native TUN config validation failed for fixture '{}' on {core}: {error:#}\n{diagnostic}", fixture.name);
+            let tun_generated = adapter
+                .generate_tun_activation_config(&node, 43129)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "fixture '{}' TUN config generation failed for {core}: {error:#}",
+                        fixture.name
+                    )
+                });
+            if let Err(error) =
+                adapters::validation::validate_generated_config(*core, &tun_generated, executable)
+            {
+                let diagnostic = if *core == CoreId::Xray {
+                    xray_validation_diagnostic(&tun_generated, executable)
+                } else {
+                    String::new()
+                };
+                panic!(
+                    "native TUN config validation failed for fixture '{}' on {core}: {error:#}\n{diagnostic}",
+                    fixture.name
+                );
             }
             tun_configs_validated += 1;
         }
