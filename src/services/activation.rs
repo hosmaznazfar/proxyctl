@@ -84,7 +84,7 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
         let executable = fs::canonicalize(executable)?;
         let managed = fs::canonicalize(managed_cores_path()?)?;
         ensure!(
-            executable.starts_with(managed),
+            executable.starts_with(&managed),
             "refusing to run a core outside Proxyctl's managed directory"
         );
         let adapter = adapters::adapter(core);
