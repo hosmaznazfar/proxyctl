@@ -115,7 +115,10 @@ impl Drop for RuntimeLock {
 
 pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result<()> {
     #[cfg(not(target_os = "linux"))]
-    anyhow::bail!("activation currently requires Linux process-identity support");
+    {
+        let _ = (node_id, core, tun_enabled);
+        anyhow::bail!("activation currently requires Linux process-identity support");
+    }
     #[cfg(target_os = "linux")]
     {
         let (runtime, state_path) = paths()?;
