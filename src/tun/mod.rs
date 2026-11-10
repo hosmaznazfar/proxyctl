@@ -3,13 +3,16 @@
 //! This module deliberately has no mutation APIs. It inspects procfs/sysfs and,
 //! when available, invokes firewall listing commands only.
 
+#[cfg(target_os = "linux")]
 use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
 };
 
-use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use anyhow::Context;
+use anyhow::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkStatus {
@@ -34,6 +37,7 @@ pub struct FirewallStatus {
     pub detail: String,
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
 struct InspectionPaths {
     sys_class_net: PathBuf,
@@ -45,6 +49,7 @@ struct InspectionPaths {
     proc_net_ip6_tables_names: PathBuf,
 }
 
+#[cfg(target_os = "linux")]
 impl Default for InspectionPaths {
     fn default() -> Self {
         Self {
@@ -138,6 +143,7 @@ fn inspect_with_paths_and_firewall(
     })
 }
 
+#[cfg(target_os = "linux")]
 fn parse_ipv4_default_routes(contents: &str) -> Vec<String> {
     contents
         .lines()
@@ -153,6 +159,7 @@ fn parse_ipv4_default_routes(contents: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(target_os = "linux")]
 fn parse_ipv6_default_routes(contents: &str) -> Vec<String> {
     contents
         .lines()
@@ -170,6 +177,7 @@ fn parse_ipv6_default_routes(contents: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(target_os = "linux")]
 fn parse_dns_servers(contents: &str) -> Vec<String> {
     contents
         .lines()
@@ -181,6 +189,7 @@ fn parse_dns_servers(contents: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(target_os = "linux")]
 fn find_tool(candidates: &[&str]) -> Option<PathBuf> {
     candidates
         .iter()
@@ -188,6 +197,7 @@ fn find_tool(candidates: &[&str]) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+#[cfg(target_os = "linux")]
 fn inspect_firewall(paths: &InspectionPaths) -> FirewallStatus {
     let nft = find_tool(&["/usr/bin/nft", "/usr/sbin/nft", "/sbin/nft"]);
     if let Some(executable) = nft {
@@ -254,6 +264,7 @@ fn inspect_firewall(paths: &InspectionPaths) -> FirewallStatus {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn parse_nft_ruleset(bytes: &[u8]) -> Result<FirewallStatus> {
     let value: serde_json::Value = serde_json::from_slice(bytes)?;
     let entries = value
@@ -277,6 +288,7 @@ fn parse_nft_ruleset(bytes: &[u8]) -> Result<FirewallStatus> {
     })
 }
 
+#[cfg(target_os = "linux")]
 fn parse_iptables_save(bytes: &[u8]) -> (usize, usize, usize) {
     let contents = String::from_utf8_lossy(bytes);
     let mut tables = 0;
@@ -294,6 +306,7 @@ fn parse_iptables_save(bytes: &[u8]) -> (usize, usize, usize) {
     (tables, chains, rules)
 }
 
+#[cfg(target_os = "linux")]
 fn read_table_names(path: &Path) -> usize {
     fs::read_to_string(path)
         .map(|contents| contents.lines().filter(|line| !line.trim().is_empty()).count())
