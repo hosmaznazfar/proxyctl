@@ -2,7 +2,7 @@
 
 > Status: approved baseline for implementation  
 > Repository: https://github.com/hosmaznazfar/proxyctl  
-> Last updated: 2026-11-09
+> Last updated: 2026-11-10
 
 ## 1. Purpose
 
@@ -186,13 +186,13 @@ The initial HTTP defaults follow v2rayN's current defaults where applicable: Goo
 
 TCP ping runs once per node and is stored under the reserved `direct` target. HTTP tests run for each compatible node/core pair. The CLI prints node/core/metric/sample progress; downloads report bounded, throttled byte progress. Ctrl-C must be observed during a running request: stop the active managed core to break the loopback proxy connection, wait for the measurement worker and child to exit, persist completed/cancelled samples, and finalize the run as cancelled. A global HTTP timeout alone is not an acceptable cancellation strategy.
 
-The first implementation batch already has typed records, schema version 2, sample persistence, median/throughput helpers, stale-run recovery, loopback-only per-core configs, native config validation, bounded child-process lifecycle, and a local fake HTTP-proxy test. Xray native validation failures now expose allowlisted diagnostic categories without raw output; upload defaults to a smaller 256 KiB sample. The first real smoke test exposed a usability defect: no progress was printed while synchronous requests were running, and Ctrl-C only set a flag that was checked between requests. The benchmark methodology and implementation are being revised before asking for another real run. Service-level orchestration tests must cover cancellation during each metric and verify child/config cleanup and persisted samples.
+**Implementation status: complete for the current benchmark contract.** Typed run/sample records, schema version 2, incremental persistence, median/throughput helpers, stale-run recovery, loopback-only per-core configs, native config validation, bounded child lifecycle, HTTP measurements, live progress, and cooperative cancellation are implemented. Failure diagnostics are allowlisted and do not expose raw core logs or transport details. The default sample sizes are 2 MiB download and 256 KiB upload, with three samples per metric. The expanded native config matrix and real single-node smoke tests have passed. Benchmark execution remains sequential and does not alter system networking.
 
-Do not start reports, sorting, or pruning until the revised benchmark implementation passes local unit/Clippy/build checks, the expanded native config matrix, and a real single-node smoke test.
+The remaining work is broader metric coverage and hardening, not a blocker for read-only reporting. Report and sorting views consume persisted samples only and never start cores.
   
 ### 3.6 Sorting and comparison semantics
 
-Metric-specific sorting is being implemented for real ping, direct TCP ping, download, and upload:
+Metric-specific sorting is implemented for real ping, direct TCP ping, download, and upload:
 
 ~~~sh
 proxyctl list --sort ping
@@ -210,6 +210,31 @@ For each node/core pair, use its latest completed run and calculate the median o
 Cross-core sorting takes the median of available per-core medians, giving each successful core equal weight rather than selecting only the fastest core. Core-specific sorting restricts the calculation to the selected core. Direct TCP ping uses the reserved `direct` target and is never combined with real ping.
 
 Ping sorts ascending; download and upload sort descending. Nodes without successful comparable measurements remain at the bottom as unmeasured, not zero. Unsupported results do not contribute values. Sorting is read-only and never starts a core or changes network settings.
+
+### 3.7 Benchmark reporting and history
+
+**Implementation status: implemented.** Reporting is read-only and uses the persisted benchmark run/sample records.
+
+~~~sh
+# Latest run per active node
+proxyctl report
+proxyctl report --node 18
+
+# Full history, including cancelled and interrupted runs
+proxyctl report --history
+proxyctl report --node 18 --history
+
+# Compare each core independently
+proxyctl report --compare
+proxyctl report --compare --node 18
+proxyctl report --compare --core xray
+~~~
+
+Latest mode displays the newest run containing each node, regardless of lifecycle status. History mode displays all matching runs newest first. Compare mode independently selects the latest completed run for each node/core pair; newer completed runs supersede older ones even when all samples failed. Cancelled, interrupted, and running runs do not replace comparison results. Direct TCP ping is shown under the separate `direct` target.
+
+Every metric reports the successful count out of three, the median of successful samples, failure counts, and samples not run. One or two successful samples produce an explicitly partial median; three successful samples are complete. Preflight outcomes (unsupported, invalid, unavailable) remain distinct from attempted network failures. Missing or failed measurements are never rendered as zero.
+
+Reports do not start proxy cores, contact measurement endpoints, or modify system networking.
 
 ### 3.7 Pruning and recovery
 
@@ -267,7 +292,7 @@ proxyctl test --node 12 --core sing-box
 proxyctl report
 proxyctl report --history
 proxyctl report --compare
-proxyctl report --core mihomo
+proxyctl report --compare --core mihomo
 proxyctl report --node 12
 
 # Sorting
@@ -372,8 +397,8 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 4. Node management: import, add, list, show, remove, restore, and duplicate handling.
 5. Core management and unified updater: official-source metadata, pinned versions, checksum verification, setup, detection, and a single update workflow for the proxyctl CLI plus managed cores.
 6. Core adapters: **complete for the documented initial subset**; the adapter unit suite, formatting, Clippy, release build, and the 23-fixture native matrix (51 supported fixture/core combinations) passed. Version-aware capability predicates and additional protocol/option coverage remain future enhancements. The expanded native test now also checks benchmark configs; that extension is pending execution.
-7. Benchmark engine: **in progress**. Typed records, schema migration, short sample transactions, aggregation primitives, stale-run recovery, per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cooperative cancellation, and CLI orchestration are implemented. Fake-core startup/cleanup and local fake HTTP-proxy measurement tests are implemented; service orchestration tests remain pending.
-8. Reports and sorting: latest/history/compare views and core-independent/core-specific sorting.
+7. Benchmark engine: **complete for the current contract**. Typed records, schema migration, short sample transactions, aggregation primitives, stale-run recovery, per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cooperative cancellation, progress, native validation, and real single-node smoke tests are implemented.
+8. Reports and sorting: **implemented**. Metric-specific sorting, latest-run reports, full per-node history, and per-core comparison views are implemented with partial/failure/missing-sample accounting. Further regression coverage and usability hardening remain part of the final hardening stage.
 9. Pruning: dry-run previews, compatible-core evaluation rules, soft deletion, and restore.
 10. Activation: managed process lifecycle and safe stop behavior.
 11. TUN: implement only after network-state detection and rollback design are tested.
