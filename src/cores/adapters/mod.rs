@@ -64,6 +64,53 @@ pub trait CoreAdapter {
         json_config(document)
     }
 
+    /// Add the selected core's native Linux TUN inbound while preserving the shared local
+    /// SOCKS5/HTTP listener. DNS and firewall integration remain disabled.
+    fn generate_tun_activation_config(
+        &self, node: &ProxyNode, listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
+        use serde_json::json;
+        let generated = self.generate_activation_config(node, listen_port)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        match self.core() {
+            CoreId::SingBox => {
+                document["inbounds"].as_array_mut()
+                    .context("sing-box activation inbounds must be an array")?
+                    .push(json!({
+                        "type":"tun","tag":"tun-in","interface_name":"tun-proxyctl",
+                        "address":["198.18.0.1/30","fdfe:dcba:9876::1/126"],
+                        "mtu":1500,"auto_route":true,"strict_route":false,"dns_mode":"disabled"
+                    }));
+                document["route"] = json!({"final":"proxy","auto_detect_interface":true});
+            }
+            CoreId::Xray => {
+                document["inbounds"].as_array_mut()
+                    .context("Xray activation inbounds must be an array")?
+                    .push(json!({
+                        "tag":"tun-in","protocol":"tun",
+                        "settings":{
+                            "name":"tun-proxyctl","mtu":1500,
+                            "gateway":["198.18.0.1/30","fdfe:dcba:9876::1/126"],
+                            "autoSystemRoutingTable":["0.0.0.0/0","::/0"],
+                            "autoOutboundsInterface":"auto","autoSystemDnsToGateway":false
+                        }
+                    }));
+            }
+            CoreId::Mihomo => {
+                document["ipv6"] = json!(true);
+                document["tun"] = json!({
+                    "enable":true,"device":"tun-proxyctl","stack":"system","mtu":1500,
+                    "inet4-address":["198.18.0.1/30"],
+                    "inet6-address":["fdfe:dcba:9876::1/126"],
+                    "auto-route":true,"auto-detect-interface":true,
+                    "auto-redirect":false,"strict-route":false,
+                    "dns-mode":"disabled","dns-hijack":[]
+                });
+            }
+        }
+        json_config(document)
+    }
+
     /// Add a loopback-only HTTP inbound for isolated benchmark traffic.
     fn generate_benchmark_config(
         &self,
