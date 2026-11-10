@@ -105,6 +105,47 @@ fn activation_configs_share_one_loopback_port_for_socks5_and_http() {
 }
 
 #[test]
+fn tun_activation_configs_keep_mixed_listener_and_disable_dns_firewall_redirects() {
+    let node =
+        parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        let generated = adapter(core).generate_tun_activation_config(&node, 43129).unwrap();
+        let document: Value = serde_json::from_slice(&generated.content).unwrap();
+        match core {
+            CoreId::SingBox => {
+                assert_eq!(document["inbounds"][0]["type"], "mixed");
+                assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
+                assert_eq!(document["inbounds"][0]["listen_port"], 43129);
+                assert_eq!(document["inbounds"][1]["type"], "tun");
+                assert_eq!(document["inbounds"][1]["interface_name"], "tun-proxyctl");
+                assert_eq!(document["inbounds"][1]["auto_route"], true);
+                assert_eq!(document["inbounds"][1]["dns_mode"], "disabled");
+                assert_eq!(document["route"]["auto_detect_interface"], true);
+            }
+            CoreId::Xray => {
+                assert_eq!(document["inbounds"][0]["protocol"], "mixed");
+                assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
+                assert_eq!(document["inbounds"][0]["port"], 43129);
+                assert_eq!(document["inbounds"][1]["protocol"], "tun");
+                assert_eq!(document["inbounds"][1]["settings"]["autoOutboundsInterface"], "auto");
+                assert_eq!(document["inbounds"][1]["settings"]["autoSystemDnsToGateway"], false);
+            }
+            CoreId::Mihomo => {
+                assert_eq!(document["mixed-port"], 43129);
+                assert_eq!(document["bind-address"], "127.0.0.1");
+                assert_eq!(document["allow-lan"], false);
+                assert_eq!(document["tun"]["stack"], "system");
+                assert_eq!(document["tun"]["auto-route"], true);
+                assert_eq!(document["tun"]["auto-detect-interface"], true);
+                assert_eq!(document["tun"]["auto-redirect"], false);
+                assert_eq!(document["tun"]["dns-mode"], "disabled");
+                assert!(document["tun"]["dns-hijack"].as_array().unwrap().is_empty());
+            }
+        }
+    }
+}
+
+#[test]
 fn adapters_reject_unknown_transport_without_dropping_it() {
     let node =
         parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic")
