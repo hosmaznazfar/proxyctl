@@ -329,14 +329,11 @@ mod tests {
     }
 
     fn evidence(run_id: u64, statuses: [BenchmarkSampleStatus; 3]) -> Vec<BenchmarkSample> {
-        let mut rows = vec![sample(run_id, 0, BenchmarkSampleStatus::Success)];
-        rows.extend(
-            statuses
-                .into_iter()
-                .enumerate()
-                .map(|(index, status)| sample(run_id, index as u8 + 1, status)),
-        );
-        rows
+        statuses
+            .into_iter()
+            .enumerate()
+            .map(|(index, status)| sample(run_id, index as u8 + 1, status))
+            .collect()
     }
 
     #[test]
