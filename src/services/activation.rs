@@ -730,8 +730,13 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
     );
     ensure!(state.config.parent() == Some(runtime),
         "TUN config path is outside the private runtime directory; refusing cleanup");
-    fs::remove_file(&state.config)?;
-    fs::remove_file(state_path)?;
+    for path in [state.config.as_path(), state_path] {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
     println!("Stopped Proxyctl-managed TUN service for node #{}; network baseline restored.", state.node_id);
     Ok(())
 }
