@@ -305,10 +305,10 @@ fn matches_process(pid: u32, expected: &Path, ticks: u64) -> bool {
 fn await_identity(pid: u32, expected: &Path, timeout: Duration) -> anyhow::Result<u64> {
     let start = Instant::now();
     loop {
-        if let (Some(ticks), Some(actual)) = (start_ticks(pid), executable(pid)) {
-            if actual == expected {
-                return Ok(ticks);
-            }
+        if let (Some(ticks), Some(actual)) = (start_ticks(pid), executable(pid))
+            && actual == expected
+        {
+            return Ok(ticks);
         }
         ensure!(
             start.elapsed() < timeout,
