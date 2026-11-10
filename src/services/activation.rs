@@ -774,7 +774,7 @@ mod tests {
             unit: "proxyctl-tun-test.service".into(), uid: 1000, gid: 1000,
             baseline: TunBaseline {
                 interfaces: vec![], tun_interfaces: vec![], default_routes: vec![],
-                dns_servers: vec![], ipv4_routes: vec![], ipv6_routes: vec:[],
+                dns_servers: vec![], ipv4_routes: vec![], ipv6_routes: vec![],
                 ipv4_rules: vec![], ipv6_rules: vec![],
             },
         };
