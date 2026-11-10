@@ -101,7 +101,9 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
         let port = reserve_port()?;
         let generated = adapter
             .generate_activation_config(&node, port)
-            .with_context(|| format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config"))?;
+            .with_context(|| {
+                format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config")
+            })?;
         adapters::validation::validate_generated_config(core, &generated, &executable)
             .with_context(|| format!("{core} rejected the activation config"))?;
 
