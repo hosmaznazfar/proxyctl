@@ -108,7 +108,11 @@ fn inspect_with_paths(paths: &InspectionPaths) -> Result<NetworkStatus> {
         .unwrap_or_default();
 
     let firewall = inspect_firewall(paths);
+    inspect_with_firewall(paths, firewall)
+}
 
+#[cfg(target_os = "linux")]
+fn inspect_with_firewall(paths: &InspectionPaths, firewall: FirewallStatus) -> Result<NetworkStatus> {
     Ok(NetworkStatus {
         interfaces,
         tun_interfaces,
@@ -247,9 +251,9 @@ fn parse_nft_ruleset(bytes: &[u8]) -> Result<FirewallStatus> {
     let mut chains = 0;
     let mut rules = 0;
     for entry in entries {
-        tables += usize::from(entry.get("table").is_some());
-        chains += usize::from(entry.get("chain").is_some());
-        rules += usize::from(entry.get("rule").is_some());
+        tables += if entry.get("table").is_some() { 1 } else { 0 };
+        chains += if entry.get("chain").is_some() { 1 } else { 0 };
+        rules += if entry.get("rule").is_some() { 1 } else { 0 };
     }
     Ok(FirewallStatus {
         backend: "nftables".into(),
@@ -326,7 +330,7 @@ fn yes_no(value: bool) -> &'static str {
     if value { "present" } else { "not detected" }
 }
 
-#[cfg(test)]
+#[(cfg(target_os = "linux"), test)]
 mod tests {
     use super::*;
 
@@ -354,6 +358,63 @@ mod tests {
         let status = parse_nft_ruleset(json).unwrap();
         assert_eq!((status.tables, status.chains, status.rules), (1, 1, 1));
         assert_eq!(status.backend, "nftables");
+    }
+
+    #[test]
+    fn inspects_temporary_system_state_without_running_host_firewall_tools() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let sys_class_net = root.join("sys/class/net");
+        let proc_dir = root.join("proc/net");
+        let run = root.join("run");
+        fs::create_dir_all(sys_class_net.join("eth0")).unwrap();
+        fs::create_dir_all(sys_class_net.join("tun0")).unwrap();
+        fs::write(sys_class_net.join("tun0/tun_flags"), "0001").unwrap();
+        fs::create_dir_all(run.join("NetworkManager")).unwrap();
+        fs::create_dir_all(run.join("systemd/resolve")).unwrap();
+        fs::create_dir_all(&proc_dir).unwrap();
+        fs::write(
+            proc_dir.join("route"),
+            "Iface Destination Gateway Flags RefCnt Use Metric Mask\neth0 00000000 0100000A 0003 0 0 100 00000000\n",
+        )
+        .unwrap();
+        fs::write(
+            proc_dir.join("ipv6_route"),
+            "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000 00000000 00000000 00000000 00000000 eth0\n",
+        )
+        .unwrap();
+        let resolv_conf = root.join("etc/resolv.conf");
+        fs::create_dir_all(resolv_conf.parent().unwrap()).unwrap();
+        fs::write(&resolv_conf, "nameserver 127.0.0.53\nnameserver 1.1.1.1\n").unwrap();
+
+        let paths = InspectionPaths {
+            sys_class_net,
+            proc_net_route: proc_dir.join("route"),
+            proc_net_ipv6_route: proc_dir.join("ipv6_route"),
+            resolv_conf,
+            run,
+            proc_net_ip_tables_names: proc_dir.join("ip_tables_names"),
+            proc_net_ip6_tables_names: proc_dir.join("ip6_tables_names"),
+        };
+        let firewall = FirewallStatus {
+            backend: "test fixture".into(),
+            tables: 1,
+            chains: 2,
+            rules: 3,
+            detail: "injected read-only fixture".into(),
+        };
+
+        let status = inspect_with_firewall(&paths, firewall).unwrap();
+        assert_eq!(status.interfaces, ["eth0", "tun0"]);
+        assert_eq!(status.tun_interfaces, ["tun0"]);
+        assert_eq!(
+            status.default_routes,
+            ["IPv4 default via eth0", "IPv6 default via eth0"]
+        );
+        assert_eq!(status.dns_servers, ["127.0.0.53", "1.1.1.1"]);
+        assert!(status.network_manager_runtime);
+        assert!(status.systemd_resolved_runtime);
+        assert_eq!(status.firewall.rules, 3);
     }
 
     #[test]
