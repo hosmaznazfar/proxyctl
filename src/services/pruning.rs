@@ -145,17 +145,19 @@ fn evaluate_node(
         );
     }
     if compatible == 0 {
-        let detail = if incomplete.is_empty() {
-            if unsupported.is_empty() {
-                "no installed compatible core is available".to_owned()
-            } else {
-                format!(
-                    "no compatible core; unsupported by {}",
-                    unsupported.join(", ")
-                )
-            }
+        if !incomplete.is_empty() {
+            return (
+                PruneDecision::InsufficientEvidence,
+                incomplete.join("; "),
+            );
+        }
+        let detail = if unsupported.is_empty() {
+            "no installed compatible core is available".to_owned()
         } else {
-            incomplete.join("; ")
+            format!(
+                "no compatible core; unsupported by {}",
+                unsupported.join(", ")
+            )
         };
         return (PruneDecision::NoCompatibleCore, detail);
     }
