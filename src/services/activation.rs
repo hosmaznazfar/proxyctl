@@ -458,6 +458,8 @@ fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLa
     let active_proxyctl_tun = if state_path.exists() {
         let state: ActiveProcess = serde_json::from_slice(&fs::read(state_path)?)
             .context("activation state is corrupt; refusing TUN preflight")?;
+        ensure!(state.config.parent() == Some(runtime),
+            "activation state config path is outside the private runtime directory");
         state.tun.is_some()
     } else {
         false
