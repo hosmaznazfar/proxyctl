@@ -46,7 +46,7 @@ pub trait CoreAdapter {
                 document["inbounds"] = json!([{
                     "listen": "127.0.0.1",
                     "port": listen_port,
-                    "protocol": "socks",
+                    "protocol": "mixed",
                     "settings": {
                         "auth": "noauth",
                         "udp": true,
