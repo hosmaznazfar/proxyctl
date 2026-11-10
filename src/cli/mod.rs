@@ -312,15 +312,22 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
         println!("No proxy nodes found.");
         return;
     }
+    let core_width = records
+        .iter()
+        .map(|record| record.cores.chars().count())
+        .max()
+        .unwrap_or_default()
+        .max("CORE(S)".len());
     println!(
-        "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  NAME",
+        "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<width$}  NAME",
         "RANK",
         "ID",
         "PROTOCOL",
         "SERVER",
         "PORT",
         metric.label(),
-        "CORE(S)"
+        "CORE(S)",
+        width = core_width
     );
     for (index, record) in records.iter().enumerate() {
         let value = match record.value {
@@ -329,7 +336,7 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
             None => "unmeasured".to_owned(),
         };
         println!(
-            "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  {}",
+            "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<width$}  {}",
             if record.value.is_some() {
                 (index + 1).to_string()
             } else {
@@ -340,14 +347,15 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
             safe_field(&record.node.node.server, 32),
             record.node.node.port,
             value,
-            safe_field(&record.cores, 20),
+            safe_field(&record.cores, core_width),
             record
                 .node
                 .node
                 .name
                 .as_deref()
                 .map(|name| safe_field(name, 32))
-                .unwrap_or_else(|| "-".to_owned())
+                .unwrap_or_else(|| "-".to_owned()),
+            width = core_width
         );
     }
 }
