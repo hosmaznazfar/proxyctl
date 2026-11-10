@@ -177,7 +177,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             return Ok(());
         }
         Command::Use { id, core } => {
-            crate::services::activation::activate(id, parse_core(Some(&core))?.expect("required core"))?;
+            let core = parse_core(Some(&core))?
+                .ok_or_else(|| anyhow::anyhow!("--core is required for activation"))?;
+            crate::services::activation::activate(id, core)?;
             return Ok(());
         }
         Command::Stop => {
