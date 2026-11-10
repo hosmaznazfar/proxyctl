@@ -434,12 +434,17 @@ fn print_metric_summary(summary: &reporting::MetricSummary) {
             summary.metric.unit()
         ),
         (None, _, Some(preflight)) => {
-            println!("      {label}: {} (preflight)", sample_status_label(preflight))
+            println!(
+                "      {label}: {} (preflight)",
+                sample_status_label(preflight)
+            )
         }
         (None, 0, None) if summary.attempted == 0 => {
             println!("      {label}: not run (0/3)")
         }
-        (None, _, None) => println!("      {label}: no successful samples (0/3{suffix}{missing_suffix})"),
+        (None, _, None) => {
+            println!("      {label}: no successful samples (0/3{suffix}{missing_suffix})")
+        }
     }
 }
 
