@@ -482,6 +482,7 @@ mod tests {
         let port = readiness.local_addr().unwrap().port();
 
         let mut previous_config: Option<PathBuf> = None;
+        let mut previous_process: Option<(u32, PathBuf, u64)> = None;
         for (node_id, core) in [(1, "sing-box"), (2, "xray"), (3, "mihomo")] {
             let config = runtime.join(format!("active-{node_id}-{core}.json"));
             let mut command = Command::new(&fake);
@@ -495,6 +496,11 @@ mod tests {
             assert_eq!(state.node_id, node_id);
             assert_eq!(state.core, core);
             assert!(matches_process(state.pid, &fake, state.start_ticks));
+            if let Some((pid, executable, ticks)) = previous_process.take() {
+                assert!(!matches_process(pid, &executable, ticks),
+                    "switching must stop the previously active process");
+            }
+            previous_process = Some((state.pid, fake.clone(), state.start_ticks));
             if let Some(previous) = previous_config.take() {
                 assert!(!previous.exists(), "previous activation config must be removed");
             }
@@ -530,6 +536,28 @@ mod tests {
         assert!(launch_managed(
             &runtime, &state_path, &managed, &fake, &config, b"{}",
             4, "sing-box", port, command, Duration::from_millis(150),
+        ).is_err());
+        assert!(!state_path.exists());
+        assert!(!config.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn spawn_failure_removes_prepared_config_without_persisting_state() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let runtime = dir.path().join("runtime");
+        let managed = dir.path().join("managed");
+        fs::create_dir_all(&runtime).unwrap();
+        fs::create_dir_all(&managed).unwrap();
+        let managed = fs::canonicalize(managed).unwrap();
+        let state_path = runtime.join("active.json");
+        let config = runtime.join("active-6-mihomo.json");
+        let command = Command::new(dir.path().join("does-not-exist"));
+
+        assert!(launch_managed(
+            &runtime, &state_path, &managed, &managed.join("fake-core"), &config, b"{}",
+            6, "mihomo", 12347, command, Duration::from_millis(100),
         ).is_err());
         assert!(!state_path.exists());
         assert!(!config.exists());
