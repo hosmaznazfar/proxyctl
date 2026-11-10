@@ -671,7 +671,7 @@ fn await_tun_interface(pid: u32, ticks: u64, timeout: Duration) -> anyhow::Resul
     loop {
         ensure!(start_ticks(pid) == Some(ticks),
             "managed TUN core exited before its interface became ready");
-        if interface.exists() { return Ok(()); }
+        if interface.join("tun_flags").exists() { return Ok(()); }
         ensure!(start.elapsed() < timeout,
             "managed core did not create the expected tun-proxyctl interface");
         thread::sleep(POLL);
