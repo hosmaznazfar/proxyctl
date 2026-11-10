@@ -1,6 +1,6 @@
 # Benchmark design
 
-> Status: revised methodology approved; implementation in progress
+> Status: benchmark engine, metric sorting, and reporting implemented
 > Last updated: 2026-11-09
 
 ## 1. Goals and scope
@@ -182,3 +182,39 @@ Sources:
 - LibreSpeed public service privacy disclosure: https://librespeed.org/
 
 Keep this document and `docs/PLAN.md` synchronized as implementation evidence changes.
+
+
+## 12. Benchmark reports and history
+
+The report command is a read-only view over the persisted run and sample tables. It never starts a core or performs a network measurement.
+
+~~~sh
+# Latest run for each active node
+proxyctl report
+
+# Latest run for one node
+proxyctl report --node 18
+
+# All runs, newest first; includes completed, cancelled, interrupted, and running records
+proxyctl report --history
+proxyctl report --node 18 --history
+
+# Per-core comparison using the latest completed run for each node/core pair
+proxyctl report --compare
+proxyctl report --compare --node 18
+proxyctl report --compare --core xray
+proxyctl report --compare --node 18 --core mihomo
+~~~
+
+Latest mode selects the most recent run containing each selected node, regardless of lifecycle status, so an interrupted or cancelled latest run is visible rather than silently replaced by an older run. History mode shows every matching run newest first.
+
+Comparison mode is intentionally different: it selects the latest **completed** run independently for each node/core pair. A newer completed run supersedes an older one even if it has no successful samples; comparison never falls back to stale measurements. Cancelled, interrupted, and running runs remain visible in history but do not replace the latest completed comparison. Direct TCP ping is shown as its own `direct` row and is not attributed to a proxy core.
+
+Each metric summary reports:
+- The median of successful samples only, when at least one succeeded.
+- The successful count out of the three scheduled samples.
+- Failure counts by outcome (for example, timeout or unreachable).
+- The number of samples not run when a run ended before all three attempts.
+- A preflight outcome such as unsupported, invalid, or unavailable when the core was not tested.
+
+A median based on one or two successful samples is explicitly labelled partial. Three successes are labelled complete. No failed or missing sample is represented as zero. The report does not infer a failure for a sample that was never attempted.
