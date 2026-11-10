@@ -475,7 +475,7 @@ mod tests {
             .map(|path| path.join("sleep"))
             .find(|path| path.is_file())
             .expect("sleep utility is required for process lifecycle tests");
-        let fake = managed.join("fake-core");
+        let fake = managed.join("sleep");
         fs::copy(source, &fake).unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
         (managed, fake)
