@@ -38,6 +38,7 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
     let mut validated = 0usize;
     let mut benchmark_configs_validated = 0usize;
     let mut activation_configs_validated = 0usize;
+    let mut tun_configs_validated = 0usize;
 
     for fixture in &fixtures {
         let node = parse_proxy_url(&fixture.url)
@@ -130,11 +131,18 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 );
             }
             activation_configs_validated += 1;
+            let tun_generated = adapter.generate_tun_activation_config(&node, 43129)
+                .unwrap_or_else(|error| panic!("fixture '{}' TUN config generation failed for {core}: {error:#}", fixture.name));
+            if let Err(error) = adapters::validation::validate_generated_config(*core, &tun_generated, executable) {
+                let diagnostic = if *core == CoreId::Xray { xray_validation_diagnostic(&tun_generated, executable) } else { String::new() };
+                panic!("native TUN config validation failed for fixture '{}' on {core}: {error:#}\n{diagnostic}", fixture.name);
+            }
+            tun_configs_validated += 1;
         }
     }
 
     println!(
-        "Native validation succeeded for {validated} standard configs, {benchmark_configs_validated} loopback benchmark configs, and {activation_configs_validated} shared SOCKS5/HTTP activation configs across {} fixtures.",
+        "Native validation succeeded for {validated} standard configs, {benchmark_configs_validated} loopback benchmark configs, {activation_configs_validated} shared SOCKS5/HTTP activation configs, and {tun_configs_validated} native TUN activation configs across {} fixtures.",
         fixtures.len()
     );
 }
