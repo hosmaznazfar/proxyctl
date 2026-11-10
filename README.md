@@ -2,7 +2,7 @@
 
 A lightweight Rust CLI for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, and benchmark reports/history are implemented. Pruning, activation, and TUN remain staged follow-up work.
+> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, benchmark reports/history, and compatibility-aware pruning are implemented. Activation and TUN remain staged follow-up work.
 
 ## Goals
 
@@ -126,7 +126,25 @@ proxyctl report --compare --core xray
 proxyctl report --compare --node 18 --core mihomo
 ~~~
 
-Reports retain the distinction between direct TCP ping and measurements through a proxy core. Each metric displays its median of successful samples, the successful count out of three, and failure or not-run counts. A partial median is explicitly marked partial. A newer completed run supersedes older results even if all of its samples failed; cancelled and interrupted runs appear in history but do not replace a core's latest completed comparison. Reports are read-only and never start proxy cores or change system networking.
+Reports retain the distinction between direct TCP ping and measurements through a proxy core. Each metric displays its median of successful samples, the successful count out of three, and failure or not-run counts. A partial median is explicitly marked partial. A newer completed run supersedes older results even if all of its samples failed; cancelled and interrupted runs appear in history but do not replace a core's latest completed comparison. Reports are read-only and never start proxy cores or change system networking. Core versions are concise by default (for example, `sing-box (1.14.4)`); `--verbose` preserves the full version/build metadata recorded with the run.
+
+## Compatibility-aware pruning
+
+Preview candidates across all installed cores that currently support each node:
+
+~~~sh
+proxyctl prune --unavailable-all
+proxyctl prune --unavailable-all --dry-run
+~~~
+
+Or evaluate one installed managed core:
+
+~~~sh
+proxyctl prune --core xray --unavailable
+proxyctl prune --core xray --unavailable --apply
+~~~
+
+Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core mode, unsupported core/node combinations are excluded rather than counted as failures. A node is eligible only when every currently compatible core has a latest completed benchmark run with three distinct real-ping samples, all marked unreachable. One successful sample keeps the node. Missing runs, partial samples, invalid compatibility, startup/preflight errors, timeouts, cancellations, and other ambiguous HTTP/runtime failures prevent pruning. A newer completed run supersedes older evidence; cancelled/interrupted runs do not. Use `proxyctl restore ID` to restore a soft-deleted node.
 
 ## Planned commands
 
