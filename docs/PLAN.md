@@ -282,7 +282,7 @@ TUN is a separate opt-in feature. **Read-only Linux inspection is implemented** 
 | Core | Native configuration |
 |---|---|
 | sing-box | One `mixed` inbound |
-| Xray | One `socks` inbound; Xray's SOCKS inbound accepts HTTP proxy requests |
+| Xray | One `mixed` inbound (Xray's native alias for the SOCKS handler, which accepts HTTP proxy requests) |
 | Mihomo | One `mixed-port` |
 
 The listener binds only to `127.0.0.1`; LAN access remains disabled. The benchmark path intentionally remains a separate HTTP-only listener because its measurement client uses HTTP CONNECT and does not need SOCKS support. The mixed listener is used by `proxyctl use` only.
