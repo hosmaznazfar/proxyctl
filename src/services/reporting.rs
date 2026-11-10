@@ -8,8 +8,8 @@ use crate::{
     cores::CoreId,
     database::{NodeDatabase, NodeRecord},
     domain::{
-        BenchmarkMetric, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample,
-        BenchmarkSampleStatus, median_successful_samples,
+        BenchmarkMetric, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, BenchmarkSampleStatus,
+        median_successful_samples,
     },
 };
 
@@ -92,9 +92,11 @@ pub fn build_report(path: &Path, options: ReportOptions) -> anyhow::Result<Bench
     let (nodes, runs, samples) = {
         let database = NodeDatabase::open(path)?;
         let nodes = if let Some(node_id) = options.node_id {
-            vec![database
-                .get_node(node_id)?
-                .ok_or_else(|| anyhow::anyhow!("node #{node_id} was not found"))?]
+            vec![
+                database
+                    .get_node(node_id)?
+                    .ok_or_else(|| anyhow::anyhow!("node #{node_id} was not found"))?,
+            ]
         } else {
             database.list_nodes(false)?
         };
@@ -141,11 +143,7 @@ pub fn build_report(path: &Path, options: ReportOptions) -> anyhow::Result<Bench
     })
 }
 
-fn build_run_report(
-    run: &BenchmarkRun,
-    node_id: u64,
-    samples: &[BenchmarkSample],
-) -> RunReport {
+fn build_run_report(run: &BenchmarkRun, node_id: u64, samples: &[BenchmarkSample]) -> RunReport {
     let targets = run
         .cores
         .iter()
@@ -156,11 +154,11 @@ fn build_run_report(
                 .filter(|sample| sample.run_id == run.id && sample.node_id == node_id)
                 .filter(|sample| sample.core == *target)
                 .collect::<Vec<_>>();
-            let core_version = run
-                .core_versions
-                .get(target)
-                .cloned()
-                .or_else(|| target_samples.iter().find_map(|sample| sample.core_version.clone()));
+            let core_version = run.core_versions.get(target).cloned().or_else(|| {
+                target_samples
+                    .iter()
+                    .find_map(|sample| sample.core_version.clone())
+            });
             TargetReport {
                 target: target.clone(),
                 core_version,
@@ -229,10 +227,7 @@ fn build_comparisons(
     comparisons
 }
 
-fn latest_completed_run<'a>(
-    runs: &[&'a BenchmarkRun],
-    target: &str,
-) -> Option<&'a BenchmarkRun> {
+fn latest_completed_run<'a>(runs: &[&'a BenchmarkRun], target: &str) -> Option<&'a BenchmarkRun> {
     runs.iter()
         .copied()
         .filter(|run| run.cores.iter().any(|core| core == target))
@@ -250,11 +245,11 @@ fn comparison_for(
         .filter(|sample| sample.run_id == run.id)
         .filter(|sample| sample.node_id == node.id && sample.core == target)
         .collect::<Vec<_>>();
-    let core_version = run
-        .core_versions
-        .get(target)
-        .cloned()
-        .or_else(|| target_samples.iter().find_map(|sample| sample.core_version.clone()));
+    let core_version = run.core_versions.get(target).cloned().or_else(|| {
+        target_samples
+            .iter()
+            .find_map(|sample| sample.core_version.clone())
+    });
 
     CoreComparison {
         node: node.clone(),
@@ -304,7 +299,10 @@ fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> Me
         if sample.status == BenchmarkSampleStatus::Success {
             continue;
         }
-        if let Some(existing) = failures.iter_mut().find(|item| item.status == sample.status) {
+        if let Some(existing) = failures
+            .iter_mut()
+            .find(|item| item.status == sample.status)
+        {
             existing.count += 1;
         } else {
             failures.push(FailureCount {
