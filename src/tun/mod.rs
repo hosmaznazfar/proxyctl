@@ -201,7 +201,10 @@ fn find_tool(candidates: &[&str]) -> Option<PathBuf> {
 fn inspect_firewall(paths: &InspectionPaths) -> FirewallStatus {
     let nft = find_tool(&["/usr/bin/nft", "/usr/sbin/nft", "/sbin/nft"]);
     if let Some(executable) = nft {
-        match Command::new(executable).args(["-j", "list", "ruleset"]).output() {
+        match Command::new(executable)
+            .args(["-j", "list", "ruleset"])
+            .output()
+        {
             Ok(output) if output.status.success() => {
                 return parse_nft_ruleset(&output.stdout).unwrap_or_else(|_| FirewallStatus {
                     backend: "nftables".into(),
@@ -224,8 +227,16 @@ fn inspect_firewall(paths: &InspectionPaths) -> FirewallStatus {
         }
     }
 
-    let ipv4 = find_tool(&["/usr/bin/iptables-save", "/usr/sbin/iptables-save", "/sbin/iptables-save"]);
-    let ipv6 = find_tool(&["/usr/bin/ip6tables-save", "/usr/sbin/ip6tables-save", "/sbin/ip6tables-save"]);
+    let ipv4 = find_tool(&[
+        "/usr/bin/iptables-save",
+        "/usr/sbin/iptables-save",
+        "/sbin/iptables-save",
+    ]);
+    let ipv6 = find_tool(&[
+        "/usr/bin/ip6tables-save",
+        "/usr/sbin/ip6tables-save",
+        "/sbin/ip6tables-save",
+    ]);
     if ipv4.is_some() || ipv6.is_some() {
         let mut totals = (0, 0, 0);
         let mut inspected = 0;
@@ -309,7 +320,12 @@ fn parse_iptables_save(bytes: &[u8]) -> (usize, usize, usize) {
 #[cfg(target_os = "linux")]
 fn read_table_names(path: &Path) -> usize {
     fs::read_to_string(path)
-        .map(|contents| contents.lines().filter(|line| !line.trim().is_empty()).count())
+        .map(|contents| {
+            contents
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .count()
+        })
         .unwrap_or_default()
 }
 
@@ -336,7 +352,9 @@ impl NetworkStatus {
         );
         println!(
             "resolv.conf target: {}",
-            self.resolv_conf_target.as_deref().unwrap_or("regular file or unavailable")
+            self.resolv_conf_target
+                .as_deref()
+                .unwrap_or("regular file or unavailable")
         );
         println!(
             "NetworkManager runtime directory: {}",
