@@ -492,6 +492,7 @@ mod tests {
                 mode: ReportMode::History,
                 node_id: Some(1),
                 core: None,
+                verbose: false,
             },
         )
         .unwrap();
