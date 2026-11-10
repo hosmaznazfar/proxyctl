@@ -87,7 +87,7 @@ fn activation_configs_share_one_loopback_port_for_socks5_and_http() {
                 assert_eq!(document["route"]["final"], "proxy");
             }
             CoreId::Xray => {
-                assert_eq!(document["inbounds"][0]["protocol"], "socks");
+                assert_eq!(document["inbounds"][0]["protocol"], "mixed");
                 assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
                 assert_eq!(document["inbounds"][0]["port"], 43128);
                 assert_eq!(document["inbounds"][0]["settings"]["auth"], "noauth");
