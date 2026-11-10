@@ -200,7 +200,9 @@ fn latest_run<'a>(
 ) -> Option<&'a BenchmarkRun> {
     runs.iter()
         .filter(|run| {
-            run.node_ids.contains(&node_id) && run.cores.iter().any(|core| core == target)
+            run.status == BenchmarkRunStatus::Completed
+                && run.node_ids.contains(&node_id)
+                && run.cores.iter().any(|core| core == target)
         })
         .max_by_key(|run| (run.completed_at.unwrap_or(run.started_at), run.id))
 }
