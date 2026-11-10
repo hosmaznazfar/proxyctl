@@ -501,7 +501,10 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             statuses,
-            [BenchmarkRunStatus::Interrupted, BenchmarkRunStatus::Cancelled]
+            [
+                BenchmarkRunStatus::Interrupted,
+                BenchmarkRunStatus::Cancelled
+            ]
         );
     }
 }
