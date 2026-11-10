@@ -740,7 +740,7 @@ fn safe_field(value: &str, max_chars: usize) -> String {
 mod tests {
     use clap::Parser;
 
-    use super::{Cli, Command, display_core_version};
+    use super::{Cli, Command, TunCommand, display_core_version};
 
     #[test]
     fn list_command_accepts_metric_sorting_and_optional_core() {
