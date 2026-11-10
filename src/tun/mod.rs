@@ -330,7 +330,7 @@ fn yes_no(value: bool) -> &'static str {
     if value { "present" } else { "not detected" }
 }
 
-#[(cfg(target_os = "linux"), test)]
+#[cfg(all(target_os = "linux", test))]
 mod tests {
     use super::*;
 
