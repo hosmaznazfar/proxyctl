@@ -1,7 +1,7 @@
 # Benchmark design
 
 > Status: benchmark engine, metric sorting, and reporting implemented
-> Last updated: 2026-11-09
+> Last updated: 2026-11-10
 
 ## 1. Goals and scope
 
@@ -151,7 +151,7 @@ Persist the run before testing. Keep redb closed while any core process or measu
 4. **In progress:** add direct TCP ping as a distinct metric/target.
 5. **In progress:** add live metric/sample/download progress and cancellation that stops the active core while a request is in flight.
 6. Add service-level orchestration tests for normal completion, per-metric failure, Ctrl-C during each metric, child cleanup, and sample persistence.
-7. **Complete:** the expanded native config matrix and real single-node benchmark smoke tests passed. Metric-specific sorting is now being implemented before reports and pruning.
+7. **Complete:** the expanded native config matrix and real single-node benchmark smoke tests passed. Metric-specific sorting and latest/history/per-core comparison reports are implemented; pruning remains the next feature stage.
 
 ## 11. Metric-specific sorting and comparison
 
