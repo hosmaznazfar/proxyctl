@@ -815,8 +815,6 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    #[cfg(target_os = "linux")]
-    #[test]
     fn process_identity_includes_start_ticks_and_executable() {
         let pid = std::process::id();
         let exe = executable(pid).unwrap();
