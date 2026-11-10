@@ -373,9 +373,15 @@ fn ip_json_snapshot(arguments: &[&str]) -> anyhow::Result<Vec<String>> {
         .context("could not inspect Linux route tables")?;
     ensure!(output.status.success(),
         "could not capture the complete Linux route/rule baseline; TUN activation was not started");
-    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+    let mut value: serde_json::Value = serde_json::from_slice(&output.stdout)
         .context("iproute2 returned an invalid JSON route/rule snapshot")?;
-    let entries = value.as_array().context("iproute2 route/rule snapshot was not a JSON array")?;
+    let entries = value.as_array_mut().context("iproute2 route/rule snapshot was not a JSON array")?;
+    // IPv6 route lifetimes count down continuously; they are not route-ownership changes.
+    for entry in entries.iter_mut() {
+        if let Some(object) = entry.as_object_mut() {
+            object.remove("expires");
+        }
+    }
     let mut snapshot = entries.iter().map(serde_json::to_string)
         .collect::<Result<Vec<_>, _>>()?;
     snapshot.sort();
