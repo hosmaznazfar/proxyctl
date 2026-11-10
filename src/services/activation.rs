@@ -106,9 +106,7 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
             .with_context(|| format!("{core} rejected the activation config"))?;
 
         // Do not interrupt the existing activation until the replacement config validates.
-        stop_locked(&runtime, &state_path)?;
         let config = runtime.join(format!("active-{node_id}-{}.json", core.as_str()));
-        write_atomic(&config, &generated.content)?;
         let mut command = Command::new(&executable);
         match core {
             CoreId::SingBox | CoreId::Xray => {
@@ -118,52 +116,10 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
                 command.arg("-f").arg(&config);
             }
         }
-        let mut child = match command
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-        {
-            Ok(child) => child,
-            Err(error) => {
-                let _ = fs::remove_file(&config);
-                return Err(error).with_context(|| format!("could not start managed {core}"));
-            }
-        };
-        let pid = child.id();
-        let start_ticks = match await_identity(pid, &executable, WAIT) {
-            Ok(ticks) => ticks,
-            Err(error) => {
-                // Child::kill targets the exact Child handle, so it is safe even when procfs
-                // identity could not be established.
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = fs::remove_file(&config);
-                return Err(error);
-            }
-        };
-        let state = ActiveProcess {
-            pid,
-            start_ticks,
-            executable,
-            config,
-            node_id,
-            core: core.to_string(),
-            port,
-        };
-        if let Err(error) = write_atomic(&state_path, &serde_json::to_vec(&state)?) {
-            let _ = child.kill();
-            let _ = child.wait();
-            let _ = fs::remove_file(&state.config);
-            return Err(error);
-        }
-        // Persist ownership before the readiness wait, so interruption cannot orphan an
-        // untracked core during the full startup timeout.
-        drop(child);
-        if let Err(error) = await_listener(pid, start_ticks, port, WAIT) {
-            let _ = stop_locked(&runtime, &state_path);
-            return Err(error);
-        }
+        launch_managed(
+            &runtime, &state_path, &managed, &executable, &config, &generated.content,
+            node_id, core.as_str(), port, command, WAIT,
+        )?;
         println!("Activated node #{node_id} with {core}.");
         println!(
             "Local HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
@@ -187,7 +143,7 @@ pub fn stop_if_active_core(core: CoreId) -> anyhow::Result<()> {
         let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
             .context("activation state is corrupt; refusing to update a managed core")?;
         if state.core == core.as_str() {
-            stop_locked(&runtime, &state_path)?;
+            stop_locked(&runtime, &state_path, &managed)?;
         }
         Ok(())
     }
@@ -200,8 +156,72 @@ pub fn stop() -> anyhow::Result<()> {
     {
         let (runtime, state) = paths()?;
         let _lock = RuntimeLock::acquire(&runtime)?;
-        stop_locked(&runtime, &state)
+        let managed = fs::canonicalize(managed_cores_path()?)
+            .context("Proxyctl managed-core directory is unavailable; refusing to stop")?;
+        stop_locked(&runtime, &state, &managed)
     }
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+fn launch_managed(
+    runtime: &Path,
+    state_path: &Path,
+    managed_root: &Path,
+    executable: &Path,
+    config: &Path,
+    config_content: &[u8],
+    node_id: u64,
+    core: &str,
+    port: u16,
+    mut command: Command,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    ensure!(
+        executable.starts_with(managed_root),
+        "refusing to run a core outside Proxyctl's managed directory"
+    );
+    // Validate and prepare the replacement before stopping the current process.
+    write_atomic(config, config_content)?;
+    let mut child = match command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = fs::remove_file(config);
+            return Err(error).context("could not start managed core");
+        }
+    };
+    let pid = child.id();
+    let start_ticks = match await_identity(pid, executable, timeout) {
+        Ok(ticks) => ticks,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = fs::remove_file(config);
+            return Err(error);
+        }
+    };
+    let state = ActiveProcess {
+        pid, start_ticks, executable: executable.to_path_buf(), config: config.to_path_buf(),
+        node_id, core: core.to_owned(), port,
+    };
+    if let Err(error) = write_atomic(state_path, &serde_json::to_vec(&state)?) {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = fs::remove_file(config);
+        return Err(error);
+    }
+    // Persist ownership before readiness checks so failure can safely stop this exact process.
+    drop(child);
+    if let Err(error) = await_listener(pid, start_ticks, port, timeout) {
+        let _ = stop_locked(runtime, state_path, managed_root);
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn paths() -> anyhow::Result<(PathBuf, PathBuf)> {
@@ -229,7 +249,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 #[cfg(target_os = "linux")]
-fn stop_locked(runtime: &Path, state_path: &Path) -> anyhow::Result<()> {
+fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow::Result<()> {
     if !state_path.exists() {
         println!("No Proxyctl-managed core is active.");
         return Ok(());
@@ -244,8 +264,6 @@ fn stop_locked(runtime: &Path, state_path: &Path) -> anyhow::Result<()> {
                 .is_some_and(|n| n.to_string_lossy().starts_with("active-")),
         "activation config path is outside the private runtime directory; refusing cleanup"
     );
-    let managed_root = fs::canonicalize(managed_cores_path()?)
-        .context("Proxyctl managed-core directory is unavailable; refusing to signal")?;
     ensure!(
         state.executable.starts_with(managed_root),
         "recorded executable is outside Proxyctl's managed-core directory; refusing to signal"
