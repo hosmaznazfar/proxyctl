@@ -330,7 +330,7 @@ impl NetworkStatus {
             yes_no(self.network_manager_runtime)
         );
         println!(
-            "systemd-resolved runtime directory: {},
+            "systemd-resolved runtime directory: {}",
             yes_no(self.systemd_resolved_runtime)
         );
         println!(
@@ -441,6 +441,8 @@ mod tests {
         assert_eq!(status.dns_servers, ["127.0.0.53", "1.1.1.1"]);
         assert!(status.network_manager_runtime);
         assert!(status.systemd_resolved_runtime);
+        assert!(status.routes_inspected);
+        assert!(status.dns_inspected);
         assert_eq!(status.firewall.rules, 3);
     }
 
