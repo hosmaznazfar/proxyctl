@@ -294,7 +294,6 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     mode,
                     node_id: node,
                     core: parse_core(core.as_deref())?,
-                    verbose,
                 },
             )?;
             print_benchmark_report(&report, verbose);
@@ -705,7 +704,7 @@ fn safe_field(value: &str, max_chars: usize) -> String {
 mod tests {
     use clap::Parser;
 
-    use super::{Cli, Command};
+    use super::{Cli, Command, display_core_version};
 
     #[test]
     fn list_command_accepts_metric_sorting_and_optional_core() {
@@ -716,6 +715,22 @@ mod tests {
         );
         assert!(Cli::try_parse_from(["proxyctl", "list", "--core", "xray"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "unknown"]).is_err());
+    }
+
+    #[test]
+    fn concise_report_versions_extract_core_version_and_verbose_keeps_metadata() {
+        assert_eq!(
+            display_core_version("sing-box version 1.14.4 (linux; go1.26.0)", false),
+            "1.14.4"
+        );
+        assert_eq!(
+            display_core_version("Mihomo Meta v1.19.33", false),
+            "1.19.33"
+        );
+        assert_eq!(
+            display_core_version("Xray 26.11.9 (go1.26.0)", true),
+            "Xray 26.11.9 (go1.26.0)"
+        );
     }
 
     #[test]
