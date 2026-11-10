@@ -325,7 +325,7 @@ fn summarize_metric(
     let values = metric_samples
         .iter()
         .filter(|sample| sample.sample_index > 0)
-        .map(|sample| (*sample).clone())
+        .map(|sample| (**sample).clone())
         .collect::<Vec<_>>();
 
     MetricSummary {
@@ -481,10 +481,39 @@ mod tests {
         let database = NodeDatabase::open(&path).unwrap();
         let node: ProxyNode = parse_proxy_url("vless://uuid@example.test:443").unwrap();
         database.add_node(&node).unwrap();
-        let first = run(1, BenchmarkRunStatus::Cancelled, Some(20));
-        let second = run(2, BenchmarkRunStatus::Interrupted, Some(30));
-        // The history selector deliberately does not filter by lifecycle status.
-        assert_eq!(first.status, BenchmarkRunStatus::Cancelled);
-        assert_eq!(second.status, BenchmarkRunStatus::Interrupted);
+
+        let mut cancelled = run(0, BenchmarkRunStatus::Running, None);
+        cancelled.id = 0;
+        let cancelled_id = database.start_benchmark_run(cancelled).unwrap();
+        database
+            .finish_benchmark_run(cancelled_id, BenchmarkRunStatus::Cancelled, 20, None)
+            .unwrap();
+
+        let mut interrupted = run(0, BenchmarkRunStatus::Running, None);
+        interrupted.id = 0;
+        let interrupted_id = database.start_benchmark_run(interrupted).unwrap();
+        database
+            .finish_benchmark_run(interrupted_id, BenchmarkRunStatus::Interrupted, 30, None)
+            .unwrap();
+        drop(database);
+
+        let report = build_report(
+            &path,
+            ReportOptions {
+                mode: ReportMode::History,
+                node_id: Some(1),
+                core: None,
+            },
+        )
+        .unwrap();
+        let statuses = report.nodes[0]
+            .runs
+            .iter()
+            .map(|run| run.run.status)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            statuses,
+            [BenchmarkRunStatus::Interrupted, BenchmarkRunStatus::Cancelled]
+        );
     }
 }
