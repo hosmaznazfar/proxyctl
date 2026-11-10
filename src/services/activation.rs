@@ -57,8 +57,26 @@ impl TunBaseline {
             ipv6_rules: ip_json_snapshot(&["-j","-6","rule","show"] )?,
         })
     }
-    #[cfg(target_os = "linux")]
-    fn matches_current(&self) -> anyhow::Result<bool> { Ok(self == &Self::capture()?) }
+    fn differences(&self, current: &Self) -> Vec<String> {
+        let mut differences = Vec::new();
+        macro_rules! compare {
+            ($field:ident, $label:literal) => {
+                if self.$field != current.$field {
+                    differences.push($label.to_owned());
+                }
+            };
+        }
+        compare!(interfaces, "network interfaces");
+        compare!(tun_interfaces, "TUN/TAP interfaces");
+        compare!(default_routes, "default routes");
+        compare!(dns_servers, "DNS nameservers");
+        compare!(resolv_conf_target, "resolv.conf target");
+        compare!(ipv4_routes, "IPv4 routing tables");
+        compare!(ipv6_routes, "IPv6 routing tables");
+        compare!(ipv4_rules, "IPv4 policy rules");
+        compare!(ipv6_rules, "IPv6 policy rules");
+        differences
+    }
 }
 #[cfg(target_os = "linux")]
 struct TunLaunchContext {
@@ -700,8 +718,13 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
         ensure!(state.pid == 0 || !matches_process(state.pid, &state.executable, state.start_ticks),
             "the recorded TUN core is still running but its systemd unit is unavailable; refusing to signal it directly");
     }
-    ensure!(tun.baseline.matches_current()?,
-        "TUN cleanup did not restore the recorded interfaces, IPv4/IPv6 routes and rules, and DNS baseline; state/config retained for manual inspection, no routes or interfaces were deleted");
+    let current_baseline = TunBaseline::capture()?;
+    let differences = tun.baseline.differences(&current_baseline);
+    ensure!(
+        differences.is_empty(),
+        "TUN cleanup did not restore the baseline ({}) ; state/config retained for manual inspection, no routes or interfaces were deleted",
+        differences.join(", ")
+    );
     ensure!(state.config.parent() == Some(runtime),
         "TUN config path is outside the private runtime directory; refusing cleanup");
     fs::remove_file(&state.config)?;
@@ -832,6 +855,28 @@ fn private_fd(_fd: i32) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tun_baseline_reports_exact_changed_categories() {
+        let baseline = TunBaseline {
+            interfaces: vec!["lo".into()],
+            tun_interfaces: vec![],
+            default_routes: vec!["IPv4 default via wlan0".into()],
+            dns_servers: vec!["127.0.0.53".into()],
+            resolv_conf_target: Some("/run/systemd/resolve/stub-resolv.conf".into()),
+            ipv4_routes: vec!["main-route".into()],
+            ipv6_routes: vec!["main-v6-route".into()],
+            ipv4_rules: vec!["main-rule".into()],
+            ipv6_rules: vec!["main-v6-rule".into()],
+        };
+        let mut current = baseline.clone();
+        current.ipv4_routes.push("unexpected-route".into());
+        current.dns_servers = vec!["1.1.1.1".into()];
+        assert_eq!(
+            baseline.differences(&current),
+            vec!["DNS nameservers", "IPv4 routing tables"]
+        );
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn tun_capability_check_accepts_only_unprivileged_net_admin_service() {
