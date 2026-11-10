@@ -859,6 +859,19 @@ mod tests {
     }
 
     #[test]
+    fn tun_status_is_the_only_exposed_tun_operation() {
+        let cli = Cli::try_parse_from(["proxyctl", "tun", "status"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Tun {
+                command: TunCommand::Status
+            })
+        ));
+        assert!(Cli::try_parse_from(["proxyctl", "tun", "on"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "tun", "off"]).is_err());
+    }
+
+    #[test]
     fn test_command_accepts_one_node_and_core_with_custom_payloads() {
         let cli = Cli::try_parse_from([
             "proxyctl",
