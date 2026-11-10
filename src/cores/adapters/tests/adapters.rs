@@ -70,6 +70,41 @@ fn benchmark_configs_bind_only_to_loopback_for_each_core() {
 }
 
 #[test]
+fn activation_configs_share_one_loopback_port_for_socks5_and_http() {
+    let node =
+        parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        let generated = adapter(core)
+            .generate_activation_config(&node, 43128)
+            .unwrap();
+        let document: Value = serde_json::from_slice(&generated.content).unwrap();
+        match core {
+            CoreId::SingBox => {
+                assert_eq!(document["inbounds"][0]["type"], "mixed");
+                assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
+                assert_eq!(document["inbounds"][0]["listen_port"], 43128);
+                assert_eq!(document["route"]["final"], "proxy");
+            }
+            CoreId::Xray => {
+                assert_eq!(document["inbounds"][0]["protocol"], "socks");
+                assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
+                assert_eq!(document["inbounds"][0]["port"], 43128);
+                assert_eq!(document["inbounds"][0]["settings"]["auth"], "noauth");
+                assert_eq!(document["inbounds"][0]["settings"]["udp"], true);
+            }
+            CoreId::Mihomo => {
+                assert_eq!(document["mixed-port"], 43128);
+                assert_eq!(document["bind-address"], "127.0.0.1");
+                assert_eq!(document["allow-lan"], false);
+                assert!(document.get("port").is_none());
+                assert!(document.get("socks-port").is_none());
+            }
+        }
+    }
+}
+
+#[test]
 fn adapters_reject_unknown_transport_without_dropping_it() {
     let node =
         parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic")
