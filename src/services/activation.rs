@@ -1043,7 +1043,8 @@ mod tests {
         assert!(!tun_interfaces_are_safe(&["tun0".into()], false));
         assert!(!tun_interfaces_are_safe(&["tun-proxyctl".into()], false));
         assert!(!tun_interfaces_are_safe(
-            &["tun-proxyctl".into(), "tun0".into()], true
+            &["tun-proxyctl".into(), "tun0".into()],
+            true
         ));
     }
 
@@ -1082,7 +1083,8 @@ mod tests {
         );
         assert!(process_status_has_only_tun_capability(valid, 1000));
         assert!(!process_status_has_only_tun_capability(
-            &valid.replace("0000000000001000", "0000000000003000"), 1000
+            &valid.replace("0000000000001000", "0000000000003000"),
+            1000
         ));
         assert!(!process_status_has_only_tun_capability(valid, 0));
     }
@@ -1091,25 +1093,46 @@ mod tests {
     #[test]
     fn tun_service_command_limits_capabilities_and_keeps_user_identity() {
         let context = TunLaunchContext {
-            sudo: PathBuf::from("/usr/bin/sudo"), systemd_run: PathBuf::from("/usr/bin/systemd-run"),
+            sudo: PathBuf::from("/usr/bin/sudo"),
+            systemd_run: PathBuf::from("/usr/bin/systemd-run"),
             systemctl: PathBuf::from("/usr/bin/systemctl"),
-            unit: "proxyctl-tun-test.service".into(), uid: 1000, gid: 1000,
+            unit: "proxyctl-tun-test.service".into(),
+            uid: 1000,
+            gid: 1000,
             baseline: TunBaseline {
-                interfaces: vec![], tun_interfaces: vec![], default_routes: vec![],
-                dns_servers: vec![], resolv_conf_target: None, ipv4_routes: vec![], ipv6_routes: vec![],
-                ipv4_rules: vec![], ipv6_rules: vec![],
+                interfaces: vec![],
+                tun_interfaces: vec![],
+                default_routes: vec![],
+                dns_servers: vec![],
+                resolv_conf_target: None,
+                ipv4_routes: vec![],
+                ipv6_routes: vec![],
+                ipv4_rules: vec![],
+                ipv6_rules: vec![],
             },
         };
-        let command = build_tun_service_command(&context, Path::new("/managed/sing-box"),
-            CoreId::SingBox, Path::new("/runtime/active.json"));
-        let args = command.get_args().map(|arg| arg.to_string_lossy().into_owned())
+        let command = build_tun_service_command(
+            &context,
+            Path::new("/managed/sing-box"),
+            CoreId::SingBox,
+            Path::new("/runtime/active.json"),
+        );
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         for expected in [
-            "--property=User=1000", "--property=Group=1000",
+            "--property=User=1000",
+            "--property=Group=1000",
             "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
             "--property=AmbientCapabilities=CAP_NET_ADMIN",
-            "--property=NoNewPrivileges=yes", "--property=KillMode=control-group",
-            "--", "/managed/sing-box", "run", "-c", "/runtime/active.json"
+            "--property=NoNewPrivileges=yes",
+            "--property=KillMode=control-group",
+            "--",
+            "/managed/sing-box",
+            "run",
+            "-c",
+            "/runtime/active.json",
         ] {
             assert!(args.iter().any(|arg| arg == expected), "missing {expected}");
         }
@@ -1117,16 +1140,23 @@ mod tests {
         assert!(!args.iter().any(|arg| arg.contains("CAP_NET_RAW")));
 
         let preflight = build_tun_preflight_command(&context, Path::new("/usr/bin/true"));
-        let preflight_args = preflight.get_args()
+        let preflight_args = preflight
+            .get_args()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         for expected in [
-            "--wait", "--collect", "--property=User=1000",
+            "--wait",
+            "--collect",
+            "--property=User=1000",
             "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
             "--property=AmbientCapabilities=CAP_NET_ADMIN",
-            "--property=NoNewPrivileges=yes", "/usr/bin/true"
+            "--property=NoNewPrivileges=yes",
+            "/usr/bin/true",
         ] {
-            assert!(preflight_args.iter().any(|arg| arg == expected), "missing preflight {expected}");
+            assert!(
+                preflight_args.iter().any(|arg| arg == expected),
+                "missing preflight {expected}"
+            );
         }
     }
 
