@@ -352,6 +352,16 @@ fn signal_verified(pid: u32, expected: &Path, ticks: u64, signal: i32) -> anyhow
     // SAFETY: scalar PID/flags; successful result is an owned descriptor.
     let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0) as i32 };
     ensure!(fd >= 0, "could not obtain pidfd; refusing to signal by PID");
+    // The PID could have been reused between the first identity check and pidfd_open.
+    // Recheck while holding the pidfd; after this, signalling the pidfd cannot target a
+    // later process that reuses the numeric PID.
+    if !matches_process(pid, expected, ticks) {
+        // SAFETY: fd was opened above and is owned here.
+        unsafe {
+            libc::close(fd);
+        }
+        anyhow::bail!("process identity changed after pidfd acquisition; refusing signal");
+    }
     // SAFETY: fd is a valid pidfd and siginfo is unused for this syscall.
     let result = unsafe {
         libc::syscall(
