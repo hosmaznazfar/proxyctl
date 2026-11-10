@@ -2,7 +2,7 @@
 
 A lightweight Rust CLI for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, benchmark reports/history, and compatibility-aware pruning are implemented. Activation and TUN remain staged follow-up work.
+> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, benchmark reports/history, compatibility-aware pruning, and Linux single-core activation are implemented. TUN remains separate staged work.
 
 ## Goals
 
@@ -45,6 +45,21 @@ proxyctl cores
 ~~~
 
 The initial installer supports Linux x86_64. It selects stable assets from each core's official GitHub Releases API, verifies the GitHub-published SHA-256 asset digest before extraction, extracts only the expected regular executable without writing archive paths to disk, validates its reported version, then installs into the proxyctl data directory under cores/. It does not use PATH, package managers, sudo, or system directories. It does not start a core or change proxy, network, DNS, route, firewall, or TUN settings.
+
+## Single-core activation
+
+Activate one stored node with one explicitly selected Proxyctl-managed core:
+
+~~~sh
+proxyctl use 12 --core sing-box
+proxyctl use 12 --core xray
+proxyctl use 12 --core mihomo
+proxyctl stop
+~~~
+
+Only one normal Proxyctl-managed core may be active at a time. Switching validates the replacement config first, then stops the previously tracked Proxyctl process before starting the selected core. The HTTP listener binds exclusively to 127.0.0.1; the address is printed for manual application configuration. Proxyctl does not enable a system proxy or modify DNS, routes, firewall, or TUN settings. Stop verifies the recorded Linux process start identity and canonical executable path, then uses a pidfd-backed signal; stale or mismatched records never cause another process to be signalled. Activation currently requires Linux.
+
+Activation state and credentials-bearing runtime configuration are stored under the private Proxyctl runtime directory (0700 directory, 0600 files). State contains process identity and node/core identifiers only, not node credentials. Proxyctl uses only its own managed core binary path, never PATH fallback, and never manages another application's processes or core installations. The other managed core binaries remain idle and consume disk space only.
 
 ## Updating
 
@@ -151,7 +166,7 @@ proxyctl prune --core xray --unavailable --apply
 
 Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core mode, unsupported core/node combinations are excluded rather than counted as failures. A node is eligible only when every currently compatible core has a latest completed benchmark run with three distinct real-ping samples, all marked unreachable. One successful sample keeps the node. Missing runs, partial samples, invalid compatibility, startup/preflight errors, timeouts, cancellations, and other ambiguous HTTP/runtime failures prevent pruning. A newer completed run supersedes older evidence; cancelled/interrupted runs do not. Use `proxyctl restore ID` to restore a soft-deleted node.
 
-## Planned commands
+## Additional planned commands
 
 ~~~sh
 proxyctl test --all-cores
@@ -165,8 +180,6 @@ proxyctl list --sort ping
 proxyctl list --sort download
 proxyctl list --sort upload
 proxyctl prune --unavailable-all --dry-run
-proxyctl use 12 --core sing-box
-proxyctl stop
 proxyctl tun on
 proxyctl tun off
 ~~~
@@ -188,4 +201,4 @@ cargo build --release
 
 ## Security
 
-Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking. Only the explicit benchmark command starts a managed core, with a loopback-only listener.
+Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking. Only explicit benchmark and activation commands start a managed core, always with a loopback-only listener. Normal activation is limited to one Proxyctl-owned core process. Stop uses process-identity verification and cannot target another application's process. TUN remains unimplemented and no system networking settings are changed.
