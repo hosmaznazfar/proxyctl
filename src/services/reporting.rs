@@ -14,7 +14,6 @@ use crate::{
 };
 
 const DIRECT_TARGET: &str = "direct";
-const SAMPLES_PER_METRIC: usize = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReportMode {
@@ -209,7 +208,7 @@ fn build_comparisons(
         targets.sort();
         targets.dedup();
         if let Some(core) = selected_core {
-            targets.retain(|target| target == core.as_str());
+            targets.retain(|target| target.as_str() == core.as_str());
         }
 
         for target in targets {
@@ -346,7 +345,6 @@ mod tests {
 
     use super::*;
     use crate::{
-        database::NodeDatabase,
         domain::{BenchmarkSettings, ProxyNode},
         parser::parse_proxy_url,
     };
