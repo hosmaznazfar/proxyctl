@@ -61,6 +61,18 @@ Only one normal Proxyctl-managed core may be active at a time. Switching validat
 
 Setup and non-check update operations targeting the currently active core stop that exact tracked process before invoking the installer; update check-only remains read-only. Activation state and credentials-bearing runtime configuration are stored under the private Proxyctl runtime directory (0700 directory, 0600 files). State contains process identity and node/core identifiers only, not node credentials. Proxyctl uses only its own managed core binary path, never PATH fallback, and never manages another application's processes or core installations. The other managed core binaries remain idle and consume disk space only.
 
+## TUN safety inspection (read-only)
+
+The first TUN stage exposes only a read-only inspection command:
+
+~~~sh
+proxyctl tun status
+~~~
+
+It reports Linux network interfaces, detected TUN/TAP devices, IPv4/IPv6 default routes, resolver nameservers and `resolv.conf` target, NetworkManager/systemd-resolved runtime presence, and a summary of the current nftables or iptables ruleset when a supported listing utility is available. Firewall rule contents are never printed. If the firewall cannot be inspected, the output says so rather than treating missing evidence as an empty ruleset.
+
+This command does not create or delete interfaces, change routes, alter DNS, modify firewall rules, start a proxy core, or request elevated privileges. TUN activation/deactivation is not implemented yet; it will require a separate ownership and rollback design.
+
 ## Updating
 
 ~~~sh
