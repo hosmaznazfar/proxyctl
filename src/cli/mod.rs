@@ -59,6 +59,10 @@ enum Command {
     },
     /// Show managed core status and versions.
     Cores,
+    /// Activate one node using one Proxyctl-managed core (loopback only).
+    Use { id: u64, #[arg(long, value_name = "CORE", required = true)] core: String },
+    /// Stop only the exact process tracked by Proxyctl.
+    Stop,
     /// Install all supported cores, or one selected core.
     Setup {
         #[arg(long, value_name = "CORE")]
@@ -170,6 +174,14 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     None => println!("{}: not installed", status.core),
                 }
             }
+            return Ok(());
+        }
+        Command::Use { id, core } => {
+            crate::services::activation::activate(id, parse_core(Some(&core))?.expect("required core"))?;
+            return Ok(());
+        }
+        Command::Stop => {
+            crate::services::activation::stop()?;
             return Ok(());
         }
         Command::Setup { core } => {
@@ -379,7 +391,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 },
             )?;
         }
-        Command::Cores | Command::Setup { .. } | Command::Update { .. } => {
+        Command::Cores | Command::Setup { .. } | Command::Update { .. } | Command::Use { .. } | Command::Stop => {
             unreachable!("management commands are dispatched before database access")
         }
     }
@@ -711,6 +723,9 @@ mod tests {
         );
         assert!(Cli::try_parse_from(["proxyctl", "list", "--core", "xray"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "unknown"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "use", "12", "--core", "xray"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "use", "12"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "stop"]).is_ok());
     }
 
     #[test]
