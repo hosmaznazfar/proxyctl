@@ -70,6 +70,14 @@ pub fn inspect() -> Result<NetworkStatus> {
 
 #[cfg(target_os = "linux")]
 fn inspect_with_paths(paths: &InspectionPaths) -> Result<NetworkStatus> {
+    inspect_with_paths_and_firewall(paths, None)
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_with_paths_and_firewall(
+    paths: &InspectionPaths,
+    firewall_override: Option<FirewallStatus>,
+) -> Result<NetworkStatus> {
     let mut interfaces = Vec::new();
     let mut tun_interfaces = Vec::new();
 
@@ -107,12 +115,7 @@ fn inspect_with_paths(paths: &InspectionPaths) -> Result<NetworkStatus> {
         .map(|contents| parse_dns_servers(&contents))
         .unwrap_or_default();
 
-    let firewall = inspect_firewall(paths);
-    inspect_with_firewall(paths, firewall)
-}
-
-#[cfg(target_os = "linux")]
-fn inspect_with_firewall(paths: &InspectionPaths, firewall: FirewallStatus) -> Result<NetworkStatus> {
+    let firewall = firewall_override.unwrap_or_else(|| inspect_firewall(paths));
     Ok(NetworkStatus {
         interfaces,
         tun_interfaces,
@@ -404,7 +407,7 @@ mod tests {
             detail: "injected read-only fixture".into(),
         };
 
-        let status = inspect_with_firewall(&paths, firewall).unwrap();
+        let status = inspect_with_paths_and_firewall(&paths, Some(firewall)).unwrap();
         assert_eq!(status.interfaces, ["eth0", "tun0"]);
         assert_eq!(status.tun_interfaces, ["tun0"]);
         assert_eq!(
