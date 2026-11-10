@@ -467,6 +467,11 @@ fn launch_tun_managed(
     Ok(())
 }
 
+fn tun_interfaces_are_safe(interfaces: &[String], active_proxyctl_tun: bool) -> bool {
+    interfaces.is_empty()
+        || (active_proxyctl_tun && interfaces.iter().all(|name| name == "tun-proxyctl"))
+}
+
 #[cfg(target_os = "linux")]
 fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLaunchContext> {
     ensure!(Path::new("/run/systemd/system").is_dir(),
@@ -486,10 +491,8 @@ fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLa
     ensure!(status.routes_inspected && status.dns_inspected,
         "TUN activation requires readable baseline route and DNS state; no changes were made");
     ensure!(
-        status.tun_interfaces.is_empty()
-            || (active_proxyctl_tun
-                && status.tun_interfaces.iter().all(|name| name == "tun-proxyctl")),
-        "another TUN/TAP interface is already present; stop that VPN before enabling Proxyctl TUN mode"
+        tun_interfaces_are_safe(&status.tun_interfaces, active_proxyctl_tun),
+        "a foreign TUN/TAP interface is already present; stop that VPN before enabling Proxyctl TUN mode"
     );
     let baseline = TunBaseline::capture()?;
     let sudo = find_program("sudo")?;
@@ -855,6 +858,17 @@ fn private_fd(_fd: i32) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tun_preflight_refuses_foreign_tun_interfaces_but_allows_its_own_for_switching() {
+        assert!(tun_interfaces_are_safe(&[], false));
+        assert!(tun_interfaces_are_safe(&["tun-proxyctl".into()], true));
+        assert!(!tun_interfaces_are_safe(&["tun0".into()], false));
+        assert!(!tun_interfaces_are_safe(&["tun-proxyctl".into()], false));
+        assert!(!tun_interfaces_are_safe(
+            &["tun-proxyctl".into(), "tun0".into()], true
+        ));
+    }
+
     #[test]
     fn tun_baseline_reports_exact_changed_categories() {
         let baseline = TunBaseline {
