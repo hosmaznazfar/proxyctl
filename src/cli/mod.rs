@@ -4,6 +4,7 @@ use crate::{
     database::{AddNodeOutcome, NodeRecord, default_database_path},
     services::{
         nodes,
+        reporting::{self, ReportMode, ReportOptions},
         sorting::{self, SortMetric},
     },
     updates::release::ReleaseChannel,
@@ -99,6 +100,22 @@ enum Command {
         /// Maximum startup/readiness wait for a managed core, in seconds.
         #[arg(long, default_value_t = 10)]
         startup_timeout_secs: u64,
+    },
+    /// Show benchmark results, per-node history, or per-core comparisons.
+    #[command(group(ArgGroup::new("report_view").args(["history", "compare"]).multiple(false)))]
+    Report {
+        /// Restrict the report to one stored node.
+        #[arg(long)]
+        node: Option<u64>,
+        /// Show every benchmark run, newest first.
+        #[arg(long)]
+        history: bool,
+        /// Compare the latest completed result for each core independently.
+        #[arg(long)]
+        compare: bool,
+        /// Restrict --compare to one managed core.
+        #[arg(long, value_name = "CORE", requires = "compare")]
+        core: Option<String>,
     },
     /// Check for and install proxyctl and managed-core updates.
     #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
@@ -234,6 +251,14 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 parse_core(core.as_deref())?,
             )?;
         }
+        Command::Report { node, history, compare, core } => {
+            let mode = if compare { ReportMode::Compare } else if history { ReportMode::History } else { ReportMode::Latest };
+            let report = reporting::build_report(
+                &database_path,
+                ReportOptions { mode, node_id: node, core: parse_core(core.as_deref())? },
+            )?;
+            print_benchmark_report(&report);
+        }
         Command::Test {
             all_cores,
             node,
@@ -275,6 +300,156 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+fn print_benchmark_report(report: &reporting::BenchmarkReport) {
+    use reporting::ReportMode;
+
+    if report.mode == ReportMode::Compare {
+        if report.comparisons.is_empty() {
+            println!("No completed benchmark comparisons found.");
+            return;
+        }
+        for comparison in &report.comparisons {
+            println!(
+                "Node #{} {}:{} — {} — run #{}{}",
+                comparison.node.id,
+                safe_field(&comparison.node.node.server, 48),
+                comparison.node.node.port,
+                comparison.target,
+                comparison.run_id,
+                comparison
+                    .core_version
+                    .as_deref()
+                    .map(|version| format!(" ({version})"))
+                    .unwrap_or_default()
+            );
+            for metric in &comparison.metrics {
+                print_metric_summary(metric);
+            }
+            println!();
+        }
+        return;
+    }
+
+    if report.nodes.is_empty() {
+        println!("No proxy nodes found.");
+        return;
+    }
+    for node in &report.nodes {
+        println!(
+            "Node #{} {}:{}{}",
+            node.node.id,
+            safe_field(&node.node.node.server, 48),
+            node.node.node.port,
+            node.node
+                .node
+                .name
+                .as_deref()
+                .map(|name| format!(" — {}", safe_field(name, 48)))
+                .unwrap_or_default()
+        );
+        if node.runs.is_empty() {
+            println!("  No benchmark history.");
+            println!();
+            continue;
+        }
+        for run in &node.runs {
+            println!(
+                "  Run #{} — {} — started {} — completed {}",
+                run.run.id,
+                run_status_label(run.run.status),
+                run.run.started_at,
+                run.run
+                    .completed_at
+                    .map(|timestamp| timestamp.to_string())
+                    .unwrap_or_else(|| "-".into())
+            );
+            if let Some(summary) = run.run.summary.as_deref() {
+                println!("    Summary: {}", safe_field(summary, 160));
+            }
+            for target in &run.targets {
+                println!(
+                    "    {}{}",
+                    target.target,
+                    target
+                        .core_version
+                        .as_deref()
+                        .map(|version| format!(" ({version})"))
+                        .unwrap_or_default()
+                );
+                for metric in &target.metrics {
+                    print_metric_summary(metric);
+                }
+            }
+        }
+        println!();
+    }
+}
+
+fn print_metric_summary(summary: &reporting::MetricSummary) {
+    let label = summary.metric.label();
+    let missing = 3_usize.saturating_sub(summary.attempted);
+    let failures = summary
+        .failures
+        .iter()
+        .map(|failure| format!("{}={}", sample_status_label(failure.status), failure.count))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let suffix = if failures.is_empty() {
+        String::new()
+    } else {
+        format!("; {failures}")
+    };
+    let missing_suffix = if missing > 0 {
+        format!("; {missing} not run")
+    } else {
+        String::new()
+    };
+
+    match (summary.median, summary.successful) {
+        (Some(value), 3) => println!(
+            "      {label}: {:.2} {} (3/3 successful)",
+            value,
+            summary.metric.unit()
+        ),
+        (Some(value), successful) => println!(
+            "      {label}: {:.2} {} (partial: {successful}/3 successful{suffix}{missing_suffix})",
+            value,
+            summary.metric.unit()
+        ),
+        (None, _) if summary.preflight.is_some() => println!(
+            "      {label}: {} (preflight)",
+            sample_status_label(summary.preflight.expect("checked above"))
+        ),
+        (None, 0) if summary.attempted == 0 => {
+            println!("      {label}: not run (0/3)")
+        }
+        (None, _) => println!(
+            "      {label}: no successful samples (0/3{suffix}{missing_suffix})"
+        ),
+    }
+}
+
+fn run_status_label(status: crate::domain::BenchmarkRunStatus) -> &'static str {
+    match status {
+        crate::domain::BenchmarkRunStatus::Running => "running",
+        crate::domain::BenchmarkRunStatus::Completed => "completed",
+        crate::domain::BenchmarkRunStatus::Interrupted => "interrupted",
+        crate::domain::BenchmarkRunStatus::Cancelled => "cancelled",
+    }
+}
+
+fn sample_status_label(status: crate::domain::BenchmarkSampleStatus) -> &'static str {
+    match status {
+        crate::domain::BenchmarkSampleStatus::Success => "success",
+        crate::domain::BenchmarkSampleStatus::Unreachable => "unreachable",
+        crate::domain::BenchmarkSampleStatus::Unsupported => "unsupported",
+        crate::domain::BenchmarkSampleStatus::Invalid => "invalid",
+        crate::domain::BenchmarkSampleStatus::Timeout => "timeout",
+        crate::domain::BenchmarkSampleStatus::Unavailable => "unavailable",
+        crate::domain::BenchmarkSampleStatus::Cancelled => "cancelled",
+    }
 }
 
 fn parse_core(value: Option<&str>) -> anyhow::Result<Option<CoreId>> {
@@ -432,6 +607,20 @@ mod tests {
         );
         assert!(Cli::try_parse_from(["proxyctl", "list", "--core", "xray"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "unknown"]).is_err());
+    }
+
+    #[test]
+    fn report_command_accepts_latest_history_and_core_comparison_views() {
+        assert!(Cli::try_parse_from(["proxyctl", "report"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "report", "--node", "18", "--history"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "report", "--compare"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["proxyctl", "report", "--compare", "--core", "xray"]).is_ok()
+        );
+        assert!(Cli::try_parse_from(["proxyctl", "report", "--core", "xray"]).is_err());
+        assert!(
+            Cli::try_parse_from(["proxyctl", "report", "--history", "--compare"]).is_err()
+        );
     }
 
     #[test]
