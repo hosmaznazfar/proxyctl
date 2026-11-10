@@ -25,6 +25,12 @@ pub struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
+enum TunCommand {
+    /// Show interfaces, default routes, DNS, and firewall state (read-only).
+    Status,
+}
+
+#[derive(Debug, Subcommand)]
 enum Command {
     Add {
         url: String,
@@ -148,6 +154,11 @@ enum Command {
         #[arg(long, conflicts_with = "dry_run")]
         apply: bool,
     },
+    /// Inspect Linux networking state without changing it.
+    Tun {
+        #[command(subcommand)]
+        command: TunCommand,
+    },
     /// Check for and install proxyctl and managed-core updates.
     #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
     Update {
@@ -171,6 +182,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         return Ok(());
     };
     let command = match command {
+        Command::Tun { command: TunCommand::Status } => {
+            crate::tun::inspect()?.print();
+            return Ok(());
+        }
         Command::Cores => {
             for status in crate::services::cores::inventory()? {
                 match status.version {
@@ -401,7 +416,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         | Command::Setup { .. }
         | Command::Update { .. }
         | Command::Use { .. }
-        | Command::Stop => {
+        | Command::Stop
+        | Command::Tun { .. } => {
             unreachable!("management commands are dispatched before database access")
         }
     }
