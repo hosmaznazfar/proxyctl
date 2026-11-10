@@ -146,10 +146,7 @@ fn evaluate_node(
     }
     if compatible == 0 {
         if !incomplete.is_empty() {
-            return (
-                PruneDecision::InsufficientEvidence,
-                incomplete.join("; "),
-            );
+            return (PruneDecision::InsufficientEvidence, incomplete.join("; "));
         }
         let detail = if unsupported.is_empty() {
             "no installed compatible core is available".to_owned()
