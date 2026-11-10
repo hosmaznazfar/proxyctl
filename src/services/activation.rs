@@ -183,6 +183,7 @@ fn launch_managed(
     );
     // Validate and prepare the replacement before stopping the current process.
     write_atomic(config, config_content)?;
+    stop_locked(runtime, state_path, managed_root)?;
     let mut child = match command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -447,6 +448,113 @@ mod tests {
         signal_verified(pid, &exe, ticks, libc::SIGTERM).unwrap();
         child.wait().unwrap();
         assert!(!matches_process(pid, &exe, ticks));
+    }
+
+    #[cfg(target_os = "linux")]
+    fn test_managed_root(directory: &Path) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let managed = directory.join("managed");
+        fs::create_dir_all(&managed).unwrap();
+        let source = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|path| path.join("sleep"))
+            .find(|path| path.is_file())
+            .expect("sleep utility is required for process lifecycle tests");
+        let fake = managed.join("fake-core");
+        fs::copy(source, &fake).unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
+        (managed, fake)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn activation_switches_managed_process_and_stop_cleans_state_and_config() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let runtime = dir.path().join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        let state_path = runtime.join("active.json");
+        let (managed, fake) = test_managed_root(dir.path());
+        let managed = fs::canonicalize(managed).unwrap();
+        let fake = fs::canonicalize(fake).unwrap();
+        let readiness = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = readiness.local_addr().unwrap().port();
+
+        for (node_id, core) in [(1, "sing-box"), (2, "xray"), (3, "mihomo")] {
+            let config = runtime.join(format!("active-{node_id}-{core}.json"));
+            let mut command = Command::new(&fake);
+            command.arg("30");
+            launch_managed(
+                &runtime, &state_path, &managed, &fake, &config, b"{}",
+                node_id, core, port, command, Duration::from_secs(2),
+            ).unwrap();
+            let state: ActiveProcess =
+                serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+            assert_eq!(state.node_id, node_id);
+            assert_eq!(state.core, core);
+            assert!(matches_process(state.pid, &fake, state.start_ticks));
+            if node_id > 1 {
+                let previous_config = runtime.join(format!("active-{}-{}.json", node_id - 1,
+                    ["", "sing-box", "xray"][node_id as usize]));
+                assert!(!previous_config.exists(), "previous activation config must be removed");
+            }
+        }
+
+        let final_state: ActiveProcess =
+            serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
+        stop_locked(&runtime, &state_path, &managed).unwrap();
+        assert!(!matches_process(final_state.pid, &fake, final_state.start_ticks));
+        assert!(!state_path.exists());
+        assert!(!runtime.join("active-3-mihomo.json").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn readiness_failure_stops_fake_process_and_removes_runtime_files() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let runtime = dir.path().join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        let state_path = runtime.join("active.json");
+        let (managed, fake) = test_managed_root(dir.path());
+        let managed = fs::canonicalize(managed).unwrap();
+        let fake = fs::canonicalize(fake).unwrap();
+        let unavailable = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = unavailable.local_addr().unwrap().port();
+        drop(unavailable);
+        let config = runtime.join("active-4-sing-box.json");
+        let mut command = Command::new(&fake);
+        command.arg("30");
+
+        assert!(launch_managed(
+            &runtime, &state_path, &managed, &fake, &config, b"{}",
+            4, "sing-box", port, command, Duration::from_millis(150),
+        ).is_err());
+        assert!(!state_path.exists());
+        assert!(!config.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn activation_refuses_fake_executable_outside_managed_directory() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let runtime = dir.path().join("runtime");
+        fs::create_dir_all(&runtime).unwrap();
+        let state_path = runtime.join("active.json");
+        let (managed, fake) = test_managed_root(dir.path());
+        let managed = fs::canonicalize(managed).unwrap();
+        let fake = fs::canonicalize(fake).unwrap();
+        let outside = dir.path().join("outside");
+        fs::copy(&fake, &outside).unwrap();
+        let config = runtime.join("active-5-xray.json");
+        let command = Command::new(&outside);
+
+        assert!(launch_managed(
+            &runtime, &state_path, &managed, &outside, &config, b"{}",
+            5, "xray", 12345, command, Duration::from_millis(100),
+        ).is_err());
+        assert!(!state_path.exists());
+        assert!(!config.exists());
     }
 
     #[test]
