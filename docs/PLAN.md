@@ -258,9 +258,20 @@ A compatible core contributes an unavailable result only when its latest complet
 
 Pruning is a soft-delete/lifecycle-state change, not immediate permanent erasure. Use `proxyctl restore ID` to restore a node. Pruning reads persisted benchmark evidence only: it does not start cores, contact measurement endpoints, or change system networking.
 
-### 3.8 Activation and TUN safety
+### 3.8 Managed activation and TUN safety
 
-Normal activation selects one node and one core. The stop command stops only processes started and tracked by proxyctl.
+**Linux single-core activation: implemented.** The command surface is:
+
+~~~sh
+proxyctl use 12 --core sing-box
+proxyctl stop
+~~~
+
+Activation is restricted to one node and one explicitly selected Proxyctl-managed core. The generated loopback-only config is checked with the selected core's native validator before the current Proxyctl process is stopped. Switching then stops the previous tracked process and starts only the new selected core. A private runtime lock serializes activation/stop operations. The process record includes PID, Linux process start ticks, canonical managed executable path, node/core IDs, loopback port, and private config path; it contains no node credentials. Stop verifies process identity and uses a pidfd-backed signal, preventing PID reuse from redirecting the signal to an unrelated process. Stale/mismatched process records are cleaned without signalling any process.
+
+The core HTTP inbound binds only to 127.0.0.1. The CLI prints the local listener address for manual application configuration. It does not enable a system proxy or change DNS, routes, firewall, or TUN. Only binaries at Proxyctl's private managed-core paths are eligible; there is no PATH fallback and no discovery, update, reuse, or shutdown of cores owned by V2rayN or other applications. Other installed core binaries remain idle during normal activation. Runtime config and state live in a 0700 directory with 0600 files. Activation currently requires Linux; equivalent process-identity support is required before enabling other platforms.
+
+Implementation tests cover process identity and credential-free state serialization; they do not start a real proxy core. Actual activation is an explicit user command.
 
 TUN is a separate opt-in feature. It must detect existing interfaces, routes, DNS configuration, NetworkManager/systemd-resolved state, and firewall configuration before making changes. It must not assume it owns the machine's network stack. Enabling TUN requires explicit user intent, privilege escalation where needed, and a rollback/cleanup path. Benchmarking must not depend on TUN and must use isolated local listeners.
 
@@ -400,7 +411,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 7. Benchmark engine: **complete for the current contract**. Typed records, schema migration, short sample transactions, aggregation primitives, stale-run recovery, per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cooperative cancellation, progress, native validation, and real single-node smoke tests are implemented.
 8. Reports and sorting: **implemented**. Metric-specific sorting, latest-run reports, full per-node history, and per-core comparison views are implemented with partial/failure/missing-sample accounting. Concise core versions are the default; `--verbose` displays complete stored build metadata.
 9. **Complete:** compatibility-aware pruning with default dry-run, explicit soft-delete apply, unsupported-core exclusion, latest-completed evidence, and conservative handling of incomplete or ambiguous samples.
-10. Activation: managed process lifecycle and safe stop behavior.
+10. **Implemented on Linux:** single-core activation, private runtime state/config, loopback-only inbound, process identity verification, serialized switching, and safe stop. Other platforms remain disabled pending equivalent process-handle support.
 11. TUN: implement only after network-state detection and rollback design are tested.
 12. Hardening: integration tests, documentation, packaging, security review, and performance checks.
 
