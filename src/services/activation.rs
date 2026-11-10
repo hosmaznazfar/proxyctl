@@ -47,8 +47,6 @@ impl TunBaseline {
         let status = crate::tun::inspect()?;
         ensure!(status.routes_inspected && status.dns_inspected,
             "TUN activation requires readable baseline route and DNS state; no changes were made");
-        ensure!(status.tun_interfaces.is_empty(),
-            "another TUN/TAP interface is already present; stop that VPN before enabling Proxyctl TUN mode");
         Ok(Self {
             interfaces: status.interfaces, tun_interfaces: status.tun_interfaces,
             default_routes: status.default_routes, dns_servers: status.dns_servers,
@@ -161,7 +159,7 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result
             }
         }
         if tun_enabled {
-            let context = prepare_tun_launch()?;
+            let context = prepare_tun_launch(&runtime, &state_path)?;
             launch_tun_managed(&runtime, &state_path, &managed, &executable, &config,
                 &generated.content, node_id, core, port, context, WAIT)?;
         } else {
@@ -406,7 +404,11 @@ fn launch_tun_managed(
     }
     // If replacing an existing TUN core, snapshot only after its owned routes are gone.
     context.baseline = match TunBaseline::capture() {
-        Ok(baseline) => baseline,
+        Ok(baseline) if baseline.tun_interfaces.is_empty() => baseline,
+        Ok(_) => {
+            let _ = fs::remove_file(config);
+            anyhow::bail!("another TUN/TAP interface remains after stopping Proxyctl's previous activation; refusing to start a second TUN");
+        }
         Err(error) => {
             let _ = fs::remove_file(config);
             return Err(error);
@@ -448,11 +450,27 @@ fn launch_tun_managed(
 }
 
 #[cfg(target_os = "linux")]
-fn prepare_tun_launch() -> anyhow::Result<TunLaunchContext> {
+fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLaunchContext> {
     ensure!(Path::new("/run/systemd/system").is_dir(),
         "TUN activation requires a running systemd system manager; ordinary activation remains available");
     let _tun_device = OpenOptions::new().read(true).write(true).open("/dev/net/tun")
         .context("TUN activation requires readable/writable /dev/net/tun")?;
+    let active_proxyctl_tun = if state_path.exists() {
+        let state: ActiveProcess = serde_json::from_slice(&fs::read(state_path)?)
+            .context("activation state is corrupt; refusing TUN preflight")?;
+        state.tun.is_some()
+    } else {
+        false
+    };
+    let status = crate::tun::inspect()?;
+    ensure!(status.routes_inspected && status.dns_inspected,
+        "TUN activation requires readable baseline route and DNS state; no changes were made");
+    ensure!(
+        status.tun_interfaces.is_empty()
+            || (active_proxyctl_tun
+                && status.tun_interfaces.iter().all(|name| name == "tun-proxyctl")),
+        "another TUN/TAP interface is already present; stop that VPN before enabling Proxyctl TUN mode"
+    );
     let baseline = TunBaseline::capture()?;
     let sudo = find_program("sudo")?;
     let systemd_run = find_program("systemd-run")?;
