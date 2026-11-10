@@ -65,7 +65,7 @@ When the system default route points to the TUN interface, the proxy core's own 
 
 Linux TUN device creation and route configuration require `CAP_NET_ADMIN`. Proxyctl uses a transient systemd system service instead of running the core as root. It authenticates with `sudo -v` through the user's terminal, then runs the core with the invoking UID/GID, `CapabilityBoundingSet=CAP_NET_ADMIN`, `AmbientCapabilities=CAP_NET_ADMIN`, and `NoNewPrivileges=yes`. The service is cgroup-owned by systemd, has a bounded stop timeout, and no restart policy. Proxyctl verifies MainPID, process start ticks, canonical executable, UID, and capability masks before accepting readiness. No file capabilities are changed, no password is stored, and no permanent privileged daemon is installed.
 
-If systemd, sudo authorization, iproute2, or TUN device access is unavailable, TUN activation fails before the previous activation is stopped. Ordinary loopback activation remains independent of these requirements.
+If systemd, sudo authorization, iproute2, or TUN device access is unavailable, or another TUN/TAP interface is already present, TUN activation fails before the previous activation is stopped. Ordinary loopback activation remains independent of these requirements.
 
 ## Ownership, rollback, and recovery requirements
 
