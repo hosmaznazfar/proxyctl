@@ -5,9 +5,11 @@ use crate::{
 };
 use anyhow::{Context, ensure};
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
+use std::io::Read;
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Write,
     net::{TcpListener, TcpStream},
     os::fd::AsRawFd,
     path::{Path, PathBuf},
