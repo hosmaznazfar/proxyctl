@@ -36,7 +36,7 @@ struct TunProcess { unit: String, uid: u32, baseline: TunBaseline }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct TunBaseline {
     interfaces: Vec<String>, tun_interfaces: Vec<String>, default_routes: Vec<String>,
-    dns_servers: Vec<String>, ipv4_routes: Vec<String>, ipv6_routes: Vec<String>,
+    dns_servers: Vec<String>, resolv_conf_target: Option<String>, ipv4_routes: Vec<String>, ipv6_routes: Vec<String>,
     ipv4_rules: Vec<String>, ipv6_rules: Vec<String>,
 }
 impl TunBaseline {
@@ -48,6 +48,7 @@ impl TunBaseline {
         Ok(Self {
             interfaces: status.interfaces, tun_interfaces: status.tun_interfaces,
             default_routes: status.default_routes, dns_servers: status.dns_servers,
+            resolv_conf_target: status.resolv_conf_target,
             ipv4_routes: ip_json_snapshot(&["-j","-4","route","show","table","all"] )?,
             ipv6_routes: ip_json_snapshot(&["-j","-6","route","show","table","all"] )?,
             ipv4_rules: ip_json_snapshot(&["-j","-4","rule","show"] )?,
@@ -780,7 +781,7 @@ mod tests {
             unit: "proxyctl-tun-test.service".into(), uid: 1000, gid: 1000,
             baseline: TunBaseline {
                 interfaces: vec![], tun_interfaces: vec![], default_routes: vec![],
-                dns_servers: vec![], ipv4_routes: vec![], ipv6_routes: vec![],
+                dns_servers: vec![], resolv_conf_target: None, ipv4_routes: vec![], ipv6_routes: vec![],
                 ipv4_rules: vec![], ipv6_rules: vec![],
             },
         };
