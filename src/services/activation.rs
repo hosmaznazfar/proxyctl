@@ -145,7 +145,7 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result
             .with_context(|| format!("{core} rejected the activation config"))?;
 
         // Do not interrupt the existing activation until the replacement config validates.
-        let config = runtime.join(format!("active-{node_id}-{}.json", core.as_str()));
+        let config = runtime.join(format!("active-{node_id}-{}-{port}.json", core.as_str()));
         let mut command = Command::new(&executable);
         match core {
             CoreId::SingBox | CoreId::Xray => {
@@ -231,7 +231,10 @@ fn launch_managed(
     );
     // Validate and prepare the replacement before stopping the current process.
     write_atomic(config, config_content)?;
-    stop_locked(runtime, state_path, managed_root)?;
+    if let Err(error) = stop_locked(runtime, state_path, managed_root) {
+        let _ = fs::remove_file(config);
+        return Err(error);
+    }
     let mut child = match command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -386,7 +389,10 @@ fn launch_tun_managed(
     ensure!(executable.starts_with(managed_root),
         "refusing to run a core outside Proxyctl's managed directory");
     write_atomic(config, config_content)?;
-    stop_locked(runtime, state_path, managed_root)?;
+    if let Err(error) = stop_locked(runtime, state_path, managed_root) {
+        let _ = fs::remove_file(config);
+        return Err(error);
+    }
     // If replacing an existing TUN core, snapshot only after its owned routes are gone.
     context.baseline = TunBaseline::capture()?;
     let mut state = ActiveProcess {
@@ -443,7 +449,7 @@ fn prepare_tun_launch() -> anyhow::Result<TunLaunchContext> {
     let suffix = token.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     let unit = format!("proxyctl-tun-{suffix}.service");
     Ok(TunLaunchContext {
-        sudo, systemd_run, systemctl, unit, uid: libc::getuid(), gid: libc::getgid(), baseline
+        sudo, systemd_run, systemctl, unit, uid: unsafe { libc::getuid() }, gid: unsafe { libc::getgid() }, baseline
     })
 }
 
@@ -587,7 +593,7 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
     ensure!(authorization.success(), "sudo authorization was not granted; TUN service was not stopped");
     let context = TunLaunchContext {
         sudo, systemd_run: PathBuf::new(), systemctl, unit: tun.unit.clone(),
-        uid: tun.uid, gid: libc::getgid(), baseline: tun.baseline.clone(),
+        uid: tun.uid, gid: unsafe { libc::getgid() }, baseline: tun.baseline.clone(),
     };
     let load_state = systemd_property(&context, "LoadState")?;
     if load_state == "loaded" {
