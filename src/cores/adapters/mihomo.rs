@@ -9,11 +9,12 @@ use crate::{
 };
 
 use super::{
-    CoreAdapter, json_config, summarize_validation_failure,
+    CoreAdapter, json_config,
     shared::{
         Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
         shadowsocks_plugin, tls_options, validate_for_core,
     },
+    summarize_validation_failure,
 };
 
 pub struct MihomoAdapter;

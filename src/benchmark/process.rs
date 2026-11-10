@@ -237,7 +237,9 @@ fn summarize_startup_failure(fallback: &str, log_path: &Path) -> String {
 
 fn classify_runtime_diagnostic(contents: &str) -> Option<&'static str> {
     let diagnostic = contents.to_ascii_lowercase();
-    if diagnostic.contains("websocket: bad handshake") || diagnostic.contains("bad websocket handshake") {
+    if diagnostic.contains("websocket: bad handshake")
+        || diagnostic.contains("bad websocket handshake")
+    {
         Some("the remote server rejected the WebSocket handshake")
     } else if diagnostic.contains("certificate verify failed")
         || diagnostic.contains("failed to verify certificate")
@@ -250,7 +252,8 @@ fn classify_runtime_diagnostic(contents: &str) -> Option<&'static str> {
         Some("the core could not resolve the remote server hostname")
     } else if diagnostic.contains("connection refused") {
         Some("the remote server refused the outbound connection")
-    } else if diagnostic.contains("i/o timeout") || diagnostic.contains("context deadline exceeded") {
+    } else if diagnostic.contains("i/o timeout") || diagnostic.contains("context deadline exceeded")
+    {
         Some("the outbound connection timed out")
     } else if diagnostic.contains("connection reset by peer") {
         Some("the remote server reset the outbound connection")
@@ -354,7 +357,10 @@ mod tests {
         let diagnostic = classify_runtime_diagnostic(
             "[error] websocket: bad handshake for user=secret url=https://example.invalid/path",
         );
-        assert_eq!(diagnostic, Some("the remote server rejected the WebSocket handshake"));
+        assert_eq!(
+            diagnostic,
+            Some("the remote server rejected the WebSocket handshake")
+        );
         assert!(!diagnostic.unwrap().contains("secret"));
         assert_eq!(
             classify_runtime_diagnostic("dial tcp 203.0.113.1:443: i/o timeout"),
@@ -443,8 +449,7 @@ mod tests {
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
         let log = NamedTempFile::new().unwrap();
-        let mut child =
-            spawn_core(CoreId::Mihomo, &executable, &config, &log).unwrap();
+        let mut child = spawn_core(CoreId::Mihomo, &executable, &config, &log).unwrap();
         assert!(child.wait().unwrap().success());
 
         let contents = fs::read_to_string(log.path()).unwrap();

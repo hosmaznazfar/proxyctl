@@ -277,17 +277,8 @@ fn execute_run(
                 Ok(process) => process,
                 Err(error) => {
                     let (status, category, reason) = classify_core_start_failure(&error);
-                    record_preflight(
-                        database_path,
-                        &context,
-                        status,
-                        category,
-                        reason,
-                    )?;
-                    println!(
-                        "run #{run_id} node #{} {core}: {reason}",
-                        record.id
-                    );
+                    record_preflight(database_path, &context, status, category, reason)?;
+                    println!("run #{run_id} node #{} {core}: {reason}", record.id);
                     continue;
                 }
             };
@@ -369,7 +360,10 @@ fn execute_run(
             if let Some(process) = process.as_ref()
                 && let Some(diagnostic) = process.runtime_diagnostic()
             {
-                println!("run #{run_id} node #{} {core}: runtime diagnostic: {diagnostic}", record.id);
+                println!(
+                    "run #{run_id} node #{} {core}: runtime diagnostic: {diagnostic}",
+                    record.id
+                );
             }
 
             // Keep redb closed for the entire child-process lifetime. Flush this node/core
@@ -716,7 +710,10 @@ mod tests {
     fn measurement_failures_map_to_stable_sample_statuses() {
         let cases = [
             (MeasurementFailure::Timeout, BenchmarkSampleStatus::Timeout),
-            (MeasurementFailure::Unreachable, BenchmarkSampleStatus::Unreachable),
+            (
+                MeasurementFailure::Unreachable,
+                BenchmarkSampleStatus::Unreachable,
+            ),
             (
                 MeasurementFailure::InvalidResponse,
                 BenchmarkSampleStatus::Invalid,

@@ -54,7 +54,9 @@ impl std::str::FromStr for SortMetric {
             "tcp-ping" => Ok(Self::TcpPing),
             "download" => Ok(Self::Download),
             "upload" => Ok(Self::Upload),
-            _ => anyhow::bail!("unknown sort metric '{value}'; use ping, tcp-ping, download, or upload"),
+            _ => anyhow::bail!(
+                "unknown sort metric '{value}'; use ping, tcp-ping, download, or upload"
+            ),
         }
     }
 }
@@ -80,7 +82,10 @@ pub fn sort_nodes(
 ) -> anyhow::Result<Vec<RankedNode>> {
     let (runs, samples) = {
         let database = NodeDatabase::open(database_path)?;
-        (database.list_benchmark_runs()?, database.list_all_benchmark_samples()?)
+        (
+            database.list_benchmark_runs()?,
+            database.list_all_benchmark_samples()?,
+        )
     };
     let completed = runs
         .into_iter()
@@ -105,17 +110,19 @@ pub fn sort_nodes(
         })
         .collect::<Vec<_>>();
 
-    ranked.sort_by(|left, right| {
-        match (left.value, right.value) {
-            (Some(a), Some(b)) => {
-                let order = a.total_cmp(&b);
-                let order = if metric.ascending() { order } else { order.reverse() };
-                order.then_with(|| left.node.id.cmp(&right.node.id))
-            }
-            (Some(_), None) => Ordering::Less,
-            (None, Some(_)) => Ordering::Greater,
-            (None, None) => left.node.id.cmp(&right.node.id),
+    ranked.sort_by(|left, right| match (left.value, right.value) {
+        (Some(a), Some(b)) => {
+            let order = a.total_cmp(&b);
+            let order = if metric.ascending() {
+                order
+            } else {
+                order.reverse()
+            };
+            order.then_with(|| left.node.id.cmp(&right.node.id))
         }
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => left.node.id.cmp(&right.node.id),
     });
     Ok(ranked)
 }
@@ -130,7 +137,9 @@ fn aggregate_node(
     let benchmark_metric = metric.benchmark_metric();
     if metric == SortMetric::TcpPing {
         let latest = latest_run(runs, node_id, DIRECT_TARGET);
-        let Some(run) = latest else { return (None, "-".into()) };
+        let Some(run) = latest else {
+            return (None, "-".into());
+        };
         let values = samples_for(samples, run.id, node_id, DIRECT_TARGET, benchmark_metric);
         return (median_successful_samples(&values), DIRECT_TARGET.into());
     }
@@ -152,7 +161,9 @@ fn aggregate_node(
 
     let mut per_core = Vec::new();
     for core in targets {
-        let Some(run) = latest_run(runs, node_id, &core) else { continue };
+        let Some(run) = latest_run(runs, node_id, &core) else {
+            continue;
+        };
         let values = samples_for(samples, run.id, node_id, &core, benchmark_metric);
         if let Some(value) = median_successful_samples(&values) {
             per_core.push((core, value));
@@ -170,13 +181,23 @@ fn aggregate_node(
     } else {
         (values[middle - 1] + values[middle]) / 2.0
     };
-    let cores = per_core.into_iter().map(|(core, _)| core).collect::<Vec<_>>().join(", ");
+    let cores = per_core
+        .into_iter()
+        .map(|(core, _)| core)
+        .collect::<Vec<_>>()
+        .join(", ");
     (Some(aggregate), cores)
 }
 
-fn latest_run<'a>(runs: &'a [BenchmarkRun], node_id: u64, target: &str) -> Option<&'a BenchmarkRun> {
+fn latest_run<'a>(
+    runs: &'a [BenchmarkRun],
+    node_id: u64,
+    target: &str,
+) -> Option<&'a BenchmarkRun> {
     runs.iter()
-        .filter(|run| run.node_ids.contains(&node_id) && run.cores.iter().any(|core| core == target))
+        .filter(|run| {
+            run.node_ids.contains(&node_id) && run.cores.iter().any(|core| core == target)
+        })
         .max_by_key(|run| (run.completed_at.unwrap_or(run.started_at), run.id))
 }
 
@@ -203,7 +224,7 @@ fn samples_for(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{BenchmarkSettings, BenchmarkSampleStatus};
+    use crate::domain::{BenchmarkSampleStatus, BenchmarkSettings};
 
     fn run(id: u64, status: BenchmarkRunStatus, completed_at: u64, cores: &[&str]) -> BenchmarkRun {
         BenchmarkRun {
@@ -228,7 +249,13 @@ mod tests {
         }
     }
 
-    fn sample(run_id: u64, core: &str, metric: BenchmarkMetric, index: u8, value: f64) -> BenchmarkSample {
+    fn sample(
+        run_id: u64,
+        core: &str,
+        metric: BenchmarkMetric,
+        index: u8,
+        value: f64,
+    ) -> BenchmarkSample {
         BenchmarkSample {
             id: run_id * 10 + u64::from(index),
             run_id,
@@ -250,9 +277,19 @@ mod tests {
     #[test]
     fn cross_core_ranking_uses_equal_weight_median_of_latest_core_medians() {
         let runs = [
-            run(1, BenchmarkRunStatus::Completed, 100, &["direct", "sing-box"]),
+            run(
+                1,
+                BenchmarkRunStatus::Completed,
+                100,
+                &["direct", "sing-box"],
+            ),
             run(2, BenchmarkRunStatus::Completed, 200, &["direct", "xray"]),
-            run(3, BenchmarkRunStatus::Cancelled, 300, &["direct", "sing-box"]),
+            run(
+                3,
+                BenchmarkRunStatus::Cancelled,
+                300,
+                &["direct", "sing-box"],
+            ),
         ];
         let samples = [
             sample(1, "sing-box", BenchmarkMetric::Latency, 1, 100.0),
@@ -274,14 +311,25 @@ mod tests {
             run(1, BenchmarkRunStatus::Completed, 100, &["direct", "mihomo"]),
             run(2, BenchmarkRunStatus::Completed, 200, &["direct", "mihomo"]),
         ];
-        let samples = [sample(1, "mihomo", BenchmarkMetric::Download, 1, 8_000_000.0)];
+        let samples = [sample(
+            1,
+            "mihomo",
+            BenchmarkMetric::Download,
+            1,
+            8_000_000.0,
+        )];
         let (value, _) = aggregate_node(1, &runs, &samples, SortMetric::Download, Some("mihomo"));
         assert_eq!(value, None);
     }
 
     #[test]
     fn direct_tcp_ping_uses_only_the_direct_target() {
-        let runs = [run(1, BenchmarkRunStatus::Completed, 100, &["direct", "sing-box"])];
+        let runs = [run(
+            1,
+            BenchmarkRunStatus::Completed,
+            100,
+            &["direct", "sing-box"],
+        )];
         let samples = [
             sample(1, "direct", BenchmarkMetric::TcpPing, 1, 25.0),
             sample(1, "direct", BenchmarkMetric::TcpPing, 2, 15.0),

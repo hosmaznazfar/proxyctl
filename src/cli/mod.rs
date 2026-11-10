@@ -2,7 +2,10 @@
 use crate::{
     cores::CoreId,
     database::{AddNodeOutcome, NodeRecord, default_database_path},
-    services::{nodes, sorting::{self, SortMetric}},
+    services::{
+        nodes,
+        sorting::{self, SortMetric},
+    },
     updates::release::ReleaseChannel,
 };
 use clap::{ArgGroup, Parser, Subcommand};
@@ -185,13 +188,19 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 eprintln!("Line {}: {}", failure.line_number, failure.reason);
             }
         }
-        Command::List { include_deleted, sort, core } => {
+        Command::List {
+            include_deleted,
+            sort,
+            core,
+        } => {
             let records = nodes::list_nodes(&database_path, include_deleted)?;
             if let Some(metric) = sort {
                 let metric: SortMetric = metric.parse()?;
                 let core = parse_core(core.as_deref())?;
                 if metric == SortMetric::TcpPing && core.is_some() {
-                    anyhow::bail!("--core cannot be used with --sort tcp-ping because TCP ping is measured directly");
+                    anyhow::bail!(
+                        "--core cannot be used with --sort tcp-ping because TCP ping is measured directly"
+                    );
                 }
                 let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
                 print_sorted_node_list(&ranked, metric);
@@ -305,7 +314,13 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
     }
     println!(
         "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  NAME",
-        "RANK", "ID", "PROTOCOL", "SERVER", "PORT", metric.label(), "CORE(S)"
+        "RANK",
+        "ID",
+        "PROTOCOL",
+        "SERVER",
+        "PORT",
+        metric.label(),
+        "CORE(S)"
     );
     for (index, record) in records.iter().enumerate() {
         let value = match record.value {
@@ -315,14 +330,22 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
         };
         println!(
             "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<20}  {}",
-            if record.value.is_some() { (index + 1).to_string() } else { "-".into() },
+            if record.value.is_some() {
+                (index + 1).to_string()
+            } else {
+                "-".into()
+            },
             record.node.id,
             record.node.node.protocol,
             safe_field(&record.node.node.server, 32),
             record.node.node.port,
             value,
             safe_field(&record.cores, 20),
-            record.node.node.name.as_deref()
+            record
+                .node
+                .node
+                .name
+                .as_deref()
                 .map(|name| safe_field(name, 32))
                 .unwrap_or_else(|| "-".to_owned())
         );
@@ -396,10 +419,8 @@ mod tests {
     fn list_command_accepts_metric_sorting_and_optional_core() {
         assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "ping"]).is_ok());
         assert!(
-            Cli::try_parse_from([
-                "proxyctl", "list", "--sort", "download", "--core", "xray"
-            ])
-            .is_ok()
+            Cli::try_parse_from(["proxyctl", "list", "--sort", "download", "--core", "xray"])
+                .is_ok()
         );
         assert!(Cli::try_parse_from(["proxyctl", "list", "--core", "xray"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "unknown"]).is_err());
@@ -439,8 +460,7 @@ mod tests {
 
     #[test]
     fn test_command_accepts_one_node_with_all_cores() {
-        let cli = Cli::try_parse_from(["proxyctl", "test", "--node", "18", "--all-cores"])
-            .unwrap();
+        let cli = Cli::try_parse_from(["proxyctl", "test", "--node", "18", "--all-cores"]).unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::Test {

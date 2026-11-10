@@ -449,11 +449,28 @@ mod tests {
 
     #[test]
     fn classifies_ureq_transport_failures_without_exposing_diagnostics() {
-        assert_eq!(classify_error(ureq::Error::Timeout(ureq::Timeout::Global)), MeasurementFailure::Timeout);
-        assert_eq!(classify_error(ureq::Error::HostNotFound), MeasurementFailure::Unreachable);
-        assert_eq!(classify_error(ureq::Error::ConnectProxyFailed("secret proxy detail".into())), MeasurementFailure::ProxyTunnelFailed);
-        assert_eq!(classify_error(ureq::Error::Tls("secret tls detail")), MeasurementFailure::TlsFailed);
-        assert_eq!(classify_error(ureq::Error::StatusCode(502)), MeasurementFailure::HttpStatus(502));
+        assert_eq!(
+            classify_error(ureq::Error::Timeout(ureq::Timeout::Global)),
+            MeasurementFailure::Timeout
+        );
+        assert_eq!(
+            classify_error(ureq::Error::HostNotFound),
+            MeasurementFailure::Unreachable
+        );
+        assert_eq!(
+            classify_error(ureq::Error::ConnectProxyFailed(
+                "secret proxy detail".into()
+            )),
+            MeasurementFailure::ProxyTunnelFailed
+        );
+        assert_eq!(
+            classify_error(ureq::Error::Tls("secret tls detail")),
+            MeasurementFailure::TlsFailed
+        );
+        assert_eq!(
+            classify_error(ureq::Error::StatusCode(502)),
+            MeasurementFailure::HttpStatus(502)
+        );
     }
 
     #[test]
