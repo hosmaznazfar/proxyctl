@@ -27,7 +27,7 @@ References:
 
 | Core | Native TUN support | Lightweight default direction | Important safety behavior |
 |---|---|---|---|
-| sing-box | `tun` inbound | `system` stack | `auto_route`; route loop protection via auto-detected outbound interface |
+| sing-box | `tun` inbound | Leave `stack` unset: 1.14.x defaults to `system` when built without gVisor; 1.15+ uses sing-tun's own stack | `auto_route`; route loop protection via auto-detected outbound interface |
 | Xray | `tun` inbound | Core-managed lightweight TCP/IP stack | `autoSystemRoutingTable`; `autoOutboundsInterface` prevents loops |
 | Mihomo | `tun` configuration | `system` stack | `auto-route`; core-managed interface and routes |
 
