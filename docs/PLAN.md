@@ -275,6 +275,42 @@ Automated Linux lifecycle tests exercise the same managed-process launch/switch/
 
 TUN is a separate opt-in feature. **Read-only Linux inspection is implemented** as `proxyctl tun status`: it inventories interfaces and TUN/TAP devices, IPv4/IPv6 default routes, resolver nameservers and `resolv.conf` target, NetworkManager/systemd-resolved runtime presence, and nftables/iptables rule counts when a supported read-only listing utility is available. It never prints firewall rule contents. Missing or inaccessible firewall inspection is reported as unknown/unavailable, not as an empty ruleset. Automated tests use temporary fake procfs/sysfs/resolver inputs and injected firewall summaries. No TUN activation/deactivation command exists yet. Before adding one, design explicit interface/process ownership, route and DNS snapshots, firewall backend handling, privilege boundaries, and rollback/recovery for partial failure. TUN activation must require explicit user intent and must never assume Proxyctl owns the machine's network stack. Benchmarking remains independent of TUN and uses isolated local listeners.
 
+## 3.4.2 Shared local proxy listener
+
+**Decision: approved and implemented for interactive activation.** The selected core exposes SOCKS5 and HTTP proxy protocols on one loopback TCP port, matching the v2rayN mixed-listener behavior. Proxyctl does not create a second listener or add a proxy translation process.
+
+| Core | Native configuration |
+|---|---|
+| sing-box | One `mixed` inbound |
+| Xray | One `socks` inbound; Xray's SOCKS inbound accepts HTTP proxy requests |
+| Mihomo | One `mixed-port` |
+
+The listener binds only to `127.0.0.1`; LAN access remains disabled. The benchmark path intentionally remains a separate HTTP-only listener because its measurement client uses HTTP CONNECT and does not need SOCKS support. The mixed listener is used by `proxyctl use` only.
+
+## 3.4.3 TUN research and lightweight implementation direction
+
+**Research completed; activation remains gated.** The implementation was compared with v2rayN's current core configuration and process lifecycle, plus the native sing-box, Xray, and Mihomo TUN capabilities.
+
+- v2rayN generates a TUN inbound inside the selected core's configuration. sing-box uses its native `tun` inbound; Xray uses its native `tun` inbound and `autoSystemRoutingTable`; Mihomo uses its native `tun` configuration. v2rayN's Linux process manager elevates TUN launches through a sudo-managed core process. Its inbound generation also creates a native mixed listener for local SOCKS/HTTP traffic.
+- sing-box supports a native TUN inbound and automatic route configuration. Its `system` stack uses the operating-system network stack and avoids adding a separate userspace TCP/IP stack.
+- Xray supports a native TUN inbound, automatic route management, and binding outbound sockets to the physical interface to avoid routing loops. On Linux, its optional system-DNS handoff requires systemd-resolved and changes resolver state; Proxyctl must not enable that automatically.
+- Mihomo supports a native TUN mode and a `mixed-port` listener. Its TUN stack choices include system and userspace modes.
+
+**Lightweight direction:** keep TUN inside the already selected managed core. Do not add a Rust TUN implementation, tun2socks process, permanent daemon, or separate routing service. Use the core's system/kernel networking stack by default where supported. Keep one core active, just as normal activation does.
+
+**Safety gates before exposing `--tun`:**
+
+1. Linux-only first release; fail closed on unsupported platforms or core versions.
+2. Explicit opt-in on `proxyctl use`; normal activation and benchmarks must remain unchanged.
+3. Never change system DNS, system proxy, firewall rules, or unrelated routes by default. In particular, Xray `autoSystemDnsToGateway` remains disabled.
+4. Prevent route loops by requiring the core's native outbound-interface protection (or an equally verified equivalent) before installing default routes.
+5. Capture a read-only baseline of interfaces/routes/DNS before launch; record the selected core, exact process identity, TUN interface, and only the resources the core is expected to own.
+6. Require a privilege strategy that grants only the needed networking authority, does not persist credentials, and does not silently run ordinary non-TUN activation as root. Do not copy v2rayN's broad sudo behavior without a separate security review.
+7. Verify readiness after launch and verify cleanup after stop. If cleanup is incomplete, retain ownership state and report exactly what remains; never delete routes or interfaces based only on a matching name.
+8. Test normal stop, failed startup, replacement, process crash, SIGTERM timeout, and stale-state recovery with isolated fake processes and temporary fixtures before enabling real TUN changes.
+
+The privilege boundary and crash-recovery mechanism are still open design items. Until they are resolved and tested, Proxyctl exposes only `proxyctl tun status`; there is no `tun on/off` command and no automatic TUN activation.
+
 ## 4. Proposed command surface
 
 ~~~sh
