@@ -312,13 +312,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         .ok_or_else(|| anyhow::anyhow!("--unavailable requires --core"))?,
                 )
             };
-            let report = pruning::prune_nodes(
-                &database_path,
-                PruneOptions {
-                    scope,
-                    apply,
-                },
-            )?;
+            let report = pruning::prune_nodes(&database_path, PruneOptions { scope, apply })?;
             if report.results.is_empty() {
                 println!("No active nodes to evaluate.");
             }
@@ -344,7 +338,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             if apply {
                 println!("Pruning complete: {candidates} node(s) soft-deleted.");
             } else {
-                println!("Dry run: {candidates} node(s) eligible; no changes made. Use --apply to soft-delete.");
+                println!(
+                    "Dry run: {candidates} node(s) eligible; no changes made. Use --apply to soft-delete."
+                );
             }
         }
         Command::Test {
@@ -748,10 +744,31 @@ mod tests {
     fn prune_command_requires_one_scope_and_supports_preview_or_apply() {
         assert!(Cli::try_parse_from(["proxyctl", "prune", "--unavailable-all"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "prune", "--unavailable-all", "--apply"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl", "prune", "--core", "xray", "--unavailable"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["proxyctl", "prune", "--core", "xray", "--unavailable"]).is_ok()
+        );
         assert!(Cli::try_parse_from(["proxyctl", "prune"]).is_err());
-        assert!(Cli::try_parse_from(["proxyctl", "prune", "--unavailable-all", "--unavailable", "--core", "xray"]).is_err());
-        assert!(Cli::try_parse_from(["proxyctl", "prune", "--unavailable-all", "--apply", "--dry-run"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "prune",
+                "--unavailable-all",
+                "--unavailable",
+                "--core",
+                "xray"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "prune",
+                "--unavailable-all",
+                "--apply",
+                "--dry-run"
+            ])
+            .is_err()
+        );
     }
 
     #[test]
