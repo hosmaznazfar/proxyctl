@@ -410,7 +410,7 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
                 comparison
                     .core_version
                     .as_deref()
-                    .map(|version| format!(" ({})", display_core_version(&comparison.target, version, verbose)))
+                    .map(|version| format!(" ({})", display_core_version(version, verbose)))
                     .unwrap_or_default()
             );
             for metric in &comparison.metrics {
@@ -464,7 +464,7 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
                     target
                         .core_version
                         .as_deref()
-                        .map(|version| format!(" ({})", display_core_version(&target.target, version, verbose)))
+                        .map(|version| format!(" ({})", display_core_version(version, verbose)))
                         .unwrap_or_default()
                 );
                 for metric in &target.metrics {
@@ -476,7 +476,7 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
     }
 }
 
-fn display_core_version(target: &str, version: &str, verbose: bool) -> String {
+fn display_core_version(version: &str, verbose: bool) -> String {
     if verbose {
         return version.to_owned();
     }
@@ -490,13 +490,7 @@ fn display_core_version(target: &str, version: &str, verbose: bool) -> String {
     if short_version.is_empty() {
         version.to_owned()
     } else {
-        let core = match target {
-            "sing-box" => "sing-box",
-            "xray" => "Xray",
-            "mihomo" => "Mihomo",
-            _ => target,
-        };
-        format!("{core} {short_version}")
+        short_version
     }
 }
 
