@@ -2,7 +2,7 @@
 
 A lightweight Rust CLI for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, benchmark reports/history, compatibility-aware pruning, and Linux single-core activation are implemented. TUN remains separate staged work.
+> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, benchmark reports/history, compatibility-aware pruning, Linux single-core activation, and opt-in native TUN activation are implemented.
 
 ## Goals
 
@@ -54,16 +54,19 @@ Activate one stored node with one explicitly selected Proxyctl-managed core:
 proxyctl use 12 --core sing-box
 proxyctl use 12 --core xray
 proxyctl use 12 --core mihomo
+
+# Explicitly opt in to core-native TUN routing (Linux only)
+proxyctl use 12 --core sing-box --tun
 proxyctl stop
 ~~~
 
-Only one normal Proxyctl-managed core may be active at a time. Switching validates the replacement config first, then stops the previously tracked Proxyctl process before starting the selected core. The shared SOCKS5 + HTTP listener binds exclusively to 127.0.0.1; both protocols use the same printed port for manual application configuration. sing-box uses its native `mixed` inbound, Xray uses its native `mixed` inbound (the SOCKS handler also accepts HTTP proxy requests), and Mihomo uses `mixed-port`. No extra listener or proxy process is created. Proxyctl does not enable a system proxy or modify DNS, routes, firewall, or TUN settings. Stop verifies the recorded Linux process start identity and canonical executable path, then uses a pidfd-backed signal; stale or mismatched records never cause another process to be signalled. Activation currently requires Linux.
+Only one Proxyctl-managed core may be active at a time. Switching validates the replacement config first, then stops the previously tracked Proxyctl process before starting the selected core. The shared SOCKS5 + HTTP listener binds exclusively to 127.0.0.1; both protocols use the same printed port for manual application configuration. sing-box uses its native `mixed` inbound, Xray uses its native `mixed` inbound (the SOCKS handler also accepts HTTP proxy requests), and Mihomo uses `mixed-port`. No extra listener or proxy process is created. Default activation does not enable a system proxy or modify DNS, routes, firewall, or TUN settings. Stop verifies the recorded Linux process start identity and canonical executable path, then uses a pidfd-backed signal; stale or mismatched records never cause another process to be signalled. Activation currently requires Linux.
 
 Setup and non-check update operations targeting the currently active core stop that exact tracked process before invoking the installer; update check-only remains read-only. Activation state and credentials-bearing runtime configuration are stored under the private Proxyctl runtime directory (0700 directory, 0600 files). State contains process identity and node/core identifiers only, not node credentials. Proxyctl uses only its own managed core binary path, never PATH fallback, and never manages another application's processes or core installations. The other managed core binaries remain idle and consume disk space only.
 
 ## TUN safety inspection (read-only)
 
-The first TUN stage exposes only a read-only inspection command:
+Read-only inspection remains available independently of activation:
 
 ~~~sh
 proxyctl tun status
@@ -71,7 +74,9 @@ proxyctl tun status
 
 It reports Linux network interfaces, detected TUN/TAP devices, IPv4/IPv6 default routes, resolver nameservers and `resolv.conf` target, NetworkManager/systemd-resolved runtime presence, and a summary of the current nftables or iptables ruleset when a supported listing utility is available. Firewall rule contents are never printed. If the firewall cannot be inspected, the output says so rather than treating missing evidence as an empty ruleset.
 
-This command does not create or delete interfaces, change routes, alter DNS, modify firewall rules, start a proxy core, or request elevated privileges. TUN activation/deactivation is not implemented yet; the core-native approach, privilege boundary, route ownership, and crash recovery are being designed separately in [docs/TUN_DESIGN.md](docs/TUN_DESIGN.md).
+The status command never creates or deletes interfaces, changes routes, alters DNS, modifies firewall rules, starts a proxy core, or requests elevated privileges.
+
+TUN activation is a separate explicit opt-in through `proxyctl use NODE --core CORE --tun`. It uses the selected core's native TUN mode and route manager; it requires systemd, sudo authorization, iproute2, and readable/writable `/dev/net/tun`. A transient systemd service runs the core as the invoking user with only `CAP_NET_ADMIN` in its capability bounding and ambient sets, plus `NoNewPrivileges=yes`; Proxyctl does not run the core as root, change file capabilities, store passwords, or install a permanent privileged daemon. TUN configs disable system DNS integration and firewall auto-redirect. Proxyctl snapshots interfaces, IPv4/IPv6 routes and policy rules, and DNS before starting; stop asks systemd to stop only the recorded unit and clears state only after the full baseline is restored. If cleanup differs, the manifest/config are retained for manual inspection and Proxyctl never broadly deletes routes or interfaces. See [docs/TUN_DESIGN.md](docs/TUN_DESIGN.md).
 
 ## Updating
 
@@ -192,8 +197,8 @@ proxyctl list --sort ping
 proxyctl list --sort download
 proxyctl list --sort upload
 proxyctl prune --unavailable-all --dry-run
-proxyctl tun on
-proxyctl tun off
+proxyctl use 12 --core sing-box --tun
+proxyctl stop
 ~~~
 
 See docs/PLAN.md, docs/REQUIREMENTS.md, and docs/UPDATE_DESIGN.md.
@@ -213,4 +218,4 @@ cargo build --release
 
 ## Security
 
-Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking. Only explicit benchmark and activation commands start a managed core, always with a loopback-only listener. Normal activation is limited to one Proxyctl-owned core process. Stop uses process-identity verification and cannot target another application's process. TUN remains unimplemented and no system networking settings are changed.
+Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking. Only explicit benchmark and activation commands start a managed core, always with a loopback-only listener. Normal activation is limited to one Proxyctl-owned core process. Stop uses process-identity verification and cannot target another application's process. TUN is opt-in and changes system routes only when explicitly requested; it does not alter system DNS or firewall rules. The TUN core runs with CAP_NET_ADMIN only inside a transient systemd service, and stop verifies restoration of the captured route/rule/interface/DNS baseline.
