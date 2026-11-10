@@ -27,6 +27,7 @@ pub struct ReportOptions {
     pub mode: ReportMode,
     pub node_id: Option<u64>,
     pub core: Option<CoreId>,
+    pub verbose: bool,
 }
 
 #[derive(Clone, Debug)]
