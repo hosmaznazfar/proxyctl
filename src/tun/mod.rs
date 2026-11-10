@@ -161,7 +161,7 @@ fn parse_ipv4_default_routes(contents: &str) -> Vec<String> {
 
 #[cfg(target_os = "linux")]
 fn parse_ipv6_default_routes(contents: &str) -> Vec<String> {
-    contents
+    let mut routes = contents
         .lines()
         .filter_map(|line| {
             let fields: Vec<_> = line.split_whitespace().collect();
@@ -171,10 +171,17 @@ fn parse_ipv6_default_routes(contents: &str) -> Vec<String> {
             {
                 return None;
             }
+            // /proc/net/ipv6_route field 8 contains route flags. Ignore entries
+            // that are not marked RTF_UP, just as the IPv4 parser does.
+            let flags = u32::from_str_radix(fields[8], 16).ok()?;
             let interface = fields[9];
-            (!interface.is_empty()).then(|| format!("IPv6 default via {interface}"))
+            (flags & 1 != 0 && !interface.is_empty())
+                .then(|| format!("IPv6 default via {interface}"))
         })
-        .collect()
+        .collect::<Vec<_>>();
+    routes.sort();
+    routes.dedup();
+    routes
 }
 
 #[cfg(target_os = "linux")]
@@ -400,7 +407,7 @@ mod tests {
 
     #[test]
     fn parses_ipv6_default_routes() {
-        let routes = "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000 00000000 00000000 00000000 00000000 eth0\n20010db8000000000000000000000000 40 00000000000000000000000000000000 00 00000000 00000000 00000000 00000000 00000000 eth1\n";
+        let routes = "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000 00000000 00000000 00000000 00000001 eth0\n00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000 00000000 00000000 00000000 00000000 lo\n20010db8000000000000000000000000 40 00000000000000000000000000000000 00 00000000 00000000 00000000 00000000 00000001 eth1\n";
         assert_eq!(parse_ipv6_default_routes(routes), ["IPv6 default via eth0"]);
     }
 
