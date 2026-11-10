@@ -47,6 +47,8 @@ impl TunBaseline {
         let status = crate::tun::inspect()?;
         ensure!(status.routes_inspected && status.dns_inspected,
             "TUN activation requires readable baseline route and DNS state; no changes were made");
+        ensure!(status.tun_interfaces.is_empty(),
+            "another TUN/TAP interface is already present; stop that VPN before enabling Proxyctl TUN mode");
         Ok(Self {
             interfaces: status.interfaces, tun_interfaces: status.tun_interfaces,
             default_routes: status.default_routes, dns_servers: status.dns_servers,
