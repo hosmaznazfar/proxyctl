@@ -57,7 +57,7 @@ proxyctl use 12 --core mihomo
 proxyctl stop
 ~~~
 
-Only one normal Proxyctl-managed core may be active at a time. Switching validates the replacement config first, then stops the previously tracked Proxyctl process before starting the selected core. The HTTP listener binds exclusively to 127.0.0.1; the address is printed for manual application configuration. Proxyctl does not enable a system proxy or modify DNS, routes, firewall, or TUN settings. Stop verifies the recorded Linux process start identity and canonical executable path, then uses a pidfd-backed signal; stale or mismatched records never cause another process to be signalled. Activation currently requires Linux.
+Only one normal Proxyctl-managed core may be active at a time. Switching validates the replacement config first, then stops the previously tracked Proxyctl process before starting the selected core. The shared SOCKS5 + HTTP listener binds exclusively to 127.0.0.1; both protocols use the same printed port for manual application configuration. sing-box uses its native `mixed` inbound, Xray uses its SOCKS inbound (which accepts HTTP proxy requests), and Mihomo uses `mixed-port`. No extra listener or proxy process is created. Proxyctl does not enable a system proxy or modify DNS, routes, firewall, or TUN settings. Stop verifies the recorded Linux process start identity and canonical executable path, then uses a pidfd-backed signal; stale or mismatched records never cause another process to be signalled. Activation currently requires Linux.
 
 Setup and non-check update operations targeting the currently active core stop that exact tracked process before invoking the installer; update check-only remains read-only. Activation state and credentials-bearing runtime configuration are stored under the private Proxyctl runtime directory (0700 directory, 0600 files). State contains process identity and node/core identifiers only, not node credentials. Proxyctl uses only its own managed core binary path, never PATH fallback, and never manages another application's processes or core installations. The other managed core binaries remain idle and consume disk space only.
 
@@ -71,7 +71,7 @@ proxyctl tun status
 
 It reports Linux network interfaces, detected TUN/TAP devices, IPv4/IPv6 default routes, resolver nameservers and `resolv.conf` target, NetworkManager/systemd-resolved runtime presence, and a summary of the current nftables or iptables ruleset when a supported listing utility is available. Firewall rule contents are never printed. If the firewall cannot be inspected, the output says so rather than treating missing evidence as an empty ruleset.
 
-This command does not create or delete interfaces, change routes, alter DNS, modify firewall rules, start a proxy core, or request elevated privileges. TUN activation/deactivation is not implemented yet; it will require a separate ownership and rollback design.
+This command does not create or delete interfaces, change routes, alter DNS, modify firewall rules, start a proxy core, or request elevated privileges. TUN activation/deactivation is not implemented yet; the core-native approach, privilege boundary, route ownership, and crash recovery are being designed separately in [docs/TUN_DESIGN.md](docs/TUN_DESIGN.md).
 
 ## Updating
 
