@@ -440,9 +440,7 @@ fn print_metric_summary(summary: &reporting::MetricSummary) {
         (None, 0) if summary.attempted == 0 => {
             println!("      {label}: not run (0/3)")
         }
-        (None, _) => println!(
-            "      {label}: no successful samples (0/3{suffix}{missing_suffix})"
-        ),
+        (None, _) => println!("      {label}: no successful samples (0/3{suffix}{missing_suffix})"),
     }
 }
 
@@ -629,13 +627,9 @@ mod tests {
         assert!(Cli::try_parse_from(["proxyctl", "report"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--node", "18", "--history"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--compare"]).is_ok());
-        assert!(
-            Cli::try_parse_from(["proxyctl", "report", "--compare", "--core", "xray"]).is_ok()
-        );
+        assert!(Cli::try_parse_from(["proxyctl", "report", "--compare", "--core", "xray"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--core", "xray"]).is_err());
-        assert!(
-            Cli::try_parse_from(["proxyctl", "report", "--history", "--compare"]).is_err()
-        );
+        assert!(Cli::try_parse_from(["proxyctl", "report", "--history", "--compare"]).is_err());
     }
 
     #[test]
