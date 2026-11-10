@@ -143,6 +143,8 @@ pub fn stop_if_active_core(core: CoreId) -> anyhow::Result<()> {
         let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
             .context("activation state is corrupt; refusing to update a managed core")?;
         if state.core == core.as_str() {
+            let managed = fs::canonicalize(managed_cores_path()?)
+                .context("Proxyctl managed-core directory is unavailable; refusing to stop")?;
             stop_locked(&runtime, &state_path, &managed)?;
         }
         Ok(())
