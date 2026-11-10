@@ -86,8 +86,13 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
             CoreId::SingBox | CoreId::Xray => { command.arg("run").arg("-c").arg(&config); }
             CoreId::Mihomo => { command.arg("-f").arg(&config); }
         }
-        let mut child = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-            .spawn().with_context(|| format!("could not start managed {core}"))?;
+        let mut child = match command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = fs::remove_file(&config);
+                return Err(error).with_context(|| format!("could not start managed {core}"));
+            }
+        };
         let pid = child.id();
         let start_ticks = match await_identity(pid, &executable, WAIT) {
             Ok(ticks) => ticks,
