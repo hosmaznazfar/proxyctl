@@ -32,6 +32,7 @@ pub fn setup(selected: Option<CoreId>) -> anyhow::Result<()> {
     let cores = selected.map_or_else(|| CoreId::ALL.to_vec(), |core| vec![core]);
     let mut failures = Vec::new();
     for core in cores {
+        crate::services::activation::stop_if_active_core(core)?;
         if let Err(error) = installer::install_or_update(core, false, ReleaseChannel::Stable) {
             eprintln!("{core}: {error:#}");
             failures.push(core);
@@ -75,6 +76,9 @@ pub fn update_installed(
     }
     let mut failures = Vec::new();
     for core in candidates {
+        if !check_only {
+            crate::services::activation::stop_if_active_core(core)?;
+        }
         if let Err(error) = installer::install_or_update(core, check_only, channel) {
             eprintln!("{core}: {error:#}");
             failures.push(core);
