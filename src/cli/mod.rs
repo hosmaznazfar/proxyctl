@@ -65,11 +65,14 @@ enum Command {
     },
     /// Show managed core status and versions.
     Cores,
-    /// Activate one node using one Proxyctl-managed core (loopback only).
+    /// Activate one node using one Proxyctl-managed core (loopback only by default).
     Use {
         id: u64,
         #[arg(long, value_name = "CORE", required = true)]
         core: String,
+        /// Opt in to the core-native Linux TUN interface and system routes.
+        #[arg(long)]
+        tun: bool,
     },
     /// Stop only the exact process tracked by Proxyctl.
     Stop,
@@ -197,10 +200,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        Command::Use { id, core } => {
+        Command::Use { id, core, tun } => {
             let core = parse_core(Some(&core))?
                 .ok_or_else(|| anyhow::anyhow!("--core is required for activation"))?;
-            crate::services::activation::activate(id, core)?;
+            crate::services::activation::activate(id, core, tun)?;
             return Ok(());
         }
         Command::Stop => {
@@ -752,6 +755,7 @@ mod tests {
         assert!(Cli::try_parse_from(["proxyctl", "list", "--core", "xray"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "unknown"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "use", "12", "--core", "xray"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "use", "12", "--core", "xray", "--tun"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "use", "12"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "stop"]).is_ok());
     }
