@@ -64,7 +64,7 @@ Only one Proxyctl-managed core may be active at a time. Switching validates the 
 
 Setup and non-check update operations targeting the currently active core stop that exact tracked process before invoking the installer; update check-only remains read-only. Activation state and credentials-bearing runtime configuration are stored under the private Proxyctl runtime directory (0700 directory, 0600 files). State contains process identity and node/core identifiers only, not node credentials. Proxyctl uses only its own managed core binary path, never PATH fallback, and never manages another application's processes or core installations. The other managed core binaries remain idle and consume disk space only.
 
-## TUN safety inspection (read-only)
+## TUN status inspection and opt-in activation
 
 Read-only inspection remains available independently of activation:
 
@@ -76,7 +76,7 @@ It reports Linux network interfaces, detected TUN/TAP devices, IPv4/IPv6 default
 
 The status command never creates or deletes interfaces, changes routes, alters DNS, modifies firewall rules, starts a proxy core, or requests elevated privileges.
 
-TUN activation is a separate explicit opt-in through `proxyctl use NODE --core CORE --tun`. It uses the selected core's native TUN mode and route manager; it requires systemd, sudo authorization, iproute2, and readable/writable `/dev/net/tun`. A transient systemd service runs the core as the invoking user with only `CAP_NET_ADMIN` in its capability bounding and ambient sets, plus `NoNewPrivileges=yes`; Proxyctl does not run the core as root, change file capabilities, store passwords, or install a permanent privileged daemon. TUN configs disable system DNS integration and firewall auto-redirect. Proxyctl snapshots interfaces, IPv4/IPv6 routes and policy rules, and DNS before starting; stop asks systemd to stop only the recorded unit and clears state only after the full baseline is restored. If cleanup differs, the manifest/config are retained for manual inspection and Proxyctl never broadly deletes routes or interfaces. See [docs/TUN_DESIGN.md](docs/TUN_DESIGN.md).
+TUN activation is a separate explicit opt-in through `proxyctl use NODE --core CORE --tun`. It uses the selected core's native TUN mode and route manager; it requires systemd, sudo authorization, iproute2, and readable/writable `/dev/net/tun`. A transient systemd service runs the core as the invoking user with only `CAP_NET_ADMIN` in its capability bounding and ambient sets, plus `NoNewPrivileges=yes`; Proxyctl does not run the core as root, change file capabilities, store passwords, or install a permanent privileged daemon. TUN configs disable system DNS integration and firewall auto-redirect. Before stopping an existing core, Proxyctl preflights the transient systemd capability policy with a one-shot `true` service that changes no networking. It then snapshots interfaces, IPv4/IPv6 routes and policy rules, DNS nameservers, and the `resolv.conf` target; stop asks systemd to stop only the recorded unit and clears state only after the full baseline is restored. If cleanup differs, the manifest/config are retained for manual inspection and Proxyctl never broadly deletes routes or interfaces. See [docs/TUN_DESIGN.md](docs/TUN_DESIGN.md).
 
 ## Updating
 
