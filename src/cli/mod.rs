@@ -251,11 +251,26 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 parse_core(core.as_deref())?,
             )?;
         }
-        Command::Report { node, history, compare, core } => {
-            let mode = if compare { ReportMode::Compare } else if history { ReportMode::History } else { ReportMode::Latest };
+        Command::Report {
+            node,
+            history,
+            compare,
+            core,
+        } => {
+            let mode = if compare {
+                ReportMode::Compare
+            } else if history {
+                ReportMode::History
+            } else {
+                ReportMode::Latest
+            };
             let report = reporting::build_report(
                 &database_path,
-                ReportOptions { mode, node_id: node, core: parse_core(core.as_deref())? },
+                ReportOptions {
+                    mode,
+                    node_id: node,
+                    core: parse_core(core.as_deref())?,
+                },
             )?;
             print_benchmark_report(&report);
         }
