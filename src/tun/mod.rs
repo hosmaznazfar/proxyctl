@@ -16,7 +16,9 @@ pub struct NetworkStatus {
     pub interfaces: Vec<String>,
     pub tun_interfaces: Vec<String>,
     pub default_routes: Vec<String>,
+    pub routes_inspected: bool,
     pub dns_servers: Vec<String>,
+    pub dns_inspected: bool,
     pub resolv_conf_target: Option<String>,
     pub network_manager_runtime: bool,
     pub systemd_resolved_runtime: bool,
@@ -101,26 +103,34 @@ fn inspect_with_paths_and_firewall(
     tun_interfaces.sort();
 
     let mut default_routes = Vec::new();
-    if let Ok(contents) = fs::read_to_string(&paths.proc_net_route) {
-        default_routes.extend(parse_ipv4_default_routes(&contents));
+    let ipv4_routes = fs::read_to_string(&paths.proc_net_route);
+    let ipv6_routes = fs::read_to_string(&paths.proc_net_ipv6_route);
+    if let Ok(contents) = &ipv4_routes {
+        default_routes.extend(parse_ipv4_default_routes(contents));
     }
-    if let Ok(contents) = fs::read_to_string(&paths.proc_net_ipv6_route) {
-        default_routes.extend(parse_ipv6_default_routes(&contents));
+    if let Ok(contents) = &ipv6_routes {
+        default_routes.extend(parse_ipv6_default_routes(contents));
     }
+    let routes_inspected = ipv4_routes.is_ok() && ipv6_routes.is_ok();
 
     let resolv_conf_target = fs::read_link(&paths.resolv_conf)
         .ok()
         .map(|target| target.display().to_string());
-    let dns_servers = fs::read_to_string(&paths.resolv_conf)
-        .map(|contents| parse_dns_servers(&contents))
+    let resolver_contents = fs::read_to_string(&paths.resolv_conf);
+    let dns_servers = resolver_contents
+        .as_ref()
+        .map(|contents| parse_dns_servers(contents))
         .unwrap_or_default();
+    let dns_inspected = resolver_contents.is_ok();
 
     let firewall = firewall_override.unwrap_or_else(|| inspect_firewall(paths));
     Ok(NetworkStatus {
         interfaces,
         tun_interfaces,
         default_routes,
+        routes_inspected,
         dns_servers,
+        dns_inspected,
         resolv_conf_target,
         network_manager_runtime: paths.run.join("NetworkManager").exists(),
         systemd_resolved_runtime: paths.run.join("systemd/resolve").exists(),
@@ -295,18 +305,32 @@ impl NetworkStatus {
         println!("Network inspection (read-only; no changes made)");
         println!("Interfaces: {}", display_list(&self.interfaces));
         println!("TUN/TAP interfaces: {}", display_list(&self.tun_interfaces));
-        println!("Default routes: {}", display_list(&self.default_routes));
-        println!("DNS servers: {}", display_list(&self.dns_servers));
+        println!(
+            "Default routes: {}",
+            if self.routes_inspected {
+                display_list(&self.default_routes)
+            } else {
+                "inspection incomplete (one or both route tables unreadable)".into()
+            }
+        );
+        println!(
+            "DNS servers: {}",
+            if self.dns_inspected {
+                display_list(&self.dns_servers)
+            } else {
+                "inspection incomplete (resolv.conf unreadable)".into()
+            }
+        );
         println!(
             "resolv.conf target: {}",
             self.resolv_conf_target.as_deref().unwrap_or("regular file or unavailable")
         );
         println!(
-            "NetworkManager runtime: {}",
+            "NetworkManager runtime directory: {}",
             yes_no(self.network_manager_runtime)
         );
         println!(
-            "systemd-resolved runtime: {}",
+            "systemd-resolved runtime directory: {},
             yes_no(self.systemd_resolved_runtime)
         );
         println!(
