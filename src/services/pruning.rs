@@ -128,7 +128,9 @@ fn evaluate_node(
             CoreConnectivity::Reachable => reachable = true,
             CoreConnectivity::Unreachable => unreachable += 1,
             CoreConnectivity::Unsupported => {
-                incomplete.push(format!("{core}: stored preflight disagrees with current compatibility"));
+                incomplete.push(format!(
+                    "{core}: stored preflight disagrees with current compatibility"
+                ));
             }
             CoreConnectivity::Incomplete(reason) => {
                 incomplete.push(format!("{core}: {reason}"));
@@ -147,7 +149,10 @@ fn evaluate_node(
             if unsupported.is_empty() {
                 "no installed compatible core is available".to_owned()
             } else {
-                format!("no compatible core; unsupported by {}", unsupported.join(", "))
+                format!(
+                    "no compatible core; unsupported by {}",
+                    unsupported.join(", ")
+                )
             }
         } else {
             incomplete.join("; ")
@@ -227,10 +232,10 @@ fn evaluate_core(
         Some(BenchmarkSampleStatus::Unavailable)
         | Some(BenchmarkSampleStatus::Timeout)
         | Some(BenchmarkSampleStatus::Unreachable)
-        | Some(BenchmarkSampleStatus::Cancelled)
-        | None => {
-            return CoreConnectivity::Incomplete("compatible-core preflight is missing or failed".into());
+        | Some(BenchmarkSampleStatus::Cancelled) => {
+            return CoreConnectivity::Incomplete("compatible-core preflight failed".into());
         }
+        None => {}
     }
 
     let attempts = latency
@@ -272,10 +277,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use crate::{
-        domain::BenchmarkSettings,
-        parser::parse_proxy_url,
-    };
+    use crate::{domain::BenchmarkSettings, parser::parse_proxy_url};
 
     fn node() -> NodeRecord {
         NodeRecord {
@@ -339,10 +341,7 @@ mod tests {
     #[test]
     fn three_unreachable_samples_confirm_a_core_unavailable() {
         let runs = [run(1, BenchmarkRunStatus::Completed, 20)];
-        let samples = evidence(
-            1,
-            [BenchmarkSampleStatus::Unreachable; 3],
-        );
+        let samples = evidence(1, [BenchmarkSampleStatus::Unreachable; 3]);
         assert!(matches!(
             evaluate_core(1, CoreId::SingBox, &runs, &samples),
             CoreConnectivity::Unreachable
@@ -406,10 +405,7 @@ mod tests {
             run(3, BenchmarkRunStatus::Cancelled, 40),
         ];
         let mut samples = evidence(1, [BenchmarkSampleStatus::Success; 3]);
-        samples.extend(evidence(
-            2,
-            [BenchmarkSampleStatus::Unreachable; 3],
-        ));
+        samples.extend(evidence(2, [BenchmarkSampleStatus::Unreachable; 3]));
         samples.extend(evidence(3, [BenchmarkSampleStatus::Success; 3]));
         assert!(matches!(
             evaluate_core(1, CoreId::SingBox, &runs, &samples),
@@ -420,12 +416,7 @@ mod tests {
     #[test]
     fn adapter_unsupported_is_not_a_connection_failure() {
         let node = node();
-        let result = evaluate_node(
-            &node,
-            &[CoreId::Xray],
-            &[],
-            &[],
-        );
+        let result = evaluate_node(&node, &[CoreId::Xray], &[], &[]);
         assert_eq!(result.0, PruneDecision::NoCompatibleCore);
         assert!(result.1.contains("unsupported"));
     }
@@ -434,12 +425,7 @@ mod tests {
     fn invalid_current_compatibility_prevents_pruning() {
         let mut node = node();
         node.node = parse_proxy_url("vless://uuid@example.test:443?type=ws&type=grpc").unwrap();
-        let result = evaluate_node(
-            &node,
-            &[CoreId::SingBox],
-            &[],
-            &[],
-        );
+        let result = evaluate_node(&node, &[CoreId::SingBox], &[], &[]);
         assert_eq!(result.0, PruneDecision::InsufficientEvidence);
     }
 
