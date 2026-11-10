@@ -141,7 +141,11 @@ fn aggregate_node(
             return (None, "-".into());
         };
         let values = samples_for(samples, run.id, node_id, DIRECT_TARGET, benchmark_metric);
-        return (median_successful_samples(&values), DIRECT_TARGET.into());
+        let median = median_successful_samples(&values);
+        return match median {
+            Some(value) => (Some(value), DIRECT_TARGET.into()),
+            None => (None, "-".into()),
+        };
     }
 
     let targets = if let Some(core) = selected_core {
@@ -320,6 +324,22 @@ mod tests {
         )];
         let (value, _) = aggregate_node(1, &runs, &samples, SortMetric::Download, Some("mihomo"));
         assert_eq!(value, None);
+    }
+
+    #[test]
+    fn unmeasured_direct_tcp_ping_has_no_contributing_target() {
+        let runs = [run(1, BenchmarkRunStatus::Completed, 100, &["direct", "sing-box"])];
+        let samples = [sample(
+            1,
+            "sing-box",
+            BenchmarkMetric::Latency,
+            1,
+            250.0,
+        )];
+        let (value, target) =
+            aggregate_node(1, &runs, &samples, SortMetric::TcpPing, None);
+        assert_eq!(value, None);
+        assert_eq!(target, "-");
     }
 
     #[test]
