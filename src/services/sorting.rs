@@ -328,16 +328,14 @@ mod tests {
 
     #[test]
     fn unmeasured_direct_tcp_ping_has_no_contributing_target() {
-        let runs = [run(1, BenchmarkRunStatus::Completed, 100, &["direct", "sing-box"])];
-        let samples = [sample(
+        let runs = [run(
             1,
-            "sing-box",
-            BenchmarkMetric::Latency,
-            1,
-            250.0,
+            BenchmarkRunStatus::Completed,
+            100,
+            &["direct", "sing-box"],
         )];
-        let (value, target) =
-            aggregate_node(1, &runs, &samples, SortMetric::TcpPing, None);
+        let samples = [sample(1, "sing-box", BenchmarkMetric::Latency, 1, 250.0)];
+        let (value, target) = aggregate_node(1, &runs, &samples, SortMetric::TcpPing, None);
         assert_eq!(value, None);
         assert_eq!(target, "-");
     }
