@@ -479,6 +479,7 @@ mod tests {
         let readiness = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = readiness.local_addr().unwrap().port();
 
+        let mut previous_config: Option<PathBuf> = None;
         for (node_id, core) in [(1, "sing-box"), (2, "xray"), (3, "mihomo")] {
             let config = runtime.join(format!("active-{node_id}-{core}.json"));
             let mut command = Command::new(&fake);
@@ -492,11 +493,10 @@ mod tests {
             assert_eq!(state.node_id, node_id);
             assert_eq!(state.core, core);
             assert!(matches_process(state.pid, &fake, state.start_ticks));
-            if node_id > 1 {
-                let previous_config = runtime.join(format!("active-{}-{}.json", node_id - 1,
-                    ["", "sing-box", "xray"][node_id as usize]));
-                assert!(!previous_config.exists(), "previous activation config must be removed");
+            if let Some(previous) = previous_config.take() {
+                assert!(!previous.exists(), "previous activation config must be removed");
             }
+            previous_config = Some(config);
         }
 
         let final_state: ActiveProcess =
