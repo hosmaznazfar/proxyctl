@@ -273,14 +273,14 @@ mod tests {
 
     use super::*;
     use crate::{
-        domain::{BenchmarkSettings, ProxyNode},
+        domain::BenchmarkSettings,
         parser::parse_proxy_url,
     };
 
     fn node() -> NodeRecord {
         NodeRecord {
             id: 1,
-            node: parse_proxy_url("vless://uuid@example.test:443").unwrap(),
+            node: parse_proxy_url("hysteria2://password@example.test:443").unwrap(),
             created_at: 1,
             deleted_at: None,
         }
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn invalid_current_compatibility_prevents_pruning() {
         let mut node = node();
-        node.node = parse_proxy_url("vless://uuid@example.test:443?encryption=bad").unwrap();
+        node.node = parse_proxy_url("vless://uuid@example.test:443?type=ws&type=grpc").unwrap();
         let result = evaluate_node(
             &node,
             &[CoreId::SingBox],
