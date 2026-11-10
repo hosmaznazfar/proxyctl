@@ -252,11 +252,11 @@ proxyctl prune --core xray --unavailable --dry-run
 proxyctl prune --core xray --unavailable --apply
 ~~~
 
-A node is unavailable across all cores only when every compatible core has a completed connectivity evaluation and none has a successful connection result. A core that cannot support the node is unsupported, not a failed connection. Thus, a Hysteria2 node is evaluated against sing-box and Mihomo; Xray's unsupported status does not count as a connection failure.
+**Implementation status: implemented.** `proxyctl prune --unavailable-all` evaluates each active node against every installed core that currently reports the node as supported. `proxyctl prune --core xray --unavailable` restricts the evaluation to one selected managed core. Preview is the default; `--apply` is the only mode that changes node state (`--dry-run` explicitly selects the default preview behavior).
 
-A node must not be pruned if required tests are missing, incomplete, or ambiguous. One successful sample is enough to prevent classifying the node as unavailable, even if other samples failed. Core-specific pruning likewise requires a completed evaluation for that core.
+A compatible core contributes an unavailable result only when its latest completed run for that node contains no failing preflight record and exactly three distinct real-ping samples, all marked `unreachable`. One successful real-ping sample is enough to keep the node, even if other samples failed. Unsupported combinations are excluded and never counted as failed. Invalid current compatibility, missing runs, missing or duplicate samples, incomplete evidence, timeouts, cancellations, core startup failures, and other local/HTTP errors are ambiguous and prevent pruning. A newer completed run supersedes older evidence; cancelled and interrupted runs do not replace it.
 
-Pruning is a soft-delete/lifecycle-state change, not immediate permanent erasure. Preview is the default; applying changes requires an explicit flag. A restore command is part of the planned interface.
+Pruning is a soft-delete/lifecycle-state change, not immediate permanent erasure. Use `proxyctl restore ID` to restore a node. Pruning reads persisted benchmark evidence only: it does not start cores, contact measurement endpoints, or change system networking.
 
 ### 3.8 Activation and TUN safety
 
@@ -398,8 +398,8 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 5. Core management and unified updater: official-source metadata, pinned versions, checksum verification, setup, detection, and a single update workflow for the proxyctl CLI plus managed cores.
 6. Core adapters: **complete for the documented initial subset**; the adapter unit suite, formatting, Clippy, release build, and the 23-fixture native matrix (51 supported fixture/core combinations) passed. Version-aware capability predicates and additional protocol/option coverage remain future enhancements. The expanded native test also checks benchmark configs, and the expanded native matrix has passed.
 7. Benchmark engine: **complete for the current contract**. Typed records, schema migration, short sample transactions, aggregation primitives, stale-run recovery, per-core loopback HTTP config, process lifecycle, bounded HTTP measurements, cooperative cancellation, progress, native validation, and real single-node smoke tests are implemented.
-8. Reports and sorting: **implemented**. Metric-specific sorting, latest-run reports, full per-node history, and per-core comparison views are implemented with partial/failure/missing-sample accounting. Further regression coverage and usability hardening remain part of the final hardening stage.
-9. Pruning: dry-run previews, compatible-core evaluation rules, soft deletion, and restore.
+8. Reports and sorting: **implemented**. Metric-specific sorting, latest-run reports, full per-node history, and per-core comparison views are implemented with partial/failure/missing-sample accounting. Concise core versions are the default; `--verbose` displays complete stored build metadata.
+9. **Complete:** compatibility-aware pruning with default dry-run, explicit soft-delete apply, unsupported-core exclusion, latest-completed evidence, and conservative handling of incomplete or ambiguous samples.
 10. Activation: managed process lifecycle and safe stop behavior.
 11. TUN: implement only after network-state detection and rollback design are tested.
 12. Hardening: integration tests, documentation, packaging, security review, and performance checks.
