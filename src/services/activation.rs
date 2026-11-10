@@ -449,9 +449,43 @@ fn prepare_tun_launch() -> anyhow::Result<TunLaunchContext> {
     File::open("/dev/urandom")?.read_exact(&mut token)?;
     let suffix = token.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     let unit = format!("proxyctl-tun-{suffix}.service");
-    Ok(TunLaunchContext {
-        sudo, systemd_run, systemctl, unit, uid: unsafe { libc::getuid() }, gid: unsafe { libc::getgid() }, baseline
-    })
+    let context = TunLaunchContext {
+        sudo, systemd_run, systemctl, unit,
+        uid: unsafe { libc::getuid() }, gid: unsafe { libc::getgid() }, baseline
+    };
+    // Verify that systemd accepts the exact unprivileged-user/CAP_NET_ADMIN policy before
+    // stopping any existing activation. The one-shot command is /usr/bin/true and changes no
+    // interfaces, routes, DNS, or firewall state.
+    let true_executable = find_program("true")?;
+    preflight_tun_service(&context, &true_executable)?;
+    Ok(context)
+}
+
+#[cfg(target_os = "linux")]
+fn preflight_tun_service(context: &TunLaunchContext, true_executable: &Path) -> anyhow::Result<()> {
+    let unit = format!("{}-preflight.service", context.unit.trim_end_matches(".service"));
+    let output = Command::new(&context.sudo)
+        .args(["-n", "--"])
+        .arg(&context.systemd_run)
+        .arg("--system")
+        .arg("--quiet")
+        .arg("--wait")
+        .arg("--collect")
+        .arg(format!("--unit={unit}"))
+        .arg(format!("--property=User={}", context.uid))
+        .arg(format!("--property=Group={}", context.gid))
+        .arg("--property=CapabilityBoundingSet=CAP_NET_ADMIN")
+        .arg("--property=AmbientCapabilities=CAP_NET_ADMIN")
+        .arg("--property=NoNewPrivileges=yes")
+        .arg("--")
+        .arg(true_executable)
+        .output()
+        .context("could not preflight the isolated TUN systemd service")?;
+    ensure!(
+        output.status.success(),
+        "systemd cannot create the required unprivileged CAP_NET_ADMIN service; existing activation was not stopped"
+    );
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
