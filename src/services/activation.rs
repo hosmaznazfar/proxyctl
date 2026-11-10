@@ -100,8 +100,8 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
 
         let port = reserve_port()?;
         let generated = adapter
-            .generate_benchmark_config(&node, port)
-            .with_context(|| format!("could not generate loopback-only {core} config"))?;
+            .generate_activation_config(&node, port)
+            .with_context(|| format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config"))?;
         adapters::validation::validate_generated_config(core, &generated, &executable)
             .with_context(|| format!("{core} rejected the activation config"))?;
 
@@ -131,7 +131,7 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
         )?;
         println!("Activated node #{node_id} with {core}.");
         println!(
-            "Local HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
+            "Shared SOCKS5/HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
         );
         println!("System proxy, DNS, routes, firewall, and TUN were not changed.");
         Ok(())
