@@ -253,7 +253,9 @@ fn evaluate_core(
                 != 1
         })
     {
-        return CoreConnectivity::Incomplete("three distinct real-ping samples are required".into());
+        return CoreConnectivity::Incomplete(
+            "three distinct real-ping samples are required".into(),
+        );
     }
 
     if attempts
