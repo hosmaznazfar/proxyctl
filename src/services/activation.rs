@@ -7,7 +7,7 @@ use anyhow::{Context, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     net::{TcpListener, TcpStream},
     os::fd::AsRawFd,
     path::{Path, PathBuf},
@@ -28,6 +28,39 @@ struct ActiveProcess {
     node_id: u64,
     core: String,
     port: u16,
+    #[serde(default)]
+    tun: Option<TunProcess>,
+}
+#[derive(Debug, Serialize, Deserialize)]
+struct TunProcess { unit: String, uid: u32, baseline: TunBaseline }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct TunBaseline {
+    interfaces: Vec<String>, tun_interfaces: Vec<String>, default_routes: Vec<String>,
+    dns_servers: Vec<String>, ipv4_routes: Vec<String>, ipv6_routes: Vec<String>,
+    ipv4_rules: Vec<String>, ipv6_rules: Vec<String>,
+}
+impl TunBaseline {
+    #[cfg(target_os = "linux")]
+    fn capture() -> anyhow::Result<Self> {
+        let status = crate::tun::inspect()?;
+        ensure!(status.routes_inspected && status.dns_inspected,
+            "TUN activation requires readable baseline route and DNS state; no changes were made");
+        Ok(Self {
+            interfaces: status.interfaces, tun_interfaces: status.tun_interfaces,
+            default_routes: status.default_routes, dns_servers: status.dns_servers,
+            ipv4_routes: ip_json_snapshot(&["-j","-4","route","show","table","all"] )?,
+            ipv6_routes: ip_json_snapshot(&["-j","-6","route","show","table","all"] )?,
+            ipv4_rules: ip_json_snapshot(&["-j","-4","rule","show"] )?,
+            ipv6_rules: ip_json_snapshot(&["-j","-6","rule","show"] )?,
+        })
+    }
+    #[cfg(target_os = "linux")]
+    fn matches_current(&self) -> anyhow::Result<bool> { Ok(self == &Self::capture()?) }
+}
+#[cfg(target_os = "linux")]
+struct TunLaunchContext {
+    sudo: PathBuf, systemd_run: PathBuf, systemctl: PathBuf, unit: String,
+    uid: u32, gid: u32, baseline: TunBaseline,
 }
 struct RuntimeLock(File);
 impl RuntimeLock {
@@ -58,7 +91,7 @@ impl Drop for RuntimeLock {
     }
 }
 
-pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
+pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result<()> {
     #[cfg(not(target_os = "linux"))]
     anyhow::bail!("activation currently requires Linux process-identity support");
     #[cfg(target_os = "linux")]
@@ -99,11 +132,15 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
         );
 
         let port = reserve_port()?;
-        let generated = adapter
-            .generate_activation_config(&node, port)
-            .with_context(|| {
-                format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config")
-            })?;
+        let generated = if tun_enabled {
+            adapter.generate_tun_activation_config(&node, port)
+        } else {
+            adapter.generate_activation_config(&node, port)
+        }.with_context(|| if tun_enabled {
+            format!("could not generate loopback mixed SOCKS5/HTTP plus native TUN {core} config")
+        } else {
+            format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config")
+        })?;
         adapters::validation::validate_generated_config(core, &generated, &executable)
             .with_context(|| format!("{core} rejected the activation config"))?;
 
@@ -118,24 +155,22 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
                 command.arg("-f").arg(&config);
             }
         }
-        launch_managed(
-            &runtime,
-            &state_path,
-            &managed,
-            &executable,
-            &config,
-            &generated.content,
-            node_id,
-            core.as_str(),
-            port,
-            command,
-            WAIT,
-        )?;
+        if tun_enabled {
+            let context = prepare_tun_launch()?;
+            launch_tun_managed(&runtime, &state_path, &managed, &executable, &config,
+                &generated.content, node_id, core, port, context, WAIT)?;
+        } else {
+            launch_managed(&runtime, &state_path, &managed, &executable, &config,
+                &generated.content, node_id, core.as_str(), port, command, WAIT)?;
+        }
         println!("Activated node #{node_id} with {core}.");
-        println!(
-            "Shared SOCKS5/HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
-        );
-        println!("System proxy, DNS, routes, firewall, and TUN were not changed.");
+        println!("Shared SOCKS5/HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually).");
+        if tun_enabled {
+            println!("Native TUN interface tun-proxyctl is active; DNS and firewall settings were not changed.");
+            println!("The core runs as your user with only CAP_NET_ADMIN in a transient systemd service.");
+        } else {
+            println!("System proxy, DNS, routes, firewall, and TUN were not changed.");
+        }
         Ok(())
     }
 }
@@ -227,6 +262,7 @@ fn launch_managed(
         node_id,
         core: core.to_owned(),
         port,
+        tun: None,
     };
     if let Err(error) = write_atomic(state_path, &serde_json::to_vec(&state)?) {
         let _ = child.kill();
@@ -287,6 +323,9 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
         state.executable.starts_with(managed_root),
         "recorded executable is outside Proxyctl's managed-core directory; refusing to signal"
     );
+    if state.tun.is_some() {
+        return stop_tun_locked(runtime, state_path, &state);
+    }
     if matches_process(state.pid, &state.executable, state.start_ticks) {
         signal_verified(
             state.pid,
@@ -321,6 +360,272 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
     fs::remove_file(state_path)?;
     Ok(())
 }
+#[cfg(target_os = "linux")]
+fn ip_json_snapshot(arguments: &[&str]) -> anyhow::Result<Vec<String>> {
+    let ip = find_program("ip")?;
+    let output = Command::new(ip).args(arguments).output()
+        .context("could not inspect Linux route tables")?;
+    ensure!(output.status.success(),
+        "could not capture the complete Linux route/rule baseline; TUN activation was not started");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .context("iproute2 returned an invalid JSON route/rule snapshot")?;
+    let entries = value.as_array().context("iproute2 route/rule snapshot was not a JSON array")?;
+    let mut snapshot = entries.iter().map(serde_json::to_string)
+        .collect::<Result<Vec<_>, _>>()?;
+    snapshot.sort();
+    Ok(snapshot)
+}
+
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+fn launch_tun_managed(
+    runtime: &Path, state_path: &Path, managed_root: &Path, executable: &Path,
+    config: &Path, config_content: &[u8], node_id: u64, core: CoreId, port: u16,
+    mut context: TunLaunchContext, timeout: Duration,
+) -> anyhow::Result<()> {
+    ensure!(executable.starts_with(managed_root),
+        "refusing to run a core outside Proxyctl's managed directory");
+    write_atomic(config, config_content)?;
+    stop_locked(runtime, state_path, managed_root)?;
+    // If replacing an existing TUN core, snapshot only after its owned routes are gone.
+    context.baseline = TunBaseline::capture()?;
+    let mut state = ActiveProcess {
+        pid: 0, start_ticks: 0, executable: executable.to_path_buf(),
+        config: config.to_path_buf(), node_id, core: core.as_str().to_owned(), port,
+        tun: Some(TunProcess {
+            unit: context.unit.clone(), uid: context.uid, baseline: context.baseline.clone()
+        }),
+    };
+    if let Err(error) = write_atomic(state_path, &serde_json::to_vec(&state)?) {
+        let _ = fs::remove_file(config);
+        return Err(error);
+    }
+    let start_result = (|| {
+        start_tun_service(&context, executable, core, config)?;
+        let pid = await_systemd_main_pid(&context, timeout)?;
+        let ticks = await_identity(pid, executable, timeout)?;
+        ensure!(process_has_only_tun_capability(pid, context.uid),
+            "TUN service did not start with the expected unprivileged UID and CAP_NET_ADMIN-only capability set");
+        state.pid = pid;
+        state.start_ticks = ticks;
+        write_atomic(state_path, &serde_json::to_vec(&state)?)?;
+        await_listener(pid, ticks, port, timeout)?;
+        await_tun_interface(pid, ticks, timeout)?;
+        Ok(())
+    })();
+    if let Err(error) = start_result {
+        return match stop_locked(runtime, state_path, managed_root) {
+            Ok(()) => Err(error),
+            Err(cleanup) => anyhow::bail!(
+                "TUN activation failed ({error:#}); cleanup could not be verified ({cleanup:#}). State and config were retained."
+            ),
+        };
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_tun_launch() -> anyhow::Result<TunLaunchContext> {
+    ensure!(Path::new("/run/systemd/system").is_dir(),
+        "TUN activation requires a running systemd system manager; ordinary activation remains available");
+    let _tun_device = OpenOptions::new().read(true).write(true).open("/dev/net/tun")
+        .context("TUN activation requires readable/writable /dev/net/tun")?;
+    let baseline = TunBaseline::capture()?;
+    let sudo = find_program("sudo")?;
+    let systemd_run = find_program("systemd-run")?;
+    let systemctl = find_program("systemctl")?;
+    // Let sudo prompt through the user's terminal. Proxyctl never reads or stores the password.
+    let authorization = Command::new(&sudo).arg("-v").status()?;
+    ensure!(authorization.success(),
+        "sudo authorization was not granted; no TUN service or network changes were made");
+    let mut token = [0u8; 16];
+    File::open("/dev/urandom")?.read_exact(&mut token)?;
+    let suffix = token.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    let unit = format!("proxyctl-tun-{suffix}.service");
+    Ok(TunLaunchContext {
+        sudo, systemd_run, systemctl, unit, uid: libc::getuid(), gid: libc::getgid(), baseline
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn find_program(name: &str) -> anyhow::Result<PathBuf> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    for directory in std::env::split_paths(&path) {
+        let candidate = directory.join(name);
+        if candidate.is_file() {
+            return fs::canonicalize(candidate)
+                .with_context(|| format!("could not resolve required utility {name}"));
+        }
+    }
+    anyhow::bail!("required utility {name} was not found in PATH")
+}
+
+#[cfg(target_os = "linux")]
+fn build_tun_service_command(
+    context: &TunLaunchContext, executable: &Path, core: CoreId, config: &Path,
+) -> Command {
+    let mut command = Command::new(&context.sudo);
+    command.args(["-n","--"]).arg(&context.systemd_run)
+        .arg("--system").arg("--quiet").arg("--collect")
+        .arg(format!("--unit={}", context.unit))
+        .arg(format!("--property=User={}", context.uid))
+        .arg(format!("--property=Group={}", context.gid))
+        .arg("--property=CapabilityBoundingSet=CAP_NET_ADMIN")
+        .arg("--property=AmbientCapabilities=CAP_NET_ADMIN")
+        .arg("--property=NoNewPrivileges=yes")
+        .arg("--property=KillMode=control-group")
+        .arg("--property=KillSignal=SIGTERM")
+        .arg("--property=TimeoutStopSec=5s")
+        .arg("--property=SendSIGKILL=yes")
+        .arg("--property=Restart=no")
+        .arg("--property=UMask=0077")
+        .arg("--property=PrivateTmp=yes")
+        .arg("--property=StandardOutput=null")
+        .arg("--property=StandardError=null")
+        .arg("--").arg(executable);
+    match core {
+        CoreId::SingBox | CoreId::Xray => { command.arg("run").arg("-c").arg(config); }
+        CoreId::Mihomo => { command.arg("-f").arg(config); }
+    }
+    command
+}
+
+#[cfg(target_os = "linux")]
+fn start_tun_service(
+    context: &TunLaunchContext, executable: &Path, core: CoreId, config: &Path,
+) -> anyhow::Result<()> {
+    let output = build_tun_service_command(context, executable, core, config)
+        .output().context("could not invoke systemd-run")?;
+    ensure!(output.status.success(),
+        "systemd refused to start the isolated TUN service; raw privileged command output withheld");
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn systemd_property(context: &TunLaunchContext, property: &str) -> anyhow::Result<String> {
+    let output = Command::new(&context.sudo).args(["-n","--"]).arg(&context.systemctl)
+        .arg("show").arg(format!("--property={property}")).arg("--value")
+        .arg(&context.unit).output().context("could not inspect the Proxyctl TUN service")?;
+    ensure!(output.status.success(),
+        "could not inspect the Proxyctl TUN service; refusing to signal a process");
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+#[cfg(target_os = "linux")]
+fn systemd_main_pid(context: &TunLaunchContext) -> anyhow::Result<Option<u32>> {
+    let load_state = systemd_property(context, "LoadState")?;
+    if load_state == "not-found" { return Ok(None); }
+    ensure!(load_state == "loaded",
+        "Proxyctl TUN service has an unexpected systemd state; refusing to signal a process");
+    let pid = systemd_property(context, "MainPID")?.parse::<u32>()
+        .context("systemd returned an invalid TUN service PID")?;
+    Ok((pid != 0).then_some(pid))
+}
+
+#[cfg(target_os = "linux")]
+fn await_systemd_main_pid(context: &TunLaunchContext, timeout: Duration) -> anyhow::Result<u32> {
+    let start = Instant::now();
+    loop {
+        if let Some(pid) = systemd_main_pid(context)? { return Ok(pid); }
+        ensure!(start.elapsed() < timeout, "TUN service did not publish a running core process");
+        thread::sleep(POLL);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn process_status_has_only_tun_capability(status: &str, expected_uid: u32) -> bool {
+    let field = |name: &str| status.lines()
+        .find_map(|line| line.strip_prefix(name)).map(str::trim);
+    let uid_matches = field("Uid:").is_some_and(|value| {
+        let values = value.split_whitespace().filter_map(|uid| uid.parse::<u32>().ok())
+            .collect::<Vec<_>>();
+        values.len() == 4 && values.iter().all(|uid| *uid == expected_uid)
+    });
+    const NET_ADMIN: u64 = 1 << 12;
+    let capability_matches = ["CapEff:","CapPrm:","CapBnd:","CapAmb:"].into_iter().all(|name| {
+        field(name).and_then(|value| u64::from_str_radix(value, 16).ok()) == Some(NET_ADMIN)
+    });
+    uid_matches && capability_matches
+}
+
+#[cfg(target_os = "linux")]
+fn process_has_only_tun_capability(pid: u32, expected_uid: u32) -> bool {
+    fs::read_to_string(format!("/proc/{pid}/status"))
+        .is_ok_and(|status| process_status_has_only_tun_capability(&status, expected_uid))
+}
+
+#[cfg(target_os = "linux")]
+fn await_tun_interface(pid: u32, ticks: u64, timeout: Duration) -> anyhow::Result<()> {
+    let interface = Path::new("/sys/class/net/tun-proxyctl");
+    let start = Instant::now();
+    loop {
+        ensure!(start_ticks(pid) == Some(ticks),
+            "managed TUN core exited before its interface became ready");
+        if interface.exists() { return Ok(()); }
+        ensure!(start.elapsed() < timeout,
+            "managed core did not create the expected tun-proxyctl interface");
+        thread::sleep(POLL);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn stop_systemd_unit(context: &TunLaunchContext) -> anyhow::Result<()> {
+    let output = Command::new(&context.sudo).args(["-n","--"]).arg(&context.systemctl)
+        .arg("stop").arg(&context.unit).output()?;
+    ensure!(output.status.success(), "systemd could not stop the exact Proxyctl TUN service");
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> anyhow::Result<()> {
+    let tun = state.tun.as_ref().context("missing TUN ownership manifest")?;
+    ensure!(tun.unit.starts_with("proxyctl-tun-") && tun.unit.ends_with(".service"),
+        "recorded TUN service name is outside Proxyctl's namespace; refusing systemd operation");
+    let sudo = find_program("sudo")?;
+    let systemctl = find_program("systemctl")?;
+    let authorization = Command::new(&sudo).arg("-v").status()?;
+    ensure!(authorization.success(), "sudo authorization was not granted; TUN service was not stopped");
+    let context = TunLaunchContext {
+        sudo, systemd_run: PathBuf::new(), systemctl, unit: tun.unit.clone(),
+        uid: tun.uid, gid: libc::getgid(), baseline: tun.baseline.clone(),
+    };
+    let load_state = systemd_property(&context, "LoadState")?;
+    if load_state == "loaded" {
+        let pid = systemd_property(&context, "MainPID")?.parse::<u32>()
+            .context("systemd returned an invalid TUN service PID")?;
+        let tracked = if pid == 0 { None } else {
+            ensure!(state.pid == 0 || state.pid == pid,
+                "TUN service PID differs from the recorded process; refusing to stop it");
+            let ticks = if state.start_ticks == 0 { await_identity(pid, &state.executable, WAIT)? }
+                else { state.start_ticks };
+            ensure!(matches_process(pid, &state.executable, ticks),
+                "TUN process identity changed; refusing systemd stop");
+            Some((pid, ticks))
+        };
+        stop_systemd_unit(&context)?;
+        if let Some((pid, ticks)) = tracked {
+            wait_exit(pid, ticks, Duration::from_secs(10));
+            ensure!(!matches_process(pid, &state.executable, ticks),
+                "TUN core did not exit; activation state and config were retained");
+        }
+        ensure!(systemd_main_pid(&context)?.is_none(),
+            "TUN systemd service still has a running process after stop");
+    } else {
+        ensure!(load_state == "not-found",
+            "Proxyctl TUN service has an unexpected load state; refusing cleanup");
+        ensure!(state.pid == 0 || !matches_process(state.pid, &state.executable, state.start_ticks),
+            "the recorded TUN core is still running but its systemd unit is unavailable; refusing to signal it directly");
+    }
+    ensure!(tun.baseline.matches_current()?,
+        "TUN cleanup did not restore the recorded interfaces, IPv4/IPv6 routes and rules, and DNS baseline; state/config retained for manual inspection, no routes or interfaces were deleted");
+    ensure!(state.config.parent() == Some(runtime),
+        "TUN config path is outside the private runtime directory; refusing cleanup");
+    fs::remove_file(&state.config)?;
+    fs::remove_file(state_path)?;
+    println!("Stopped Proxyctl-managed TUN service for node #{}; network baseline restored.", state.node_id);
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn start_ticks(pid: u32) -> Option<u64> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
@@ -444,6 +749,67 @@ fn private_fd(_fd: i32) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
+    #[test]
+    fn tun_capability_check_accepts_only_unprivileged_net_admin_service() {
+        let valid = concat!(
+            "Uid:\t1000\t1000\t1000\t1000\n",
+            "CapEff:\t0000000000001000\n",
+            "CapPrm:\t0000000000001000\n",
+            "CapBnd:\t0000000000001000\n",
+            "CapAmb:\t0000000000001000\n"
+        );
+        assert!(process_status_has_only_tun_capability(valid, 1000));
+        assert!(!process_status_has_only_tun_capability(
+            &valid.replace("0000000000001000", "0000000000003000"), 1000
+        ));
+        assert!(!process_status_has_only_tun_capability(valid, 0));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn tun_service_command_limits_capabilities_and_keeps_user_identity() {
+        let context = TunLaunchContext {
+            sudo: PathBuf::from("/usr/bin/sudo"), systemd_run: PathBuf::from("/usr/bin/systemd-run"),
+            systemctl: PathBuf::from("/usr/bin/systemctl"),
+            unit: "proxyctl-tun-test.service".into(), uid: 1000, gid: 1000,
+            baseline: TunBaseline {
+                interfaces: vec![], tun_interfaces: vec![], default_routes: vec![],
+                dns_servers: vec![], ipv4_routes: vec![], ipv6_routes: vec:[],
+                ipv4_rules: vec![], ipv6_rules: vec![],
+            },
+        };
+        let command = build_tun_service_command(&context, Path::new("/managed/sing-box"),
+            CoreId::SingBox, Path::new("/runtime/active.json"));
+        let args = command.get_args().map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        for expected in [
+            "--property=User=1000", "--property=Group=1000",
+            "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
+            "--property=AmbientCapabilities=CAP_NET_ADMIN",
+            "--property=NoNewPrivileges=yes", "--property=KillMode=control-group",
+            "--", "/managed/sing-box", "run", "-c", "/runtime/active.json"
+        ] {
+            assert!(args.iter().any(|arg| arg == expected), "missing {expected}");
+        }
+        assert!(!args.iter().any(|arg| arg.contains("CAP_SYS_ADMIN")));
+        assert!(!args.iter().any(|arg| arg.contains("CAP_NET_RAW")));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn old_activation_state_without_tun_manifest_remains_readable() {
+        let state = serde_json::json!({
+            "pid": 10, "start_ticks": 20, "executable": "/managed/sing-box",
+            "config": "/runtime/active-1-sing-box.json", "node_id": 1,
+            "core": "sing-box", "port": 1080
+        });
+        let parsed: ActiveProcess = serde_json::from_value(state).unwrap();
+        assert!(parsed.tun.is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn process_identity_includes_start_ticks_and_executable() {    #[cfg(target_os = "linux")]
     #[test]
     fn process_identity_includes_start_ticks_and_executable() {
         let pid = std::process::id();
