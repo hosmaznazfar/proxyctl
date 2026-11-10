@@ -169,10 +169,10 @@ fn stop_locked(runtime: &Path, state_path: &Path) -> anyhow::Result<()> {
     ensure!(state.executable.starts_with(managed_root),
         "recorded executable is outside Proxyctl's managed-core directory; refusing to signal");
     if matches_process(state.pid, &state.executable, state.start_ticks) {
-        signal_verified(state.pid, &state.executable, Some(state.start_ticks), libc::SIGTERM)?;
+        signal_verified(state.pid, &state.executable, state.start_ticks, libc::SIGTERM)?;
         wait_exit(state.pid, state.start_ticks, Duration::from_secs(5));
         if matches_process(state.pid, &state.executable, state.start_ticks) {
-            signal_verified(state.pid, &state.executable, Some(state.start_ticks), libc::SIGKILL)?;
+            signal_verified(state.pid, &state.executable, state.start_ticks, libc::SIGKILL)?;
             wait_exit(state.pid, state.start_ticks, Duration::from_secs(5));
         }
         ensure!(!matches_process(state.pid, &state.executable, state.start_ticks),
