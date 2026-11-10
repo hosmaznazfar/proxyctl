@@ -121,6 +121,26 @@ pub fn activate(node_id: u64, core: CoreId) -> anyhow::Result<()> {
     }
 }
 
+/// Stop the selected core before setup/update replaces its managed executable.
+pub fn stop_if_active_core(core: CoreId) -> anyhow::Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    anyhow::bail!("activation currently requires Linux process-identity support");
+    #[cfg(target_os = "linux")]
+    {
+        let (runtime, state_path) = paths()?;
+        let _lock = RuntimeLock::acquire(&runtime)?;
+        if !state_path.exists() {
+            return Ok(());
+        }
+        let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
+            .context("activation state is corrupt; refusing to update a managed core")?;
+        if state.core == core.as_str() {
+            stop_locked(&runtime, &state_path)?;
+        }
+        Ok(())
+    }
+}
+
 pub fn stop() -> anyhow::Result<()> {
     #[cfg(not(target_os = "linux"))]
     anyhow::bail!("activation currently requires Linux process-identity support");
