@@ -57,6 +57,7 @@ impl TunBaseline {
             ipv6_rules: ip_json_snapshot(&["-j","-6","rule","show"] )?,
         })
     }
+    #[cfg(target_os = "linux")]
     fn differences(&self, current: &Self) -> Vec<String> {
         let mut differences = Vec::new();
         macro_rules! compare {
@@ -467,6 +468,7 @@ fn launch_tun_managed(
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn tun_interfaces_are_safe(interfaces: &[String], active_proxyctl_tun: bool) -> bool {
     interfaces.is_empty()
         || (active_proxyctl_tun && interfaces.iter().all(|name| name == "tun-proxyctl"))
@@ -863,6 +865,7 @@ fn private_fd(_fd: i32) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
     #[test]
     fn tun_preflight_refuses_foreign_tun_interfaces_but_allows_its_own_for_switching() {
         assert!(tun_interfaces_are_safe(&[], false));
@@ -874,6 +877,7 @@ mod tests {
         ));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn tun_baseline_reports_exact_changed_categories() {
         let baseline = TunBaseline {
