@@ -422,25 +422,24 @@ fn print_metric_summary(summary: &reporting::MetricSummary) {
         String::new()
     };
 
-    match (summary.median, summary.successful) {
-        (Some(value), 3) => println!(
+    match (summary.median, summary.successful, summary.preflight) {
+        (Some(value), 3, _) => println!(
             "      {label}: {:.2} {} (3/3 successful)",
             value,
             summary.metric.unit()
         ),
-        (Some(value), successful) => println!(
+        (Some(value), successful, _) => println!(
             "      {label}: {:.2} {} (partial: {successful}/3 successful{suffix}{missing_suffix})",
             value,
             summary.metric.unit()
         ),
-        (None, _) if summary.preflight.is_some() => println!(
-            "      {label}: {} (preflight)",
-            sample_status_label(summary.preflight.expect("checked above"))
-        ),
-        (None, 0) if summary.attempted == 0 => {
+        (None, _, Some(preflight)) => {
+            println!("      {label}: {} (preflight)", sample_status_label(preflight))
+        }
+        (None, 0, None) if summary.attempted == 0 => {
             println!("      {label}: not run (0/3)")
         }
-        (None, _) => println!("      {label}: no successful samples (0/3{suffix}{missing_suffix})"),
+        (None, _, None) => println!("      {label}: no successful samples (0/3{suffix}{missing_suffix})"),
     }
 }
 
