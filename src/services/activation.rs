@@ -809,7 +809,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn process_identity_includes_start_ticks_and_executable() {    #[cfg(target_os = "linux")]
+    #[cfg(target_os = "linux")]
     #[test]
     fn process_identity_includes_start_ticks_and_executable() {
         let pid = std::process::id();
