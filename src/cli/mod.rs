@@ -1,8 +1,8 @@
 //! CLI definitions and dispatch. Application behavior belongs in services.
 use crate::{
     cores::CoreId,
-    services::node_selection::{self, NodeSelection},
     database::{AddNodeOutcome, NodeRecord, default_database_path},
+    services::node_selection::{self, NodeSelection},
     services::{
         nodes,
         pruning::{self, PruneDecision, PruneOptions, PruneScope},
