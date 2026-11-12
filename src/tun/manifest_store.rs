@@ -11,10 +11,12 @@ use super::{
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
+#[cfg(unix)]
+use std::fs::OpenOptions;
 
 const STORE_FILE: &str = "tun-manifest.json";
 const STORE_VERSION: u32 = 1;
