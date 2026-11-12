@@ -163,3 +163,8 @@ A fail-closed readiness evaluator now requires evidence for the exact manifest-o
 ### Fake-process test stability
 
 Process-identity tests now use bounded retries when a freshly spawned fake child is not yet consistently visible through procfs/pidfd. The argv[0] test uses a long-lived fixture that preserves its argument storage and waits briefly for the expected procfs view. These are test-only synchronization measures; production identity checks remain strict and fail closed.
+
+
+## Fixed kernel operation planning (not execution)
+
+The Linux kernel backend now translates a validated dual-stack routing-policy plan into fixed-argument iproute2 operations: create the named TUN device for the invoking UID/GID, bring it up, add the exact IPv4/IPv6 default routes to the dedicated table, then add the exact marked-core bypass and proxy lookup rules. Cleanup is generated in reverse dependency order. The planner has no shell strings and cannot execute commands or obtain privileges. It is not yet a production kernel backend: before any operation can run, the broker must inspect live state, bind the created interface index, persist exact fingerprints, and perform compare-and-delete for every resource. TUN remains disabled.
