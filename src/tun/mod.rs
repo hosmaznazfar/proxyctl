@@ -13,6 +13,7 @@ pub mod privilege_broker;
 #[cfg(target_os = "linux")]
 pub mod process;
 pub mod recovery;
+pub mod readiness;
 pub mod route_policy;
 pub mod service_manager;
 #[cfg(target_os = "linux")]
