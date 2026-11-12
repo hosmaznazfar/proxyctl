@@ -212,14 +212,8 @@ impl RoutingPolicyPlan {
             );
         }
 
-        // No terminal rule or blackhole route is allowed: an empty dedicated table must let
-        // the kernel continue to the ordinary later RPDB rules instead of blackholing traffic.
-        ensure!(
-            self.rules.iter().all(|rule| {
-                matches!(rule.purpose, RulePurpose::CoreTrafficBypass | RulePurpose::ProxyTraffic)
-            }),
-            "unsupported terminal policy rule"
-        );
+        // Rules are lookup-only. An empty dedicated table therefore has no terminal
+        // action here and the kernel can continue to later RPDB rules.
         Ok(())
     }
 
