@@ -5,8 +5,6 @@ use crate::{
 };
 use anyhow::{Context, ensure};
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "linux")]
-use std::{io::Read, os::unix::process::CommandExt};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -17,6 +15,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+#[cfg(target_os = "linux")]
+use std::{io::Read, os::unix::process::CommandExt};
 
 const WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);
@@ -185,10 +185,15 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result
             adapter.generate_tun_activation_config(&node, port)
         } else {
             adapter.generate_activation_config(&node, port)
-        }.with_context(|| if tun_enabled {
-            format!("could not generate loopback mixed SOCKS5/HTTP plus native TUN {core} config")
-        } else {
-            format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config")
+        }
+        .with_context(|| {
+            if tun_enabled {
+                format!(
+                    "could not generate loopback mixed SOCKS5/HTTP plus native TUN {core} config"
+                )
+            } else {
+                format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config")
+            }
         })?;
         adapters::validation::validate_generated_config(core, &generated, &executable)
             .with_context(|| format!("{core} rejected the activation config"))?;
@@ -206,17 +211,45 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result
         }
         if tun_enabled {
             let context = prepare_tun_launch(&runtime, &state_path)?;
-            launch_tun_managed(&runtime, &state_path, &managed, &executable, &config,
-                &generated.content, node_id, core, port, context, WAIT)?;
+            launch_tun_managed(
+                &runtime,
+                &state_path,
+                &managed,
+                &executable,
+                &config,
+                &generated.content,
+                node_id,
+                core,
+                port,
+                context,
+                WAIT,
+            )?;
         } else {
-            launch_managed(&runtime, &state_path, &managed, &executable, &config,
-                &generated.content, node_id, core.as_str(), port, command, WAIT)?;
+            launch_managed(
+                &runtime,
+                &state_path,
+                &managed,
+                &executable,
+                &config,
+                &generated.content,
+                node_id,
+                core.as_str(),
+                port,
+                command,
+                WAIT,
+            )?;
         }
         println!("Activated node #{node_id} with {core}.");
-        println!("Shared SOCKS5/HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually).");
+        println!(
+            "Shared SOCKS5/HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
+        );
         if tun_enabled {
-            println!("Native TUN interface tun-proxyctl is active; DNS and firewall settings were not changed.");
-            println!("The core runs as your user with only CAP_NET_ADMIN in a transient systemd service.");
+            println!(
+                "Native TUN interface tun-proxyctl is active; DNS and firewall settings were not changed."
+            );
+            println!(
+                "The core runs as your user with only CAP_NET_ADMIN in a transient systemd service."
+            );
         } else {
             println!("System proxy, DNS, routes, firewall, and TUN were not changed.");
         }
