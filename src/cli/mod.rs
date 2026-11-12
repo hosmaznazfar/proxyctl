@@ -344,12 +344,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     );
                 }
                 let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
-                print_sorted_node_list(
-                    &ranked,
-                    metric,
-                    &display_numbers,
-                    &deleted_display_numbers,
-                );
+                print_sorted_node_list(&ranked, metric, &display_numbers, &deleted_display_numbers);
             } else {
                 print_node_list(&records, &display_numbers, &deleted_display_numbers);
             }
