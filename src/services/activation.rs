@@ -1228,10 +1228,11 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn managed_process_uses_unified_proxyctl_identity_without_changing_executable() {
-        let mut command = Command::new("sleep");
+        let sleep = find_program("sleep").unwrap();
+        let mut command = Command::new(&sleep);
         command.arg("30");
         configure_process_identity(&mut command);
-        let executable_path = fs::canonicalize(command.get_program()).unwrap();
+        let executable_path = fs::canonicalize(&sleep).unwrap();
         let mut child = command.spawn().unwrap();
         let pid = child.id();
         await_identity(pid, &executable_path, Duration::from_secs(2)).unwrap();
