@@ -61,7 +61,7 @@ impl KernelCommandPlan {
             cleanup.push(rule_delete(rule));
         }
         for route in policy.routes.iter().rev() {
-            cleanup.push(route_delete(route));
+            cleanup.push(route_delete(route)?);
         }
         cleanup.push(IpCommand::new([
             "link",
