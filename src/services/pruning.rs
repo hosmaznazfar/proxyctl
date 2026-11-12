@@ -285,6 +285,7 @@ mod tests {
             id: 1,
             node: parse_proxy_url("hysteria2://password@example.test:443").unwrap(),
             created_at: 1,
+            active_order: 0,
             deleted_at: None,
         }
     }
