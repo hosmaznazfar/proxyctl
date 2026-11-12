@@ -64,17 +64,11 @@ pub fn list_nodes(database_path: &Path, include_deleted: bool) -> anyhow::Result
     NodeDatabase::open(database_path)?.list_nodes(include_deleted)
 }
 
-pub fn get_node(database_path: &Path, id: u64) -> anyhow::Result<Option<NodeRecord>> {
-    NodeDatabase::open(database_path)?.get_node(id)
-}
-
-pub fn remove_node(database_path: &Path, id: u64) -> anyhow::Result<bool> {
-    NodeDatabase::open(database_path)?.soft_delete(id)
-}
-
-pub fn restore_node(database_path: &Path, id: u64) -> anyhow::Result<bool> {
-    NodeDatabase::open(database_path)?.restore(id)
-}
+pub fn get_node(path:&Path,id:u64)->anyhow::Result<Option<NodeRecord>>{NodeDatabase::open(path)?.get_node(id)}
+#[derive(Clone,Debug,Default,Eq,PartialEq)] pub struct BatchNodeSummary{pub changed:Vec<u64>,pub missing:Vec<u64>,pub unchanged:Vec<u64>}
+pub fn resolve_node_selection(path:&Path,sel:&super::node_selection::NodeSelection,include_deleted:bool)->anyhow::Result<Vec<u64>>{let db=NodeDatabase::open(path)?;match sel{super::node_selection::NodeSelection::All=>Ok(db.list_nodes(true)?.into_iter().filter(|r|r.is_deleted()==include_deleted).map(|r|r.id).collect()),super::node_selection::NodeSelection::Ids(ids)=>Ok(ids.clone())}}
+pub fn remove_nodes(path:&Path,ids:&[u64])->anyhow::Result<BatchNodeSummary>{let db=NodeDatabase::open(path)?;let mut s=BatchNodeSummary::default();for id in ids{match db.get_node(*id)?{None=>s.missing.push(*id),Some(r)if r.is_deleted()=>s.unchanged.push(*id),Some(_)if db.soft_delete(*id)?=>s.changed.push(*id),Some(_)=>s.unchanged.push(*id)}}Ok(s)}
+pub fn restore_nodes(path:&Path,ids:&[u64])->anyhow::Result<BatchNodeSummary>{let db=NodeDatabase::open(path)?;let mut s=BatchNodeSummary::default();for id in ids{match db.get_node(*id)?{None=>s.missing.push(*id),Some(r)if !r.is_deleted()=>s.unchanged.push(*id),Some(_)if db.restore(*id)?=>s.changed.push(*id),Some(_)=>s.unchanged.push(*id)}}Ok(s)}
 
 fn safe_parse_error(error: ParseError) -> String {
     error.to_string()
