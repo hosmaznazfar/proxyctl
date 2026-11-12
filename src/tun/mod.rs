@@ -2,6 +2,10 @@
 //!
 //! This module deliberately has no mutation APIs. It inspects procfs/sysfs and,
 //! when available, invokes firewall listing commands only.
+//!
+//! Runtime service-manager discovery is also read-only and distro-agnostic.
+
+pub mod service_manager;
 
 #[cfg(target_os = "linux")]
 use std::{
