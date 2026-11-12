@@ -4,12 +4,12 @@
 //! The caller must serialize lifecycle operations; this store prevents stale activations from
 //! overwriting or deleting a different activation's recovery record.
 
+#[cfg(target_os = "linux")]
+use super::process::ProcessIdentity;
 use super::{
     ownership::RouteManifest,
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase, transition},
 };
-#[cfg(target_os = "linux")]
-use super::process::ProcessIdentity;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]

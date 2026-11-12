@@ -1,9 +1,9 @@
+#[cfg(target_os = "linux")]
+use super::process::ProcessIdentity;
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
-#[cfg(target_os = "linux")]
-use super::process::ProcessIdentity;
 use anyhow::{Context, Result, ensure};
 use std::{fs::File, path::PathBuf, time::Duration};
 #[cfg(unix)]
@@ -72,7 +72,6 @@ impl LifecycleCoordinator {
             .transpose()
     }
 
-
     /// Bind the exact launched core process to a prepared activation before committing startup.
     /// The process must still match its procfs identity when the durable write is performed.
     #[cfg(target_os = "linux")]
@@ -83,7 +82,10 @@ impl LifecycleCoordinator {
     ) -> Result<()> {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         process.validate()?;
-        ensure!(process.verify()?, "managed core process identity is no longer live");
+        ensure!(
+            process.verify()?,
+            "managed core process identity is no longer live"
+        );
         let mut snapshot = self
             .store
             .load()?
@@ -262,16 +264,30 @@ mod tests {
             .spawn()
             .unwrap();
         let identity = ProcessIdentity::capture(child.id()).unwrap();
-        coordinator.bind_core_process(&token, identity.clone()).unwrap();
+        coordinator
+            .bind_core_process(&token, identity.clone())
+            .unwrap();
         assert_eq!(
-            coordinator.load_current().unwrap().unwrap().snapshot.core_process,
+            coordinator
+                .load_current()
+                .unwrap()
+                .unwrap()
+                .snapshot
+                .core_process,
             Some(identity)
         );
-        assert!(coordinator.bind_core_process(&token, ProcessIdentity {
-            pid: 0,
-            start_ticks: 1,
-            executable: "/bin/sleep".into(),
-        }).is_err());
+        assert!(
+            coordinator
+                .bind_core_process(
+                    &token,
+                    ProcessIdentity {
+                        pid: 0,
+                        start_ticks: 1,
+                        executable: "/bin/sleep".into(),
+                    }
+                )
+                .is_err()
+        );
         child.kill().unwrap();
         child.wait().unwrap();
     }

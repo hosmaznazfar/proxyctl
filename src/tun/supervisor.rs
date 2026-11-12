@@ -28,7 +28,10 @@ pub fn monitor_core<B: OwnedResourceBackend>(
     let current = coordinator
         .load_current()?
         .context("no active TUN manifest exists for the supervisor")?;
-    ensure!(current.token == *token, "supervisor activation token is stale");
+    ensure!(
+        current.token == *token,
+        "supervisor activation token is stale"
+    );
     ensure!(
         matches!(
             current.snapshot.phase,
@@ -42,7 +45,10 @@ pub fn monitor_core<B: OwnedResourceBackend>(
     let current = coordinator
         .load_current()?
         .context("TUN manifest disappeared while monitoring core")?;
-    ensure!(current.token == *token, "TUN activation changed while monitoring core");
+    ensure!(
+        current.token == *token,
+        "TUN activation changed while monitoring core"
+    );
     coordinator.apply_event(token, SupervisorEvent::CoreExited)?;
 
     let current = coordinator
@@ -63,7 +69,6 @@ pub fn monitor_core<B: OwnedResourceBackend>(
     Ok(report)
 }
 
-
 /// Resume monitoring from the durable process identity after a supervisor restart.
 ///
 /// If the recorded process instance no longer exists (or its PID has been reused), cleanup
@@ -77,7 +82,10 @@ pub fn resume_or_recover<B: OwnedResourceBackend>(
     let current = coordinator
         .load_current()?
         .context("no TUN recovery manifest exists")?;
-    ensure!(current.token == *token, "recovery activation token is stale");
+    ensure!(
+        current.token == *token,
+        "recovery activation token is stale"
+    );
     if current.snapshot.phase == SupervisorPhase::CleanupPending {
         return recover_pending_cleanup(coordinator, token, backend).map(Some);
     }
@@ -112,7 +120,10 @@ pub fn recover_pending_cleanup<B: OwnedResourceBackend>(
     let current = coordinator
         .load_current()?
         .context("no TUN recovery manifest exists")?;
-    ensure!(current.token == *token, "recovery activation token is stale");
+    ensure!(
+        current.token == *token,
+        "recovery activation token is stale"
+    );
     ensure!(
         current.snapshot.phase == SupervisorPhase::CleanupPending,
         "recovery manifest is not waiting for cleanup"
@@ -193,21 +204,25 @@ mod tests {
             },
         };
         let token = coordinator.create_prepared(&snapshot).unwrap();
-        if matches!(phase, SupervisorPhase::Running | SupervisorPhase::CleanupPending) {
-            coordinator.apply_event(&token, SupervisorEvent::StartCommitted).unwrap();
+        if matches!(
+            phase,
+            SupervisorPhase::Running | SupervisorPhase::CleanupPending
+        ) {
+            coordinator
+                .apply_event(&token, SupervisorEvent::StartCommitted)
+                .unwrap();
         }
         if phase == SupervisorPhase::CleanupPending {
-            coordinator.apply_event(&token, SupervisorEvent::CoreExited).unwrap();
+            coordinator
+                .apply_event(&token, SupervisorEvent::CoreExited)
+                .unwrap();
         }
         (directory, coordinator, token)
     }
 
     fn backend() -> FakeBackend {
         FakeBackend {
-            resources: BTreeMap::from([(
-                "route:v4-default".into(),
-                "route-fingerprint".into(),
-            )]),
+            resources: BTreeMap::from([("route:v4-default".into(), "route-fingerprint".into())]),
         }
     }
 
@@ -222,7 +237,9 @@ mod tests {
             .spawn()
             .unwrap();
         let identity = ProcessIdentity::capture(child.id()).unwrap();
-        coordinator.bind_core_process(&token, identity.clone()).unwrap();
+        coordinator
+            .bind_core_process(&token, identity.clone())
+            .unwrap();
         let process = ProcessHandle::open(identity).unwrap();
         let worker = thread::spawn(move || {
             let mut backend = backend();
@@ -249,7 +266,9 @@ mod tests {
             .unwrap();
         let identity = ProcessIdentity::capture(child.id()).unwrap();
         coordinator.bind_core_process(&token, identity).unwrap();
-        coordinator.apply_event(&token, SupervisorEvent::StartCommitted).unwrap();
+        coordinator
+            .apply_event(&token, SupervisorEvent::StartCommitted)
+            .unwrap();
         child.kill().unwrap();
         child.wait().unwrap();
 
@@ -326,7 +345,10 @@ mod tests {
         };
         let new_token = coordinator.create_prepared(&new_snapshot).unwrap();
         assert!(recover_pending_cleanup(&coordinator, &old_token, &mut backend).is_err());
-        assert_eq!(coordinator.load_current().unwrap().unwrap().token, new_token);
+        assert_eq!(
+            coordinator.load_current().unwrap().unwrap().token,
+            new_token
+        );
         assert!(backend.resources.is_empty());
     }
 }
