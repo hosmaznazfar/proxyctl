@@ -418,6 +418,8 @@ proxyctl update --core sing-box
 proxyctl import ~/Documents/servers.txt
 proxyctl add "vless://..."
 proxyctl list
+proxyctl list --protocol vless
+proxyctl list --search example.com
 proxyctl show 12
 proxyctl show 1 2 3
 proxyctl show 1..5
@@ -425,19 +427,23 @@ proxyctl remove 12
 proxyctl remove 1 2 3
 proxyctl remove 1..5
 proxyctl remove all
+proxyctl remove all --yes
 proxyctl restore 1 2 3
 proxyctl restore 1..5
 proxyctl restore all
 proxyctl check 1 2 3
+proxyctl check 1..5 --core xray
 
 proxyctl test --all-cores
 proxyctl test --node 12 --core sing-box
+proxyctl test --node 12 13 14 --all-cores
+proxyctl test --node 12..18 --core xray
 
 proxyctl report
 proxyctl report --history
 proxyctl report --compare
-proxyctl report --core mihomo
-proxyctl report --node 12
+proxyctl report --node 12 13 14 --history
+proxyctl report --node 12..18 --compare
 
 proxyctl list --sort ping
 proxyctl list --sort download
@@ -451,12 +457,10 @@ proxyctl prune --core xray --unavailable --apply
 
 proxyctl use 12 --core sing-box
 proxyctl stop
-
-proxyctl tun on
-proxyctl tun off
+proxyctl tun status
 ~~~
 
-The exact help wording and minor flag refinements may evolve, but the safety and behavior requirements above must remain intact.
+All commands accepting node IDs use the shared selector grammar: positive IDs, space-separated lists, inclusive `START..END` ranges, combined lists/ranges, or standalone `all`. Remove-all requires interactive confirmation or explicit `--yes`; restore-all selects deleted records. TUN activation is deferred and is not part of the exposed command surface.
 
 ## 6. Release acceptance checklist
 
