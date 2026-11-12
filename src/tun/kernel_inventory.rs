@@ -209,7 +209,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn captures_command_output_without_a_shell_or_pipe_backpressure() {
+    fn captures_command_output_to_file_without_pipe_backpressure() {
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("emit");
         fs::write(&executable, "#!/bin/sh\nprintf '[{}]\n'\n").unwrap();
