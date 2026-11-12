@@ -16,10 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 #[cfg(target_os = "linux")]
-use std::{
-    io::Read,
-    os::unix::process::CommandExt,
-};
+use std::{io::Read, os::unix::process::CommandExt};
 
 const WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);
