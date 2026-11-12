@@ -10,12 +10,20 @@ use crate::{
 
 /// Validate one stored node against a selected core, or every installed core when omitted.
 /// Unsupported combinations are reported but are not treated as validation failures.
-pub fn check_node(database_path: &Path, node_id: u64, selected_core: Option<CoreId>) -> anyhow::Result<()> {
+pub fn check_node(
+    database_path: &Path,
+    node_id: u64,
+    selected_core: Option<CoreId>,
+) -> anyhow::Result<()> {
     check_nodes(database_path, &[node_id], selected_core)
 }
 
 /// Validate every selected node. Continue after per-node validation failures and summarize them.
-pub fn check_nodes(database_path: &Path, node_ids: &[u64], selected_core: Option<CoreId>) -> anyhow::Result<()> {
+pub fn check_nodes(
+    database_path: &Path,
+    node_ids: &[u64],
+    selected_core: Option<CoreId>,
+) -> anyhow::Result<()> {
     anyhow::ensure!(!node_ids.is_empty(), "select at least one node to check");
     let mut failures = Vec::new();
     for node_id in node_ids {
@@ -25,7 +33,14 @@ pub fn check_nodes(database_path: &Path, node_ids: &[u64], selected_core: Option
         }
     }
     if !failures.is_empty() {
-        anyhow::bail!("configuration checks failed for node(s): {}", failures.iter().map(u64::to_string).collect::<Vec<_>>().join(", "));
+        anyhow::bail!(
+            "configuration checks failed for node(s): {}",
+            failures
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
     Ok(())
 }
