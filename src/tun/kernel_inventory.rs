@@ -4,8 +4,11 @@
 //! and fails closed when the output is incomplete or cannot be interpreted.
 
 use crate::tun::route_policy::{AddressFamily, KernelInventory};
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use anyhow::ensure;
 use serde_json::Value;
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 /// Inspect route tables and rule priorities for both address families.
@@ -23,7 +26,7 @@ pub fn inspect() -> Result<KernelInventory> {
 
 #[cfg(not(target_os = "linux"))]
 pub fn inspect() -> Result<KernelInventory> {
-    bail!("kernel routing inventory is currently supported only on Linux");
+    anyhow::bail!("kernel routing inventory is currently supported only on Linux");
 }
 
 #[cfg(target_os = "linux")]
