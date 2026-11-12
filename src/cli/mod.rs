@@ -972,7 +972,7 @@ mod tests {
             cli.command,
             Some(Command::Test {
                 all_cores: true,
-                node: ref node,
+                ref node,
                 core: None,
                 ..
             }) if node.is_empty()
@@ -1004,7 +1004,7 @@ mod tests {
             cli.command,
             Some(Command::Test {
                 all_cores: true,
-                node: ref node,
+                ref node,
                 core: None,
                 ..
             }) if node == &vec!["18".to_owned()]
@@ -1060,7 +1060,7 @@ mod tests {
             cli.command,
             Some(Command::Test {
                 all_cores: false,
-                node: ref node,
+                ref node,
                 core: Some(ref core),
                 download_bytes: 2_097_152,
                 upload_bytes: 1_048_576,
