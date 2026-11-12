@@ -103,6 +103,10 @@ A generation-scoped lifecycle transition function now models the offline sequenc
 
 All three native TUN adapter configs now disable core-managed automatic route installation. sing-box sets auto_route to false; Xray supplies an empty autoSystemRoutingTable; Mihomo sets auto-route to false. DNS redirection and firewall auto-redirect remain disabled. This is a configuration contract for future external route ownership, not a runnable TUN setup.
 
+
+
+A Linux process-identity primitive now captures PID, procfs start-time ticks, and the canonical executable path. It opens a pidfd, revalidates the complete identity after opening, polls the pinned process instance for exit, and signals through pidfd only after a fresh identity check. Fake-child tests cover exact identity, altered start time/executable, exit monitoring, and pidfd signaling. This is a reusable process-monitoring primitive, not yet a surviving supervisor: no background supervisor process or init-manager integration is launched, and TUN remains disabled.
+
 ## Verification gates
 
 ### Gate 1 — offline automated tests
