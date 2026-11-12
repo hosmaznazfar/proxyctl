@@ -38,17 +38,17 @@ impl KernelCommandPlan {
     ) -> Result<Self> {
         policy.validate()?;
         let mut apply = vec![
-            IpCommand::new([
-                "tuntap",
-                "add",
-                "dev",
-                policy.interface_name.as_str(),
-                "mode",
-                "tun",
-                "user",
-                &owner_uid.to_string(),
-                "group",
-                &owner_gid.to_string(),
+            IpCommand::new(vec![
+                "tuntap".into(),
+                "add".into(),
+                "dev".into(),
+                policy.interface_name.clone(),
+                "mode".into(),
+                "tun".into(),
+                "user".into(),
+                owner_uid.to_string(),
+                "group".into(),
+                owner_gid.to_string(),
             ]),
             IpCommand::new([
                 "link",
@@ -93,29 +93,29 @@ fn family_args(family: AddressFamily) -> &'static str {
 
 fn route_add(route: &PlannedRoute) -> Result<IpCommand> {
     anyhow::ensure!(route.route_type == RouteType::Unicast, "only unicast routes may be planned");
-    Ok(IpCommand::new([
-        family_args(route.family),
-        "route",
-        "add",
-        route.destination.as_str(),
-        "dev",
-        route.interface_name.as_str(),
-        "table",
-        &route.table_id.to_string(),
+    Ok(IpCommand::new(vec![
+        family_args(route.family).into(),
+        "route".into(),
+        "add".into(),
+        route.destination.clone(),
+        "dev".into(),
+        route.interface_name.clone(),
+        "table".into(),
+        route.table_id.to_string(),
     ]))
 }
 
 fn route_delete(route: &PlannedRoute) -> Result<IpCommand> {
     anyhow::ensure!(route.route_type == RouteType::Unicast, "only unicast routes may be planned");
-    Ok(IpCommand::new([
-        family_args(route.family),
-        "route",
-        "del",
-        route.destination.as_str(),
-        "dev",
-        route.interface_name.as_str(),
-        "table",
-        &route.table_id.to_string(),
+    Ok(IpCommand::new(vec![
+        family_args(route.family).into(),
+        "route".into(),
+        "del".into(),
+        route.destination.clone(),
+        "dev".into(),
+        route.interface_name.clone(),
+        "table".into(),
+        route.table_id.to_string(),
     ]))
 }
 
