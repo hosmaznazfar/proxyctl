@@ -100,6 +100,11 @@ impl ManifestStore {
             snapshot.phase == SupervisorPhase::Prepared,
             "new TUN manifest must begin in the prepared phase"
         );
+        #[cfg(target_os = "linux")]
+        ensure!(
+            snapshot.core_process.is_none(),
+            "new TUN manifest cannot begin with a pre-bound core process"
+        );
         ensure!(
             self.load()?.is_none(),
             "an existing TUN recovery manifest must be recovered before a new activation"
