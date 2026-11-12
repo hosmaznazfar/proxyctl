@@ -123,8 +123,7 @@ impl BrokerRequest {
             "privilege-broker manifest path contains an unsafe component"
         );
         ensure!(
-            self.manifest_path.file_name().and_then(OsStr::to_str)
-                == Some("tun-manifest.json"),
+            self.manifest_path.file_name().and_then(OsStr::to_str) == Some("tun-manifest.json"),
             "privilege-broker request does not reference a TUN manifest"
         );
         Ok(())
@@ -145,9 +144,9 @@ fn valid_activation_id(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{ffi::OsString, fs};
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    use std::{ffi::OsString, fs};
 
     fn request() -> BrokerRequest {
         BrokerRequest {

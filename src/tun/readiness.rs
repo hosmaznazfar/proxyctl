@@ -65,7 +65,10 @@ pub fn verify_readiness(
         evidence.proxied_traffic_verified,
         "end-to-end proxied traffic probe failed"
     );
-    ensure!(evidence.dns_unchanged, "TUN readiness probe detected DNS changes");
+    ensure!(
+        evidence.dns_unchanged,
+        "TUN readiness probe detected DNS changes"
+    );
     ensure!(
         evidence.firewall_unchanged,
         "TUN readiness probe detected firewall changes"
