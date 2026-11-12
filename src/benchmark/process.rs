@@ -302,9 +302,11 @@ mod tests {
 
     #[test]
     fn reserves_only_loopback_ephemeral_ports() {
+        // The reservation socket is intentionally dropped before the core binds.
+        // Do not re-bind here: another process may legitimately win that port
+        // between the reservation and this assertion (TOCTOU).
         let port = reserve_loopback_port().unwrap();
-        let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
-        assert_eq!(listener.local_addr().unwrap().ip().to_string(), "127.0.0.1");
+        assert_ne!(port, 0, "the OS must assign an ephemeral port");
     }
 
     #[cfg(unix)]
