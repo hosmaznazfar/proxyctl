@@ -567,7 +567,16 @@ fn print_batch_summary(action: &str, summary: &nodes::BatchNodeSummary, unchange
 
 fn selected_ids(path: &std::path::Path, selectors: &[String]) -> anyhow::Result<Vec<u64>> {
     let selection = node_selection::parse_node_selection(selectors)?;
-    nodes::resolve_node_selection(path, &selection, false)
+    let ids = nodes::resolve_node_selection(path, &selection, false)?;
+    for id in &ids {
+        let record = nodes::get_node(path, *id)?
+            .ok_or_else(|| anyhow::anyhow!("node #{id} was not found"))?;
+        anyhow::ensure!(
+            !record.is_deleted(),
+            "node #{id} is deleted; restore it before using this selection"
+        );
+    }
+    Ok(ids)
 }
 fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
     use reporting::ReportMode;
