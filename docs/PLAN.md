@@ -256,7 +256,7 @@ proxyctl prune --core xray --unavailable --apply
 
 A compatible core contributes an unavailable result only when its latest completed run for that node contains no failing preflight record and exactly three distinct real-ping samples, all marked `unreachable`. One successful real-ping sample is enough to keep the node, even if other samples failed. Unsupported combinations are excluded and never counted as failed. Invalid current compatibility, missing runs, missing or duplicate samples, incomplete evidence, timeouts, cancellations, core startup failures, and other local/HTTP errors are ambiguous and prevent pruning. A newer completed run supersedes older evidence; cancelled and interrupted runs do not replace it.
 
-Pruning is a soft-delete/lifecycle-state change, not immediate permanent erasure. Use `proxyctl restore ID` to restore a node. Pruning reads persisted benchmark evidence only: it does not start cores, contact measurement endpoints, or change system networking.
+Pruning is a soft-delete/lifecycle-state change, not immediate permanent erasure. Use `list --include-deleted` to see deleted positions (`D1`, `D2`, ...), then `proxyctl restore 1` to restore the first deleted row. Pruning reads persisted benchmark evidence only: it does not start cores, contact measurement endpoints, or change system networking.
 
 ### 3.8 Managed activation and TUN safety
 
