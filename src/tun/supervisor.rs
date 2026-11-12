@@ -158,7 +158,9 @@ mod tests {
             let prepared = ManifestSnapshot { phase: SupervisorPhase::Prepared, ..snapshot.clone() };
             let token = coordinator.create_prepared(&prepared).unwrap();
             coordinator.apply_event(&token, SupervisorEvent::StartCommitted).unwrap();
-            coordinator.apply_event(&token, SupervisorEvent::CoreExited).unwrap();
+            if phase == SupervisorPhase::CleanupPending {
+                coordinator.apply_event(&token, SupervisorEvent::CoreExited).unwrap();
+            }
             token
         };
         (directory, coordinator, token)
@@ -240,4 +242,44 @@ mod tests {
         let mut backend = backend();
         assert!(recover_pending_cleanup(&coordinator, &stale, &mut backend).is_err());
     }
-}
+}    #[test]
+    fn cleanup_conflict_retains_manifest_for_recovery() {
+        let (_directory, coordinator, token) = setup(SupervisorPhase::CleanupPending);
+        let mut backend = FakeBackend {
+            resources: BTreeMap::from([("route:v4-default".into(), "foreign".into())]),
+            conflict: false,
+        };
+        assert!(recover_pending_cleanup(&coordinator, &token, &mut backend).is_err());
+        let current = coordinator.load_current().unwrap().unwrap();
+        assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
+        assert_eq!(backend.resources.len(), 1);
+    }
+
+    #[test]
+    fn stale_token_cannot_clean_a_new_activation() {
+        let (_directory, coordinator, old_token) = setup(SupervisorPhase::CleanupPending);
+        let mut backend = backend();
+        recover_pending_cleanup(&coordinator, &old_token, &mut backend).unwrap();
+
+        let new_snapshot = ManifestSnapshot {
+            schema_version: 1,
+            generation: 1,
+            phase: SupervisorPhase::Prepared,
+            manifest: RouteManifest {
+                version: MANIFEST_VERSION,
+                activation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
+                table_id: 42420,
+                rule_priority: 42420,
+                interface_name: "tun-proxyctl".into(),
+                interface_index: 77,
+                resources: vec![OwnedResource {
+                    key: "route:v4-default".into(),
+                    fingerprint: "new-route".into(),
+                }],
+            },
+        };
+        let new_token = coordinator.create_prepared(&new_snapshot).unwrap();
+        assert!(recover_pending_cleanup(&coordinator, &old_token, &mut backend).is_err());
+        assert!(coordinator.load_current().unwrap().unwrap().token == new_token);
+        assert!(backend.resources.is_empty());
+    }
