@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 #[cfg(target_os = "linux")]
 use std::{
-    io::{Seek, SeekFrom},
+    io::{Read, Seek, SeekFrom},
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
@@ -185,6 +185,43 @@ fn parse_table_id(value: &Value) -> Result<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::{fs, os::unix::fs::PermissionsExt};
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn bounds_inspection_process_runtime_and_reaps_timeout() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("busy");
+        fs::write(&executable, "#!/bin/sh\\nwhile :; do :; done\\n").unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let started = Instant::now();
+        let result = run_ip_command(
+            executable.to_str().unwrap(),
+            &[],
+            Duration::from_millis(40),
+        );
+        assert!(result.unwrap_err().to_string().contains("timed out"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn captures_command_output_without_a_shell_or_pipe_backpressure() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("emit");
+        fs::write(&executable, "#!/bin/sh\\nprintf '[{}]\\n'\\n").unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let output = run_ip_command(
+            executable.to_str().unwrap(),
+            &[],
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(output, b"[{}]\\n");
+    }
 
     #[test]
     fn parses_dual_stack_routes_and_rules_into_deduplicated_inventory() {
