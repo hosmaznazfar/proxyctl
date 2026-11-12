@@ -1263,8 +1263,6 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn managed_process_uses_unified_proxyctl_identity_without_changing_executable() {
-        use tempfile::tempdir;
-        let dir = tempdir().unwrap();
         let sleep = find_program("sleep").unwrap();
         let executable_path = fs::canonicalize(&sleep).unwrap();
         let mut command = Command::new(&executable_path);
