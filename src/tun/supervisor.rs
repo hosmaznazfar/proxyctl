@@ -91,7 +91,7 @@ pub fn resume_or_recover<B: OwnedResourceBackend>(
     }
     let process = match ProcessHandle::open(identity.clone()) {
         Ok(process) => process,
-        Err(error) if !identity.verify()? => {
+        Err(_error) if !identity.verify()? => {
             coordinator.apply_event(token, SupervisorEvent::CoreExited)?;
             return recover_pending_cleanup(coordinator, token, backend).map(Some);
         }
@@ -235,6 +235,39 @@ mod tests {
         let (result, backend) = worker.join().unwrap();
         assert_eq!(result.unwrap().removed, ["route:v4-default"]);
         assert!(backend.resources.is_empty());
+    }
+
+    #[test]
+    fn restart_detects_dead_persisted_core_and_recovers_manifest() {
+        let (_directory, coordinator, token) = setup(SupervisorPhase::Prepared);
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let identity = ProcessIdentity::capture(child.id()).unwrap();
+        coordinator.bind_core_process(&token, identity).unwrap();
+        coordinator.apply_event(&token, SupervisorEvent::StartCommitted).unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
+
+        let mut backend = backend();
+        let report = resume_or_recover(&coordinator, &token, &mut backend)
+            .unwrap()
+            .unwrap();
+        assert_eq!(report.removed, ["route:v4-default"]);
+        assert!(coordinator.load_current().unwrap().is_none());
+    }
+
+    #[test]
+    fn restart_refuses_running_manifest_without_persisted_process_identity() {
+        let (_directory, coordinator, token) = setup(SupervisorPhase::Running);
+        let mut backend = backend();
+        assert!(resume_or_recover(&coordinator, &token, &mut backend).is_err());
+        assert_eq!(backend.resources.len(), 1);
+        assert!(coordinator.load_current().unwrap().is_some());
     }
 
     #[test]
