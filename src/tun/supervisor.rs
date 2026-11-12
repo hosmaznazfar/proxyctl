@@ -154,7 +154,7 @@ mod tests {
     use anyhow::Result;
     use std::{
         collections::BTreeMap,
-        process::{Command, Stdio},
+        process::{Child, Command, Stdio},
         thread,
         time::Duration,
     };
