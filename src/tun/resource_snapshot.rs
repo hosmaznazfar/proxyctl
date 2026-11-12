@@ -177,7 +177,7 @@ fn compare_route(
         [route] if route.canonical_attributes == expected => {
             SnapshotResourceState::PresentAndMatching
         }
-        [_] | [_, ..] => SnapshotResourceState::ChangedOrAmbiguous,
+        [_] | [_, _, ..] => SnapshotResourceState::ChangedOrAmbiguous,
     }
 }
 
@@ -197,26 +197,48 @@ fn compare_rule(
         [rule] if rule.canonical_attributes == expected => {
             SnapshotResourceState::PresentAndMatching
         }
-        [_] | [_, ..] => SnapshotResourceState::ChangedOrAmbiguous,
+        [_] | [_, _, ..] => SnapshotResourceState::ChangedOrAmbiguous,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tun::{
-        kernel_inventory::parse_detailed_snapshot,
-        ownership::{MANIFEST_VERSION, OwnedResource},
-    };
+    use crate::tun::ownership::{MANIFEST_VERSION, OwnedResource};
 
     fn fixture() -> (RouteManifest, KernelSnapshot) {
-        let snapshot = parse_detailed_snapshot(
-            br#"[{"dst":"0.0.0.0/0","dev":"tun-proxyctl","table":42420,"protocol":"static"}]"#,
-            br#"[{"dst":"::/0","dev":"tun-proxyctl","table":42420,"protocol":"static"}]"#,
-            br#"[{"priority":42410,"fwmark":"0x42/0xff","table":254}]"#,
-            br#"[{"priority":42410,"fwmark":"0x42/0xff","table":254}]"#,
-        )
-        .unwrap();
+        let ipv4_route = r#"{"dst":"0.0.0.0/0","dev":"tun-proxyctl","table":42420,"protocol":"static"}"#;
+        let ipv6_route = r#"{"dst":"::/0","dev":"tun-proxyctl","table":42420,"protocol":"static"}"#;
+        let ipv4_rule = r#"{"priority":42410,"fwmark":"0x42/0xff","table":254}"#;
+        let snapshot = KernelSnapshot {
+            inventory: Default::default(),
+            routes: vec![
+                KernelRouteRecord {
+                    family: AddressFamily::Ipv4,
+                    table_id: 42420,
+                    canonical_attributes: ipv4_route.into(),
+                },
+                KernelRouteRecord {
+                    family: AddressFamily::Ipv6,
+                    table_id: 42420,
+                    canonical_attributes: ipv6_route.into(),
+                },
+            ],
+            rules: vec![
+                KernelRuleRecord {
+                    family: AddressFamily::Ipv4,
+                    priority: 42410,
+                    table_id: Some(254),
+                    canonical_attributes: ipv4_rule.into(),
+                },
+                KernelRuleRecord {
+                    family: AddressFamily::Ipv6,
+                    priority: 42410,
+                    table_id: Some(254),
+                    canonical_attributes: ipv4_rule.into(),
+                },
+            ],
+        };
         let resources = vec![
             OwnedResource {
                 key: "route:v4:42420:0.0.0.0/0".into(),
