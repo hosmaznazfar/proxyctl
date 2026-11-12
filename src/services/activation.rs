@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 #[cfg(target_os = "linux")]
-use std::{io::Read, os::unix::{fs::symlink, process::CommandExt}};
+use std::{io::Read, os::unix::{fs::hard_link, process::CommandExt}};
 
 const WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);
@@ -200,7 +200,7 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result
 
         // Do not interrupt the existing activation until the replacement config validates.
         let config = runtime.join(format!("active-{node_id}-{}-{port}.json", core.as_str()));
-        let mut command = Command::new(runtime.join(PROCESS_NAME));
+        let mut command = Command::new(executable.parent().unwrap().join(PROCESS_NAME));
         match core {
             CoreId::SingBox | CoreId::Xray => {
                 command.arg("run").arg("-c").arg(&config);
@@ -317,9 +317,13 @@ fn launch_managed(
         let _ = fs::remove_file(config);
         return Err(error);
     }
-    let launch_path = runtime.join(PROCESS_NAME);
-    symlink(executable, &launch_path)
-        .context("could not create the unified Proxyctl executable alias")?;
+    let launch_path = executable
+        .parent()
+        .context("managed core executable has no parent directory")?
+        .join(PROCESS_NAME);
+    hard_link(executable, &launch_path)
+        .context("could not create the unified Proxyctl executable hard link")?;
+    let launch_executable = fs::canonicalize(&launch_path)?;
     configure_process_identity(&mut command);
     let mut child = match command
         .stdin(Stdio::null())
@@ -335,7 +339,7 @@ fn launch_managed(
         }
     };
     let pid = child.id();
-    let start_ticks = match await_identity(pid, executable, timeout) {
+    let start_ticks = match await_identity(pid, &launch_executable, timeout) {
         Ok(ticks) => ticks,
         Err(error) => {
             let _ = child.kill();
@@ -348,7 +352,7 @@ fn launch_managed(
     let state = ActiveProcess {
         pid,
         start_ticks,
-        executable: executable.to_path_buf(),
+        executable: launch_executable,
         config: config.to_path_buf(),
         node_id,
         core: core.to_owned(),
@@ -465,13 +469,8 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
         );
     }
     let _ = fs::remove_file(state.config);
-    let launch_path = runtime.join(PROCESS_NAME);
-    if fs::read_link(&launch_path)
-        .ok()
-        .and_then(|target| fs::canonicalize(target).ok())
-        .as_deref() == Some(state.executable.as_path())
-    {
-        fs::remove_file(launch_path)?;
+    if state.executable.file_name().is_some_and(|name| name == PROCESS_NAME) {
+        fs::remove_file(&state.executable)?;
     }
     fs::remove_file(state_path)?;
     Ok(())
@@ -1262,7 +1261,7 @@ mod tests {
         let sleep = find_program("sleep").unwrap();
         let executable_path = fs::canonicalize(&sleep).unwrap();
         let alias = dir.path().join(PROCESS_NAME);
-        symlink(&executable_path, &alias).unwrap();
+        hard_link(&executable_path, &alias).unwrap();
         let mut command = Command::new(&alias);
         command.arg("30");
         configure_process_identity(&mut command);
@@ -1271,7 +1270,7 @@ mod tests {
         await_identity(pid, &executable_path, Duration::from_secs(2)).unwrap();
         let comm = fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
         assert_eq!(comm.trim(), PROCESS_NAME);
-        assert_eq!(executable(pid).as_deref(), Some(executable_path.as_path()));
+        assert_eq!(executable(pid).as_deref(), Some(alias.as_path()));
         child.kill().unwrap();
         child.wait().unwrap();
     }
@@ -1334,7 +1333,7 @@ mod tests {
         let mut previous_process: Option<(u32, PathBuf, u64)> = None;
         for (node_id, core) in [(1, "sing-box"), (2, "xray"), (3, "mihomo")] {
             let config = runtime.join(format!("active-{node_id}-{core}.json"));
-            let mut command = Command::new(runtime.join(PROCESS_NAME));
+            let mut command = Command::new(fake.parent().unwrap().join(PROCESS_NAME));
             command.arg("30");
             launch_managed(
                 &runtime,
@@ -1354,14 +1353,14 @@ mod tests {
                 serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
             assert_eq!(state.node_id, node_id);
             assert_eq!(state.core, core);
-            assert!(matches_process(state.pid, &fake, state.start_ticks));
+            assert!(matches_process(state.pid, &state.executable, state.start_ticks));
             if let Some((pid, executable, ticks)) = previous_process.take() {
                 assert!(
                     !matches_process(pid, &executable, ticks),
                     "switching must stop the previously active process"
                 );
             }
-            previous_process = Some((state.pid, fake.clone(), state.start_ticks));
+            previous_process = Some((state.pid, state.executable.clone(), state.start_ticks));
             if let Some(previous) = previous_config.take() {
                 assert!(
                     !previous.exists(),
@@ -1376,7 +1375,7 @@ mod tests {
         stop_locked(&runtime, &state_path, &managed).unwrap();
         assert!(!matches_process(
             final_state.pid,
-            &fake,
+            &final_state.executable,
             final_state.start_ticks
         ));
         assert!(!state_path.exists());
@@ -1398,7 +1397,7 @@ mod tests {
         let port = unavailable.local_addr().unwrap().port();
         drop(unavailable);
         let config = runtime.join("active-4-sing-box.json");
-        let mut command = Command::new(runtime.join(PROCESS_NAME));
+        let mut command = Command::new(fake.parent().unwrap().join(PROCESS_NAME));
         command.arg("30");
 
         assert!(
