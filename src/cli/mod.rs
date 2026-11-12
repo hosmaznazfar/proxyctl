@@ -904,7 +904,7 @@ mod tests {
     fn list_command_accepts_protocol_and_search_filters() {
         assert!(Cli::try_parse_from(["proxyctl", "list", "--protocol", "vless"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "list", "--search", "example.com"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl","list","--protocol","invalid"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "list", "--protocol", "invalid"]).is_err());
     }
 
     #[test]
