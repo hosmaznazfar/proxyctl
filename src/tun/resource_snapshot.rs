@@ -350,6 +350,22 @@ mod tests {
     }
 
     #[test]
+    fn manifest_keys_outside_its_dedicated_default_route_table_fail_closed() {
+        let (mut manifest, snapshot) = fixture();
+        manifest.resources[0].key = "route:v4:254:0.0.0.0/0".into();
+        assert_eq!(
+            compare_manifest(&manifest, &snapshot).unwrap().resources[0].state,
+            SnapshotResourceState::UnsupportedIdentity
+        );
+
+        manifest.resources[0].key = "route:v4:42420:10.0.0.0/8".into();
+        assert_eq!(
+            compare_manifest(&manifest, &snapshot).unwrap().resources[0].state,
+            SnapshotResourceState::UnsupportedIdentity
+        );
+    }
+
+    #[test]
     fn malformed_resource_keys_do_not_get_guessed() {
         let (mut manifest, snapshot) = fixture();
         manifest.resources[0].key = "route:v7:42420:0.0.0.0/0".into();
