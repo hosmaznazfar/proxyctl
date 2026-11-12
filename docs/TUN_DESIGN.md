@@ -153,3 +153,8 @@ Until all gates pass, TUN activation remains unavailable. The offline groundwork
 ## Privilege-broker request boundary (offline contract)
 
 A Linux-only discovery layer now enumerates executable `sudo`, `doas`, and `pkexec` candidates from the caller's PATH without invoking them. Discovery is informational only: finding a binary does not prove that authorization is configured, non-interactive, or safe. The versioned broker request is deliberately narrow: it carries an activation UUID, generation, the absolute private `tun-manifest.json` path, and one of two actions (apply a prepared manifest or clean it up). It has no arbitrary command, argv, shell text, route string, interface command, executable path, or firewall operation. A future privileged helper must reopen and validate the manifest and derive exact operations from its ownership records. No broker is launched and no privilege is acquired by this module; TUN remains disabled.
+
+
+## Dataplane readiness evidence (offline contract)
+
+A fail-closed readiness evaluator now requires evidence for the exact manifest-owned TUN interface name and ifindex, verified core process identity, local listener, installed route policy, physical-egress bypass, successful end-to-end proxied traffic, and unchanged DNS/firewall state. Process liveness or a listening local port alone can never mark TUN ready. The evaluator consumes evidence only; no live probes are wired yet, so this does not make TUN activation available.
