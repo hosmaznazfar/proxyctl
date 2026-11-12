@@ -55,11 +55,27 @@ enum Command {
         #[arg(long, value_name = "CORE", requires = "sort")]
         core: Option<String>,
     },
-    Show { #[arg(required=true,num_args=1..,value_name="ID|RANGE|all")] nodes: Vec<String> },
-    Remove { #[arg(required=true,num_args=1..,value_name="ID|RANGE|all")] nodes: Vec<String>, #[arg(long,short='y')] yes: bool },
-    Restore { #[arg(required=true,num_args=1..,value_name="ID|RANGE|all")] nodes: Vec<String> },
+    Show {
+        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        nodes: Vec<String>,
+    },
+    Remove {
+        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        nodes: Vec<String>,
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+    Restore {
+        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        nodes: Vec<String>,
+    },
     /// Validate a stored node's generated config without starting a proxy core.
-    Check { #[arg(required=true,num_args=1..,value_name="ID|RANGE|all")] nodes: Vec<String>, #[arg(long,value_name="CORE")] core: Option<String> },
+    Check {
+        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        nodes: Vec<String>,
+        #[arg(long, value_name = "CORE")]
+        core: Option<String>,
+    },
     /// Show managed core status and versions.
     Cores,
     /// Activate one node using one Proxyctl-managed core (loopback only by default).
@@ -86,7 +102,7 @@ enum Command {
         all_cores: bool,
         /// Restrict --all-cores to one stored node; otherwise use with --core.
         #[arg(long)]
-        #[arg(long,num_args=1..,value_name="ID|RANGE|all")]
+        #[arg(long, num_args = 1.., value_name = "ID|RANGE|all")]
         node: Vec<String>,
         /// Test --node with one selected managed core (mutually exclusive with --all-cores).
         #[arg(long, value_name = "CORE", requires = "node")]
@@ -300,28 +316,42 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Command::Show { nodes: selectors } => {
-            let selection=node_selection::parse_node_selection(&selectors)?;
-            let ids=nodes::resolve_node_selection(&database_path,&selection,false)?;
-            if ids.is_empty(){println!("No matching nodes.");}
-            for id in ids { match nodes::get_node(&database_path,id)? {Some(r)=>print_node_details(&r),None=>println!("Node #{id}: not found.")} }
+            let selection = node_selection::parse_node_selection(&selectors)?;
+            let ids = nodes::resolve_node_selection(&database_path, &selection, false)?;
+            if ids.is_empty() {
+                println!("No matching nodes.");
+            }
+            for id in ids {
+                match nodes::get_node(&database_path, id)? {
+                    Some(record) => print_node_details(&record),
+                    None => println!("Node #{id}: not found."),
+                }
+            }
         }
         Command::Remove { nodes: selectors, yes } => {
-            let selection=node_selection::parse_node_selection(&selectors)?;
-            let ids=nodes::resolve_node_selection(&database_path,&selection,false)?;
-            if matches!(selection,NodeSelection::All)&&!yes&&!confirm_remove_all()?{println!("Removal cancelled; no nodes changed.");return Ok(());}
-            let summary=nodes::remove_nodes(&database_path,&ids)?;
-            print_batch_summary("Removed",&summary,"already deleted");
+            let selection = node_selection::parse_node_selection(&selectors)?;
+            let ids = nodes::resolve_node_selection(&database_path, &selection, false)?;
+            if matches!(selection, NodeSelection::All) && !yes && !confirm_remove_all()? {
+                println!("Removal cancelled; no nodes changed.");
+                return Ok(());
+            }
+            let summary = nodes::remove_nodes(&database_path, &ids)?;
+            print_batch_summary("Removed", &summary, "already deleted");
         }
         Command::Restore { nodes: selectors } => {
-            let selection=node_selection::parse_node_selection(&selectors)?;
-            let ids=nodes::resolve_node_selection(&database_path,&selection,true)?;
-            let summary=nodes::restore_nodes(&database_path,&ids)?;
-            print_batch_summary("Restored",&summary,"already active");
+            let selection = node_selection::parse_node_selection(&selectors)?;
+            let ids = nodes::resolve_node_selection(&database_path, &selection, true)?;
+            let summary = nodes::restore_nodes(&database_path, &ids)?;
+            print_batch_summary("Restored", &summary, "already active");
         }
         Command::Check { nodes: selectors, core } => {
-            let selection=node_selection::parse_node_selection(&selectors)?;
-            let ids=nodes::resolve_node_selection(&database_path,&selection,false)?;
-            crate::services::validation::check_nodes(&database_path,&ids,parse_core(core.as_deref())?)?;
+            let selection = node_selection::parse_node_selection(&selectors)?;
+            let ids = nodes::resolve_node_selection(&database_path, &selection, false)?;
+            crate::services::validation::check_nodes(
+                &database_path,
+                &ids,
+                parse_core(core.as_deref())?,
+            )?;
         }
         Command::Report {
             node,
@@ -337,14 +367,28 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             } else {
                 ReportMode::Latest
             };
-            let core=parse_core(core.as_deref())?;
+            let core = parse_core(core.as_deref())?;
             if node.is_empty() {
-                let report=reporting::build_report(&database_path,ReportOptions{mode,node_id:None,core})?;
-                print_benchmark_report(&report,verbose);
+                let report = reporting::build_report(
+                    &database_path,
+                    ReportOptions {
+                        mode,
+                        node_id: None,
+                        core,
+                    },
+                )?;
+                print_benchmark_report(&report, verbose);
             } else {
-                for id in selected_ids(&database_path,&node)? {
-                    let report=reporting::build_report(&database_path,ReportOptions{mode,node_id:Some(id),core})?;
-                    print_benchmark_report(&report,verbose);
+                for id in selected_ids(&database_path, &node)? {
+                    let report = reporting::build_report(
+                        &database_path,
+                        ReportOptions {
+                            mode,
+                            node_id: Some(id),
+                            core,
+                        },
+                    )?;
+                    print_benchmark_report(&report, verbose);
                 }
             }
         }
@@ -419,12 +463,32 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             settings.upload_bytes = upload_bytes;
             settings.request_timeout_ms = request_timeout_ms;
             settings.startup_timeout_ms = startup_timeout_ms;
-            let selected=if node.is_empty(){Vec::new()}else{selected_ids(&database_path,&node)?};
+            let selected = if node.is_empty() {
+                Vec::new()
+            } else {
+                selected_ids(&database_path, &node)?
+            };
             if selected.is_empty() {
-                crate::services::benchmark::run_benchmark(&database_path,crate::services::benchmark::BenchmarkOptions{all_cores,node_id:None,core:parse_core(core.as_deref())?,settings})?;
+                crate::services::benchmark::run_benchmark(
+                    &database_path,
+                    crate::services::benchmark::BenchmarkOptions {
+                        all_cores,
+                        node_id: None,
+                        core: parse_core(core.as_deref())?,
+                        settings,
+                    },
+                )?;
             } else {
                 for id in selected {
-                    crate::services::benchmark::run_benchmark(&database_path,crate::services::benchmark::BenchmarkOptions{all_cores,node_id:Some(id),core:parse_core(core.as_deref())?,settings:settings.clone()})?;
+                    crate::services::benchmark::run_benchmark(
+                        &database_path,
+                        crate::services::benchmark::BenchmarkOptions {
+                            all_cores,
+                            node_id: Some(id),
+                            core: parse_core(core.as_deref())?,
+                            settings: settings.clone(),
+                        },
+                    )?;
                 }
             }
         }
@@ -440,9 +504,47 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn confirm_remove_all()->anyhow::Result<bool>{use std::io::{self,IsTerminal,Write};if !io::stdin().is_terminal(){anyhow::bail!("'remove all' requires an interactive terminal; use --yes to confirm explicitly");}print!("Remove every active node? Reversible with 'proxyctl restore all'. [y/N] ");io::stdout().flush()?;let mut a=String::new();io::stdin().read_line(&mut a)?;Ok(matches!(a.trim().to_ascii_lowercase().as_str(),"y"|"yes"))}
-fn print_batch_summary(action:&str,s:&nodes::BatchNodeSummary,unchanged:&str){println!("{action}: {} node(s); {} not found; {} {unchanged}.",s.changed.len(),s.missing.len(),s.unchanged.len());if !s.missing.is_empty(){println!("Not found: {}",s.missing.iter().map(u64::to_string).collect::<Vec<_>>().join(", "));}if !s.unchanged.is_empty(){println!("Unchanged: {}",s.unchanged.iter().map(u64::to_string).collect::<Vec<_>>().join(", "));}}
-fn selected_ids(path:&std::path::Path,selectors:&[String])->anyhow::Result<Vec<u64>>{let selection=node_selection::parse_node_selection(selectors)?;nodes::resolve_node_selection(path,&selection,false)}
+fn confirm_remove_all() -> anyhow::Result<bool> {
+    use std::io::{self, IsTerminal, Write};
+
+    if !io::stdin().is_terminal() {
+        anyhow::bail!("'remove all' requires an interactive terminal; use --yes to confirm explicitly");
+    }
+    print!("Remove every active node? Reversible with 'proxyctl restore all'. [y/N] ");
+    io::stdout().flush()?;
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
+}
+
+fn print_batch_summary(action: &str, summary: &nodes::BatchNodeSummary, unchanged: &str) {
+    println!(
+        "{action}: {} node(s); {} not found; {} {unchanged}.",
+        summary.changed.len(),
+        summary.missing.len(),
+        summary.unchanged.len()
+    );
+    if !summary.missing.is_empty() {
+        println!(
+            "Not found: {}",
+            summary.missing.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+        );
+    }
+    if !summary.unchanged.is_empty() {
+        println!(
+            "Unchanged: {}",
+            summary.unchanged.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+        );
+    }
+}
+
+fn selected_ids(path: &std::path::Path, selectors: &[String]) -> anyhow::Result<Vec<u64>> {
+    let selection = node_selection::parse_node_selection(selectors)?;
+    nodes::resolve_node_selection(path, &selection, false)
+}
 fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
     use reporting::ReportMode;
 
