@@ -113,10 +113,11 @@ Acceptance criteria:
 
 - `proxyctl list` shows ID, protocol, server, port, and available display name.
 - Credentials and sensitive query values are masked by default.
-- `proxyctl show <ID>` displays detailed non-secret metadata and benchmark state.
-- `proxyctl remove <ID>` changes the record's lifecycle state without immediately erasing its history.
-- `proxyctl restore <ID>` restores a soft-deleted record.
-- Unknown IDs produce a clear error.
+- `show`, `check`, `test --node`, and `report --node` accept one ID, multiple IDs, inclusive ranges, and standalone `all` where applicable.
+- `remove` accepts IDs, lists, ranges, or standalone `all`; remove-all requires interactive confirmation or explicit `--yes`.
+- `restore` accepts the same syntax, with `all` scoped to deleted records.
+- One shared parser validates selectors before side effects, rejects zero/reversed/malformed/oversized ranges, and deduplicates IDs.
+- Batch lifecycle operations distinguish missing IDs from unchanged records and preserve benchmark history.
 - List and show work without any core binary running.
 
 ### FR-006 — Protocol parsing and normalized domain model (P0)
@@ -418,8 +419,16 @@ proxyctl import ~/Documents/servers.txt
 proxyctl add "vless://..."
 proxyctl list
 proxyctl show 12
+proxyctl show 1 2 3
+proxyctl show 1..5
 proxyctl remove 12
-proxyctl restore 12
+proxyctl remove 1 2 3
+proxyctl remove 1..5
+proxyctl remove all
+proxyctl restore 1 2 3
+proxyctl restore 1..5
+proxyctl restore all
+proxyctl check 1 2 3
 
 proxyctl test --all-cores
 proxyctl test --node 12 --core sing-box
