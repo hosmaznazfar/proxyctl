@@ -289,7 +289,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 if let Some(number) = nodes::active_display_number(&database_path, id)? {
                     println!("This URL is already stored as node #{number}.");
                 } else {
-                    println!("This URL is already stored as a deleted node (restore ID {id}).");
+                    let deleted_number = deleted_display_numbers(&database_path)?
+                        .get(&id)
+                        .copied()
+                        .unwrap_or_default();
+                    println!(
+                        "This URL is already stored as deleted node D{deleted_number}; use 'restore {deleted_number}'."
+                    );
                 }
             }
         },
