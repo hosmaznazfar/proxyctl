@@ -25,11 +25,17 @@ pub fn check_nodes(
     selected_core: Option<CoreId>,
 ) -> anyhow::Result<()> {
     anyhow::ensure!(!node_ids.is_empty(), "select at least one node to check");
+    let active = NodeDatabase::open(database_path)?.list_nodes(false)?;
     let mut failures = Vec::new();
     for node_id in node_ids {
-        if let Err(error) = check_one_node(database_path, *node_id, selected_core) {
-            eprintln!("Node #{node_id}: {error:#}");
-            failures.push(*node_id);
+        let display_number = active
+            .iter()
+            .position(|record| record.id == *node_id)
+            .map(|index| index + 1)
+            .unwrap_or(*node_id as usize);
+        if let Err(error) = check_one_node(database_path, *node_id, display_number, selected_core) {
+            eprintln!("Node #{display_number}: {error:#}");
+            failures.push(display_number as u64);
         }
     }
     if !failures.is_empty() {
@@ -48,6 +54,7 @@ pub fn check_nodes(
 fn check_one_node(
     database_path: &Path,
     node_id: u64,
+    display_number: usize,
     selected_core: Option<CoreId>,
 ) -> anyhow::Result<()> {
     let database = NodeDatabase::open(database_path)?;
@@ -60,7 +67,7 @@ fn check_one_node(
     );
     let node = record.node;
     drop(database);
-    println!("Node #{node_id}:");
+    println!("Node #{display_number}:");
 
     let cores = selected_core.map_or_else(|| CoreId::ALL.to_vec(), |core| vec![core]);
     let mut attempted = 0usize;
