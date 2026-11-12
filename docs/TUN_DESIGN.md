@@ -197,3 +197,10 @@ The Linux kernel backend now translates a validated dual-stack routing-policy pl
 ### Benchmark port test isolation
 
 The loopback port reservation test asserts that the OS returned a non-zero ephemeral port. It deliberately does not attempt to bind that port a second time after the reservation socket is dropped, because a concurrent process may claim it in the intervening window. Production still reserves an OS-assigned loopback port immediately before generating and starting the benchmark core; the test does not claim that the port remains reserved across that handoff.
+
+
+## Manifest-to-snapshot comparison (read-only)
+
+A new offline comparison layer maps versioned manifest keys to exact IPv4/IPv6 route and policy-rule identities in a captured kernel snapshot. Route keys identify family, table, and destination; the complete canonical route JSON is the fingerprint, so gateway, device, metric, protocol, and other attribute changes are conflicts. Default-route aliases are normalized for identity matching, and a route fingerprint must still name the manifest's exact TUN interface. Rule keys identify family and priority, while the full canonical rule JSON retains fwmark, mask, source/destination selectors, lookup table, and other returned attributes.
+
+A missing resource is reported as already absent; duplicate identities, changed fingerprints, and unknown key kinds fail closed. The comparison is read-only and **is not an authorization to delete**: a route or rule can change after the snapshot. The eventual privileged backend must perform an atomic compare-and-delete immediately before each mutation, then persist cleanup progress so interrupted cleanup can be retried. Interface name/index verification and link deletion remain separate exact-resource checks. No command is executed and TUN activation remains disabled.
