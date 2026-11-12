@@ -43,7 +43,11 @@ enum Command {
         #[arg(long)]
         include_deleted: bool,
         /// Filter by protocol: vless, vmess, trojan, shadowsocks, or hysteria2.
-        #[arg(long, value_name = "PROTOCOL")]
+        #[arg(
+            long,
+            value_name = "PROTOCOL",
+            value_parser = ["vless", "vmess", "trojan", "shadowsocks", "ss", "hysteria2", "hy2"]
+        )]
         protocol: Option<String>,
         /// Case-insensitive substring filter over server address and display name.
         #[arg(long, value_name = "TEXT")]
@@ -69,7 +73,7 @@ enum Command {
         #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
         nodes: Vec<String>,
     },
-    /// Validate a stored node's generated config without starting a proxy core.
+    /// Validate one or more stored nodes' generated configs without starting a proxy core.
     Check {
         #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
         nodes: Vec<String>,
@@ -100,10 +104,10 @@ enum Command {
         /// Test all active nodes, or only --node, against all installed compatible managed cores.
         #[arg(long)]
         all_cores: bool,
-        /// Restrict --all-cores to one stored node; otherwise use with --core.
+        /// Restrict testing to selected stored nodes; omit to test all active nodes.
         #[arg(long, num_args = 1.., value_name = "ID|RANGE|all")]
         node: Vec<String>,
-        /// Test --node with one selected managed core (mutually exclusive with --all-cores).
+        /// Test selected --node values with one managed core (mutually exclusive with --all-cores).
         #[arg(long, value_name = "CORE", requires = "node")]
         core: Option<String>,
         /// HTTPS URL used for real HTTP ping through the selected core.
@@ -135,7 +139,7 @@ enum Command {
     /// Show benchmark results, per-node history, or per-core comparisons.
     #[command(group(ArgGroup::new("report_view").args(["history", "compare"]).multiple(false)))]
     Report {
-        /// Restrict the report to one stored node.
+        /// Restrict the report to selected stored nodes.
         #[arg(long, num_args = 1.., value_name = "ID|RANGE|all")]
         node: Vec<String>,
         /// Show every benchmark run, newest first.
@@ -954,7 +958,12 @@ mod tests {
         let cli = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
         assert!(matches!(
             cli.command,
-            Some(Command::Test { all_cores: true, node: ref node, core: None, .. }) if node.is_empty()
+            Some(Command::Test {
+                all_cores: true,
+                node: ref node,
+                core: None,
+                ..
+            }) if node.is_empty()
         ));
     }
 
@@ -981,7 +990,12 @@ mod tests {
         let cli = Cli::try_parse_from(["proxyctl", "test", "--node", "18", "--all-cores"]).unwrap();
         assert!(matches!(
             cli.command,
-            Some(Command::Test { all_cores: true, node: ref node, core: None, .. }) if node == &vec!["18".to_owned()]
+            Some(Command::Test {
+                all_cores: true,
+                node: ref node,
+                core: None,
+                ..
+            }) if node == &vec!["18".to_owned()]
         ));
     }
 
@@ -993,7 +1007,16 @@ mod tests {
         assert!(Cli::try_parse_from(["proxyctl", "remove", "all", "--yes"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "restore", "1..5"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "check", "1", "2", "--core", "xray"]).is_ok());
-        let cli = Cli::try_parse_from(["proxyctl", "test", "--node", "1", "2", "3", "--all-cores"]).unwrap();
+        let cli = Cli::try_parse_from([
+            "proxyctl",
+            "test",
+            "--node",
+            "1",
+            "2",
+            "3",
+            "--all-cores",
+        ])
+        .unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::Test { node, .. })
