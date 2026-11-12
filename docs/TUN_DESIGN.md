@@ -115,6 +115,14 @@ The first runtime layer now monitors a pinned core process through its pidfd. Wh
 
 This is not yet a detached or init-managed supervisor. The caller must provide the process handle and a concrete ownership backend. No concrete Linux kernel mutation backend, privilege broker, service-manager launcher, or reboot recovery exists yet. TUN activation remains disabled.
 
+
+
+## Durable core-process identity and restart resumption
+
+The ownership manifest now optionally persists the launched core's PID, procfs start-time ticks, and canonical executable path. Binding is serialized under the lifecycle lock, accepted only once while the manifest is Prepared, and requires the process identity to be live at write time. The supervisor can resume after its own restart: it revalidates the exact process instance, opens a pidfd and resumes monitoring when the core is still alive, or enters cleanup when the recorded process has exited or the PID now identifies a different process. Failure to inspect a still-matching process fails closed. Legacy manifests without process identity remain readable but cannot be automatically cleaned from a Running phase.
+
+Tests cover durable identity binding, dead-core restart recovery, and refusal to recover a Running manifest without process identity. This is still a callable recovery runtime, not yet an independently launched supervisor service; it also has no production kernel backend or privilege broker. TUN activation remains disabled.
+
 ## Verification gates
 
 ### Gate 1 — offline automated tests
