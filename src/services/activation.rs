@@ -16,7 +16,10 @@ use std::{
     time::{Duration, Instant},
 };
 #[cfg(target_os = "linux")]
-use std::{io::Read, os::unix::{fs::hard_link, process::CommandExt}};
+use std::{
+    io::Read,
+    os::unix::{fs::hard_link, process::CommandExt},
+};
 
 const WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);
@@ -1267,7 +1270,7 @@ mod tests {
         configure_process_identity(&mut command);
         let mut child = command.spawn().unwrap();
         let pid = child.id();
-        await_identity(pid, &executable_path, Duration::from_secs(2)).unwrap();
+        await_identity(pid, &alias, Duration::from_secs(2)).unwrap();
         let comm = fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
         assert_eq!(comm.trim(), PROCESS_NAME);
         assert_eq!(executable(pid).as_deref(), Some(alias.as_path()));
