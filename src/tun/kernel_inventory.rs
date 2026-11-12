@@ -9,7 +9,12 @@ use anyhow::ensure;
 use anyhow::{Context, Result};
 use serde_json::Value;
 #[cfg(target_os = "linux")]
-use std::process::Command;
+use std::{
+    io::{Seek, SeekFrom},
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 /// Inspect route tables and rule priorities for both address families.
 ///
@@ -30,21 +35,55 @@ pub fn inspect() -> Result<KernelInventory> {
 }
 
 #[cfg(target_os = "linux")]
+const IP_COMMAND_TIMEOUT: Duration = Duration::from_secs(2);
+
+#[cfg(target_os = "linux")]
 fn run_ip(arguments: &[&str]) -> Result<Vec<u8>> {
-    let output = Command::new("ip")
+    run_ip_command("ip", arguments, IP_COMMAND_TIMEOUT)
+}
+
+#[cfg(target_os = "linux")]
+fn run_ip_command(executable: &str, arguments: &[&str], timeout: Duration) -> Result<Vec<u8>> {
+    let mut output_file = tempfile::tempfile().context("cannot create private iproute2 output file")?;
+    let child_output = output_file.try_clone()?;
+    let mut child = Command::new(executable)
         .args(arguments)
-        .output()
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(child_output))
+        .stderr(Stdio::null())
+        .spawn()
         .with_context(|| {
             format!(
-                "cannot execute iproute2 inspection command: ip {}",
+                "cannot execute iproute2 inspection command: {} {}",
+                executable,
                 arguments.join(" ")
             )
         })?;
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            anyhow::bail!(
+                "iproute2 inspection timed out after {} ms",
+                timeout.as_millis()
+            );
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+
     ensure!(
-        output.status.success(),
+        status.success(),
         "iproute2 inspection failed for a read-only routing query"
     );
-    Ok(output.stdout)
+    output_file.seek(SeekFrom::Start(0))?;
+    let mut bytes = Vec::new();
+    output_file.read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 fn parse_snapshot(
