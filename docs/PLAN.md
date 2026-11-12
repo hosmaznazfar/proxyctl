@@ -314,6 +314,8 @@ proxyctl tun status
 proxyctl add "vless://..."
 proxyctl import ~/Documents/servers.txt
 proxyctl list
+proxyctl list --protocol vless
+proxyctl list --search example.com
 proxyctl list --include-deleted
 proxyctl show 12
 proxyctl show 1 2 3
