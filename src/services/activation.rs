@@ -357,7 +357,11 @@ fn set_process_comm(pid: u32) -> anyhow::Result<()> {
     // Set comm after exec: Linux resets comm to the executable basename during exec.
     // The Child handle is still held by the caller, so this PID cannot be recycled
     // before the write even if the child exits and becomes a zombie.
-    fs::write(format!("/proc/{pid}/comm"), PROCESS_NAME)?;
+    let mut comm = OpenOptions::new()
+        .write(true)
+        .open(format!("/proc/{pid}/comm"))?;
+    comm.write_all(PROCESS_NAME.as_bytes())?;
+    drop(comm);
     let actual = fs::read_to_string(format!("/proc/{pid}/comm"))?;
     ensure!(
         actual.trim() == PROCESS_NAME,
