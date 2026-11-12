@@ -70,7 +70,7 @@ enum Command {
         id: u64,
         #[arg(long, value_name = "CORE", required = true)]
         core: String,
-        /// Opt in to the core-native Linux TUN interface and system routes.
+        /// TUN activation is temporarily disabled pending safe route ownership and crash recovery.
         #[arg(long)]
         tun: bool,
     },
