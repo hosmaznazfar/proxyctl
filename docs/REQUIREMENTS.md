@@ -368,6 +368,7 @@ A node record should include:
 - Optional display name.
 - Created/updated/imported timestamps.
 - Active/soft-deleted state and deletion metadata.
+- A monotonic active display-order value independent of the persistent database ID. Removing a node compacts active display positions; adding or restoring a node appends it without changing existing persistent IDs or benchmark references.
 - Parser/schema version where needed for future migrations.
 
 Do not expose credential fields through default display models.
