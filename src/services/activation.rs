@@ -311,8 +311,8 @@ fn launch_managed(
         executable.starts_with(managed_root),
         "refusing to run a core outside Proxyctl's managed directory"
     );
-    let launch_executable = fs::canonicalize(executable)
-        .context("could not resolve the managed core executable")?;
+    let launch_executable =
+        fs::canonicalize(executable).context("could not resolve the managed core executable")?;
     ensure!(
         launch_executable.starts_with(managed_root),
         "resolved core executable is outside Proxyctl's managed directory"
