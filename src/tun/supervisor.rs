@@ -226,6 +226,22 @@ mod tests {
         }
     }
 
+    fn pin_live_child(child: &Child) -> (ProcessIdentity, ProcessHandle) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "fake child did not remain available long enough to pin its pidfd"
+            );
+            if let Ok(identity) = ProcessIdentity::capture(child.id()) {
+                if let Ok(handle) = ProcessHandle::open(identity.clone()) {
+                    return (identity, handle);
+                }
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
     #[test]
     fn monitors_fake_core_and_cleans_exact_manifest_resources() {
         let (_directory, coordinator, token) = setup(SupervisorPhase::Prepared);
@@ -236,11 +252,10 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let identity = ProcessIdentity::capture(child.id()).unwrap();
+        let (identity, process) = pin_live_child(&child);
         coordinator
-            .bind_core_process(&token, identity.clone())
+            .bind_core_process(&token, identity)
             .unwrap();
-        let process = ProcessHandle::open(identity).unwrap();
         let worker = thread::spawn(move || {
             let mut backend = backend();
             let result = monitor_core(&coordinator, &token, &process, &mut backend);
