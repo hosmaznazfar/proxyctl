@@ -134,7 +134,6 @@ mod tests {
     }
 }
 
-
 /// Durable lifecycle phase written by the supervisor alongside the ownership manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -225,40 +224,24 @@ pub fn transition(
     }
 }
 
-
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
 
     #[test]
     fn stale_generation_cannot_change_phase_or_request_cleanup() {
-        let result = transition(
-            SupervisorPhase::Running,
-            SupervisorEvent::CoreExited,
-            6,
-            7,
-        );
+        let result = transition(SupervisorPhase::Running, SupervisorEvent::CoreExited, 6, 7);
         assert_eq!(result.phase, SupervisorPhase::Running);
         assert_eq!(result.action, RecoveryAction::IgnoreStaleEvent);
     }
 
     #[test]
     fn core_exit_enters_cleanup_and_manifest_is_removed_only_after_success() {
-        let cleanup = transition(
-            SupervisorPhase::Running,
-            SupervisorEvent::CoreExited,
-            7,
-            7,
-        );
+        let cleanup = transition(SupervisorPhase::Running, SupervisorEvent::CoreExited, 7, 7);
         assert_eq!(cleanup.phase, SupervisorPhase::CleanupPending);
         assert_eq!(cleanup.action, RecoveryAction::CleanupManifestResources);
 
-        let completed = transition(
-            cleanup.phase,
-            SupervisorEvent::CleanupCompleted,
-            7,
-            7,
-        );
+        let completed = transition(cleanup.phase, SupervisorEvent::CleanupCompleted, 7, 7);
         assert_eq!(completed.phase, SupervisorPhase::Cleaned);
         assert_eq!(completed.action, RecoveryAction::RemoveManifest);
     }
@@ -280,12 +263,7 @@ mod lifecycle_tests {
 
     #[test]
     fn cleaned_generation_is_terminal_and_repeated_events_are_harmless() {
-        let result = transition(
-            SupervisorPhase::Cleaned,
-            SupervisorEvent::CoreExited,
-            7,
-            7,
-        );
+        let result = transition(SupervisorPhase::Cleaned, SupervisorEvent::CoreExited, 7, 7);
         assert_eq!(result.phase, SupervisorPhase::Cleaned);
         assert_eq!(result.action, RecoveryAction::None);
     }
