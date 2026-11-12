@@ -224,3 +224,81 @@ pub fn transition(
         },
     }
 }
+
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn stale_generation_cannot_change_phase_or_request_cleanup() {
+        let result = transition(
+            SupervisorPhase::Running,
+            SupervisorEvent::CoreExited,
+            6,
+            7,
+        );
+        assert_eq!(result.phase, SupervisorPhase::Running);
+        assert_eq!(result.action, RecoveryAction::IgnoreStaleEvent);
+    }
+
+    #[test]
+    fn core_exit_enters_cleanup_and_manifest_is_removed_only_after_success() {
+        let cleanup = transition(
+            SupervisorPhase::Running,
+            SupervisorEvent::CoreExited,
+            7,
+            7,
+        );
+        assert_eq!(cleanup.phase, SupervisorPhase::CleanupPending);
+        assert_eq!(cleanup.action, RecoveryAction::CleanupManifestResources);
+
+        let completed = transition(
+            cleanup.phase,
+            SupervisorEvent::CleanupCompleted,
+            7,
+            7,
+        );
+        assert_eq!(completed.phase, SupervisorPhase::Cleaned);
+        assert_eq!(completed.action, RecoveryAction::RemoveManifest);
+    }
+
+    #[test]
+    fn cleanup_conflict_keeps_manifest_for_recovery() {
+        let result = transition(
+            SupervisorPhase::CleanupPending,
+            SupervisorEvent::CleanupConflicted,
+            7,
+            7,
+        );
+        assert_eq!(result.phase, SupervisorPhase::CleanupPending);
+        assert_eq!(
+            result.action,
+            RecoveryAction::PreserveManifestAndReportConflict
+        );
+    }
+
+    #[test]
+    fn cleaned_generation_is_terminal_and_repeated_events_are_harmless() {
+        let result = transition(
+            SupervisorPhase::Cleaned,
+            SupervisorEvent::CoreExited,
+            7,
+            7,
+        );
+        assert_eq!(result.phase, SupervisorPhase::Cleaned);
+        assert_eq!(result.action, RecoveryAction::None);
+    }
+
+    #[test]
+    fn zero_generation_is_always_rejected() {
+        let result = transition(
+            SupervisorPhase::Prepared,
+            SupervisorEvent::StartCommitted,
+            0,
+            0,
+        );
+        assert_eq!(result.phase, SupervisorPhase::Prepared);
+        assert_eq!(result.action, RecoveryAction::IgnoreStaleEvent);
+    }
+}
