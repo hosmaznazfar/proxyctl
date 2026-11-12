@@ -219,6 +219,7 @@ fn parse_detailed_snapshot(
     Ok(snapshot)
 }
 
+#[cfg(test)]
 fn parse_route_tables(bytes: &[u8]) -> Result<Vec<u32>> {
     let routes = parse_array(bytes, "route")?;
     routes
@@ -232,11 +233,13 @@ fn parse_route_tables(bytes: &[u8]) -> Result<Vec<u32>> {
         .collect()
 }
 
+#[cfg(test)]
 struct ParsedRules {
     tables: Vec<u32>,
     priorities: Vec<(AddressFamily, u32)>,
 }
 
+#[cfg(test)]
 fn parse_rules(bytes: &[u8], family: AddressFamily) -> Result<ParsedRules> {
     let rules = parse_array(bytes, "rule")?;
     let mut tables = Vec::new();
@@ -326,6 +329,38 @@ mod tests {
         let output =
             run_ip_command(executable.to_str().unwrap(), &[], Duration::from_secs(1)).unwrap();
         assert_eq!(output, b"[{}]\n");
+    }
+
+    #[test]
+    fn detailed_snapshot_retains_full_route_and_rule_selectors() {
+        let snapshot = parse_detailed_snapshot(
+            br#"[{"dst":"default","dev":"tun0","table":42420,"protocol":"static","metric":10}]"#,
+            br#"[{"dst":"::/0","dev":"tun0","table":42420}]"#,
+            br#"[{"priority":100,"fwmark":"0x42/0xff","table":254}]"#,
+            br#"[{"priority":100,"from":"::/0","table":254}]"#,
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.routes.len(), 2);
+        assert_eq!(snapshot.rules.len(), 2);
+        assert_eq!(snapshot.routes[0].family, AddressFamily::Ipv4);
+        assert_eq!(snapshot.routes[0].table_id, 42_420);
+        assert!(snapshot.routes[0].canonical_attributes.contains("metric"));
+        assert!(snapshot.rules[0].canonical_attributes.contains("fwmark"));
+        assert_eq!(snapshot.rules[0].table_id, Some(254));
+        assert_eq!(snapshot.inventory.occupied_tables, [254, 42_420]);
+    }
+
+    #[test]
+    fn detailed_snapshot_rejects_unparseable_resource_identity() {
+        assert!(parse_detailed_snapshot(
+            br#"[{"table":"unknown-vpn-table"}]"#,
+            b"[]",
+            b"[]",
+            b"[]",
+        )
+        .is_err());
+        assert!(parse_detailed_snapshot(b"[]", b"[]", br#"[{"table":254}]"#, b"[]").is_err());
     }
 
     #[test]
