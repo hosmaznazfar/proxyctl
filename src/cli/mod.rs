@@ -311,6 +311,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         } => {
             let mut records = nodes::list_nodes(&database_path, include_deleted)?;
             let display_numbers = active_display_numbers(&database_path)?;
+            let deleted_display_numbers = deleted_display_numbers(&database_path)?;
             if let Some(protocol) = protocol {
                 let protocol = crate::domain::Protocol::from_scheme(&protocol)
                     .ok_or_else(|| anyhow::anyhow!("unsupported protocol filter '{protocol}'"))?;
@@ -338,7 +339,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
                 print_sorted_node_list(&ranked, metric, &display_numbers);
             } else {
-                print_node_list(&records, &display_numbers);
+                print_node_list(&records, &display_numbers, &deleted_display_numbers);
             }
         }
         Command::Show { nodes: selectors } => {
@@ -786,11 +787,24 @@ fn active_display_numbers(path: &std::path::Path) -> anyhow::Result<HashMap<u64,
         .collect())
 }
 
+fn deleted_display_numbers(path: &std::path::Path) -> anyhow::Result<HashMap<u64, usize>> {
+    Ok(nodes::list_nodes(path, true)?
+        .into_iter()
+        .filter(|record| record.is_deleted())
+        .enumerate()
+        .map(|(index, record)| (record.id, index + 1))
+        .collect())
+}
+
 fn parse_core(value: Option<&str>) -> anyhow::Result<Option<CoreId>> {
     value.map(str::parse).transpose()
 }
 
-fn print_node_list(records: &[NodeRecord], display_numbers: &HashMap<u64, usize>) {
+fn print_node_list(
+    records: &[NodeRecord],
+    display_numbers: &HashMap<u64, usize>,
+    deleted_display_numbers: &HashMap<u64, usize>,
+) {
     if records.is_empty() {
         println!("No proxy nodes found.");
         return;
@@ -803,7 +817,7 @@ fn print_node_list(records: &[NodeRecord], display_numbers: &HashMap<u64, usize>
         println!(
             "{:>5}  {:<12}  {:<32}  {:>5}  {}",
             if record.is_deleted() {
-                format!("D{}", record.id)
+                format!("D{}", deleted_display_numbers.get(&record.id).copied().unwrap_or_default())
             } else {
                 display_numbers.get(&record.id).copied().unwrap_or_default().to_string()
             },
@@ -838,7 +852,7 @@ fn print_sorted_node_list(
     println!(
         "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<width$}  NAME",
         "RANK",
-        "ID",
+        "NO.",
         "PROTOCOL",
         "SERVER",
         "PORT",
