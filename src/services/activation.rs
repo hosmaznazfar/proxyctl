@@ -307,6 +307,12 @@ fn launch_managed(
             return Err(error);
         }
     };
+    if let Err(error) = set_process_comm(pid) {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = fs::remove_file(config);
+        return Err(error).context("could not assign the unified Proxyctl process name");
+    }
     let state = ActiveProcess {
         pid,
         start_ticks,
@@ -342,20 +348,22 @@ fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
 
 #[cfg(target_os = "linux")]
 fn configure_process_identity(command: &mut Command) {
+    // argv[0] is a stable user-facing identity. The real executable path is unchanged.
     command.arg0(PROCESS_NAME);
-    // Set both argv[0] and Linux's short process comm name. The canonical executable
-    // remains the real managed core path and is still used for ownership verification.
-    // SAFETY: pre_exec runs in the child immediately before exec; prctl is a direct
-    // syscall and the static NUL-terminated name requires no allocation.
-    unsafe {
-        command.pre_exec(|| {
-            let name = b"proxyctl-core\0";
-            if libc::prctl(libc::PR_SET_NAME, name.as_ptr(), 0, 0, 0) == -1 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
+}
+
+#[cfg(target_os = "linux")]
+fn set_process_comm(pid: u32) -> anyhow::Result<()> {
+    // Set comm after exec: Linux resets comm to the executable basename during exec.
+    // The Child handle is still held by the caller, so this PID cannot be recycled
+    // before the write even if the child exits and becomes a zombie.
+    fs::write(format!("/proc/{pid}/comm"), PROCESS_NAME)?;
+    let actual = fs::read_to_string(format!("/proc/{pid}/comm"))?;
+    ensure!(
+        actual.trim() == PROCESS_NAME,
+        "could not verify the unified Proxyctl process name"
+    );
+    Ok(())
 }
 
 fn paths() -> anyhow::Result<(PathBuf, PathBuf)> {
@@ -1226,6 +1234,8 @@ mod tests {
         let executable_path = fs::canonicalize(command.get_program()).unwrap();
         let mut child = command.spawn().unwrap();
         let pid = child.id();
+        await_identity(pid, &executable_path, Duration::from_secs(2)).unwrap();
+        set_process_comm(pid).unwrap();
         let comm = fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
         assert_eq!(comm.trim(), PROCESS_NAME);
         assert_eq!(executable(pid).as_deref(), Some(executable_path.as_path()));
