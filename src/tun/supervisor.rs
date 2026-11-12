@@ -233,10 +233,10 @@ mod tests {
                 std::time::Instant::now() < deadline,
                 "fake child did not remain available long enough to pin its pidfd"
             );
-            if let Ok(identity) = ProcessIdentity::capture(child.id()) {
-                if let Ok(handle) = ProcessHandle::open(identity.clone()) {
-                    return (identity, handle);
-                }
+            if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && let Ok(handle) = ProcessHandle::open(identity.clone())
+            {
+                return (identity, handle);
             }
             thread::sleep(Duration::from_millis(5));
         }
