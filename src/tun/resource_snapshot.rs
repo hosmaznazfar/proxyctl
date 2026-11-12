@@ -71,15 +71,17 @@ pub fn compare_manifest(
                 family,
                 table_id,
                 destination,
-            }) => compare_route(
-                family,
-                table_id,
-                &destination,
-                &manifest.interface_name,
-                &resource.fingerprint,
-                &snapshot.routes,
-            ),
-            Ok(ResourceKey::Rule { family, priority }) => compare_rule(
+            }) if table_id == manifest.table_id && destination == family.default_prefix() => {
+                compare_route(
+                    family,
+                    table_id,
+                    &destination,
+                    &manifest.interface_name,
+                    &resource.fingerprint,
+                    &snapshot.routes,
+                )
+            }
+            Ok(ResourceKey::Rule { family, priority }) if priority > 0 => compare_rule(
                 family,
                 priority,
                 &resource.fingerprint,
