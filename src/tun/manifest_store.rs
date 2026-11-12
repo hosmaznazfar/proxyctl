@@ -6,9 +6,7 @@
 
 use super::{
     ownership::RouteManifest,
-    recovery::{
-        transition, RecoveryAction, SupervisorEvent, SupervisorPhase,
-    },
+    recovery::{transition, RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -87,11 +85,7 @@ impl ManifestStore {
     ///
     /// Cleanup completion is durable before the manifest is removed. If removal fails, the
     /// remaining Cleaned record is safe to remove on the next recovery pass.
-    pub fn apply_event(
-        &self,
-        event: SupervisorEvent,
-        generation: u64,
-    ) -> Result<RecoveryAction> {
+    pub fn apply_event(&self, event: SupervisorEvent, generation: u64) -> Result<RecoveryAction> {
         let mut snapshot = self
             .load()?
             .ok_or_else(|| anyhow::anyhow!("no TUN recovery manifest exists"))?;
