@@ -21,8 +21,17 @@ proxyctl import ~/Documents/servers.txt
 proxyctl list
 proxyctl list --include-deleted
 proxyctl show 12
+proxyctl show 1 2 3
+proxyctl show 1..5
 proxyctl remove 12
-proxyctl restore 12
+proxyctl remove 1 2 3
+proxyctl remove 1..5
+proxyctl remove all
+proxyctl remove all --yes
+proxyctl restore 1 2 3
+proxyctl restore 1..5
+proxyctl restore all
+proxyctl check 1 2 3
 ~~~
 
 Imported source files are read-only. Credentials are masked in normal output. Proxyctl's data directory is private (0700 on Unix), and the database is protected (0600).
@@ -102,9 +111,10 @@ proxyctl test --all-cores
 
 # Test one node against one selected core
 proxyctl test --node 12 --core sing-box
-
-# Test one node against every installed compatible core
-proxyctl test --node 12 --all-cores
+proxyctl test --node 12 13 14 --core sing-box
+proxyctl test --node 12..18 --core sing-box
+proxyctl test --node 12 13 14 --all-cores
+proxyctl test --node 12..18 --all-cores
 ~~~
 
 Each selected node receives three direct TCP-ping samples. Each compatible node/core pair receives three real-ping, download, and upload samples through that core. The revised defaults follow v2rayN where applicable: Google `generate_204` for real ping and CacheFly's 10 MB test file for download, sampling only the first 2 MiB per sample to keep data use modest. Upload remains separately configurable and initially uses Cloudflare's upload endpoint, with a 256 KiB synthetic payload per sample to keep the default usable on slower upstream links. Cloudflare documents aggregated measurement collection; Proxyctl sends only a generated synthetic body, not user files or proxy credentials. All endpoint URLs, payload limits, and timeouts are configurable.
@@ -137,6 +147,8 @@ Show the latest run for every active node, or inspect one node:
 ~~~sh
 proxyctl report
 proxyctl report --node 18
+proxyctl report --node 18 19 20
+proxyctl report --node 18..25
 ~~~
 
 Show the full run history (newest first), including cancelled and interrupted runs:
@@ -180,25 +192,20 @@ proxyctl prune --core xray --unavailable --apply
 
 Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core mode, unsupported core/node combinations are excluded rather than counted as failures. A node is eligible only when every currently compatible core has a latest completed benchmark run with three distinct real-ping samples, all marked unreachable. One successful sample keeps the node. Missing runs, partial samples, invalid compatibility, startup/preflight errors, timeouts, cancellations, and other ambiguous HTTP/runtime failures prevent pruning. A newer completed run supersedes older evidence; cancelled/interrupted runs do not. Use `proxyctl restore ID` to restore a soft-deleted node.
 
-## Additional planned commands
+## Shared node selection
+
+Commands accepting node selectors share one syntax: a positive ID (`12`), list (`1 2 3`), inclusive range (`1..5`), combined IDs/ranges (`1 3 5..8`), or standalone `all`. The word `all` cannot be mixed with IDs. Duplicate IDs are removed; malformed, zero, reversed, and oversized ranges are rejected before work begins.
+
+`remove` and `restore` are soft lifecycle operations that preserve benchmark history. `remove all` requires interactive confirmation; `--yes` explicitly confirms non-interactive removal. `restore all` selects deleted nodes only. Batch operations report missing and unchanged IDs separately.
 
 ~~~sh
-proxyctl test --all-cores
-proxyctl test --node 12 --all-cores
-proxyctl test --node 12 --core sing-box
-proxyctl test --node 12 --core xray --download-bytes 2097152 --upload-bytes 1048576
-proxyctl report
-proxyctl report --node 18 --history
-proxyctl report --compare
-proxyctl list --sort ping
-proxyctl list --sort download
-proxyctl list --sort upload
-proxyctl prune --unavailable-all --dry-run
-proxyctl use 12 --core sing-box --tun
-proxyctl stop
+proxyctl show 1 2 3
+proxyctl check 1..5 --core xray
+proxyctl test --node 1 2 3 --all-cores
+proxyctl report --node 1..5 --history
+proxyctl remove all
+proxyctl restore all
 ~~~
-
-See docs/PLAN.md, docs/REQUIREMENTS.md, and docs/UPDATE_DESIGN.md.
 
 ## Development
 
@@ -215,4 +222,4 @@ cargo build --release
 
 ## Security
 
-Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking. Only explicit benchmark and activation commands start a managed core, always with a loopback-only listener. Normal activation is limited to one Proxyctl-owned core process. Stop uses process-identity verification and cannot target another application's process. TUN is opt-in and changes system routes only when explicitly requested; it does not alter system DNS or firewall rules. The TUN core runs with CAP_NET_ADMIN only inside a transient systemd service, and stop verifies restoration of the captured route/rule/interface/DNS baseline.
+Proxy URLs can contain credentials. Do not share database files or logs containing unmasked URLs. Proxyctl only modifies its own private data directory. Core artifacts are verified before extraction or execution; archive paths are not extracted to disk. Setup and update never start cores or change system networking. Only explicit benchmark and activation commands start a managed core, always with a loopback-only listener. Normal activation is limited to one Proxyctl-owned core process. Stop uses process-identity verification and cannot target another application's process. TUN activation is currently disabled at the service boundary. No command can start a TUN core or change routes, DNS, firewall rules, or interfaces through TUN mode until ownership and crash-safe recovery are implemented and fault-tested.
