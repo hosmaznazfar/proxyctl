@@ -220,12 +220,16 @@ mod tests {
         // independently-created route/rule resource.
         assert_eq!(plan.apply.len(), 8);
         assert_eq!(plan.cleanup.len(), 7);
-        assert!(plan.cleanup[..4]
-            .iter()
-            .all(|command| command.arguments[1..3] == ["rule", "del"]));
-        assert!(plan.cleanup[4..6]
-            .iter()
-            .all(|command| command.arguments[1..3] == ["route", "del"]));
+        assert!(
+            plan.cleanup[..4]
+                .iter()
+                .all(|command| command.arguments[1..3] == ["rule", "del"])
+        );
+        assert!(
+            plan.cleanup[4..6]
+                .iter()
+                .all(|command| command.arguments[1..3] == ["route", "del"])
+        );
         assert_eq!(
             plan.cleanup.last().unwrap().arguments,
             ["link", "delete", "dev", "tun-proxyctl"]
