@@ -196,9 +196,11 @@ Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core 
 
 ## Shared node selection
 
-Commands accepting node selectors share one syntax: a positive ID (`12`), list (`1 2 3`), inclusive range (`1..5`), combined IDs/ranges (`1 3 5..8`), or standalone `all`. The word `all` cannot be mixed with IDs. Duplicate IDs are removed; malformed, zero, reversed, and oversized ranges are rejected before work begins.
+Commands accepting node selectors use **current one-based display numbers**, not persistent database IDs: a number (`12`), list (`1 2 3`), inclusive range (`1..5`), combined numbers/ranges (`1 3 5..8`), or standalone `all`. Active-node commands (`show`, `remove`, `check`, `test`, `report`, and `use`) resolve against the current active list. After a removal, later active nodes immediately shift up in display numbering. `list --include-deleted` labels deleted rows `D1`, `D2`, and so on; `restore 1` selects the first deleted row, and ranges/lists use those deleted-row positions. `all` selects the relevant active or deleted set. Duplicate selectors are removed; malformed, zero, reversed, oversized, and out-of-range selections are rejected before work begins.
 
-`remove` and `restore` are soft lifecycle operations that preserve benchmark history. `remove all` requires interactive confirmation; `--yes` explicitly confirms non-interactive removal. `restore all` selects deleted nodes only. Batch operations report missing and unchanged IDs separately.
+Persistent database IDs are never renumbered. Benchmark runs and samples continue referencing the same records, so adding, removing, or restoring a node cannot reassign another node's history. New nodes and restored nodes are appended to active display order. Filtered lists keep the numbers from the full active list; sorted lists show the original node number alongside the separate rank.
+
+`remove` and `restore` are soft lifecycle operations that preserve benchmark history. `remove all` requires interactive confirmation; `--yes` explicitly confirms non-interactive removal. `restore all` selects deleted rows only. Batch operations report missing and unchanged selections separately. For a deleted row, use its `D#` position from `list --include-deleted` with `restore`.
 
 ~~~sh
 proxyctl show 1 2 3
