@@ -213,12 +213,18 @@ fn execute_run(
     cores: &[CoreId],
     core_versions: &BTreeMap<String, String>,
     settings: &BenchmarkSettings,
-) -> anyhow::Result<()> {
+ ) -> anyhow::Result<()> {
+    let active_nodes = NodeDatabase::open(database_path)?.list_nodes(false)?;
     for record in nodes {
+        let display_number = active_nodes
+            .iter()
+            .position(|active| active.id == record.id)
+            .map(|index| index + 1)
+            .unwrap_or(record.id as usize);
         if CANCELLED.load(Ordering::Relaxed) {
             return Ok(());
         }
-        execute_tcp_ping(database_path, run_id, record)?;
+        execute_tcp_ping(database_path, run_id, record, display_number)?;
 
         for core in cores {
             if CANCELLED.load(Ordering::Relaxed) {
@@ -244,7 +250,7 @@ fn execute_run(
 
             println!(
                 "run #{run_id} node #{}: validating {core} configuration...",
-                record.id
+                display_number
             );
             let adapter = adapters::adapter(*core);
             let compatibility = adapter.compatibility(&record.node);
@@ -263,7 +269,7 @@ fn execute_run(
                     crate::cores::adapters::CompatibilityStatus::Supported => unreachable!(),
                 };
                 record_preflight(database_path, &context, status, category, reason)?;
-                println!("run #{run_id} node #{} {core}: {category}", record.id);
+                println!("run #{run_id} node #{} {core}: {category}", display_number);
                 continue;
             }
 
@@ -308,7 +314,7 @@ fn execute_run(
                 for sample_index in 1..=SAMPLES_PER_METRIC {
                     let label = format!(
                         "run #{run_id} node #{} {core} {} sample {sample_index}/{SAMPLES_PER_METRIC}",
-                        record.id,
+                        display_number,
                         metric.label()
                     );
                     println!("{label}: starting...");
@@ -362,7 +368,7 @@ fn execute_run(
             {
                 println!(
                     "run #{run_id} node #{} {core}: runtime diagnostic: {diagnostic}",
-                    record.id
+                    display_number
                 );
             }
 
@@ -382,7 +388,12 @@ fn execute_run(
     Ok(())
 }
 
-fn execute_tcp_ping(database_path: &Path, run_id: u64, record: &NodeRecord) -> anyhow::Result<()> {
+fn execute_tcp_ping(
+    database_path: &Path,
+    run_id: u64,
+    record: &NodeRecord,
+    display_number: usize,
+) -> anyhow::Result<()> {
     let context = SampleContext {
         run_id,
         node_id: record.id,
@@ -395,7 +406,7 @@ fn execute_tcp_ping(database_path: &Path, run_id: u64, record: &NodeRecord) -> a
         }
         let label = format!(
             "run #{run_id} node #{} direct TCP ping sample {sample_index}/{SAMPLES_PER_METRIC}",
-            record.id
+            display_number
         );
         println!(
             "{label}: connecting to {}:{}...",
