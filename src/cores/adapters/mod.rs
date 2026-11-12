@@ -86,7 +86,7 @@ pub trait CoreAdapter {
                         "interface_name": "tun-proxyctl",
                         "address": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
                         "mtu": 1500,
-                        "auto_route": true,
+                        "auto_route": false,
                         "strict_route": false,
                         "dns_mode": "disabled"
                     }));
@@ -106,7 +106,7 @@ pub trait CoreAdapter {
                             "name": "tun-proxyctl",
                             "mtu": 1500,
                             "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
-                            "autoSystemRoutingTable": ["0.0.0.0/0", "::/0"],
+                            "autoSystemRoutingTable": [],
                             "autoOutboundsInterface": "auto",
                             "autoSystemDnsToGateway": false
                         }
@@ -121,7 +121,7 @@ pub trait CoreAdapter {
                     "mtu": 1500,
                     "inet4-address": ["198.18.0.1/30"],
                     "inet6-address": ["fdfe:dcba:9876::1/126"],
-                    "auto-route": true,
+                    "auto-route": false,
                     "auto-detect-interface": true,
                     "auto-redirect": false,
                     "strict-route": false,

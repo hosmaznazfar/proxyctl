@@ -122,7 +122,7 @@ fn tun_activation_configs_keep_mixed_listener_and_disable_dns_firewall_redirects
                 assert_eq!(document["inbounds"][0]["listen_port"], 43129);
                 assert_eq!(document["inbounds"][1]["type"], "tun");
                 assert_eq!(document["inbounds"][1]["interface_name"], "tun-proxyctl");
-                assert_eq!(document["inbounds"][1]["auto_route"], true);
+                assert_eq!(document["inbounds"][1]["auto_route"], false);
                 assert_eq!(document["inbounds"][1]["dns_mode"], "disabled");
                 assert_eq!(document["route"]["auto_detect_interface"], true);
             }
@@ -145,7 +145,7 @@ fn tun_activation_configs_keep_mixed_listener_and_disable_dns_firewall_redirects
                 assert_eq!(document["bind-address"], "127.0.0.1");
                 assert_eq!(document["allow-lan"], false);
                 assert_eq!(document["tun"]["stack"], "system");
-                assert_eq!(document["tun"]["auto-route"], true);
+                assert_eq!(document["tun"]["auto-route"], false);
                 assert_eq!(document["tun"]["auto-detect-interface"], true);
                 assert_eq!(document["tun"]["auto-redirect"], false);
                 assert_eq!(document["tun"]["dns-mode"], "disabled");

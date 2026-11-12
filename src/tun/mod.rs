@@ -5,6 +5,8 @@
 //!
 //! Runtime service-manager discovery is also read-only and distro-agnostic.
 
+pub mod ownership;
+pub mod recovery;
 pub mod service_manager;
 
 #[cfg(target_os = "linux")]
