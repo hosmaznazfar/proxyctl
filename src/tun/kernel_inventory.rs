@@ -21,16 +21,30 @@ use std::{
 /// Requires iproute2's `ip` executable on PATH. No shell is used and all arguments are fixed.
 #[cfg(target_os = "linux")]
 pub fn inspect() -> Result<KernelInventory> {
+    Ok(inspect_snapshot()?.inventory)
+}
+
+/// Capture the read-only route/rule inventory with complete normalized JSON attributes.
+///
+/// Canonical attributes are retained for later exact-ownership comparison; this function
+/// still performs no reservation or mutation.
+#[cfg(target_os = "linux")]
+pub fn inspect_snapshot() -> Result<KernelSnapshot> {
     let ipv4_routes = run_ip(&["-j", "-4", "route", "show", "table", "all"])?;
     let ipv6_routes = run_ip(&["-j", "-6", "route", "show", "table", "all"])?;
     let ipv4_rules = run_ip(&["-j", "-4", "rule", "show"])?;
     let ipv6_rules = run_ip(&["-j", "-6", "rule", "show"])?;
 
-    parse_snapshot(&ipv4_routes, &ipv6_routes, &ipv4_rules, &ipv6_rules)
+    parse_detailed_snapshot(&ipv4_routes, &ipv6_routes, &ipv4_rules, &ipv6_rules)
 }
 
 #[cfg(not(target_os = "linux"))]
 pub fn inspect() -> Result<KernelInventory> {
+    anyhow::bail!("kernel routing inventory is currently supported only on Linux");
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn inspect_snapshot() -> Result<KernelSnapshot> {
     anyhow::bail!("kernel routing inventory is currently supported only on Linux");
 }
 
@@ -107,38 +121,102 @@ fn run_ip_command(executable: &str, arguments: &[&str], timeout: Duration) -> Re
     Ok(bytes)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KernelRouteRecord {
+    pub family: AddressFamily,
+    pub table_id: u32,
+    /// Canonical JSON for all attributes returned by iproute2.
+    pub canonical_attributes: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KernelRuleRecord {
+    pub family: AddressFamily,
+    pub priority: u32,
+    pub table_id: Option<u32>,
+    /// Canonical JSON for all selectors and actions returned by iproute2.
+    pub canonical_attributes: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct KernelSnapshot {
+    pub inventory: KernelInventory,
+    pub routes: Vec<KernelRouteRecord>,
+    pub rules: Vec<KernelRuleRecord>,
+}
+
 fn parse_snapshot(
     ipv4_routes: &[u8],
     ipv6_routes: &[u8],
     ipv4_rules: &[u8],
     ipv6_rules: &[u8],
 ) -> Result<KernelInventory> {
-    let mut inventory = KernelInventory::default();
-    inventory
-        .occupied_tables
-        .extend(parse_route_tables(ipv4_routes)?);
-    inventory
-        .occupied_tables
-        .extend(parse_route_tables(ipv6_routes)?);
+    Ok(parse_detailed_snapshot(ipv4_routes, ipv6_routes, ipv4_rules, ipv6_rules)?.inventory)
+}
 
-    let ipv4_rules = parse_rules(ipv4_rules, AddressFamily::Ipv4)?;
-    let ipv6_rules = parse_rules(ipv6_rules, AddressFamily::Ipv6)?;
-    inventory.occupied_tables.extend(ipv4_rules.tables);
-    inventory.occupied_tables.extend(ipv6_rules.tables);
-    inventory.rule_priorities.extend(ipv4_rules.priorities);
-    inventory.rule_priorities.extend(ipv6_rules.priorities);
+fn parse_detailed_snapshot(
+    ipv4_routes: &[u8],
+    ipv6_routes: &[u8],
+    ipv4_rules: &[u8],
+    ipv6_rules: &[u8],
+) -> Result<KernelSnapshot> {
+    let mut snapshot = KernelSnapshot::default();
+    for (family, bytes) in [
+        (AddressFamily::Ipv4, ipv4_routes),
+        (AddressFamily::Ipv6, ipv6_routes),
+    ] {
+        for route in parse_array(bytes, "route")? {
+            let table_id = route.get("table").map(parse_table_id).unwrap_or(Ok(
+                crate::tun::route_policy::RT_TABLE_MAIN,
+            ))?;
+            snapshot.inventory.occupied_tables.push(table_id);
+            snapshot.routes.push(KernelRouteRecord {
+                family,
+                table_id,
+                canonical_attributes: serde_json::to_string(&route)?,
+            });
+        }
+    }
 
-    inventory.occupied_tables.sort_unstable();
-    inventory.occupied_tables.dedup();
-    inventory.rule_priorities.sort_by_key(|(family, priority)| {
+    for (family, bytes) in [
+        (AddressFamily::Ipv4, ipv4_rules),
+        (AddressFamily::Ipv6, ipv6_rules),
+    ] {
+        for rule in parse_array(bytes, "rule")? {
+            let priority = rule
+                .get("priority")
+                .and_then(Value::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .context("iproute2 rule is missing a valid numeric priority")?;
+            let table_id = rule
+                .get("table")
+                .or_else(|| rule.get("lookup"))
+                .map(parse_table_id)
+                .transpose()?;
+            snapshot.inventory.rule_priorities.push((family, priority));
+            if let Some(table_id) = table_id {
+                snapshot.inventory.occupied_tables.push(table_id);
+            }
+            snapshot.rules.push(KernelRuleRecord {
+                family,
+                priority,
+                table_id,
+                canonical_attributes: serde_json::to_string(&rule)?,
+            });
+        }
+    }
+
+    snapshot.inventory.occupied_tables.sort_unstable();
+    snapshot.inventory.occupied_tables.dedup();
+    snapshot.inventory.rule_priorities.sort_by_key(|(family, priority)| {
         let family_order = match family {
             AddressFamily::Ipv4 => 4,
             AddressFamily::Ipv6 => 6,
         };
         (family_order, *priority)
     });
-    inventory.rule_priorities.dedup();
-    Ok(inventory)
+    snapshot.inventory.rule_priorities.dedup();
+    Ok(snapshot)
 }
 
 fn parse_route_tables(bytes: &[u8]) -> Result<Vec<u32>> {
