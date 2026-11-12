@@ -6,6 +6,7 @@
 //! Runtime service-manager discovery is also read-only and distro-agnostic.
 
 pub mod kernel_inventory;
+pub mod lifecycle_coordinator;
 pub mod manifest_store;
 pub mod ownership;
 pub mod recovery;
