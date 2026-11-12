@@ -321,7 +321,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Check { nodes: selectors, core } => {
             let selection=node_selection::parse_node_selection(&selectors)?;
             let ids=nodes::resolve_node_selection(&database_path,&selection,false)?;
-            for id in ids { crate::services::validation::check_node(&database_path,id,parse_core(core.as_deref())?)?; }
+            crate::services::validation::check_nodes(&database_path,&ids,parse_core(core.as_deref())?)?;
         }
         Command::Report {
             node,
