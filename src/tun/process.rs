@@ -25,7 +25,11 @@ impl ProcessIdentity {
         let start_ticks = read_start_ticks(pid)?;
         let executable = fs::canonicalize(format!("/proc/{pid}/exe"))
             .with_context(|| format!("cannot resolve executable for process {pid}"))?;
-        let identity = Self { pid, start_ticks, executable };
+        let identity = Self {
+            pid,
+            start_ticks,
+            executable,
+        };
         identity.validate()?;
         Ok(identity)
     }
@@ -33,7 +37,10 @@ impl ProcessIdentity {
     pub fn validate(&self) -> Result<()> {
         ensure!(self.pid > 0, "process ID must be non-zero");
         ensure!(self.start_ticks > 0, "process start time must be non-zero");
-        ensure!(self.executable.is_absolute(), "process executable identity must be an absolute path");
+        ensure!(
+            self.executable.is_absolute(),
+            "process executable identity must be an absolute path"
+        );
         Ok(())
     }
 
@@ -41,8 +48,13 @@ impl ProcessIdentity {
         self.validate()?;
         let start_ticks = match read_start_ticks(self.pid) {
             Ok(value) => value,
-            Err(error) if error.downcast_ref::<std::io::Error>()
-                .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) => return Ok(false),
+            Err(error)
+                if error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                return Ok(false);
+            }
             Err(error) => return Err(error),
         };
         if start_ticks != self.start_ticks {
@@ -69,11 +81,17 @@ impl ProcessHandle {
         let raw = unsafe {
             libc::syscall(libc::SYS_pidfd_open, identity.pid as libc::pid_t, 0u32) as libc::c_int
         };
-        ensure!(raw >= 0, "pidfd_open is unavailable or process cannot be opened");
+        ensure!(
+            raw >= 0,
+            "pidfd_open is unavailable or process cannot be opened"
+        );
         // SAFETY: successful pidfd_open returns a new owned file descriptor.
         let pidfd = unsafe { OwnedFd::from_raw_fd(raw) };
         let handle = Self { identity, pidfd };
-        ensure!(handle.identity.verify()?, "process identity changed while opening pidfd");
+        ensure!(
+            handle.identity.verify()?,
+            "process identity changed while opening pidfd"
+        );
         Ok(handle)
     }
 
@@ -128,16 +146,24 @@ impl ProcessHandle {
 fn read_start_ticks(pid: u32) -> Result<u64> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat"))
         .with_context(|| format!("cannot read process identity for PID {pid}"))?;
-    let close = stat.rfind(')').context("process stat has no closing command delimiter")?;
+    let close = stat
+        .rfind(')')
+        .context("process stat has no closing command delimiter")?;
     let fields = stat[close + 1..].split_whitespace().collect::<Vec<_>>();
-    fields.get(19).context("process stat is missing start-time field")?
-        .parse().context("process stat has an invalid start-time field")
+    fields
+        .get(19)
+        .context("process stat is missing start-time field")?
+        .parse()
+        .context("process stat has an invalid start-time field")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{process::{Child, Command, Stdio}, time::Instant};
+    use std::{
+        process::{Child, Command, Stdio},
+        time::Instant,
+    };
 
     fn child() -> Child {
         Command::new("sleep")
