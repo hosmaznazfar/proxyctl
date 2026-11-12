@@ -295,10 +295,11 @@ The listener binds only to `127.0.0.1`; LAN access remains disabled. The benchma
 
 Native config validation and pure privilege/command tests do not create a host TUN device or alter host routes. A live TUN smoke test remains a deliberate user operation, not a CI test. TUN remains independent of benchmark execution.
 
-## 4. Proposed command surface
+## 4. Implemented command surface
+
+Node selectors share one parser: a positive ID, multiple IDs, inclusive range (`1..5`), combined IDs/ranges (`1 3 5..8`), or standalone `all`. Duplicates are removed; malformed, zero, reversed, and oversized ranges are rejected before work begins.
 
 ~~~sh
-# Managed binaries
 proxyctl setup
 proxyctl cores
 proxyctl update
@@ -306,45 +307,50 @@ proxyctl update --check
 proxyctl update --app
 proxyctl update --cores
 proxyctl update --core sing-box
+proxyctl use 12 --core sing-box
+proxyctl stop
+proxyctl tun status
 
-# URL records
-proxyctl import ~/Documents/servers.txt
 proxyctl add "vless://..."
+proxyctl import ~/Documents/servers.txt
 proxyctl list
+proxyctl list --include-deleted
 proxyctl show 12
+proxyctl show 1 2 3
+proxyctl show 1..5
 proxyctl remove 12
-proxyctl restore 12
+proxyctl remove 1 2 3
+proxyctl remove 1..5
+proxyctl remove all
+proxyctl remove all --yes
+proxyctl restore 1 2 3
+proxyctl restore 1..5
+proxyctl restore all
+proxyctl check 1 2 3
+proxyctl check 1..5 --core xray
 
-# Benchmarks
 proxyctl test --all-cores
 proxyctl test --node 12 --core sing-box
+proxyctl test --node 12 13 14 --all-cores
+proxyctl test --node 12..18 --core xray
 
-# Reports
 proxyctl report
 proxyctl report --history
 proxyctl report --compare
-proxyctl report --compare --core mihomo
-proxyctl report --node 12
+proxyctl report --node 12 13 14 --history
+proxyctl report --node 12..18 --compare
 
-# Sorting
 proxyctl list --sort ping
 proxyctl list --sort download --core sing-box
+proxyctl list --sort tcp-ping
 
-# Cleanup
 proxyctl prune --unavailable-all --dry-run
 proxyctl prune --unavailable-all --apply
 proxyctl prune --core xray --unavailable --dry-run
 proxyctl prune --core xray --unavailable --apply
-
-# Activation
-proxyctl use 12 --core sing-box
-proxyctl stop
-
-# TUN status is read-only; activation is currently disabled
-proxyctl tun status
 ~~~
 
-This is the initial command contract. Help text and flags may be refined while preserving documented behavior.
+`remove` and `restore` remain soft lifecycle operations. `remove all` requires interactive confirmation unless `--yes` is supplied; `restore all` selects deleted records only. Batch operations report missing and unchanged IDs separately. Benchmark/report selectors accept lists and ranges; the CLI currently executes selected-node benchmarks and reports per node, preserving the existing per-node run/report semantics.
 
 ## 5. Architecture
 
@@ -432,9 +438,10 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 9. **Complete:** compatibility-aware pruning with default dry-run, explicit soft-delete apply, unsupported-core exclusion, latest-completed evidence, and conservative handling of incomplete or ambiguous samples.
 10. **Implemented on Linux:** single-core activation, private runtime state/config, loopback-only inbound, process identity verification, serialized switching, and safe stop. Other platforms remain disabled pending equivalent process-handle support.
 11. **TUN activation deferred:** read-only status inspection remains available. Re-enable only after exact route/rule ownership, crash-safe recovery, idempotent cleanup, and fault-injection tests pass; no live TUN tests before that gate.
-12. Hardening: integration tests, documentation, packaging, security review, and performance checks.
+12. **Implemented:** shared node selector parser, multi-node show/check/test/report command syntax, bulk soft-delete/restore, remove-all confirmation, and synchronized command documentation.
+13. Hardening: integration tests, documentation, packaging, security review, and performance checks.
 
-Each stage should leave the default branch buildable and tested. Do not implement all features in one large change. Update this plan when a material design decision changes.
+Each stage should leave the default branch buildable and tested. Apply related CLI, service, tests, and documentation together when they share a command contract. Update this plan when a material design decision changes.
 
 ## 8. Open implementation details
 
