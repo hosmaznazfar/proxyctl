@@ -130,7 +130,10 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
         .open(path)
         .with_context(|| format!("cannot securely open TUN lifecycle lock {}", path.display()))?;
     let metadata = file.metadata()?;
-    ensure!(metadata.file_type().is_file(), "TUN lifecycle lock is not a regular file");
+    ensure!(
+        metadata.file_type().is_file(),
+        "TUN lifecycle lock is not a regular file"
+    );
     // SAFETY: geteuid has no preconditions and does not mutate process state.
     ensure!(
         metadata.uid() == unsafe { libc::geteuid() },
@@ -149,10 +152,7 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
             return Ok(file);
         }
         let error = std::io::Error::last_os_error();
-        if !matches!(
-            error.raw_os_error(),
-            Some(libc::EWOULDBLOCK)
-        ) {
+        if !matches!(error.raw_os_error(), Some(libc::EWOULDBLOCK)) {
             return Err(error).context("cannot acquire TUN lifecycle lock");
         }
         ensure!(
@@ -219,15 +219,21 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            coordinator.apply_event(&token, SupervisorEvent::StartCommitted).unwrap(),
+            coordinator
+                .apply_event(&token, SupervisorEvent::StartCommitted)
+                .unwrap(),
             RecoveryAction::StartManagedCore
         );
         assert_eq!(
-            coordinator.apply_event(&token, SupervisorEvent::CoreExited).unwrap(),
+            coordinator
+                .apply_event(&token, SupervisorEvent::CoreExited)
+                .unwrap(),
             RecoveryAction::CleanupManifestResources
         );
         assert_eq!(
-            coordinator.apply_event(&token, SupervisorEvent::CleanupConflicted).unwrap(),
+            coordinator
+                .apply_event(&token, SupervisorEvent::CleanupConflicted)
+                .unwrap(),
             RecoveryAction::PreserveManifestAndReportConflict
         );
         let current = coordinator.load_current().unwrap().unwrap();
@@ -244,17 +250,28 @@ mod tests {
             .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
             .unwrap();
 
-        coordinator.apply_event(&old_token, SupervisorEvent::StartCommitted).unwrap();
-        coordinator.apply_event(&old_token, SupervisorEvent::CoreExited).unwrap();
-        coordinator.apply_event(&old_token, SupervisorEvent::CleanupCompleted).unwrap();
+        coordinator
+            .apply_event(&old_token, SupervisorEvent::StartCommitted)
+            .unwrap();
+        coordinator
+            .apply_event(&old_token, SupervisorEvent::CoreExited)
+            .unwrap();
+        coordinator
+            .apply_event(&old_token, SupervisorEvent::CleanupCompleted)
+            .unwrap();
 
         let new_token = coordinator
             .create_prepared(&snapshot("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"))
             .unwrap();
         assert_eq!(old_token.generation(), new_token.generation());
         assert!(
-            coordinator.apply_event(&old_token, SupervisorEvent::CoreExited).is_err()
+            coordinator
+                .apply_event(&old_token, SupervisorEvent::CoreExited)
+                .is_err()
         );
-        assert_eq!(coordinator.load_current().unwrap().unwrap().token, new_token);
+        assert_eq!(
+            coordinator.load_current().unwrap().unwrap().token,
+            new_token
+        );
     }
 }

@@ -6,17 +6,17 @@
 
 use super::{
     ownership::RouteManifest,
-    recovery::{transition, RecoveryAction, SupervisorEvent, SupervisorPhase},
+    recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase, transition},
 };
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::fs::OpenOptions;
 use std::{
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
-#[cfg(unix)]
-use std::fs::OpenOptions;
 
 const STORE_FILE: &str = "tun-manifest.json";
 const STORE_VERSION: u32 = 1;
@@ -32,8 +32,14 @@ pub struct ManifestSnapshot {
 
 impl ManifestSnapshot {
     pub fn validate(&self) -> Result<()> {
-        ensure!(self.schema_version == STORE_VERSION, "unsupported TUN manifest store version");
-        ensure!(self.generation > 0, "TUN manifest generation must be non-zero");
+        ensure!(
+            self.schema_version == STORE_VERSION,
+            "unsupported TUN manifest store version"
+        );
+        ensure!(
+            self.generation > 0,
+            "TUN manifest generation must be non-zero"
+        );
         self.manifest.validate()
     }
 }
@@ -49,11 +55,22 @@ impl ManifestStore {
     /// only when owned by the current user; symlink directories are always rejected.
     pub fn open(directory: impl Into<PathBuf>) -> Result<Self> {
         let directory = directory.into();
-        fs::create_dir_all(&directory)
-            .with_context(|| format!("cannot create TUN runtime directory {}", directory.display()))?;
-        let metadata = fs::symlink_metadata(&directory)
-            .with_context(|| format!("cannot inspect TUN runtime directory {}", directory.display()))?;
-        ensure!(metadata.file_type().is_dir(), "TUN runtime path is not a real directory");
+        fs::create_dir_all(&directory).with_context(|| {
+            format!(
+                "cannot create TUN runtime directory {}",
+                directory.display()
+            )
+        })?;
+        let metadata = fs::symlink_metadata(&directory).with_context(|| {
+            format!(
+                "cannot inspect TUN runtime directory {}",
+                directory.display()
+            )
+        })?;
+        ensure!(
+            metadata.file_type().is_dir(),
+            "TUN runtime path is not a real directory"
+        );
         verify_owner(&metadata)?;
         set_private_directory(&directory)?;
         let metadata = fs::metadata(&directory)?;
@@ -124,7 +141,10 @@ impl ManifestStore {
         }
 
         let bytes = serde_json::to_vec_pretty(snapshot)?;
-        ensure!(bytes.len() as u64 <= MAX_MANIFEST_BYTES, "TUN manifest exceeds size limit");
+        ensure!(
+            bytes.len() as u64 <= MAX_MANIFEST_BYTES,
+            "TUN manifest exceeds size limit"
+        );
         let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)
             .context("cannot create private temporary TUN manifest")?;
         set_private_file(temporary.as_file())?;
@@ -146,13 +166,22 @@ impl ManifestStore {
             Err(error) => return Err(error).context("cannot securely open TUN manifest"),
         };
         let metadata = file.metadata()?;
-        ensure!(metadata.len() <= MAX_MANIFEST_BYTES, "TUN manifest exceeds size limit");
-        ensure!(metadata.file_type().is_file(), "TUN manifest is not a regular file");
+        ensure!(
+            metadata.len() <= MAX_MANIFEST_BYTES,
+            "TUN manifest exceeds size limit"
+        );
+        ensure!(
+            metadata.file_type().is_file(),
+            "TUN manifest is not a regular file"
+        );
         verify_owner(&metadata)?;
         verify_private_file(&metadata)?;
         let mut bytes = Vec::with_capacity(metadata.len() as usize);
         file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
-        ensure!(bytes.len() as u64 <= MAX_MANIFEST_BYTES, "TUN manifest exceeds size limit");
+        ensure!(
+            bytes.len() as u64 <= MAX_MANIFEST_BYTES,
+            "TUN manifest exceeds size limit"
+        );
         let snapshot: ManifestSnapshot =
             serde_json::from_slice(&bytes).context("TUN manifest is malformed")?;
         snapshot.validate()?;
@@ -165,8 +194,7 @@ impl ManifestStore {
             return Ok(());
         };
         ensure!(
-            snapshot.manifest.activation_id == activation_id
-                && snapshot.generation == generation,
+            snapshot.manifest.activation_id == activation_id && snapshot.generation == generation,
             "refusing to remove a different TUN activation manifest"
         );
         ensure!(
@@ -185,7 +213,10 @@ impl ManifestStore {
 fn verify_owner(metadata: &fs::Metadata) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
     // SAFETY: geteuid has no preconditions and does not mutate process state.
-    ensure!(metadata.uid() == unsafe { libc::geteuid() }, "TUN runtime file has a foreign owner");
+    ensure!(
+        metadata.uid() == unsafe { libc::geteuid() },
+        "TUN runtime file has a foreign owner"
+    );
     Ok(())
 }
 
@@ -209,7 +240,10 @@ fn set_private_directory(_path: &Path) -> Result<()> {
 #[cfg(unix)]
 fn verify_private_directory(metadata: &fs::Metadata) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    ensure!(metadata.permissions().mode() & 0o077 == 0, "TUN runtime directory permissions are not private");
+    ensure!(
+        metadata.permissions().mode() & 0o077 == 0,
+        "TUN runtime directory permissions are not private"
+    );
     Ok(())
 }
 
@@ -233,7 +267,10 @@ fn set_private_file(_file: &File) -> Result<()> {
 #[cfg(unix)]
 fn verify_private_file(metadata: &fs::Metadata) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    ensure!(metadata.permissions().mode() & 0o077 == 0, "TUN manifest permissions are not private");
+    ensure!(
+        metadata.permissions().mode() & 0o077 == 0,
+        "TUN manifest permissions are not private"
+    );
     Ok(())
 }
 
@@ -298,8 +335,18 @@ mod tests {
         let original = snapshot();
         store.write(&original).unwrap();
         assert_eq!(store.load().unwrap(), Some(original));
-        assert_eq!(fs::metadata(store.path()).unwrap().permissions().mode() & 0o777, 0o600);
-        assert_eq!(fs::metadata(directory.path().join("runtime")).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            fs::metadata(store.path()).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::metadata(directory.path().join("runtime"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
     }
 
     #[cfg(unix)]
@@ -312,7 +359,11 @@ mod tests {
         let mut other = original.clone();
         other.generation += 1;
         assert!(store.write(&other).is_err());
-        assert!(store.remove_cleaned("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", 9).is_err());
+        assert!(
+            store
+                .remove_cleaned("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", 9)
+                .is_err()
+        );
         assert_eq!(store.load().unwrap(), Some(original));
     }
 
@@ -323,10 +374,16 @@ mod tests {
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         let mut value = snapshot();
         store.write(&value).unwrap();
-        assert!(store.remove_cleaned(&value.manifest.activation_id, value.generation).is_err());
+        assert!(
+            store
+                .remove_cleaned(&value.manifest.activation_id, value.generation)
+                .is_err()
+        );
         value.phase = SupervisorPhase::Cleaned;
         store.write(&value).unwrap();
-        store.remove_cleaned(&value.manifest.activation_id, value.generation).unwrap();
+        store
+            .remove_cleaned(&value.manifest.activation_id, value.generation)
+            .unwrap();
         assert!(store.load().unwrap().is_none());
     }
 
@@ -340,16 +397,24 @@ mod tests {
         let original = snapshot();
         store.create_prepared(&original).unwrap();
         assert_eq!(
-            store.apply_event(SupervisorEvent::StartCommitted, 9).unwrap(),
+            store
+                .apply_event(SupervisorEvent::StartCommitted, 9)
+                .unwrap(),
             RecoveryAction::StartManagedCore
         );
-        assert_eq!(store.load().unwrap().unwrap().phase, SupervisorPhase::Running);
+        assert_eq!(
+            store.load().unwrap().unwrap().phase,
+            SupervisorPhase::Running
+        );
 
         assert_eq!(
             store.apply_event(SupervisorEvent::CoreExited, 8).unwrap(),
             RecoveryAction::IgnoreStaleEvent
         );
-        assert_eq!(store.load().unwrap().unwrap().phase, SupervisorPhase::Running);
+        assert_eq!(
+            store.load().unwrap().unwrap().phase,
+            SupervisorPhase::Running
+        );
 
         assert_eq!(
             store.apply_event(SupervisorEvent::CoreExited, 9).unwrap(),
@@ -369,11 +434,15 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         store.create_prepared(&snapshot()).unwrap();
-        store.apply_event(SupervisorEvent::StartCommitted, 9).unwrap();
+        store
+            .apply_event(SupervisorEvent::StartCommitted, 9)
+            .unwrap();
         store.apply_event(SupervisorEvent::CoreExited, 9).unwrap();
 
         assert_eq!(
-            store.apply_event(SupervisorEvent::CleanupConflicted, 9).unwrap(),
+            store
+                .apply_event(SupervisorEvent::CleanupConflicted, 9)
+                .unwrap(),
             RecoveryAction::PreserveManifestAndReportConflict
         );
         assert_eq!(
@@ -382,7 +451,9 @@ mod tests {
         );
 
         assert_eq!(
-            store.apply_event(SupervisorEvent::CleanupCompleted, 9).unwrap(),
+            store
+                .apply_event(SupervisorEvent::CleanupCompleted, 9)
+                .unwrap(),
             RecoveryAction::RemoveManifest
         );
         assert!(store.load().unwrap().is_none());
