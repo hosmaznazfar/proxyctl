@@ -267,13 +267,13 @@ impl RoutingPolicyPlan {
 mod tests {
     use super::*;
 
-    fn plan() -> RoutingPolicyPlan {
+    fn sample_plan() -> RoutingPolicyPlan {
         RoutingPolicyPlan::new(42_420, 42_410, 42_420, 0x42, 0xff, "tun-proxyctl", 77)
     }
 
     #[test]
     fn creates_valid_dual_stack_policy_with_core_bypass_before_proxy_rule() {
-        let plan = plan();
+        let plan = sample_plan();
         plan.validate().unwrap();
         assert_eq!(plan.routes.len(), 2);
         assert_eq!(plan.rules.len(), 4);
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn rejects_reserved_or_low_routing_table_ids() {
         for table in [0, RT_TABLE_DEFAULT, RT_TABLE_MAIN, RT_TABLE_LOCAL, 9999] {
-            let mut plan = plan();
+            let mut plan = sample_plan();
             plan.table_id = table;
             assert!(plan.validate().is_err(), "accepted table {table}");
         }
@@ -291,10 +291,10 @@ mod tests {
 
     #[test]
     fn rejects_invalid_mark_and_mask() {
-        let mut plan = plan();
+        let mut plan = sample_plan();
         plan.core_mark_mask = 0;
         assert!(plan.validate().is_err());
-        let mut plan = plan();
+        let mut plan = sample_plan();
         plan.core_mark = 0x100;
         plan.core_mark_mask = 0xff;
         assert!(plan.validate().is_err());
@@ -302,7 +302,7 @@ mod tests {
 
     #[test]
     fn rejects_bypass_rule_after_proxy_rule() {
-        let mut plan = plan();
+        let mut plan = sample_plan();
         plan.bypass_priority = 50_000;
         plan.proxy_priority = 40_000;
         assert!(plan.validate().is_err());
@@ -310,27 +310,27 @@ mod tests {
 
     #[test]
     fn rejects_terminal_route_types_and_foreign_interface_identity() {
-        let mut plan = plan();
+        let mut plan = sample_plan();
         plan.routes[0].route_type = RouteType::Blackhole;
         assert!(plan.validate().is_err());
-        let mut plan = plan();
+        let mut plan = sample_plan();
         plan.routes[1].interface_index += 1;
         assert!(plan.validate().is_err());
     }
 
     #[test]
     fn rejects_missing_or_duplicate_family_resources() {
-        let mut plan = plan();
+        let mut plan = sample_plan();
         plan.routes.pop();
         assert!(plan.validate().is_err());
-        let mut plan = plan();
+        let mut plan = sample_plan();
         plan.rules.push(plan.rules[0].clone());
         assert!(plan.validate().is_err());
     }
 
     #[test]
     fn rejects_occupied_table_and_rule_priorities() {
-        let plan = plan();
+        let plan = sample_plan();
         let mut inventory = KernelInventory::default();
         inventory.occupied_tables.push(plan.table_id);
         assert!(plan.validate_against(&inventory).is_err());
@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     fn accepts_unoccupied_exact_plan_without_terminal_fallback_rules() {
-        let plan = plan();
+        let plan = sample_plan();
         plan.validate_against(&KernelInventory::default()).unwrap();
         assert!(
             plan.routes
