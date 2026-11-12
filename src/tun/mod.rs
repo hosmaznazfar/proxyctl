@@ -7,6 +7,7 @@
 
 pub mod ownership;
 pub mod recovery;
+pub mod route_policy;
 pub mod service_manager;
 
 #[cfg(target_os = "linux")]
