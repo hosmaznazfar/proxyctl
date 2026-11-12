@@ -1,6 +1,6 @@
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
-    process::ProcessIdentity,
+    #[cfg(target_os = "linux")] process::ProcessIdentity,
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
@@ -74,6 +74,7 @@ impl LifecycleCoordinator {
 
     /// Bind the exact launched core process to a prepared activation before committing startup.
     /// The process must still match its procfs identity when the durable write is performed.
+    #[cfg(target_os = "linux")]
     pub fn bind_core_process(
         &self,
         token: &ActivationToken,
@@ -210,6 +211,7 @@ mod tests {
             schema_version: 1,
             generation: 17,
             phase: SupervisorPhase::Prepared,
+            #[cfg(target_os = "linux")]
             core_process: None,
             manifest: RouteManifest {
                 version: MANIFEST_VERSION,
