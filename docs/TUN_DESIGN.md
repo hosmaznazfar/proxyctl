@@ -192,3 +192,8 @@ Process-identity tests now use bounded retries when a freshly spawned fake child
 ## Fixed kernel operation planning (not execution)
 
 The Linux kernel backend now translates a validated dual-stack routing-policy plan into fixed-argument iproute2 operations: create the named TUN device for the invoking UID/GID, bring it up, add the exact IPv4/IPv6 default routes to the dedicated table, then add the exact marked-core bypass and proxy lookup rules. Cleanup is generated in reverse dependency order. The final link deletion removes the TUN interface and implicitly reverses its link-up operation, so cleanup contains one fewer command than setup; all independently-created rules and routes are deleted first. The planner has no shell strings and cannot execute commands or obtain privileges. It is not yet a production kernel backend: before any operation can run, the broker must inspect live state, bind the created interface index, persist exact fingerprints, and perform compare-and-delete for every resource. TUN remains disabled.
+
+
+### Benchmark port test isolation
+
+The loopback port reservation test asserts that the OS returned a non-zero ephemeral port. It deliberately does not attempt to bind that port a second time after the reservation socket is dropped, because a concurrent process may claim it in the intervening window. Production still reserves an OS-assigned loopback port immediately before generating and starting the benchmark core; the test does not claim that the port remains reserved across that handoff.
