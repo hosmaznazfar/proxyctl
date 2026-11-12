@@ -186,6 +186,7 @@ fn parse_table_id(value: &Value) -> Result<u32> {
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "linux")]
     use std::{fs, os::unix::fs::PermissionsExt};
 
     #[cfg(target_os = "linux")]
