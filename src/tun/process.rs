@@ -213,11 +213,26 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
     }
 
+    fn pin_live_child(child: &Child) -> (ProcessIdentity, ProcessHandle) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            assert!(
+                Instant::now() < deadline,
+                "fake child did not remain available long enough to pin its pidfd"
+            );
+            if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && let Ok(handle) = ProcessHandle::open(identity.clone())
+            {
+                return (identity, handle);
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
     #[test]
     fn pidfd_signal_targets_the_verified_fake_child() {
         let mut child = child();
-        let identity = ProcessIdentity::capture(child.id()).unwrap();
-        let handle = ProcessHandle::open(identity).unwrap();
+        let (_identity, handle) = pin_live_child(&child);
         handle.signal(libc::SIGTERM).unwrap();
         assert!(handle.wait_exit(Duration::from_secs(2)).unwrap());
         child.wait().unwrap();
