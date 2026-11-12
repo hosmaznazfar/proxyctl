@@ -143,12 +143,7 @@ impl RoutingPolicyPlan {
     pub fn validate(&self) -> Result<()> {
         ensure!(
             self.table_id >= RT_TABLE_MIN_PROXYCTL
-                && ![
-                    RT_TABLE_DEFAULT,
-                    RT_TABLE_MAIN,
-                    RT_TABLE_LOCAL
-                ]
-                .contains(&self.table_id),
+                && ![RT_TABLE_DEFAULT, RT_TABLE_MAIN, RT_TABLE_LOCAL].contains(&self.table_id),
             "Proxyctl routing table ID is reserved or below the private allocation floor"
         );
         ensure!(
@@ -169,13 +164,29 @@ impl RoutingPolicyPlan {
                 }),
             "invalid TUN interface name"
         );
-        ensure!(self.interface_index > 0, "TUN interface index must be non-zero");
-        ensure!(self.routes.len() == 2, "routing plan must contain one default route per family");
-        ensure!(self.rules.len() == 4, "routing plan must contain bypass and proxy rules per family");
+        ensure!(
+            self.interface_index > 0,
+            "TUN interface index must be non-zero"
+        );
+        ensure!(
+            self.routes.len() == 2,
+            "routing plan must contain one default route per family"
+        );
+        ensure!(
+            self.rules.len() == 4,
+            "routing plan must contain bypass and proxy rules per family"
+        );
 
         for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
-            let routes = self.routes.iter().filter(|route| route.family == family).collect::<Vec<_>>();
-            ensure!(routes.len() == 1, "routing plan has a missing or duplicate family route");
+            let routes = self
+                .routes
+                .iter()
+                .filter(|route| route.family == family)
+                .collect::<Vec<_>>();
+            ensure!(
+                routes.len() == 1,
+                "routing plan has a missing or duplicate family route"
+            );
             let route = routes[0];
             ensure!(
                 route.destination == family.default_prefix()
@@ -186,21 +197,31 @@ impl RoutingPolicyPlan {
                 "route is not the exact unicast default route through the owned TUN interface"
             );
 
-            let bypass = self.rules.iter().filter(|rule| {
-                rule.family == family && rule.purpose == RulePurpose::CoreTrafficBypass
-            }).collect::<Vec<_>>();
-            let proxy = self.rules.iter().filter(|rule| {
-                rule.family == family && rule.purpose == RulePurpose::ProxyTraffic
-            }).collect::<Vec<_>>();
-            ensure!(bypass.len() == 1 && proxy.len() == 1, "routing plan has missing or duplicate rules");
+            let bypass = self
+                .rules
+                .iter()
+                .filter(|rule| {
+                    rule.family == family && rule.purpose == RulePurpose::CoreTrafficBypass
+                })
+                .collect::<Vec<_>>();
+            let proxy = self
+                .rules
+                .iter()
+                .filter(|rule| rule.family == family && rule.purpose == RulePurpose::ProxyTraffic)
+                .collect::<Vec<_>>();
+            ensure!(
+                bypass.len() == 1 && proxy.len() == 1,
+                "routing plan has missing or duplicate rules"
+            );
             let bypass = bypass[0];
             let proxy = proxy[0];
             ensure!(
                 bypass.priority == self.bypass_priority
-                    && bypass.mark == Some(MarkSelector {
-                        value: self.core_mark,
-                        mask: self.core_mark_mask,
-                    })
+                    && bypass.mark
+                        == Some(MarkSelector {
+                            value: self.core_mark,
+                            mask: self.core_mark_mask,
+                        })
                     && bypass.lookup_table == RT_TABLE_MAIN,
                 "core bypass rule must match the exact socket mark and consult the main table"
             );
@@ -226,11 +247,15 @@ impl RoutingPolicyPlan {
         );
         for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
             ensure!(
-                !inventory.rule_priorities.contains(&(family, self.bypass_priority)),
+                !inventory
+                    .rule_priorities
+                    .contains(&(family, self.bypass_priority)),
                 "core bypass rule priority is already occupied"
             );
             ensure!(
-                !inventory.rule_priorities.contains(&(family, self.proxy_priority)),
+                !inventory
+                    .rule_priorities
+                    .contains(&(family, self.proxy_priority)),
                 "proxy rule priority is already occupied"
             );
         }
@@ -310,7 +335,9 @@ mod tests {
         inventory.occupied_tables.push(plan.table_id);
         assert!(plan.validate_against(&inventory).is_err());
         inventory.occupied_tables.clear();
-        inventory.rule_priorities.push((AddressFamily::Ipv6, plan.proxy_priority));
+        inventory
+            .rule_priorities
+            .push((AddressFamily::Ipv6, plan.proxy_priority));
         assert!(plan.validate_against(&inventory).is_err());
     }
 
@@ -318,7 +345,15 @@ mod tests {
     fn accepts_unoccupied_exact_plan_without_terminal_fallback_rules() {
         let plan = plan();
         plan.validate_against(&KernelInventory::default()).unwrap();
-        assert!(plan.routes.iter().all(|route| route.route_type == RouteType::Unicast));
-        assert!(plan.rules.iter().all(|rule| rule.lookup_table != RT_TABLE_DEFAULT));
+        assert!(
+            plan.routes
+                .iter()
+                .all(|route| route.route_type == RouteType::Unicast)
+        );
+        assert!(
+            plan.rules
+                .iter()
+                .all(|rule| rule.lookup_table != RT_TABLE_DEFAULT)
+        );
     }
 }
