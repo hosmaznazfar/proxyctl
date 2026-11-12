@@ -18,7 +18,7 @@ use std::{
 #[cfg(target_os = "linux")]
 use std::{
     io::Read,
-    os::unix::{fs::hard_link, process::CommandExt},
+    os::unix::process::CommandExt,
 };
 
 const WAIT: Duration = Duration::from_secs(10);
@@ -324,7 +324,7 @@ fn launch_managed(
         .parent()
         .context("managed core executable has no parent directory")?
         .join(PROCESS_NAME);
-    hard_link(executable, &launch_path)
+    fs::hard_link(executable, &launch_path)
         .context("could not create the unified Proxyctl executable hard link")?;
     let launch_executable = fs::canonicalize(&launch_path)?;
     configure_process_identity(&mut command);
@@ -393,7 +393,6 @@ fn configure_process_identity(command: &mut Command) {
 }
 
 #[cfg(target_os = "linux")]
-
 fn paths() -> anyhow::Result<(PathBuf, PathBuf)> {
     let db = default_database_path()?;
     let data = db.parent().context("Proxyctl data directory unavailable")?;
@@ -472,7 +471,11 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
         );
     }
     let _ = fs::remove_file(state.config);
-    if state.executable.file_name().is_some_and(|name| name == PROCESS_NAME) {
+    if state
+        .executable
+        .file_name()
+        .is_some_and(|name| name == PROCESS_NAME)
+    {
         fs::remove_file(&state.executable)?;
     }
     fs::remove_file(state_path)?;
@@ -916,17 +919,17 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
             .parse::<u32>()
             .context("systemd returned an invalid TUN service PID")?;
         let tracked = if pid == 0 {
-                None
-            } else {
+            None
+        } else {
             ensure!(
                 state.pid == 0 || state.pid == pid,
                 "TUN service PID differs from the recorded process; refusing to stop it"
             );
             let ticks = if state.start_ticks == 0 {
-                    await_identity(pid, &state.executable, WAIT)?
-                } else {
-                    state.start_ticks
-                };
+                await_identity(pid, &state.executable, WAIT)?
+            } else {
+                state.start_ticks
+            };
             ensure!(
                 matches_process(pid, &state.executable, ticks),
                 "TUN process identity changed; refusing systemd stop"
@@ -1262,7 +1265,7 @@ mod tests {
         let sleep = find_program("sleep").unwrap();
         let executable_path = fs::canonicalize(&sleep).unwrap();
         let alias = dir.path().join(PROCESS_NAME);
-        hard_link(&executable_path, &alias).unwrap();
+        fs::hard_link(&executable_path, &alias).unwrap();
         let mut command = Command::new(&alias);
         command.arg("30");
         configure_process_identity(&mut command);
@@ -1354,7 +1357,11 @@ mod tests {
                 serde_json::from_slice(&fs::read(&state_path).unwrap()).unwrap();
             assert_eq!(state.node_id, node_id);
             assert_eq!(state.core, core);
-            assert!(matches_process(state.pid, &state.executable, state.start_ticks));
+            assert!(matches_process(
+                state.pid,
+                &state.executable,
+                state.start_ticks
+            ));
             if let Some((pid, executable, ticks)) = previous_process.take() {
                 assert!(
                     !matches_process(pid, &executable, ticks),
