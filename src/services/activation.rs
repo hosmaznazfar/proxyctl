@@ -478,6 +478,14 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
         );
     }
     let _ = fs::remove_file(state.config);
+    // Remove a launch alias left by older Proxyctl versions after its process has exited.
+    if state
+        .executable
+        .file_name()
+        .is_some_and(|name| name == PROCESS_NAME)
+    {
+        fs::remove_file(&state.executable)?;
+    }
     fs::remove_file(state_path)?;
     Ok(())
 }
