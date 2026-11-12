@@ -60,11 +60,11 @@ enum Command {
         core: Option<String>,
     },
     Show {
-        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
     },
     Remove {
-        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
         #[arg(long, short = 'y')]
         yes: bool,
@@ -84,6 +84,7 @@ enum Command {
     Cores,
     /// Activate one node using one Proxyctl-managed core (loopback only by default).
     Use {
+        #[arg(value_name = "NUMBER")]
         id: u64,
         #[arg(long, value_name = "CORE", required = true)]
         core: String,
