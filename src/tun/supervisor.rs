@@ -18,7 +18,7 @@ const MONITOR_INTERVAL: Duration = Duration::from_millis(250);
 /// Monitor the exact core instance and clean only resources recorded by its activation.
 ///
 /// The pidfd remains pinned for the duration of monitoring. A core exit is persisted before
-/// cleanup begins; a cleanup error persists CleanupPending/Conflict and retains the manifest.
+/// cleanup begins; a cleanup error persists CleanupPending and retains the manifest.
 pub fn monitor_core<B: OwnedResourceBackend>(
     coordinator: &LifecycleCoordinator,
     token: &ActivationToken,
@@ -99,19 +99,21 @@ pub fn recover_pending_cleanup<B: OwnedResourceBackend>(
 mod tests {
     use super::*;
     use crate::tun::{
-        lifecycle_coordinator::LifecycleCoordinator,
         manifest_store::{ManifestSnapshot, ManifestStore},
         ownership::{MANIFEST_VERSION, OwnedResource, ResourceState, RouteManifest},
-        process::ProcessHandle,
-        recovery::SupervisorPhase,
+        process::{ProcessHandle, ProcessIdentity},
     };
     use anyhow::Result;
-    use std::{collections::BTreeMap, process::{Command, Stdio}, thread, time::Duration};
+    use std::{
+        collections::BTreeMap,
+        process::{Command, Stdio},
+        thread,
+        time::Duration,
+    };
 
     #[derive(Default)]
     struct FakeBackend {
         resources: BTreeMap<String, String>,
-        conflict: bool,
     }
 
     impl OwnedResourceBackend for FakeBackend {
@@ -122,7 +124,7 @@ mod tests {
         fn remove_if_matches(&mut self, key: &str, expected: &str) -> Result<ResourceState> {
             match self.resources.get(key) {
                 None => Ok(ResourceState::AlreadyAbsent),
-                Some(value) if self.conflict || value != expected => Ok(ResourceState::ChangedOrForeign),
+                Some(value) if value != expected => Ok(ResourceState::ChangedOrForeign),
                 Some(_) => {
                     self.resources.remove(key);
                     Ok(ResourceState::Removed)
@@ -138,7 +140,7 @@ mod tests {
         let snapshot = ManifestSnapshot {
             schema_version: 1,
             generation: 1,
-            phase,
+            phase: SupervisorPhase::Prepared,
             manifest: RouteManifest {
                 version: MANIFEST_VERSION,
                 activation_id: "12345678-1234-4234-8234-123456789abc".into(),
@@ -152,36 +154,39 @@ mod tests {
                 }],
             },
         };
-        let token = if phase == SupervisorPhase::Prepared {
-            coordinator.create_prepared(&snapshot).unwrap()
-        } else {
-            let prepared = ManifestSnapshot { phase: SupervisorPhase::Prepared, ..snapshot.clone() };
-            let token = coordinator.create_prepared(&prepared).unwrap();
+        let token = coordinator.create_prepared(&snapshot).unwrap();
+        if matches!(phase, SupervisorPhase::Running | SupervisorPhase::CleanupPending) {
             coordinator.apply_event(&token, SupervisorEvent::StartCommitted).unwrap();
-            if phase == SupervisorPhase::CleanupPending {
-                coordinator.apply_event(&token, SupervisorEvent::CoreExited).unwrap();
-            }
-            token
-        };
+        }
+        if phase == SupervisorPhase::CleanupPending {
+            coordinator.apply_event(&token, SupervisorEvent::CoreExited).unwrap();
+        }
         (directory, coordinator, token)
     }
 
     fn backend() -> FakeBackend {
         FakeBackend {
-            resources: BTreeMap::from([("route:v4-default".into(), "route-fingerprint".into())]),
-            conflict: false,
+            resources: BTreeMap::from([(
+                "route:v4-default".into(),
+                "route-fingerprint".into(),
+            )]),
         }
     }
 
     #[test]
     fn monitors_fake_core_and_cleans_exact_manifest_resources() {
         let (_directory, coordinator, token) = setup(SupervisorPhase::Running);
-        let mut child = Command::new("sleep").arg("30").stdin(Stdio::null())
-            .stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
         let identity = ProcessIdentity::capture(child.id()).unwrap();
         let process = ProcessHandle::open(identity).unwrap();
-        let mut backend = backend();
         let worker = thread::spawn(move || {
+            let mut backend = backend();
             let result = monitor_core(&coordinator, &token, &process, &mut backend);
             (result, backend)
         });
@@ -195,20 +200,14 @@ mod tests {
 
     #[test]
     fn cleanup_conflict_retains_manifest_for_recovery() {
-        let (_directory, coordinator, token) = setup(SupervisorPhase::Running);
-        let mut child = Command::new("true").stdin(Stdio::null()).stdout(Stdio::null())
-            .stderr(Stdio::null()).spawn().unwrap();
-        child.wait().unwrap();
-        let identity = ProcessIdentity::capture(std::process::id()).unwrap();
-        let process = ProcessHandle::open(identity).unwrap();
+        let (_directory, coordinator, token) = setup(SupervisorPhase::CleanupPending);
         let mut backend = FakeBackend {
             resources: BTreeMap::from([("route:v4-default".into(), "foreign".into())]),
-            conflict: false,
         };
-        let result = monitor_core(&coordinator, &token, &process, &mut backend);
-        assert!(result.is_err());
+        assert!(recover_pending_cleanup(&coordinator, &token, &mut backend).is_err());
         let current = coordinator.load_current().unwrap().unwrap();
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
+        assert_eq!(backend.resources.len(), 1);
     }
 
     #[test]
@@ -226,32 +225,6 @@ mod tests {
         let mut backend = backend();
         assert!(recover_pending_cleanup(&coordinator, &token, &mut backend).is_err());
         assert!(coordinator.load_current().unwrap().is_some());
-        assert_eq!(backend.resources.len(), 1);
-    }
-
-    #[test]
-    fn stale_token_cannot_monitor_or_clean_a_new_activation() {
-        let (_directory, coordinator, token) = setup(SupervisorPhase::CleanupPending);
-        let mut backend = backend();
-        let mut stale = token.clone();
-        // The token's fields are intentionally private; obtain a different valid activation
-        // through the durable coordinator after cleaning the first activation.
-        recover_pending_cleanup(&coordinator, &token, &mut backend).unwrap();
-        let current = setup(SupervisorPhase::Prepared);
-        stale = current.2;
-        let mut backend = backend();
-        assert!(recover_pending_cleanup(&coordinator, &stale, &mut backend).is_err());
-    }
-}    #[test]
-    fn cleanup_conflict_retains_manifest_for_recovery() {
-        let (_directory, coordinator, token) = setup(SupervisorPhase::CleanupPending);
-        let mut backend = FakeBackend {
-            resources: BTreeMap::from([("route:v4-default".into(), "foreign".into())]),
-            conflict: false,
-        };
-        assert!(recover_pending_cleanup(&coordinator, &token, &mut backend).is_err());
-        let current = coordinator.load_current().unwrap().unwrap();
-        assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
         assert_eq!(backend.resources.len(), 1);
     }
 
@@ -280,6 +253,7 @@ mod tests {
         };
         let new_token = coordinator.create_prepared(&new_snapshot).unwrap();
         assert!(recover_pending_cleanup(&coordinator, &old_token, &mut backend).is_err());
-        assert!(coordinator.load_current().unwrap().unwrap().token == new_token);
+        assert_eq!(coordinator.load_current().unwrap().unwrap().token, new_token);
         assert!(backend.resources.is_empty());
     }
+}
