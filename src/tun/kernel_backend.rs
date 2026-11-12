@@ -31,11 +31,7 @@ pub struct KernelCommandPlan {
 
 impl KernelCommandPlan {
     /// Build a fixed-argument plan from a validated policy. Commands are not executed.
-    pub fn from_policy(
-        policy: &RoutingPolicyPlan,
-        owner_uid: u32,
-        owner_gid: u32,
-    ) -> Result<Self> {
+    pub fn from_policy(policy: &RoutingPolicyPlan, owner_uid: u32, owner_gid: u32) -> Result<Self> {
         policy.validate()?;
         let mut apply = vec![
             IpCommand::new(vec![
@@ -50,13 +46,7 @@ impl KernelCommandPlan {
                 "group".into(),
                 owner_gid.to_string(),
             ]),
-            IpCommand::new([
-                "link",
-                "set",
-                "dev",
-                policy.interface_name.as_str(),
-                "up",
-            ]),
+            IpCommand::new(["link", "set", "dev", policy.interface_name.as_str(), "up"]),
         ];
 
         for route in &policy.routes {
@@ -92,7 +82,10 @@ fn family_args(family: AddressFamily) -> &'static str {
 }
 
 fn route_add(route: &PlannedRoute) -> Result<IpCommand> {
-    anyhow::ensure!(route.route_type == RouteType::Unicast, "only unicast routes may be planned");
+    anyhow::ensure!(
+        route.route_type == RouteType::Unicast,
+        "only unicast routes may be planned"
+    );
     Ok(IpCommand::new(vec![
         family_args(route.family).into(),
         "route".into(),
@@ -106,7 +99,10 @@ fn route_add(route: &PlannedRoute) -> Result<IpCommand> {
 }
 
 fn route_delete(route: &PlannedRoute) -> Result<IpCommand> {
-    anyhow::ensure!(route.route_type == RouteType::Unicast, "only unicast routes may be planned");
+    anyhow::ensure!(
+        route.route_type == RouteType::Unicast,
+        "only unicast routes may be planned"
+    );
     Ok(IpCommand::new(vec![
         family_args(route.family).into(),
         "route".into(),
@@ -173,17 +169,47 @@ mod tests {
         assert_eq!(
             plan.apply[0].arguments,
             [
-                "tuntap", "add", "dev", "tun-proxyctl", "mode", "tun", "user", "1000", "group",
+                "tuntap",
+                "add",
+                "dev",
+                "tun-proxyctl",
+                "mode",
+                "tun",
+                "user",
+                "1000",
+                "group",
                 "1000"
             ]
         );
-        assert!(plan.apply.iter().all(|command| !command.arguments.iter().any(|arg| arg.contains(';') || arg.contains('|'))));
-        assert!(plan.apply.iter().any(|command| command.arguments == [
-            "-4", "rule", "add", "priority", "42410", "fwmark", "0x42/0xff", "lookup", "254"
-        ]));
-        assert!(plan.apply.iter().any(|command| command.arguments == [
-            "-6", "route", "add", "::/0", "dev", "tun-proxyctl", "table", "42420"
-        ]));
+        assert!(plan.apply.iter().all(|command| {
+            !command
+                .arguments
+                .iter()
+                .any(|arg| arg.contains(';') || arg.contains('|'))
+        }));
+        assert!(plan.apply.iter().any(|command| command.arguments
+            == [
+                "-4",
+                "rule",
+                "add",
+                "priority",
+                "42410",
+                "fwmark",
+                "0x42/0xff",
+                "lookup",
+                "254"
+            ]));
+        assert!(plan.apply.iter().any(|command| command.arguments
+            == [
+                "-6",
+                "route",
+                "add",
+                "::/0",
+                "dev",
+                "tun-proxyctl",
+                "table",
+                "42420"
+            ]));
     }
 
     #[test]

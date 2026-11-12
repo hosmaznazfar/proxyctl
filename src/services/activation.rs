@@ -1283,7 +1283,10 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(2);
         let argv0 = loop {
             let command_line = fs::read(format!("/proc/{pid}/cmdline")).unwrap();
-            let argv0 = command_line.split(|byte| *byte == 0).next().unwrap_or_default();
+            let argv0 = command_line
+                .split(|byte| *byte == 0)
+                .next()
+                .unwrap_or_default();
             if argv0 == PROCESS_NAME.as_bytes() {
                 break argv0.to_vec();
             }
