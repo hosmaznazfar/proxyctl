@@ -111,7 +111,7 @@ A Linux process-identity primitive now captures PID, procfs start-time ticks, an
 
 ## Supervisor runtime (backend-injected; not yet activated)
 
-The first runtime layer now monitors a pinned core process through its pidfd. When that exact process exits, it persists the generation-scoped CoreExited transition before attempting manifest cleanup. Cleanup uses the exact-resource backend contract; on any conflict/error it persists CleanupPending and retains the manifest. A restart-recovery entry point retries only manifests already in CleanupPending and refuses to clean Running manifests without independent core-exit evidence. Fake-child tests cover core exit, cleanup, conflict retention, restart retry, and stale activation tokens.
+The first runtime layer now monitors a pinned core process through its pidfd. When that exact process exits, it persists the generation-scoped CoreExited transition before attempting manifest cleanup. Cleanup uses the exact-resource backend contract; on any conflict/error it persists CleanupPending and retains the manifest. A restart-recovery entry point retries only manifests already in CleanupPending and refuses to clean Running manifests without independent core-exit evidence. Fake-child tests cover core exit, cleanup, conflict retention, restart retry, and stale activation tokens. Test setup pins the child with a bounded retry around transient procfs/pidfd acquisition races before binding its identity into the manifest.
 
 This is not yet a detached or init-managed supervisor. The caller must provide the process handle and a concrete ownership backend. No concrete Linux kernel mutation backend, privilege broker, service-manager launcher, or reboot recovery exists yet. TUN activation remains disabled.
 
