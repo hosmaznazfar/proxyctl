@@ -1333,7 +1333,7 @@ mod tests {
         let managed = directory.join("managed");
         fs::create_dir_all(&managed).unwrap();
         let source = std::env::split_paths(&std::env::var_os("PATH").unwrap())
-            .map(|path| path.join("sleep"))
+            .map(|path| path.join("tail"))
             .find(|path| path.is_file())
             .expect("sleep utility is required for process lifecycle tests");
         let fake = managed.join("sleep");
@@ -1361,7 +1361,7 @@ mod tests {
         for (node_id, core) in [(1, "sing-box"), (2, "xray"), (3, "mihomo")] {
             let config = runtime.join(format!("active-{node_id}-{core}.json"));
             let mut command = Command::new(&fake);
-            command.arg("30");
+            command.args(["-f", "/dev/null"]);
             launch_managed(
                 &runtime,
                 &state_path,
@@ -1429,7 +1429,7 @@ mod tests {
         drop(unavailable);
         let config = runtime.join("active-4-sing-box.json");
         let mut command = Command::new(fake.parent().unwrap().join(PROCESS_NAME));
-        command.arg("30");
+        command.args(["-f", "/dev/null"]);
 
         assert!(
             launch_managed(
