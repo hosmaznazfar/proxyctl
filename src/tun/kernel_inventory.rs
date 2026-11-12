@@ -44,7 +44,8 @@ fn run_ip(arguments: &[&str]) -> Result<Vec<u8>> {
 
 #[cfg(target_os = "linux")]
 fn run_ip_command(executable: &str, arguments: &[&str], timeout: Duration) -> Result<Vec<u8>> {
-    let mut output_file = tempfile::tempfile().context("cannot create private iproute2 output file")?;
+    let mut output_file =
+        tempfile::tempfile().context("cannot create private iproute2 output file")?;
     let child_output = output_file.try_clone()?;
     let mut child = Command::new(executable)
         .args(arguments)
@@ -198,11 +199,7 @@ mod tests {
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
         let started = Instant::now();
-        let result = run_ip_command(
-            executable.to_str().unwrap(),
-            &[],
-            Duration::from_millis(40),
-        );
+        let result = run_ip_command(executable.to_str().unwrap(), &[], Duration::from_millis(40));
         assert!(result.unwrap_err().to_string().contains("timed out"));
         assert!(started.elapsed() < Duration::from_secs(2));
     }
@@ -215,12 +212,8 @@ mod tests {
         fs::write(&executable, "#!/bin/sh\nprintf '[{}]\n'\n").unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
-        let output = run_ip_command(
-            executable.to_str().unwrap(),
-            &[],
-            Duration::from_secs(1),
-        )
-        .unwrap();
+        let output =
+            run_ip_command(executable.to_str().unwrap(), &[], Duration::from_secs(1)).unwrap();
         assert_eq!(output, b"[{}]\n");
     }
 
