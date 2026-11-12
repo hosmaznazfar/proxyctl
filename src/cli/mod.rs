@@ -70,12 +70,12 @@ enum Command {
         yes: bool,
     },
     Restore {
-        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
     },
     /// Validate one or more stored nodes' generated configs without starting a proxy core.
     Check {
-        #[arg(required = true, num_args = 1.., value_name = "ID|RANGE|all")]
+        #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
         #[arg(long, value_name = "CORE")]
         core: Option<String>,
@@ -106,7 +106,7 @@ enum Command {
         #[arg(long)]
         all_cores: bool,
         /// Restrict testing to selected stored nodes; omit to test all active nodes.
-        #[arg(long, num_args = 1.., value_name = "ID|RANGE|all")]
+        #[arg(long, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         node: Vec<String>,
         /// Test selected --node values with one managed core (mutually exclusive with --all-cores).
         #[arg(long, value_name = "CORE", requires = "node")]
@@ -141,7 +141,7 @@ enum Command {
     #[command(group(ArgGroup::new("report_view").args(["history", "compare"]).multiple(false)))]
     Report {
         /// Restrict the report to selected stored nodes.
-        #[arg(long, num_args = 1.., value_name = "ID|RANGE|all")]
+        #[arg(long, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         node: Vec<String>,
         /// Show every benchmark run, newest first.
         #[arg(long)]
