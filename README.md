@@ -192,7 +192,7 @@ proxyctl prune --core xray --unavailable
 proxyctl prune --core xray --unavailable --apply
 ~~~
 
-Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core mode, unsupported core/node combinations are excluded rather than counted as failures. A node is eligible only when every currently compatible core has a latest completed benchmark run with three distinct real-ping samples, all marked unreachable. One successful sample keeps the node. Missing runs, partial samples, invalid compatibility, startup/preflight errors, timeouts, cancellations, and other ambiguous HTTP/runtime failures prevent pruning. A newer completed run supersedes older evidence; cancelled/interrupted runs do not. Use `proxyctl restore ID` to restore a soft-deleted node.
+Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core mode, unsupported core/node combinations are excluded rather than counted as failures. A node is eligible only when every currently compatible core has a latest completed benchmark run with three distinct real-ping samples, all marked unreachable. One successful sample keeps the node. Missing runs, partial samples, invalid compatibility, startup/preflight errors, timeouts, cancellations, and other ambiguous HTTP/runtime failures prevent pruning. A newer completed run supersedes older evidence; cancelled/interrupted runs do not. Use `list --include-deleted` to see deleted positions (`D1`, `D2`, ...), then run `proxyctl restore 1` to restore the first deleted row.
 
 ## Shared node selection
 
