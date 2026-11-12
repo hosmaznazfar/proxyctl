@@ -42,6 +42,12 @@ enum Command {
     List {
         #[arg(long)]
         include_deleted: bool,
+        /// Filter by protocol: vless, vmess, trojan, shadowsocks, or hysteria2.
+        #[arg(long, value_name = "PROTOCOL")]
+        protocol: Option<String>,
+        /// Case-insensitive substring filter over server address and display name.
+        #[arg(long, value_name = "TEXT")]
+        search: Option<String>,
         /// Sort by real ping, direct TCP ping, download, or upload.
         #[arg(long, value_name = "METRIC", value_parser = ["ping", "tcp-ping", "download", "upload"])]
         sort: Option<String>,
@@ -261,10 +267,24 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
         Command::List {
             include_deleted,
+            protocol,
+            search,
             sort,
             core,
         } => {
-            let records = nodes::list_nodes(&database_path, include_deleted)?;
+            let mut records = nodes::list_nodes(&database_path, include_deleted)?;
+            if let Some(protocol) = protocol {
+                let protocol = crate::domain::Protocol::from_scheme(&protocol)
+                    .ok_or_else(|| anyhow::anyhow!("unsupported protocol filter '{protocol}'"))?;
+                records.retain(|record| record.node.protocol == protocol);
+            }
+            if let Some(search) = search {
+                let needle = search.to_lowercase();
+                records.retain(|record| {
+                    record.node.server.to_lowercase().contains(&needle)
+                        || record.node.name.as_deref().is_some_and(|name| name.to_lowercase().contains(&needle))
+                });
+            }
             if let Some(metric) = sort {
                 let metric: SortMetric = metric.parse()?;
                 let core = parse_core(core.as_deref())?;
