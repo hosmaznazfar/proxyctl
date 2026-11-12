@@ -466,3 +466,5 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **TUN dataplane readiness contract:** a new offline evaluator rejects readiness unless the exact manifest interface identity, core identity, local listener, route policy, physical-egress bypass, end-to-end proxied traffic, and unchanged DNS/firewall evidence are all present. Live evidence collection is not implemented; this remains a testable gate, not an activation feature.
+
+- Fake-process identity tests use bounded retries for transient procfs/pidfd startup races and a stable argv-preserving executable fixture. Production identity verification remains strict.
