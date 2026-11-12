@@ -520,7 +520,9 @@ fn confirm_remove_all() -> anyhow::Result<bool> {
     use std::io::{self, IsTerminal, Write};
 
     if !io::stdin().is_terminal() {
-        anyhow::bail!("'remove all' requires an interactive terminal; use --yes to confirm explicitly");
+        anyhow::bail!(
+            "'remove all' requires an interactive terminal; use --yes to confirm explicitly"
+        );
     }
     print!("Remove every active node? Reversible with 'proxyctl restore all'. [y/N] ");
     io::stdout().flush()?;
@@ -542,13 +544,23 @@ fn print_batch_summary(action: &str, summary: &nodes::BatchNodeSummary, unchange
     if !summary.missing.is_empty() {
         println!(
             "Not found: {}",
-            summary.missing.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+            summary
+                .missing
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
     if !summary.unchanged.is_empty() {
         println!(
             "Unchanged: {}",
-            summary.unchanged.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")
+            summary
+                .unchanged
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
 }
@@ -890,8 +902,8 @@ mod tests {
 
     #[test]
     fn list_command_accepts_protocol_and_search_filters() {
-        assert!(Cli::try_parse_from(["proxyctl","list","--protocol","vless"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl","list","--search","example.com"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "list", "--protocol", "vless"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "list", "--search", "example.com"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl","list","--protocol","invalid"]).is_ok());
     }
 
@@ -1007,16 +1019,8 @@ mod tests {
         assert!(Cli::try_parse_from(["proxyctl", "remove", "all", "--yes"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "restore", "1..5"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "check", "1", "2", "--core", "xray"]).is_ok());
-        let cli = Cli::try_parse_from([
-            "proxyctl",
-            "test",
-            "--node",
-            "1",
-            "2",
-            "3",
-            "--all-cores",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["proxyctl", "test", "--node", "1", "2", "3", "--all-cores"])
+            .unwrap();
         assert!(matches!(
             cli.command,
             Some(Command::Test { node, .. })
