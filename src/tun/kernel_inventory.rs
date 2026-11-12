@@ -193,7 +193,7 @@ mod tests {
     fn bounds_inspection_process_runtime_and_reaps_timeout() {
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("busy");
-        fs::write(&executable, "#!/bin/sh\\nwhile :; do :; done\\n").unwrap();
+        fs::write(&executable, "#!/bin/sh\nwhile :; do :; done\n").unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
         let started = Instant::now();
@@ -211,7 +211,7 @@ mod tests {
     fn captures_command_output_without_a_shell_or_pipe_backpressure() {
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("emit");
-        fs::write(&executable, "#!/bin/sh\\nprintf '[{}]\\n'\\n").unwrap();
+        fs::write(&executable, "#!/bin/sh\nprintf '[{}]\n'\n").unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
         let output = run_ip_command(
@@ -220,7 +220,7 @@ mod tests {
             Duration::from_secs(1),
         )
         .unwrap();
-        assert_eq!(output, b"[{}]\\n");
+        assert_eq!(output, b"[{}]\n");
     }
 
     #[test]
