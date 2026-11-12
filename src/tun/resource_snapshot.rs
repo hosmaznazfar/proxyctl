@@ -87,7 +87,7 @@ pub fn compare_manifest(
                 &resource.fingerprint,
                 &snapshot.rules,
             ),
-            Err(_) => SnapshotResourceState::UnsupportedIdentity,
+            Ok(_) | Err(_) => SnapshotResourceState::UnsupportedIdentity,
         };
         comparison.resources.push(ResourceComparison {
             key: resource.key.clone(),
