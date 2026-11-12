@@ -9,6 +9,8 @@ pub mod kernel_inventory;
 pub mod lifecycle_coordinator;
 pub mod manifest_store;
 pub mod ownership;
+#[cfg(target_os = "linux")]
+pub mod process;
 pub mod recovery;
 pub mod route_policy;
 pub mod service_manager;
