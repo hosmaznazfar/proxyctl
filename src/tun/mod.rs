@@ -15,6 +15,7 @@ pub mod privilege_broker;
 pub mod process;
 pub mod readiness;
 pub mod recovery;
+pub mod resource_snapshot;
 pub mod route_policy;
 pub mod service_manager;
 #[cfg(target_os = "linux")]
