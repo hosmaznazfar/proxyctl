@@ -108,7 +108,7 @@ pub struct CleanupReport {
 pub trait OwnedResourceBackend {
     fn fingerprint(&mut self, key: &str) -> Result<Option<String>>;
     fn remove_if_matches(&mut self, key: &str, expected_fingerprint: &str)
-        -> Result<ResourceState>;
+    -> Result<ResourceState>;
 }
 
 /// Remove only exact manifest resources. Changed resources are preserved and reported.
