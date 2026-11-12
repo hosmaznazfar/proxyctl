@@ -4,9 +4,9 @@
 //! and fails closed when the output is incomplete or cannot be interpreted.
 
 use crate::tun::route_policy::{AddressFamily, KernelInventory};
-use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use anyhow::ensure;
+use anyhow::{Context, Result};
 use serde_json::Value;
 #[cfg(target_os = "linux")]
 use std::process::Command;
@@ -34,7 +34,12 @@ fn run_ip(arguments: &[&str]) -> Result<Vec<u8>> {
     let output = Command::new("ip")
         .args(arguments)
         .output()
-        .with_context(|| format!("cannot execute iproute2 inspection command: ip {}", arguments.join(" ")))?;
+        .with_context(|| {
+            format!(
+                "cannot execute iproute2 inspection command: ip {}",
+                arguments.join(" ")
+            )
+        })?;
     ensure!(
         output.status.success(),
         "iproute2 inspection failed for a read-only routing query"
@@ -49,8 +54,12 @@ fn parse_snapshot(
     ipv6_rules: &[u8],
 ) -> Result<KernelInventory> {
     let mut inventory = KernelInventory::default();
-    inventory.occupied_tables.extend(parse_route_tables(ipv4_routes)?);
-    inventory.occupied_tables.extend(parse_route_tables(ipv6_routes)?);
+    inventory
+        .occupied_tables
+        .extend(parse_route_tables(ipv4_routes)?);
+    inventory
+        .occupied_tables
+        .extend(parse_route_tables(ipv6_routes)?);
 
     let ipv4_rules = parse_rules(ipv4_rules, AddressFamily::Ipv4)?;
     let ipv6_rules = parse_rules(ipv6_rules, AddressFamily::Ipv6)?;
@@ -175,18 +184,13 @@ mod tests {
     #[test]
     fn rejects_malformed_or_incomplete_rule_inventory() {
         assert!(parse_rules(b"not-json", AddressFamily::Ipv4).is_err());
-        assert!(
-            parse_rules(br#"[{"table":"main"}]"#, AddressFamily::Ipv4).is_err()
-        );
+        assert!(parse_rules(br#"[{"table":"main"}]"#, AddressFamily::Ipv4).is_err());
     }
 
     #[test]
     fn includes_rule_lookup_tables_even_without_routes() {
-        let parsed = parse_rules(
-            br#"[{"priority":123,"table":42420}]"#,
-            AddressFamily::Ipv4,
-        )
-        .unwrap();
+        let parsed =
+            parse_rules(br#"[{"priority":123,"table":42420}]"#, AddressFamily::Ipv4).unwrap();
         assert_eq!(parsed.tables, [42420]);
         assert_eq!(parsed.priorities, [(AddressFamily::Ipv4, 123)]);
     }
