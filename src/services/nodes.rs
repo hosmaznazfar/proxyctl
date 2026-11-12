@@ -97,22 +97,27 @@ pub fn resolve_node_selection(
             .filter(|record| record.is_deleted() == include_deleted)
             .map(|record| record.id)
             .collect()),
-        // Active-node selectors are one-based display positions, not persistent IDs.
-        // Restore is the deliberate exception: deleted rows expose their stable restore ID.
-        super::node_selection::NodeSelection::Ids(ids) if include_deleted => Ok(ids.clone()),
+        // Both active and deleted selectors are one-based positions in their
+        // respective lists. Persistent IDs never escape this resolution boundary.
         super::node_selection::NodeSelection::Ids(positions) => {
-            let active = database.list_nodes(false)?;
+            let records = database.list_nodes(include_deleted)?;
+            let selected = if include_deleted {
+                records.into_iter().filter(NodeRecord::is_deleted).collect::<Vec<_>>()
+            } else {
+                records
+            };
             positions
                 .iter()
                 .map(|position| {
                     let index = usize::try_from(*position - 1)
                         .map_err(|_| anyhow::anyhow!("node number {position} is out of range"))?;
-                    active
+                    selected
                         .get(index)
                         .map(|record| record.id)
                         .ok_or_else(|| anyhow::anyhow!(
-                            "node number {position} does not exist; there are {} active node(s)",
-                            active.len()
+                            "node number {position} does not exist; there are {} {} node(s)",
+                            selected.len(),
+                            if include_deleted { "deleted" } else { "active" }
                         ))
                 })
                 .collect()
