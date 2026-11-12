@@ -64,11 +64,61 @@ pub fn list_nodes(database_path: &Path, include_deleted: bool) -> anyhow::Result
     NodeDatabase::open(database_path)?.list_nodes(include_deleted)
 }
 
-pub fn get_node(path:&Path,id:u64)->anyhow::Result<Option<NodeRecord>>{NodeDatabase::open(path)?.get_node(id)}
-#[derive(Clone,Debug,Default,Eq,PartialEq)] pub struct BatchNodeSummary{pub changed:Vec<u64>,pub missing:Vec<u64>,pub unchanged:Vec<u64>}
-pub fn resolve_node_selection(path:&Path,sel:&super::node_selection::NodeSelection,include_deleted:bool)->anyhow::Result<Vec<u64>>{let db=NodeDatabase::open(path)?;match sel{super::node_selection::NodeSelection::All=>Ok(db.list_nodes(true)?.into_iter().filter(|r|r.is_deleted()==include_deleted).map(|r|r.id).collect()),super::node_selection::NodeSelection::Ids(ids)=>Ok(ids.clone())}}
-pub fn remove_nodes(path:&Path,ids:&[u64])->anyhow::Result<BatchNodeSummary>{let db=NodeDatabase::open(path)?;let mut s=BatchNodeSummary::default();for id in ids{match db.get_node(*id)?{None=>s.missing.push(*id),Some(r)if r.is_deleted()=>s.unchanged.push(*id),Some(_)if db.soft_delete(*id)?=>s.changed.push(*id),Some(_)=>s.unchanged.push(*id)}}Ok(s)}
-pub fn restore_nodes(path:&Path,ids:&[u64])->anyhow::Result<BatchNodeSummary>{let db=NodeDatabase::open(path)?;let mut s=BatchNodeSummary::default();for id in ids{match db.get_node(*id)?{None=>s.missing.push(*id),Some(r)if !r.is_deleted()=>s.unchanged.push(*id),Some(_)if db.restore(*id)?=>s.changed.push(*id),Some(_)=>s.unchanged.push(*id)}}Ok(s)}
+pub fn get_node(path: &Path, id: u64) -> anyhow::Result<Option<NodeRecord>> {
+    NodeDatabase::open(path)?.get_node(id)
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct BatchNodeSummary {
+    pub changed: Vec<u64>,
+    pub missing: Vec<u64>,
+    pub unchanged: Vec<u64>,
+}
+
+pub fn resolve_node_selection(
+    path: &Path,
+    selection: &super::node_selection::NodeSelection,
+    include_deleted: bool,
+) -> anyhow::Result<Vec<u64>> {
+    let database = NodeDatabase::open(path)?;
+    match selection {
+        super::node_selection::NodeSelection::All => Ok(database
+            .list_nodes(true)?
+            .into_iter()
+            .filter(|record| record.is_deleted() == include_deleted)
+            .map(|record| record.id)
+            .collect()),
+        super::node_selection::NodeSelection::Ids(ids) => Ok(ids.clone()),
+    }
+}
+
+pub fn remove_nodes(path: &Path, ids: &[u64]) -> anyhow::Result<BatchNodeSummary> {
+    let database = NodeDatabase::open(path)?;
+    let mut summary = BatchNodeSummary::default();
+    for id in ids {
+        match database.get_node(*id)? {
+            None => summary.missing.push(*id),
+            Some(record) if record.is_deleted() => summary.unchanged.push(*id),
+            Some(_) if database.soft_delete(*id)? => summary.changed.push(*id),
+            Some(_) => summary.unchanged.push(*id),
+        }
+    }
+    Ok(summary)
+}
+
+pub fn restore_nodes(path: &Path, ids: &[u64]) -> anyhow::Result<BatchNodeSummary> {
+    let database = NodeDatabase::open(path)?;
+    let mut summary = BatchNodeSummary::default();
+    for id in ids {
+        match database.get_node(*id)? {
+            None => summary.missing.push(*id),
+            Some(record) if !record.is_deleted() => summary.unchanged.push(*id),
+            Some(_) if database.restore(*id)? => summary.changed.push(*id),
+            Some(_) => summary.unchanged.push(*id),
+        }
+    }
+    Ok(summary)
+}
 
 fn safe_parse_error(error: ParseError) -> String {
     error.to_string()
@@ -103,6 +153,30 @@ mod tests {
         assert_eq!(summary.invalid, 1);
         assert_eq!(summary.failures[0].line_number, 4);
         assert_eq!(fs::read_to_string(source).unwrap(), contents);
+    }
+
+    #[test]
+    fn batch_remove_and_restore_preserve_records_and_report_missing_ids() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("proxyctl.redb");
+        let first = add_url(&database, "vless://uuid@one.example:443").unwrap();
+        let second = add_url(&database, "vless://uuid@two.example:443").unwrap();
+        assert_eq!(first, AddNodeOutcome::Added(1));
+        assert_eq!(second, AddNodeOutcome::Added(2));
+
+        let removed = remove_nodes(&database, &[1, 2, 99]).unwrap();
+        assert_eq!(removed.changed, vec![1, 2]);
+        assert_eq!(removed.missing, vec![99]);
+        assert!(removed.unchanged.is_empty());
+
+        let restored = restore_nodes(&database, &[1, 2, 99]).unwrap();
+        assert_eq!(restored.changed, vec![1, 2]);
+        assert_eq!(restored.missing, vec![99]);
+        assert!(restored.unchanged.is_empty());
+
+        let repeated = restore_nodes(&database, &[1, 2]).unwrap();
+        assert!(repeated.changed.is_empty());
+        assert_eq!(repeated.unchanged, vec![1, 2]);
     }
 
     #[test]
