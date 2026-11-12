@@ -213,7 +213,7 @@ fn execute_run(
     cores: &[CoreId],
     core_versions: &BTreeMap<String, String>,
     settings: &BenchmarkSettings,
- ) -> anyhow::Result<()> {
+) -> anyhow::Result<()> {
     let active_nodes = NodeDatabase::open(database_path)?.list_nodes(false)?;
     for record in nodes {
         let display_number = active_nodes
@@ -273,7 +273,7 @@ fn execute_run(
                 continue;
             }
 
-            println!("run #{run_id} node #{}: starting {core}...", record.id);
+            println!("run #{run_id} node #{}: starting {core}...", display_number);
             let process = match ManagedCoreProcess::start(
                 *core,
                 &record.node,
@@ -284,7 +284,7 @@ fn execute_run(
                 Err(error) => {
                     let (status, category, reason) = classify_core_start_failure(&error);
                     record_preflight(database_path, &context, status, category, reason)?;
-                    println!("run #{run_id} node #{} {core}: {reason}", record.id);
+                    println!("run #{run_id} node #{} {core}: {reason}", display_number);
                     continue;
                 }
             };
