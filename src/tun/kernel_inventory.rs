@@ -52,12 +52,12 @@ fn parse_snapshot(
     inventory.occupied_tables.extend(parse_route_tables(ipv4_routes)?);
     inventory.occupied_tables.extend(parse_route_tables(ipv6_routes)?);
 
-    let (ipv4_tables, ipv4_priorities) = parse_rules(ipv4_rules, AddressFamily::Ipv4)?;
-    let (ipv6_tables, ipv6_priorities) = parse_rules(ipv6_rules, AddressFamily::Ipv6)?;
-    inventory.occupied_tables.extend(ipv4_tables);
-    inventory.occupied_tables.extend(ipv6_tables);
-    inventory.rule_priorities.extend(ipv4_priorities);
-    inventory.rule_priorities.extend(ipv6_priorities);
+    let ipv4_rules = parse_rules(ipv4_rules, AddressFamily::Ipv4)?;
+    let ipv6_rules = parse_rules(ipv6_rules, AddressFamily::Ipv6)?;
+    inventory.occupied_tables.extend(ipv4_rules.tables);
+    inventory.occupied_tables.extend(ipv6_rules.tables);
+    inventory.rule_priorities.extend(ipv4_rules.priorities);
+    inventory.rule_priorities.extend(ipv6_rules.priorities);
 
     inventory.occupied_tables.sort_unstable();
     inventory.occupied_tables.dedup();
@@ -85,10 +85,12 @@ fn parse_route_tables(bytes: &[u8]) -> Result<Vec<u32>> {
         .collect()
 }
 
-fn parse_rules(
-    bytes: &[u8],
-    family: AddressFamily,
-) -> Result<(Vec<u32>, Vec<(AddressFamily, u32)>)> {
+struct ParsedRules {
+    tables: Vec<u32>,
+    priorities: Vec<(AddressFamily, u32)>,
+}
+
+fn parse_rules(bytes: &[u8], family: AddressFamily) -> Result<ParsedRules> {
     let rules = parse_array(bytes, "rule")?;
     let mut tables = Vec::new();
     let mut priorities = Vec::with_capacity(rules.len());
@@ -103,7 +105,7 @@ fn parse_rules(
             tables.push(parse_table_id(table)?);
         }
     }
-    Ok((tables, priorities))
+    Ok(ParsedRules { tables, priorities })
 }
 
 fn parse_array(bytes: &[u8], kind: &str) -> Result<Vec<Value>> {
@@ -180,12 +182,12 @@ mod tests {
 
     #[test]
     fn includes_rule_lookup_tables_even_without_routes() {
-        let (tables, priorities) = parse_rules(
+        let parsed = parse_rules(
             br#"[{"priority":123,"table":42420}]"#,
             AddressFamily::Ipv4,
         )
         .unwrap();
-        assert_eq!(tables, [42420]);
-        assert_eq!(priorities, [(AddressFamily::Ipv4, 123)]);
+        assert_eq!(parsed.tables, [42420]);
+        assert_eq!(parsed.priorities, [(AddressFamily::Ipv4, 123)]);
     }
 }
