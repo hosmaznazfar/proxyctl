@@ -281,7 +281,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Show { nodes: selectors } => {
             let selection=node_selection::parse_node_selection(&selectors)?;
-            let ids=nodes::resolve_node_selection(&database_path,&selection,true)?;
+            let ids=nodes::resolve_node_selection(&database_path,&selection,false)?;
             if ids.is_empty(){println!("No matching nodes.");}
             for id in ids { match nodes::get_node(&database_path,id)? {Some(r)=>print_node_details(&r),None=>println!("Node #{id}: not found.")} }
         }
@@ -317,15 +317,16 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             } else {
                 ReportMode::Latest
             };
-            let report = reporting::build_report(
-                &database_path,
-                ReportOptions {
-                    mode,
-                    node_id: if node.is_empty(){None}else{Some(selected_ids(&database_path,&node)?[0])},
-                    core: parse_core(core.as_deref())?,
-                },
-            )?;
-            print_benchmark_report(&report, verbose);
+            let core=parse_core(core.as_deref())?;
+            if node.is_empty() {
+                let report=reporting::build_report(&database_path,ReportOptions{mode,node_id:None,core})?;
+                print_benchmark_report(&report,verbose);
+            } else {
+                for id in selected_ids(&database_path,&node)? {
+                    let report=reporting::build_report(&database_path,ReportOptions{mode,node_id:Some(id),core})?;
+                    print_benchmark_report(&report,verbose);
+                }
+            }
         }
         Command::Prune {
             unavailable_all,
@@ -398,15 +399,14 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             settings.upload_bytes = upload_bytes;
             settings.request_timeout_ms = request_timeout_ms;
             settings.startup_timeout_ms = startup_timeout_ms;
-            crate::services::benchmark::run_benchmark(
-                &database_path,
-                crate::services::benchmark::BenchmarkOptions {
-                    all_cores,
-                    node_id: node,
-                    core: parse_core(core.as_deref())?,
-                    settings,
-                },
-            )?;
+            let selected=if node.is_empty(){Vec::new()}else{selected_ids(&database_path,&node)?};
+            if selected.is_empty() {
+                crate::services::benchmark::run_benchmark(&database_path,crate::services::benchmark::BenchmarkOptions{all_cores,node_id:None,core:parse_core(core.as_deref())?,settings})?;
+            } else {
+                for id in selected {
+                    crate::services::benchmark::run_benchmark(&database_path,crate::services::benchmark::BenchmarkOptions{all_cores,node_id:Some(id),core:parse_core(core.as_deref())?,settings:settings.clone()})?;
+                }
+            }
         }
         Command::Cores
         | Command::Setup { .. }
