@@ -12,7 +12,7 @@ use crate::{
     updates::release::ReleaseChannel,
 };
 use clap::{ArgGroup, Parser, Subcommand};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -220,7 +220,16 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Use { id, core, tun } => {
             let core = parse_core(Some(&core))?
                 .ok_or_else(|| anyhow::anyhow!("--core is required for activation"))?;
-            crate::services::activation::activate(id, core, tun)?;
+            let database_path = default_database_path()?;
+            let selected = nodes::resolve_node_selection(
+                &database_path,
+                &NodeSelection::Ids(vec![id]),
+                false,
+            )?;
+            let stable_id = *selected
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
+            crate::services::activation::activate(stable_id, core, tun)?;
             return Ok(());
         }
         Command::Stop => {
@@ -270,8 +279,18 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let database_path = default_database_path()?;
     match command {
         Command::Add { url } => match nodes::add_url(&database_path, &url)? {
-            AddNodeOutcome::Added(id) => println!("Added node #{id}."),
-            AddNodeOutcome::Duplicate(id) => println!("This URL is already stored as node #{id}."),
+            AddNodeOutcome::Added(id) => {
+                let number = nodes::active_display_number(&database_path, id)?
+                    .ok_or_else(|| anyhow::anyhow!("new node was not visible after insertion"))?;
+                println!("Added node #{number}.");
+            }
+            AddNodeOutcome::Duplicate(id) => {
+                if let Some(number) = nodes::active_display_number(&database_path, id)? {
+                    println!("This URL is already stored as node #{number}.");
+                } else {
+                    println!("This URL is already stored as a deleted node (restore ID {id}).");
+                }
+            }
         },
         Command::Import { file } => {
             let summary = nodes::import_file(&database_path, &file)?;
@@ -291,6 +310,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             core,
         } => {
             let mut records = nodes::list_nodes(&database_path, include_deleted)?;
+            let display_numbers = active_display_numbers(&database_path)?;
             if let Some(protocol) = protocol {
                 let protocol = crate::domain::Protocol::from_scheme(&protocol)
                     .ok_or_else(|| anyhow::anyhow!("unsupported protocol filter '{protocol}'"))?;
@@ -316,9 +336,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     );
                 }
                 let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
-                print_sorted_node_list(&ranked, metric);
+                print_sorted_node_list(&ranked, metric, &display_numbers);
             } else {
-                print_node_list(&records);
+                print_node_list(&records, &display_numbers);
             }
         }
         Command::Show { nodes: selectors } => {
@@ -329,7 +349,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             for id in ids {
                 match nodes::get_node(&database_path, id)? {
-                    Some(record) => print_node_details(&record),
+                    Some(record) => {
+                        let number = nodes::active_display_number(&database_path, id)?
+                            .unwrap_or(id as usize);
+                        print_node_details(&record, number);
+                    }
                     None => println!("Node #{id}: not found."),
                 }
             }
@@ -380,6 +404,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 ReportMode::Latest
             };
             let core = parse_core(core.as_deref())?;
+            let display_numbers = active_display_numbers(&database_path)?;
             if node.is_empty() {
                 let report = reporting::build_report(
                     &database_path,
@@ -389,7 +414,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         core,
                     },
                 )?;
-                print_benchmark_report(&report, verbose);
+                print_benchmark_report(&report, verbose, &display_numbers);
             } else {
                 for id in selected_ids(&database_path, &node)? {
                     let report = reporting::build_report(
@@ -418,6 +443,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         .ok_or_else(|| anyhow::anyhow!("--unavailable requires --core"))?,
                 )
             };
+            let display_numbers = active_display_numbers(&database_path)?;
             let report = pruning::prune_nodes(&database_path, PruneOptions { scope, apply })?;
             if report.results.is_empty() {
                 println!("No active nodes to evaluate.");
@@ -432,7 +458,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 };
                 println!(
                     "Node #{}: {label} — {}",
-                    result.node.id,
+                    display_numbers.get(&result.node.id).copied().unwrap_or(result.node.id as usize),
                     safe_field(&result.detail, 200)
                 );
             }
@@ -578,7 +604,11 @@ fn selected_ids(path: &std::path::Path, selectors: &[String]) -> anyhow::Result<
     }
     Ok(ids)
 }
-fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
+fn print_benchmark_report(
+    report: &reporting::BenchmarkReport,
+    verbose: bool,
+    display_numbers: &HashMap<u64, usize>,
+) {
     use reporting::ReportMode;
 
     if report.mode == ReportMode::Compare {
@@ -589,7 +619,7 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
         for comparison in &report.comparisons {
             println!(
                 "Node #{} {}:{} — {} — run #{}{}",
-                comparison.node.id,
+                display_numbers.get(&comparison.node.id).copied().unwrap_or(comparison.node.id as usize),
                 safe_field(&comparison.node.node.server, 48),
                 comparison.node.node.port,
                 comparison.target,
@@ -615,7 +645,7 @@ fn print_benchmark_report(report: &reporting::BenchmarkReport, verbose: bool) {
     for node in &report.nodes {
         println!(
             "Node #{} {}:{}{}",
-            node.node.id,
+            display_numbers.get(&node.node.id).copied().unwrap_or(node.node.id as usize),
             safe_field(&node.node.node.server, 48),
             node.node.node.port,
             node.node
@@ -748,23 +778,35 @@ fn sample_status_label(status: crate::domain::BenchmarkSampleStatus) -> &'static
     }
 }
 
+fn active_display_numbers(path: &std::path::Path) -> anyhow::Result<HashMap<u64, usize>> {
+    Ok(nodes::list_nodes(path, false)?
+        .into_iter()
+        .enumerate()
+        .map(|(index, record)| (record.id, index + 1))
+        .collect())
+}
+
 fn parse_core(value: Option<&str>) -> anyhow::Result<Option<CoreId>> {
     value.map(str::parse).transpose()
 }
 
-fn print_node_list(records: &[NodeRecord]) {
+fn print_node_list(records: &[NodeRecord], display_numbers: &HashMap<u64, usize>) {
     if records.is_empty() {
         println!("No proxy nodes found.");
         return;
     }
     println!(
         "{:>5}  {:<12}  {:<32}  {:>5}  NAME",
-        "ID", "PROTOCOL", "SERVER", "PORT"
+        "NO.", "PROTOCOL", "SERVER", "PORT"
     );
     for record in records {
         println!(
             "{:>5}  {:<12}  {:<32}  {:>5}  {}",
-            record.id,
+            if record.is_deleted() {
+                format!("D{}", record.id)
+            } else {
+                display_numbers.get(&record.id).copied().unwrap_or_default().to_string()
+            },
             record.node.protocol,
             safe_field(&record.node.server, 32),
             record.node.port,
@@ -778,7 +820,11 @@ fn print_node_list(records: &[NodeRecord]) {
     }
 }
 
-fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
+fn print_sorted_node_list(
+    records: &[sorting::RankedNode],
+    metric: SortMetric,
+    display_numbers: &HashMap<u64, usize>,
+) {
     if records.is_empty() {
         println!("No proxy nodes found.");
         return;
@@ -813,7 +859,7 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
             } else {
                 "-".into()
             },
-            record.node.id,
+            display_numbers.get(&record.node.id).copied().unwrap_or_default(),
             record.node.node.protocol,
             safe_field(&record.node.node.server, 32),
             record.node.node.port,
@@ -831,9 +877,9 @@ fn print_sorted_node_list(records: &[sorting::RankedNode], metric: SortMetric) {
     }
 }
 
-fn print_node_details(record: &NodeRecord) {
+fn print_node_details(record: &NodeRecord, display_number: usize) {
     let node = &record.node;
-    println!("ID: {}", record.id);
+    println!("Node: #{display_number}");
     println!("Protocol: {}", node.protocol);
     println!("Server: {}", safe_field(&node.server, 200));
     println!("Port: {}", node.port);
