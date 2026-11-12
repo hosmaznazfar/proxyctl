@@ -229,7 +229,7 @@ mod tests {
     fn rejects_command_output_above_the_fixed_memory_limit() {
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("oversized");
-        fs::write(&executable, "#!/bin/sh\\nhead -c 4194305 /dev/zero\\n").unwrap();
+        fs::write(&executable, "#!/bin/sh\nhead -c 4194305 /dev/zero\n").unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
         let error =
