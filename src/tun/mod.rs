@@ -14,6 +14,7 @@ pub mod process;
 pub mod recovery;
 pub mod route_policy;
 pub mod service_manager;
+pub mod supervisor;
 
 #[cfg(target_os = "linux")]
 use std::{
