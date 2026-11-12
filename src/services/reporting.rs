@@ -448,6 +448,7 @@ mod tests {
             id: 1,
             node: parse_proxy_url("vless://uuid@example.test:443").unwrap(),
             created_at: 1,
+            active_order: 0,
             deleted_at: None,
         };
         let rows = build_comparisons(&[node], &[old, latest, cancelled], &samples, None);
