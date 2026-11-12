@@ -3,7 +3,7 @@
 //! Detection is based on PID 1 and runtime markers, never distribution names.
 //! This module intentionally does not start, stop, or modify any service.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceManager {
