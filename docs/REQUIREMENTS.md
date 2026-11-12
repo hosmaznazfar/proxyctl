@@ -111,7 +111,7 @@ The application shall provide node lifecycle commands.
 
 Acceptance criteria:
 
-- `proxyctl list` shows ID, protocol, server, port, and available display name.
+- `proxyctl list` shows ID, protocol, server, port, and available display name; `--protocol` filters by protocol and `--search` filters server/name substrings case-insensitively.
 - Credentials and sensitive query values are masked by default.
 - `show`, `check`, `test --node`, and `report --node` accept one ID, multiple IDs, inclusive ranges, and standalone `all` where applicable.
 - `remove` accepts IDs, lists, ranges, or standalone `all`; remove-all requires interactive confirmation or explicit `--yes`.
