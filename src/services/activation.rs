@@ -20,6 +20,7 @@ use std::{
 
 const WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);
+#[cfg(target_os = "linux")]
 const PROCESS_NAME: &str = "proxyctl-core";
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -348,7 +349,7 @@ fn configure_process_identity(command: &mut Command) {
     // syscall and the static NUL-terminated name requires no allocation.
     unsafe {
         command.pre_exec(|| {
-            let name = b"proxyctl-core\\0";
+            let name = b"proxyctl-core\0";
             if libc::prctl(libc::PR_SET_NAME, name.as_ptr(), 0, 0, 0) == -1 {
                 return Err(std::io::Error::last_os_error());
             }
@@ -1219,10 +1220,17 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn managed_process_uses_unified_proxyctl_identity_without_changing_executable() {
-        let mut command = Command::new("/bin/sleep");
+        let mut command = Command::new("sleep");
+        command.arg("30");
         configure_process_identity(&mut command);
-        assert_eq!(command.get_program(), std::ffi::OsStr::new("/bin/sleep"));
-        assert_eq!(command.get_args().next(), Some(std::ffi::OsStr::new(PROCESS_NAME)));
+        let executable_path = fs::canonicalize(command.get_program()).unwrap();
+        let mut child = command.spawn().unwrap();
+        let pid = child.id();
+        let comm = fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
+        assert_eq!(comm.trim(), PROCESS_NAME);
+        assert_eq!(executable(pid).as_deref(), Some(executable_path.as_path()));
+        child.kill().unwrap();
+        child.wait().unwrap();
     }
 
     #[cfg(target_os = "linux")]
