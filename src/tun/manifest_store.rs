@@ -6,9 +6,10 @@
 
 use super::{
     ownership::RouteManifest,
-    #[cfg(target_os = "linux")] process::ProcessIdentity,
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase, transition},
 };
+#[cfg(target_os = "linux")]
+use super::process::ProcessIdentity;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
