@@ -145,6 +145,7 @@ pub struct KernelSnapshot {
     pub rules: Vec<KernelRuleRecord>,
 }
 
+#[cfg(test)]
 fn parse_snapshot(
     ipv4_routes: &[u8],
     ipv6_routes: &[u8],
