@@ -6,7 +6,7 @@
 
 use super::{
     ownership::RouteManifest,
-    process::ProcessIdentity,
+    #[cfg(target_os = "linux")] process::ProcessIdentity,
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase, transition},
 };
 use anyhow::{Context, Result, ensure};
@@ -29,6 +29,7 @@ pub struct ManifestSnapshot {
     pub generation: u64,
     pub phase: SupervisorPhase,
     pub manifest: RouteManifest,
+    #[cfg(target_os = "linux")]
     #[serde(default)]
     pub core_process: Option<ProcessIdentity>,
 }
@@ -44,6 +45,7 @@ impl ManifestSnapshot {
             "TUN manifest generation must be non-zero"
         );
         self.manifest.validate()?;
+        #[cfg(target_os = "linux")]
         if let Some(process) = &self.core_process {
             process.validate()?;
         }
@@ -318,6 +320,7 @@ mod tests {
             schema_version: STORE_VERSION,
             generation: 9,
             phase: SupervisorPhase::Prepared,
+            #[cfg(target_os = "linux")]
             core_process: None,
             manifest: RouteManifest {
                 version: MANIFEST_VERSION,
