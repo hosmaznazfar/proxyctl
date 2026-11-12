@@ -123,7 +123,7 @@ pub fn cleanup<B: OwnedResourceBackend>(
     // Preflight every resource before the first deletion to avoid partial teardown on conflict.
     for resource in &manifest.resources {
         match backend.fingerprint(&resource.key)? {
-            None => report.already_absent.push(resource.key.clone()),
+            None => {},
             Some(current) if current == resource.fingerprint => {}
             Some(_) => report.conflicts.push(resource.key.clone()),
         }
