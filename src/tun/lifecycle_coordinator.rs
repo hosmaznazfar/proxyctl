@@ -3,12 +3,9 @@ use super::{
     recovery::{RecoveryAction, SupervisorEvent},
 };
 use anyhow::{Context, Result, ensure};
-use std::{
-    fs::{File, OpenOptions},
-    path::PathBuf,
-    thread,
-    time::{Duration, Instant},
-};
+use std::{fs::File, path::PathBuf, time::Duration};
+#[cfg(unix)]
+use std::{fs::OpenOptions, thread, time::Instant};
 
 const LOCK_FILE: &str = "tun-lifecycle.lock";
 const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -110,6 +107,8 @@ impl Drop for LifecycleLock {
             // SAFETY: this guard owns the open descriptor until after the unlock call.
             unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
         }
+        #[cfg(not(unix))]
+        let _ = &self.file;
     }
 }
 
@@ -152,7 +151,7 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
         let error = std::io::Error::last_os_error();
         if !matches!(
             error.raw_os_error(),
-            Some(libc::EWOULDBLOCK) | Some(libc::EAGAIN)
+            Some(libc::EWOULDBLOCK)
         ) {
             return Err(error).context("cannot acquire TUN lifecycle lock");
         }
