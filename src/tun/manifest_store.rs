@@ -6,6 +6,7 @@
 
 use super::{
     ownership::RouteManifest,
+    process::ProcessIdentity,
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase, transition},
 };
 use anyhow::{Context, Result, ensure};
@@ -28,6 +29,8 @@ pub struct ManifestSnapshot {
     pub generation: u64,
     pub phase: SupervisorPhase,
     pub manifest: RouteManifest,
+    #[serde(default)]
+    pub core_process: Option<ProcessIdentity>,
 }
 
 impl ManifestSnapshot {
@@ -40,7 +43,11 @@ impl ManifestSnapshot {
             self.generation > 0,
             "TUN manifest generation must be non-zero"
         );
-        self.manifest.validate()
+        self.manifest.validate()?;
+        if let Some(process) = &self.core_process {
+            process.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -311,6 +318,7 @@ mod tests {
             schema_version: STORE_VERSION,
             generation: 9,
             phase: SupervisorPhase::Prepared,
+            core_process: None,
             manifest: RouteManifest {
                 version: MANIFEST_VERSION,
                 activation_id: "12345678-1234-4234-8234-123456789abc".into(),
