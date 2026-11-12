@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn monitors_fake_core_and_cleans_exact_manifest_resources() {
-        let (_directory, coordinator, token) = setup(SupervisorPhase::Running);
+        let (_directory, coordinator, token) = setup(SupervisorPhase::Prepared);
         let mut child = Command::new("sleep")
             .arg("30")
             .stdin(Stdio::null())
