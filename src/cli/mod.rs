@@ -433,7 +433,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                             core,
                         },
                     )?;
-                    print_benchmark_report(&report, verbose);
+                    print_benchmark_report(&report, verbose, &display_numbers);
                 }
             }
         }
