@@ -819,7 +819,7 @@ mod tests {
             cli.command,
             Some(Command::Test {
                 all_cores: true,
-                node: None,
+                node: ref node if node.is_empty(),
                 core: None,
                 ..
             })
@@ -851,11 +851,23 @@ mod tests {
             cli.command,
             Some(Command::Test {
                 all_cores: true,
-                node: Some(18),
+                node: ref node if node == &vec!["18".to_owned()],
                 core: None,
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn node_commands_accept_lists_ranges_and_remove_all_confirmation_flag() {
+        assert!(Cli::try_parse_from(["proxyctl","show","1","2","3"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl","show","1..5"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl","remove","all"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl","remove","all","--yes"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl","restore","1..5"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl","check","1","2","--core","xray"]).is_ok());
+        let cli=Cli::try_parse_from(["proxyctl","test","--node","1","2","3","--all-cores"]).unwrap();
+        assert!(matches!(cli.command,Some(Command::Test{node,..}) if node==vec!["1","2","3"]));
     }
 
     #[test]
@@ -890,7 +902,7 @@ mod tests {
             cli.command,
             Some(Command::Test {
                 all_cores: false,
-                node: Some(7),
+                node: ref node if node == &vec!["7".to_owned()],
                 core: Some(ref core),
                 download_bytes: 2_097_152,
                 upload_bytes: 1_048_576,
