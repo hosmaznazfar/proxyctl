@@ -169,7 +169,6 @@ fn compare_route(
             let Ok(value) = serde_json::from_str::<Value>(&route.canonical_attributes) else {
                 return false;
             };
-            let device_matches = value.get("dev").and_then(Value::as_str) == Some(interface_name);
             let route_destination = value.get("dst").and_then(Value::as_str);
             let destination_matches = route_destination.is_some_and(|actual| {
                 actual == destination
@@ -180,13 +179,20 @@ fn compare_route(
                                 | (AddressFamily::Ipv6, "::/0")
                         ))
             });
-            device_matches && destination_matches
+            destination_matches
         })
         .collect::<Vec<_>>();
 
     match matches.as_slice() {
         [] => SnapshotResourceState::Absent,
-        [route] if route.canonical_attributes == expected => {
+        [route]
+            if route.canonical_attributes == expected
+                && serde_json::from_str::<Value>(&route.canonical_attributes)
+                    .ok()
+                    .and_then(|value| value.get("dev").and_then(Value::as_str).map(str::to_owned))
+                    .as_deref()
+                    == Some(interface_name) =>
+        {
             SnapshotResourceState::PresentAndMatching
         }
         [_] | [_, _, ..] => SnapshotResourceState::ChangedOrAmbiguous,
