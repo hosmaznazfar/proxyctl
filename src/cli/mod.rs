@@ -827,9 +827,19 @@ fn print_node_list(
         println!(
             "{:>5}  {:<12}  {:<32}  {:>5}  {}",
             if record.is_deleted() {
-                format!("D{}", deleted_display_numbers.get(&record.id).copied().unwrap_or_default())
+                format!(
+                    "D{}",
+                    deleted_display_numbers
+                        .get(&record.id)
+                        .copied()
+                        .unwrap_or_default()
+                )
             } else {
-                display_numbers.get(&record.id).copied().unwrap_or_default().to_string()
+                display_numbers
+                    .get(&record.id)
+                    .copied()
+                    .unwrap_or_default()
+                    .to_string()
             },
             record.node.protocol,
             safe_field(&record.node.server, 32),
@@ -883,7 +893,10 @@ fn print_sorted_node_list(
             } else {
                 "-".into()
             },
-            display_numbers.get(&record.node.id).copied().unwrap_or_default(),
+            display_numbers
+                .get(&record.node.id)
+                .copied()
+                .unwrap_or_default(),
             record.node.node.protocol,
             safe_field(&record.node.node.server, 32),
             record.node.node.port,
