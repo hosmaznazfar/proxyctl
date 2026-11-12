@@ -1,6 +1,7 @@
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
-    recovery::{RecoveryAction, SupervisorEvent},
+    process::ProcessIdentity,
+    recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
 use std::{fs::File, path::PathBuf, time::Duration};
@@ -68,6 +69,34 @@ impl LifecycleCoordinator {
                 Ok(CoordinatedSnapshot { snapshot, token })
             })
             .transpose()
+    }
+
+
+    /// Bind the exact launched core process to a prepared activation before committing startup.
+    /// The process must still match its procfs identity when the durable write is performed.
+    pub fn bind_core_process(
+        &self,
+        token: &ActivationToken,
+        process: ProcessIdentity,
+    ) -> Result<()> {
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        process.validate()?;
+        ensure!(process.verify()?, "managed core process identity is no longer live");
+        let mut snapshot = self
+            .store
+            .load()?
+            .context("no TUN recovery manifest exists")?;
+        ensure!(
+            snapshot.manifest.activation_id == token.activation_id
+                && snapshot.generation == token.generation,
+            "stale TUN lifecycle token does not match the active activation"
+        );
+        ensure!(
+            snapshot.phase == SupervisorPhase::Prepared && snapshot.core_process.is_none(),
+            "core process can only be bound once to a prepared TUN activation"
+        );
+        snapshot.core_process = Some(process);
+        self.store.write(&snapshot)
     }
 
     pub fn apply_event(
@@ -181,6 +210,7 @@ mod tests {
             schema_version: 1,
             generation: 17,
             phase: SupervisorPhase::Prepared,
+            core_process: None,
             manifest: RouteManifest {
                 version: MANIFEST_VERSION,
                 activation_id: activation_id.into(),
