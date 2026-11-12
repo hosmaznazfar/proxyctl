@@ -68,6 +68,15 @@ pub fn get_node(path: &Path, id: u64) -> anyhow::Result<Option<NodeRecord>> {
     NodeDatabase::open(path)?.get_node(id)
 }
 
+/// Return the current one-based display position for an active persistent node ID.
+pub fn active_display_number(path: &Path, id: u64) -> anyhow::Result<Option<usize>> {
+    Ok(NodeDatabase::open(path)?
+        .list_nodes(false)?
+        .iter()
+        .position(|record| record.id == id)
+        .map(|index| index + 1))
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct BatchNodeSummary {
     pub changed: Vec<u64>,
@@ -88,7 +97,26 @@ pub fn resolve_node_selection(
             .filter(|record| record.is_deleted() == include_deleted)
             .map(|record| record.id)
             .collect()),
-        super::node_selection::NodeSelection::Ids(ids) => Ok(ids.clone()),
+        // Active-node selectors are one-based display positions, not persistent IDs.
+        // Restore is the deliberate exception: deleted rows expose their stable restore ID.
+        super::node_selection::NodeSelection::Ids(ids) if include_deleted => Ok(ids.clone()),
+        super::node_selection::NodeSelection::Ids(positions) => {
+            let active = database.list_nodes(false)?;
+            positions
+                .iter()
+                .map(|position| {
+                    let index = usize::try_from(*position - 1)
+                        .map_err(|_| anyhow::anyhow!("node number {position} is out of range"))?;
+                    active
+                        .get(index)
+                        .map(|record| record.id)
+                        .ok_or_else(|| anyhow::anyhow!(
+                            "node number {position} does not exist; there are {} active node(s)",
+                            active.len()
+                        ))
+                })
+                .collect()
+        }
     }
 }
 
@@ -177,6 +205,35 @@ mod tests {
         let repeated = restore_nodes(&database, &[1, 2]).unwrap();
         assert!(repeated.changed.is_empty());
         assert_eq!(repeated.unchanged, vec![1, 2]);
+    }
+
+    #[test]
+    fn display_numbers_compact_after_remove_and_new_nodes_keep_existing_records_stable() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("proxyctl.redb");
+        for host in ["one", "two", "three"] {
+            add_url(&database, &format!("vless://uuid@{host}.example:443")).unwrap();
+        }
+
+        let selection = super::super::node_selection::NodeSelection::Ids(vec![2]);
+        let removed_id = resolve_node_selection(&database, &selection, false).unwrap();
+        assert_eq!(removed_id, vec![2]);
+        remove_nodes(&database, &removed_id).unwrap();
+
+        assert_eq!(resolve_node_selection(&database, &selection, false).unwrap(), vec![3]);
+        assert_eq!(
+            add_url(&database, "vless://uuid@four.example:443").unwrap(),
+            AddNodeOutcome::Added(4)
+        );
+        let third_position = super::super::node_selection::NodeSelection::Ids(vec![3]);
+        assert_eq!(resolve_node_selection(&database, &third_position, false).unwrap(), vec![4]);
+
+        // Restore takes the stable restore ID shown for deleted rows and appends it.
+        restore_nodes(&database, &[2]).unwrap();
+        let fourth_position = super::super::node_selection::NodeSelection::Ids(vec![4]);
+        assert_eq!(resolve_node_selection(&database, &fourth_position, false).unwrap(), vec![2]);
+        let active = list_nodes(&database, false).unwrap();
+        assert_eq!(active.iter().map(|record| record.id).collect::<Vec<_>>(), vec![1, 3, 4, 2]);
     }
 
     #[test]
