@@ -460,7 +460,7 @@ proxyctl stop
 proxyctl tun status
 ~~~
 
-All commands accepting node IDs use the shared selector grammar: positive IDs, space-separated lists, inclusive `START..END` ranges, combined lists/ranges, or standalone `all`. Remove-all requires interactive confirmation or explicit `--yes`; restore-all selects deleted records. TUN activation is deferred and is not part of the exposed command surface.
+All commands accepting node selectors use one-based display positions, lists, inclusive `START..END` ranges, or standalone `all`. Active commands resolve against the active list; `restore` resolves against deleted-row positions (`D1`, `D2`, ...) shown by `list --include-deleted`. Persistent database IDs are never renumbered, preserving benchmark references when nodes are removed, added, or restored. Remove-all requires interactive confirmation or explicit `--yes`; restore-all selects deleted records. TUN activation is deferred and is not part of the exposed command surface.
 
 ## 6. Release acceptance checklist
 
