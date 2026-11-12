@@ -215,13 +215,21 @@ mod tests {
     #[test]
     fn cleanup_is_exact_reverse_order_of_resource_creation() {
         let plan = KernelCommandPlan::from_policy(&policy(), 1000, 1000).unwrap();
-        assert_eq!(plan.cleanup.len(), plan.apply.len());
+        // Link deletion removes both the created interface and its "up" state,
+        // so cleanup has one fewer command than setup while reversing every
+        // independently-created route/rule resource.
+        assert_eq!(plan.apply.len(), 8);
+        assert_eq!(plan.cleanup.len(), 7);
+        assert!(plan.cleanup[..4]
+            .iter()
+            .all(|command| command.arguments[1..3] == ["rule", "del"]));
+        assert!(plan.cleanup[4..6]
+            .iter()
+            .all(|command| command.arguments[1..3] == ["route", "del"]));
         assert_eq!(
             plan.cleanup.last().unwrap().arguments,
             ["link", "delete", "dev", "tun-proxyctl"]
         );
-        assert_eq!(plan.cleanup[0].arguments[1], "rule");
-        assert_eq!(plan.cleanup[0].arguments[2], "del");
     }
 
     #[test]
