@@ -6,7 +6,9 @@
 
 use super::{
     ownership::RouteManifest,
-    recovery::SupervisorPhase,
+    recovery::{
+        transition, RecoveryAction, SupervisorEvent, SupervisorPhase,
+    },
 };
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -63,6 +65,48 @@ impl ManifestStore {
 
     pub fn path(&self) -> PathBuf {
         self.directory.join(STORE_FILE)
+    }
+
+    /// Create the first durable record for a new activation.
+    ///
+    /// Callers must hold the process-wide lifecycle lock while creating or transitioning a
+    /// manifest. This method refuses to replace an existing recovery record.
+    pub fn create_prepared(&self, snapshot: &ManifestSnapshot) -> Result<()> {
+        ensure!(
+            snapshot.phase == SupervisorPhase::Prepared,
+            "new TUN manifest must begin in the prepared phase"
+        );
+        ensure!(
+            self.load()?.is_none(),
+            "an existing TUN recovery manifest must be recovered before a new activation"
+        );
+        self.write(snapshot)
+    }
+
+    /// Apply one generation-scoped lifecycle event and persist its phase before returning.
+    ///
+    /// Cleanup completion is durable before the manifest is removed. If removal fails, the
+    /// remaining Cleaned record is safe to remove on the next recovery pass.
+    pub fn apply_event(
+        &self,
+        event: SupervisorEvent,
+        generation: u64,
+    ) -> Result<RecoveryAction> {
+        let mut snapshot = self
+            .load()?
+            .ok_or_else(|| anyhow::anyhow!("no TUN recovery manifest exists"))?;
+        let next = transition(snapshot.phase, event, generation, snapshot.generation);
+        if next.action == RecoveryAction::IgnoreStaleEvent {
+            return Ok(next.action);
+        }
+        if next.phase != snapshot.phase {
+            snapshot.phase = next.phase;
+            self.write(&snapshot)?;
+        }
+        if next.action == RecoveryAction::RemoveManifest {
+            self.remove_cleaned(&snapshot.manifest.activation_id, snapshot.generation)?;
+        }
+        Ok(next.action)
     }
 
     /// Persist a snapshot atomically. A different activation/generation cannot be overwritten.
@@ -290,6 +334,78 @@ mod tests {
         store.write(&value).unwrap();
         store.remove_cleaned(&value.manifest.activation_id, value.generation).unwrap();
         assert!(store.load().unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lifecycle_events_are_generation_checked_and_durably_transitioned() {
+        use super::super::recovery::{RecoveryAction, SupervisorEvent};
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let original = snapshot();
+        store.create_prepared(&original).unwrap();
+        assert_eq!(
+            store.apply_event(SupervisorEvent::StartCommitted, 9).unwrap(),
+            RecoveryAction::StartManagedCore
+        );
+        assert_eq!(store.load().unwrap().unwrap().phase, SupervisorPhase::Running);
+
+        assert_eq!(
+            store.apply_event(SupervisorEvent::CoreExited, 8).unwrap(),
+            RecoveryAction::IgnoreStaleEvent
+        );
+        assert_eq!(store.load().unwrap().unwrap().phase, SupervisorPhase::Running);
+
+        assert_eq!(
+            store.apply_event(SupervisorEvent::CoreExited, 9).unwrap(),
+            RecoveryAction::CleanupManifestResources
+        );
+        assert_eq!(
+            store.load().unwrap().unwrap().phase,
+            SupervisorPhase::CleanupPending
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_conflict_preserves_manifest_and_success_removes_it() {
+        use super::super::recovery::{RecoveryAction, SupervisorEvent};
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        store.create_prepared(&snapshot()).unwrap();
+        store.apply_event(SupervisorEvent::StartCommitted, 9).unwrap();
+        store.apply_event(SupervisorEvent::CoreExited, 9).unwrap();
+
+        assert_eq!(
+            store.apply_event(SupervisorEvent::CleanupConflicted, 9).unwrap(),
+            RecoveryAction::PreserveManifestAndReportConflict
+        );
+        assert_eq!(
+            store.load().unwrap().unwrap().phase,
+            SupervisorPhase::CleanupPending
+        );
+
+        assert_eq!(
+            store.apply_event(SupervisorEvent::CleanupCompleted, 9).unwrap(),
+            RecoveryAction::RemoveManifest
+        );
+        assert!(store.load().unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_to_create_over_an_existing_recovery_manifest() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let original = snapshot();
+        store.create_prepared(&original).unwrap();
+        let mut another = original.clone();
+        another.generation += 1;
+        another.manifest.activation_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into();
+        assert!(store.create_prepared(&another).is_err());
+        assert_eq!(store.load().unwrap(), Some(original));
     }
 
     #[cfg(unix)]
