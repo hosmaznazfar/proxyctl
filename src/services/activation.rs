@@ -359,6 +359,7 @@ fn launch_managed(
         let _ = child.kill();
         let _ = child.wait();
         let _ = fs::remove_file(config);
+        let _ = fs::remove_file(&launch_path);
         return Err(error);
     }
     // Persist ownership before readiness checks so failure can safely stop this exact process.
