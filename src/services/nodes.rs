@@ -102,7 +102,10 @@ pub fn resolve_node_selection(
         super::node_selection::NodeSelection::Ids(positions) => {
             let records = database.list_nodes(include_deleted)?;
             let selected = if include_deleted {
-                records.into_iter().filter(NodeRecord::is_deleted).collect::<Vec<_>>()
+                records
+                    .into_iter()
+                    .filter(NodeRecord::is_deleted)
+                    .collect::<Vec<_>>()
             } else {
                 records
             };
@@ -111,14 +114,13 @@ pub fn resolve_node_selection(
                 .map(|position| {
                     let index = usize::try_from(*position - 1)
                         .map_err(|_| anyhow::anyhow!("node number {position} is out of range"))?;
-                    selected
-                        .get(index)
-                        .map(|record| record.id)
-                        .ok_or_else(|| anyhow::anyhow!(
+                    selected.get(index).map(|record| record.id).ok_or_else(|| {
+                        anyhow::anyhow!(
                             "node number {position} does not exist; there are {} {} node(s)",
                             selected.len(),
                             if include_deleted { "deleted" } else { "active" }
-                        ))
+                        )
+                    })
                 })
                 .collect()
         }
@@ -225,13 +227,19 @@ mod tests {
         assert_eq!(removed_id, vec![2]);
         remove_nodes(&database, &removed_id).unwrap();
 
-        assert_eq!(resolve_node_selection(&database, &selection, false).unwrap(), vec![3]);
+        assert_eq!(
+            resolve_node_selection(&database, &selection, false).unwrap(),
+            vec![3]
+        );
         assert_eq!(
             add_url(&database, "vless://uuid@four.example:443").unwrap(),
             AddNodeOutcome::Added(4)
         );
         let third_position = super::super::node_selection::NodeSelection::Ids(vec![3]);
-        assert_eq!(resolve_node_selection(&database, &third_position, false).unwrap(), vec![4]);
+        assert_eq!(
+            resolve_node_selection(&database, &third_position, false).unwrap(),
+            vec![4]
+        );
 
         // Deleted-list position 1 resolves to the old stable record ID 2 and appends it.
         let deleted_position = super::super::node_selection::NodeSelection::Ids(vec![1]);
@@ -239,9 +247,15 @@ mod tests {
         assert_eq!(restore_id, vec![2]);
         restore_nodes(&database, &restore_id).unwrap();
         let fourth_position = super::super::node_selection::NodeSelection::Ids(vec![4]);
-        assert_eq!(resolve_node_selection(&database, &fourth_position, false).unwrap(), vec![2]);
+        assert_eq!(
+            resolve_node_selection(&database, &fourth_position, false).unwrap(),
+            vec![2]
+        );
         let active = list_nodes(&database, false).unwrap();
-        assert_eq!(active.iter().map(|record| record.id).collect::<Vec<_>>(), vec![1, 3, 4, 2]);
+        assert_eq!(
+            active.iter().map(|record| record.id).collect::<Vec<_>>(),
+            vec![1, 3, 4, 2]
+        );
     }
 
     #[test]
