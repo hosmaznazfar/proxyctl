@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, ProxyNode};
 
-const SCHEMA_VERSION: u64 = 2;
+const SCHEMA_VERSION: u64 = 3;
 const METADATA: TableDefinition<&str, u64> = TableDefinition::new("metadata");
 const NODES: TableDefinition<u64, &[u8]> = TableDefinition::new("nodes");
 const NODE_FINGERPRINTS: TableDefinition<&str, u64> = TableDefinition::new("node_fingerprints");
@@ -23,6 +23,9 @@ pub struct NodeRecord {
     pub id: u64,
     pub node: ProxyNode,
     pub created_at: u64,
+    /// Monotonic position in active-node display order; zero is the legacy value.
+    #[serde(default)]
+    pub active_order: u64,
     pub deleted_at: Option<u64>,
 }
 
@@ -101,6 +104,7 @@ impl NodeDatabase {
                     metadata.insert("next_benchmark_sample_id", &1)?;
                 }
                 metadata.insert("schema_version", &2)?;
+                version = 2;
             } else {
                 if metadata.get("next_benchmark_run_id")?.is_none() {
                     metadata.insert("next_benchmark_run_id", &1)?;
@@ -108,6 +112,16 @@ impl NodeDatabase {
                 if metadata.get("next_benchmark_sample_id")?.is_none() {
                     metadata.insert("next_benchmark_sample_id", &1)?;
                 }
+            }
+            // Version 3 adds a monotonic active display-order sequence. Existing records
+            // deserialize with active_order=0 and retain their original ID order.
+            if version < 3 {
+                if metadata.get("next_active_order")?.is_none() {
+                    metadata.insert("next_active_order", &1)?;
+                }
+                metadata.insert("schema_version", &3)?;
+            } else if metadata.get("next_active_order")?.is_none() {
+                metadata.insert("next_active_order", &1)?;
             }
         }
         {
@@ -132,7 +146,7 @@ impl NodeDatabase {
             }
         }
 
-        let id = {
+        let (id, active_order) = {
             let mut metadata = write_txn.open_table(METADATA)?;
             let next_id = metadata
                 .get("next_node_id")?
@@ -142,13 +156,22 @@ impl NodeDatabase {
                 .checked_add(1)
                 .context("node ID space is exhausted")?;
             metadata.insert("next_node_id", &following_id)?;
-            next_id
+            let active_order = metadata
+                .get("next_active_order")?
+                .map(|value| value.value())
+                .unwrap_or(1);
+            let following_order = active_order
+                .checked_add(1)
+                .context("active node order is exhausted")?;
+            metadata.insert("next_active_order", &following_order)?;
+            (next_id, active_order)
         };
 
         let record = NodeRecord {
             id,
             node: node.clone(),
             created_at: unix_timestamp(),
+            active_order,
             deleted_at: None,
         };
         let encoded = serde_json::to_vec(&record)?;
@@ -190,7 +213,13 @@ impl NodeDatabase {
             }
         }
 
-        records.sort_by_key(|record| record.id);
+        records.sort_by_key(|record| {
+            if record.is_deleted() {
+                (1_u8, record.id, record.id)
+            } else {
+                (0_u8, record.active_order, record.id)
+            }
+        });
         Ok(records)
     }
 
@@ -431,6 +460,18 @@ impl NodeDatabase {
             return Ok(false);
         }
 
+        if deleted_at.is_none() {
+            let mut metadata = write_txn.open_table(METADATA)?;
+            let active_order = metadata
+                .get("next_active_order")?
+                .map(|value| value.value())
+                .unwrap_or(1);
+            let following_order = active_order
+                .checked_add(1)
+                .context("active node order is exhausted")?;
+            metadata.insert("next_active_order", &following_order)?;
+            record.active_order = active_order;
+        }
         record.deleted_at = deleted_at;
         let encoded = serde_json::to_vec(&record)?;
         nodes.insert(id, encoded.as_slice())?;
