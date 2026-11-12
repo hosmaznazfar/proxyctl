@@ -7,7 +7,7 @@
 use super::{
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     ownership::{CleanupReport, OwnedResourceBackend, cleanup},
-    process::{ProcessHandle, ProcessIdentity},
+    process::ProcessHandle,
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
