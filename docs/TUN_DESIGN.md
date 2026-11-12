@@ -1,80 +1,73 @@
 # Linux TUN design
 
-> Status: opt-in Linux TUN activation implemented for sing-box, Xray, and Mihomo. Automated tests cover generated configs, systemd command policy, capability checks, and baseline comparison; live systemd/TUN lifecycle testing has not yet been run against the host network.  
-> Scope: first implementation target is Linux  
-> Goal: use the selected proxy core's native TUN implementation with minimal additional resource use
+> Status: **activation disabled**. Only read-only inspection is available.
+> Scope: Linux
+> Goal: eventually use the selected managed core's native TUN implementation without adding a second packet-processing daemon.
 
-## Research findings
+## Safety incident and current decision
 
-Proxyctl was compared with v2rayN's current implementation and the native capabilities of sing-box, Xray, and Mihomo.
+A live sing-box TUN run was associated with loss of internet connectivity. Review of the implementation found a critical recovery gap: shutdown compared the current interface/route/rule/DNS state with a saved baseline, but it did not restore Proxyctl-created routes or rules. If the core was force-killed or the application exited unexpectedly, a baseline mismatch could be detected, but the network was not repaired.
 
-### v2rayN
+That is not an acceptable recovery guarantee for a feature that changes the host routing table. Therefore:
 
-v2rayN builds TUN configuration into the selected core's generated configuration instead of running an independent tun2socks service:
+- `proxyctl use NODE --core CORE --tun` is rejected before starting a process, requesting sudo, or changing networking.
+- `proxyctl tun status` remains available and read-only.
+- Ordinary `proxyctl use NODE --core CORE` remains loopback-only.
+- Benchmarks, setup, updates, and normal activation do not create TUN devices or modify routes, DNS, resolver configuration, or firewall rules.
+- No live TUN test should be run while this restriction is in place.
 
-- sing-box receives a native `tun` inbound with interface name, MTU, address, stack, auto-route, strict-route, and route exclusions.
-- Xray receives a native `tun` inbound with gateway addresses, MTU, auto system routes, optional outbound-interface binding, and optional DNS-to-gateway behavior.
-- Its Linux core manager elevates TUN launches through a sudo-managed process. That is a functional reference, not a security model Proxyctl should copy without review.
-- Its local listener generation uses the core's native mixed-protocol support rather than two independent local ports.
+## Non-negotiable isolation requirements
 
-References:
-- [v2rayN CoreManager.cs](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Manager/CoreManager.cs)
-- [v2rayN CoreAdminManager.cs](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Manager/CoreAdminManager.cs)
-- [v2rayN SingboxInboundService.cs](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Services/CoreConfig/Singbox/SingboxInboundService.cs)
-- [v2rayN V2rayInboundService.cs](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Services/CoreConfig/V2ray/V2rayInboundService.cs)
+1. Proxyctl may only create, inspect, and remove network resources it can positively identify as Proxyctl-owned.
+2. It must never flush routing tables, reset DNS, replace the resolver configuration, or remove interfaces/rules belonging to another application.
+3. It must coexist with V2rayN, NetworkManager, Docker, and other VPN clients. A foreign TUN interface or unrelated route change must not be treated as Proxyctl-owned.
+4. A single selected managed core remains the only Proxyctl core process active at a time.
+5. A core crash, forced termination, Proxyctl crash, startup failure, normal stop, and machine restart must all have a defined, tested recovery path.
+6. If ownership cannot be proven, recovery must stop and preserve diagnostics rather than modifying ambiguous host state.
 
-### Native core options
+## References and transferable design lessons
 
-| Core | Native TUN support | Lightweight default direction | Important safety behavior |
-|---|---|---|---|
-| sing-box | `tun` inbound | Leave `stack` unset: 1.14.x defaults to `system` when built without gVisor; 1.15+ uses sing-tun's own stack | `auto_route`; route loop protection via auto-detected outbound interface |
-| Xray | `tun` inbound | Core-managed lightweight TCP/IP stack | `autoSystemRoutingTable`; `autoOutboundsInterface` prevents loops |
-| Mihomo | `tun` configuration | `system` stack | `auto-route`; core-managed interface and routes |
+- v2rayN uses the selected core's native TUN functionality and has a dedicated core lifecycle manager. Its Linux privilege approach is a reference, not a reason to run all of Proxyctl as root.
+- Ninety's lifecycle design reinforces serialized operations, explicit process ownership, cleanup completion before starting a replacement, and the distinction between process liveness and dataplane health. Its Windows-specific WFP implementation is not portable to Linux.
+- Neither project removes the need for Proxyctl to prove Linux route ownership and crash recovery on its own supported host environments.
 
-Official references:
-- [sing-box TUN inbound](https://sing-box.sagernet.org/configuration/inbound/tun/)
-- [sing-box route configuration](https://sing-box.sagernet.org/configuration/route/)
-- [Xray TUN inbound](https://xtls.github.io/en/config/inbounds/tun.html)
-- [Mihomo configuration](https://wiki.metacubex.one/en/config/inbound/tun/)
+## Planned architecture before re-enabling TUN
 
-## Decisions
+The following are design requirements, not claims about current implementation:
 
-### Keep the core as the TUN engine
+- A serialized activation coordinator with operation identity/generation, preventing concurrent start/stop/switch operations.
+- A durable ownership manifest written before the first network mutation. It must record exact resource identifiers and the original state necessary for safe restoration.
+- A recovery helper whose lifecycle survives the managed core and Proxyctl process. Its cleanup must be invoked for normal stop, core failure, forced process termination, and service teardown.
+- Explicit route/rule ownership markers or a Proxyctl-managed routing table/priority range. Do not rely on comparing the entire machine snapshot and then broadly restoring it.
+- Idempotent recovery that removes only exact resources still matching the manifest. It must not overwrite legitimate changes made by NetworkManager, Docker, V2rayN, or the user while TUN was active.
+- A startup gate that verifies process identity, systemd unit identity, interface ownership, local SOCKS/HTTP listener readiness, physical egress selection, and an end-to-end proxied health check before declaring TUN usable.
+- DNS integration and firewall auto-redirect remain out of scope until their ownership and rollback models are separately designed. No automatic DNS, nftables, or iptables changes are allowed by default.
+- If the selected core's native route manager cannot meet the ownership and recovery contract, Proxyctl must manage a narrowly scoped route table itself or keep that core's TUN mode unsupported.
 
-- Do not implement a TUN device, packet stack, tun2socks bridge, or routing daemon in Proxyctl.
-- Do not add a Rust TUN dependency.
-- Reuse the already selected and already running managed core; only one core can be active.
-- Keep TUN configuration in the same private, generated per-activation config as the selected node.
-- Prefer the operating-system `system` stack. Do not choose gVisor or another userspace stack by default when the core provides a system-stack option.
-- TUN remains opt-in. Normal `proxyctl use`, benchmarks, setup, and updates do not enable it.
+## Process identity
 
-### Keep DNS and firewall out of the first implementation
+Normal activation presents the process as `proxyctl-core` in argv[0] and Linux's short `comm` name. This is a display identity only. `/proc/PID/exe` remains the canonical path to the actual Proxyctl-managed upstream binary and is the authoritative executable identity for ownership checks, updates, and shutdown. Proxyctl must never fake the executable path or signal processes based only on their display name.
 
-- Do not set system proxy settings.
-- Do not change system DNS or resolver configuration.
-- Do not add, flush, or rewrite nftables/iptables rules.
-- Do not install custom firewall kill-switch rules in the first release.
-- Do not enable Xray `autoSystemDnsToGateway`; its Linux behavior depends on systemd-resolved and changes system resolver state.
-- DNS traffic handling must be explicit in core routing configuration and must not silently take over the host resolver.
+## Verification gates
 
-### Route loop prevention is mandatory
+### Gate 1 — offline automated tests
 
-When the system default route points to the TUN interface, the proxy core's own outbound connection to the remote proxy server must continue using the physical uplink. Each supported core must have a verified native outbound-interface mechanism or an equally safe equivalent. If the physical egress interface cannot be determined and pinned safely, TUN activation must fail before changing routes.
+Use fake child processes, fake systemd/ip command runners, and synthetic route/rule snapshots. Tests must cover:
 
-### Privilege isolation (implemented)
+- Exact ownership matching and refusal to touch foreign resources.
+- Cleanup after startup failure, normal stop, core crash, SIGKILL, Proxyctl crash, and simulated reboot recovery.
+- Idempotent recovery and partially completed cleanup.
+- Preservation of third-party routes/rules/interfaces and DNS state.
+- Concurrent start/stop/switch serialization.
+- Process identity consistency while retaining canonical executable verification.
+- No real TUN device, route, rule, DNS, or firewall mutation in tests.
 
-Linux TUN device creation and route configuration require `CAP_NET_ADMIN`. Proxyctl uses a transient systemd system service instead of running the core as root. It authenticates with `sudo -v` through the user's terminal, then runs the core with the invoking UID/GID, `CapabilityBoundingSet=CAP_NET_ADMIN`, `AmbientCapabilities=CAP_NET_ADMIN`, and `NoNewPrivileges=yes`. The service is cgroup-owned by systemd, has a bounded stop timeout, and no restart policy. Proxyctl verifies MainPID, process start ticks, canonical executable, UID, and capability masks before accepting readiness. No file capabilities are changed, no password is stored, and no permanent privileged daemon is installed. Residual privilege risk: CAP_NET_ADMIN is broad within the host network namespace and can be used for firewall operations too. Generated configs disable firewall auto-redirect, but the selected core must still be trusted; this capability is not a per-route or per-interface sandbox. The deliberate absence of firewall auto-redirect also means Docker bridge/container traffic is not yet guaranteed to behave like ordinary host traffic; validate that separately before relying on it. Enabling auto-redirect requires a separate firewall ownership and rollback design.
+### Gate 2 — native configuration validation
 
-If systemd, sudo authorization, iproute2, or TUN device access is unavailable, or a foreign TUN/TAP interface is already present, TUN activation fails before the previous activation is stopped. Ordinary loopback activation remains independent of these requirements.
+Validate generated configurations using the installed managed core binaries, but do not start a core in TUN mode and do not create host network resources.
 
-## Ownership, rollback, and recovery requirements
+### Gate 3 — controlled live test
 
-Before systemd starts the service, Proxyctl first preflights the same transient capability policy with a one-shot `true` service that makes no network changes. It then atomically writes a private manifest with the unique transient unit name, selected node/core, managed executable path, config path, invoking UID, and a baseline of sysfs interfaces, IPv4/IPv6 routes from all iproute2 tables, IPv4/IPv6 policy rules, default routes, resolver nameservers, and the `resolv.conf` target. The manifest contains no proxy credentials. The core owns its native TUN interface and route lifecycle; systemd owns the exact service cgroup. Stop verifies the recorded MainPID and process identity before stopping only that unique unit, then compares the full route/rule/interface/DNS baseline. If anything differs, Proxyctl retains the manifest and config for manual inspection. It never deletes routes, interfaces, firewall rules, or resolver settings itself.
+Only after Gates 1 and 2 pass and the recovery design is reviewed should a live test be considered. It must start from a recorded read-only network snapshot, have an independently available recovery path, use one selected node/core, verify end-to-end traffic, and prove exact cleanup. Do not use the user's normal V2rayN profile or alter another application's resources.
 
-## Verification and remaining operational boundary
-
-Automated coverage includes per-core TUN config generation with the mixed listener, DNS-disabled and firewall-auto-redirect-disabled settings, native config validation for supported fixtures, a pure systemd command-construction test proving CAP_NET_ADMIN-only policy, capability-mask tests, legacy state compatibility, and fake-process activation lifecycle tests. These tests do not start a TUN core or modify the host network. A live TUN smoke test remains an explicit user operation and should be performed only after reviewing `proxyctl tun status`. CI must never create a host TUN interface or alter host routes.
-
-## Current implementation boundary
-
-The exposed operations are `proxyctl tun status` (read-only), ordinary `proxyctl use NODE --core CORE`, explicit TUN `proxyctl use NODE --core CORE --tun`, and `proxyctl stop`. There is no separate `tun on/off` command. Only explicit `--tun` creates a TUN interface and changes routes; DNS and firewall settings are not modified. If baseline inspection or cleanup verification fails, activation is refused or the private manifest is retained for manual recovery.
+Until all gates are complete, TUN activation remains unavailable.
