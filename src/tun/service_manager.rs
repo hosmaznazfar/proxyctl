@@ -117,10 +117,7 @@ mod tests {
 
     #[test]
     fn systemd_marker_takes_precedence_over_generic_init_name() {
-        assert_eq!(
-            probe("init", &["systemd/system"]),
-            ServiceManager::Systemd
-        );
+        assert_eq!(probe("init", &["systemd/system"]), ServiceManager::Systemd);
     }
 
     #[test]
