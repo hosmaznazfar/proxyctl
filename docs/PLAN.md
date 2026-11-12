@@ -297,7 +297,7 @@ Native config validation and pure privilege/command tests do not create a host T
 
 ## 4. Implemented command surface
 
-Node selectors share one parser: a positive ID, multiple IDs, inclusive range (`1..5`), combined IDs/ranges (`1 3 5..8`), or standalone `all`. Duplicates are removed; malformed, zero, reversed, and oversized ranges are rejected before work begins.
+Node selectors share one parser and use one-based display positions, not persistent database IDs. Active commands resolve positions against the active list; `restore` resolves positions against deleted rows (`D1`, `D2`, ...) shown by `list --include-deleted`. `all` selects the relevant active/deleted set. Persistent IDs and benchmark references are never renumbered. New and restored nodes append to active display order; deleting a node compacts the active numbering immediately. Filtered lists retain canonical active positions, and sorted lists show both rank and original active number.
 
 ~~~sh
 proxyctl setup
@@ -352,7 +352,7 @@ proxyctl prune --core xray --unavailable --dry-run
 proxyctl prune --core xray --unavailable --apply
 ~~~
 
-`remove` and `restore` remain soft lifecycle operations. `remove all` requires interactive confirmation unless `--yes` is supplied; `restore all` selects deleted records only. Batch operations report missing and unchanged IDs separately. Benchmark/report selectors accept lists and ranges; the CLI currently executes selected-node benchmarks and reports per node, preserving the existing per-node run/report semantics.
+`remove` and `restore` remain soft lifecycle operations. `remove all` requires interactive confirmation unless `--yes` is supplied; `restore all` selects deleted records only. For individual restore operations, use the deleted-row position shown as `D#` by `list --include-deleted`. Batch operations report missing and unchanged selections separately. Benchmark/report selectors accept lists and ranges; the CLI currently executes selected-node benchmarks and reports per node, preserving the existing per-node run/report semantics.
 
 ## 5. Architecture
 
