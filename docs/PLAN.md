@@ -289,11 +289,13 @@ The listener binds only to `127.0.0.1`; LAN access remains disabled. The benchma
 
 ## 3.4.3 TUN research and lightweight implementation direction
 
-**Research complete; live activation is disabled pending a safe recovery implementation.** Each core receives its native TUN configuration in the same generated config as the loopback mixed SOCKS5/HTTP listener. sing-box uses `auto_route` with `route.auto_detect_interface`; Xray uses `autoSystemRoutingTable` and `autoOutboundsInterface=auto`; Mihomo uses the `system` stack, `auto-route`, and `auto-detect-interface`. All three disable system DNS integration and firewall auto-redirect. No Rust TUN device, tun2socks bridge, second core, permanent helper daemon, or firewall redirection is introduced.
+**Research complete; live activation remains disabled.** The approved direction is distribution-independent Linux kernel networking with a dedicated Proxyctl policy-routing table and exact owned rules/routes. sing-box, Xray, and Mihomo must disable their own automatic route/rule installation; Proxyctl owns the host routing policy. DNS, resolver, firewall, and system-proxy mutation remain out of scope.
 
-**Previous implementation (not currently callable):** `--tun` was explicit and Linux-only; ordinary activation and benchmarks remain unchanged. TUN startup requires systemd, sudo authorization, iproute2, and accessible `/dev/net/tun`. A transient systemd service runs the managed core as the invoking UID/GID with only `CAP_NET_ADMIN` in its capability bounding/ambient sets and `NoNewPrivileges=yes`. A harmless one-shot `true` service preflights this systemd policy before the active core is stopped. Proxyctl writes a private ownership manifest before service startup, verifies the exact MainPID/process identity and capability set, and checks the TUN interface plus loopback listener before reporting readiness. Stop targets only the recorded transient unit, then compares the full interface, IPv4/IPv6 route and policy-rule, DNS, and resolver-target baseline. If the baseline is not restored, state/config are retained; Proxyctl never deletes routes or interfaces itself.
+The architecture is split into a kernel/network backend, a narrowly privileged helper, a recovery supervisor, per-core config adapters, and a readiness verifier. Service-manager integration is selected at runtime, not by distro name. The target backend matrix is systemd, OpenRC, runit, s6, dinit, and SysVinit, with a portable supervisor path where its recovery guarantees are proven. No systemd-only assumptions, distro-specific package paths, or package-manager operations are allowed. A manager/backend is supported only after passing the same fault-injection contract; otherwise TUN is refused safely while loopback activation continues to work.
 
-Native config validation and pure privilege/command tests do not create a host TUN device or alter host routes. A live TUN smoke test remains a deliberate user operation, not a CI test. TUN remains independent of benchmark execution.
+The previous transient-systemd implementation is not the target architecture. It required systemd, sudo, and core-managed automatic routes and did not restore owned routes/rules after failure. Its baseline comparison is diagnostic only and must not be used as a cleanup mechanism. See [TUN_DESIGN.md](TUN_DESIGN.md) for ownership, privilege, cross-distribution compatibility, recovery, and verification requirements.
+
+No TUN activation, route mutation, privileged service start, or live core launch is part of this design/documentation stage.
 
 ## 4. Implemented command surface
 
@@ -439,7 +441,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 8. Reports and sorting: **implemented**. Metric-specific sorting, latest-run reports, full per-node history, and per-core comparison views are implemented with partial/failure/missing-sample accounting. Concise core versions are the default; `--verbose` displays complete stored build metadata.
 9. **Complete:** compatibility-aware pruning with default dry-run, explicit soft-delete apply, unsupported-core exclusion, latest-completed evidence, and conservative handling of incomplete or ambiguous samples.
 10. **Implemented on Linux:** single-core activation, private runtime state/config, loopback-only inbound, process identity verification, serialized switching, and safe stop. Other platforms remain disabled pending equivalent process-handle support.
-11. **TUN activation deferred:** read-only status inspection remains available. Re-enable only after exact route/rule ownership, crash-safe recovery, idempotent cleanup, and fault-injection tests pass; no live TUN tests before that gate.
+11. **TUN activation deferred:** read-only status inspection remains available. Implement distribution-independent kernel routing, a narrowly privileged helper, a recovery supervisor, and runtime-selected service-manager backends (systemd, OpenRC, runit, s6, dinit, SysVinit). Re-enable only for backends that pass exact ownership, crash recovery, idempotent cleanup, and fault-injection tests; unsupported managers must fail closed.
 12. **Implemented:** shared node selector parser, multi-node show/check/test/report command syntax, bulk soft-delete/restore, remove-all confirmation, and synchronized command documentation.
 13. Hardening: integration tests, documentation, packaging, security review, and performance checks.
 
@@ -454,7 +456,7 @@ These are implementation choices, not blockers to the architecture:
 - Proxyctl release asset naming, signing/checksum publication, and safe self-update behavior for each supported platform.
 - Benchmark endpoint selection, payload sizes, and timeout defaults.
 - Precise configuration support matrix for each core version and URL option.
-- Platform-specific TUN backend; Linux is the only implemented TUN target. DNS and firewall mutation remain deliberately out of scope.
+- Linux TUN service-manager backend matrix and privilege-broker support; Linux kernel networking is the common backend, while init-manager integration is runtime-selected. DNS and firewall mutation remain deliberately out of scope.
 - Whether an explicit credential-reveal command is needed.
 
 Resolve these choices with evidence and document them before the affected feature is considered complete.
