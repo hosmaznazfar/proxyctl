@@ -1,8 +1,9 @@
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
-    #[cfg(target_os = "linux")] process::ProcessIdentity,
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
+#[cfg(target_os = "linux")]
+use super::process::ProcessIdentity;
 use anyhow::{Context, Result, ensure};
 use std::{fs::File, path::PathBuf, time::Duration};
 #[cfg(unix)]
