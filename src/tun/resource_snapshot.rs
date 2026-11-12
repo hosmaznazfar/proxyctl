@@ -75,6 +75,7 @@ pub fn compare_manifest(
                 family,
                 table_id,
                 &destination,
+                &manifest.interface_name,
                 &resource.fingerprint,
                 &snapshot.routes,
             ),
@@ -155,6 +156,7 @@ fn compare_route(
     family: AddressFamily,
     table_id: u32,
     destination: &str,
+    interface_name: &str,
     expected: &str,
     routes: &[KernelRouteRecord],
 ) -> SnapshotResourceState {
@@ -164,11 +166,21 @@ fn compare_route(
             if route.family != family || route.table_id != table_id {
                 return false;
             }
-            serde_json::from_str::<Value>(&route.canonical_attributes)
-                .ok()
-                .and_then(|value| value.get("dst").and_then(Value::as_str).map(str::to_owned))
-                .as_deref()
-                == Some(destination)
+            let Ok(value) = serde_json::from_str::<Value>(&route.canonical_attributes) else {
+                return false;
+            };
+            let device_matches = value.get("dev").and_then(Value::as_str) == Some(interface_name);
+            let route_destination = value.get("dst").and_then(Value::as_str);
+            let destination_matches = route_destination.is_some_and(|actual| {
+                actual == destination
+                    || (actual == "default"
+                        && matches!(
+                            (family, destination),
+                            (AddressFamily::Ipv4, "0.0.0.0/0")
+                                | (AddressFamily::Ipv6, "::/0")
+                        ))
+            });
+            device_matches && destination_matches
         })
         .collect::<Vec<_>>();
 
@@ -207,9 +219,9 @@ mod tests {
     use crate::tun::ownership::{MANIFEST_VERSION, OwnedResource};
 
     fn fixture() -> (RouteManifest, KernelSnapshot) {
-        let ipv4_route = r#"{"dst":"0.0.0.0/0","dev":"tun-proxyctl","table":42420,"protocol":"static"}"#;
-        let ipv6_route = r#"{"dst":"::/0","dev":"tun-proxyctl","table":42420,"protocol":"static"}"#;
-        let ipv4_rule = r#"{"priority":42410,"fwmark":"0x42/0xff","table":254}"#;
+        let ipv4_route = r#"{"dev":"tun-proxyctl","dst":"default","protocol":"static","table":42420}"#;
+        let ipv6_route = r#"{"dev":"tun-proxyctl","dst":"default","protocol":"static","table":42420}"#;
+        let ipv4_rule = r#"{"fwmark":"0x42/0xff","priority":42410,"table":254}"#;
         let snapshot = KernelSnapshot {
             inventory: Default::default(),
             routes: vec![
@@ -296,7 +308,7 @@ mod tests {
     #[test]
     fn changed_route_or_rule_attributes_are_conflicts() {
         let (manifest, mut snapshot) = fixture();
-        snapshot.routes[0].canonical_attributes = r#"{"dst":"0.0.0.0/0","dev":"eth0","table":42420}"#.into();
+        snapshot.routes[0].canonical_attributes = r#"{"dev":"eth0","dst":"default","protocol":"static","table":42420}"#.into();
         snapshot.rules[0].canonical_attributes = r#"{"priority":42410,"table":254}"#.into();
         let comparison = compare_manifest(&manifest, &snapshot).unwrap();
         assert_eq!(
