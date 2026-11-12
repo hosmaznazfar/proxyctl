@@ -133,3 +133,94 @@ mod tests {
         assert!(invalid.validate().is_err());
     }
 }
+
+
+/// Durable lifecycle phase written by the supervisor alongside the ownership manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SupervisorPhase {
+    Prepared,
+    Running,
+    CleanupPending,
+    Cleaned,
+}
+
+/// Events are generation-scoped. A service restart must reload the persisted phase before
+/// accepting events, and stale events from an earlier activation must never affect a newer one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SupervisorEvent {
+    StartCommitted,
+    CoreReady,
+    CoreExited,
+    CleanupCompleted,
+    CleanupConflicted,
+}
+
+/// The supervisor returns an instruction; the caller performs it through its injected backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryAction {
+    None,
+    StartManagedCore,
+    CleanupManifestResources,
+    RemoveManifest,
+    PreserveManifestAndReportConflict,
+    IgnoreStaleEvent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LifecycleTransition {
+    pub phase: SupervisorPhase,
+    pub action: RecoveryAction,
+}
+
+/// Pure, deterministic transition function shared by every service-manager backend.
+/// It deliberately performs no process, filesystem, privilege, or network operation.
+pub fn transition(
+    phase: SupervisorPhase,
+    event: SupervisorEvent,
+    event_generation: u64,
+    active_generation: u64,
+) -> LifecycleTransition {
+    if event_generation == 0 || event_generation != active_generation {
+        return LifecycleTransition {
+            phase,
+            action: RecoveryAction::IgnoreStaleEvent,
+        };
+    }
+
+    match (phase, event) {
+        (SupervisorPhase::Prepared, SupervisorEvent::StartCommitted) => LifecycleTransition {
+            phase: SupervisorPhase::Running,
+            action: RecoveryAction::StartManagedCore,
+        },
+        (SupervisorPhase::Running, SupervisorEvent::CoreReady) => LifecycleTransition {
+            phase: SupervisorPhase::Running,
+            action: RecoveryAction::None,
+        },
+        (SupervisorPhase::Running, SupervisorEvent::CoreExited)
+        | (SupervisorPhase::Prepared, SupervisorEvent::CoreExited) => LifecycleTransition {
+            phase: SupervisorPhase::CleanupPending,
+            action: RecoveryAction::CleanupManifestResources,
+        },
+        (SupervisorPhase::CleanupPending, SupervisorEvent::CleanupCompleted) => {
+            LifecycleTransition {
+                phase: SupervisorPhase::Cleaned,
+                action: RecoveryAction::RemoveManifest,
+            }
+        }
+        (SupervisorPhase::CleanupPending, SupervisorEvent::CleanupConflicted) => {
+            LifecycleTransition {
+                phase: SupervisorPhase::CleanupPending,
+                action: RecoveryAction::PreserveManifestAndReportConflict,
+            }
+        }
+        (SupervisorPhase::Cleaned, _) => LifecycleTransition {
+            phase: SupervisorPhase::Cleaned,
+            action: RecoveryAction::None,
+        },
+        (phase, _) => LifecycleTransition {
+            phase,
+            action: RecoveryAction::None,
+        },
+    }
+}
