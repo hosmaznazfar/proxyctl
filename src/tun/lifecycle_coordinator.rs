@@ -241,6 +241,40 @@ mod tests {
         assert!(LifecycleLock::acquire(&path, Duration::from_secs(1)).is_ok());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn binds_only_a_live_process_to_the_prepared_activation() {
+        use crate::tun::process::ProcessIdentity;
+        use std::process::{Command, Stdio};
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let coordinator = LifecycleCoordinator::new(store).unwrap();
+        let token = coordinator
+            .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
+            .unwrap();
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let identity = ProcessIdentity::capture(child.id()).unwrap();
+        coordinator.bind_core_process(&token, identity.clone()).unwrap();
+        assert_eq!(
+            coordinator.load_current().unwrap().unwrap().snapshot.core_process,
+            Some(identity)
+        );
+        assert!(coordinator.bind_core_process(&token, ProcessIdentity {
+            pid: 0,
+            start_ticks: 1,
+            executable: "/bin/sleep".into(),
+        }).is_err());
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
     #[test]
     fn coordinator_serializes_manifest_creation_and_event_transitions() {
         let directory = tempfile::tempdir().unwrap();
