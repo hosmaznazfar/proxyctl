@@ -344,7 +344,12 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     );
                 }
                 let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
-                print_sorted_node_list(&ranked, metric, &display_numbers);
+                print_sorted_node_list(
+                    &ranked,
+                    metric,
+                    &display_numbers,
+                    &deleted_display_numbers,
+                );
             } else {
                 print_node_list(&records, &display_numbers, &deleted_display_numbers);
             }
@@ -864,6 +869,7 @@ fn print_sorted_node_list(
     records: &[sorting::RankedNode],
     metric: SortMetric,
     display_numbers: &HashMap<u64, usize>,
+    deleted_display_numbers: &HashMap<u64, usize>,
 ) {
     if records.is_empty() {
         println!("No proxy nodes found.");
@@ -899,10 +905,21 @@ fn print_sorted_node_list(
             } else {
                 "-".into()
             },
-            display_numbers
-                .get(&record.node.id)
-                .copied()
-                .unwrap_or_default(),
+            if record.node.is_deleted() {
+                format!(
+                    "D{}",
+                    deleted_display_numbers
+                        .get(&record.node.id)
+                        .copied()
+                        .unwrap_or_default()
+                )
+            } else {
+                display_numbers
+                    .get(&record.node.id)
+                    .copied()
+                    .unwrap_or_default()
+                    .to_string()
+            },
             record.node.node.protocol,
             safe_field(&record.node.node.server, 32),
             record.node.node.port,
