@@ -7,7 +7,7 @@
 use super::{
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     ownership::{CleanupReport, OwnedResourceBackend, cleanup},
-    process::ProcessHandle,
+    process::{ProcessHandle, ProcessIdentity},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
@@ -61,6 +61,43 @@ pub fn monitor_core<B: OwnedResourceBackend>(
         "TUN cleanup completed but manifest transition was not accepted"
     );
     Ok(report)
+}
+
+
+/// Resume monitoring from the durable process identity after a supervisor restart.
+///
+/// If the recorded process instance no longer exists (or its PID has been reused), cleanup
+/// begins. If it is still alive, a pidfd is opened and monitoring resumes. An inability to
+/// inspect a still-matching process is an error, never evidence that cleanup is safe.
+pub fn resume_or_recover<B: OwnedResourceBackend>(
+    coordinator: &LifecycleCoordinator,
+    token: &ActivationToken,
+    backend: &mut B,
+) -> Result<Option<CleanupReport>> {
+    let current = coordinator
+        .load_current()?
+        .context("no TUN recovery manifest exists")?;
+    ensure!(current.token == *token, "recovery activation token is stale");
+    if current.snapshot.phase == SupervisorPhase::CleanupPending {
+        return recover_pending_cleanup(coordinator, token, backend).map(Some);
+    }
+    let identity = current
+        .snapshot
+        .core_process
+        .context("TUN manifest has no persisted managed-core identity")?;
+    if !identity.verify()? {
+        coordinator.apply_event(token, SupervisorEvent::CoreExited)?;
+        return recover_pending_cleanup(coordinator, token, backend).map(Some);
+    }
+    let process = match ProcessHandle::open(identity.clone()) {
+        Ok(process) => process,
+        Err(error) if !identity.verify()? => {
+            coordinator.apply_event(token, SupervisorEvent::CoreExited)?;
+            return recover_pending_cleanup(coordinator, token, backend).map(Some);
+        }
+        Err(error) => return Err(error).context("cannot monitor the still-running managed core"),
+    };
+    monitor_core(coordinator, token, &process, backend).map(Some)
 }
 
 /// Retry cleanup after a supervisor restart when the durable phase is CleanupPending.
@@ -141,6 +178,7 @@ mod tests {
             schema_version: 1,
             generation: 1,
             phase: SupervisorPhase::Prepared,
+            core_process: None,
             manifest: RouteManifest {
                 version: MANIFEST_VERSION,
                 activation_id: "12345678-1234-4234-8234-123456789abc".into(),
@@ -184,6 +222,7 @@ mod tests {
             .spawn()
             .unwrap();
         let identity = ProcessIdentity::capture(child.id()).unwrap();
+        coordinator.bind_core_process(&token, identity.clone()).unwrap();
         let process = ProcessHandle::open(identity).unwrap();
         let worker = thread::spawn(move || {
             let mut backend = backend();
@@ -238,6 +277,7 @@ mod tests {
             schema_version: 1,
             generation: 1,
             phase: SupervisorPhase::Prepared,
+            core_process: None,
             manifest: RouteManifest {
                 version: MANIFEST_VERSION,
                 activation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
