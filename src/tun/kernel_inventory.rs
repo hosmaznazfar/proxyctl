@@ -167,9 +167,10 @@ fn parse_detailed_snapshot(
         (AddressFamily::Ipv6, ipv6_routes),
     ] {
         for route in parse_array(bytes, "route")? {
-            let table_id = route.get("table").map(parse_table_id).unwrap_or(Ok(
-                crate::tun::route_policy::RT_TABLE_MAIN,
-            ))?;
+            let table_id = route
+                .get("table")
+                .map(parse_table_id)
+                .unwrap_or(Ok(crate::tun::route_policy::RT_TABLE_MAIN))?;
             snapshot.inventory.occupied_tables.push(table_id);
             snapshot.routes.push(KernelRouteRecord {
                 family,
@@ -209,13 +210,16 @@ fn parse_detailed_snapshot(
 
     snapshot.inventory.occupied_tables.sort_unstable();
     snapshot.inventory.occupied_tables.dedup();
-    snapshot.inventory.rule_priorities.sort_by_key(|(family, priority)| {
-        let family_order = match family {
-            AddressFamily::Ipv4 => 4,
-            AddressFamily::Ipv6 => 6,
-        };
-        (family_order, *priority)
-    });
+    snapshot
+        .inventory
+        .rule_priorities
+        .sort_by_key(|(family, priority)| {
+            let family_order = match family {
+                AddressFamily::Ipv4 => 4,
+                AddressFamily::Ipv6 => 6,
+            };
+            (family_order, *priority)
+        });
     snapshot.inventory.rule_priorities.dedup();
     Ok(snapshot)
 }
@@ -354,13 +358,10 @@ mod tests {
 
     #[test]
     fn detailed_snapshot_rejects_unparseable_resource_identity() {
-        assert!(parse_detailed_snapshot(
-            br#"[{"table":"unknown-vpn-table"}]"#,
-            b"[]",
-            b"[]",
-            b"[]",
-        )
-        .is_err());
+        assert!(
+            parse_detailed_snapshot(br#"[{"table":"unknown-vpn-table"}]"#, b"[]", b"[]", b"[]",)
+                .is_err()
+        );
         assert!(parse_detailed_snapshot(b"[]", b"[]", br#"[{"table":254}]"#, b"[]").is_err());
     }
 
