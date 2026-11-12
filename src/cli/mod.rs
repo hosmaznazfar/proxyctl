@@ -460,7 +460,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 };
                 println!(
                     "Node #{}: {label} — {}",
-                    display_numbers.get(&result.node.id).copied().unwrap_or(result.node.id as usize),
+                    display_numbers
+                        .get(&result.node.id)
+                        .copied()
+                        .unwrap_or(result.node.id as usize),
                     safe_field(&result.detail, 200)
                 );
             }
@@ -621,7 +624,10 @@ fn print_benchmark_report(
         for comparison in &report.comparisons {
             println!(
                 "Node #{} {}:{} — {} — run #{}{}",
-                display_numbers.get(&comparison.node.id).copied().unwrap_or(comparison.node.id as usize),
+                display_numbers
+                    .get(&comparison.node.id)
+                    .copied()
+                    .unwrap_or(comparison.node.id as usize),
                 safe_field(&comparison.node.node.server, 48),
                 comparison.node.node.port,
                 comparison.target,
@@ -647,7 +653,10 @@ fn print_benchmark_report(
     for node in &report.nodes {
         println!(
             "Node #{} {}:{}{}",
-            display_numbers.get(&node.node.id).copied().unwrap_or(node.node.id as usize),
+            display_numbers
+                .get(&node.node.id)
+                .copied()
+                .unwrap_or(node.node.id as usize),
             safe_field(&node.node.node.server, 48),
             node.node.node.port,
             node.node
