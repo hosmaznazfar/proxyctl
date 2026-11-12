@@ -296,7 +296,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 let needle = search.to_lowercase();
                 records.retain(|record| {
                     record.node.server.to_lowercase().contains(&needle)
-                        || record.node.name.as_deref().is_some_and(|name| name.to_lowercase().contains(&needle))
+                        || record
+                            .node
+                            .name
+                            .as_deref()
+                            .is_some_and(|name| name.to_lowercase().contains(&needle))
                 });
             }
             if let Some(metric) = sort {
@@ -326,7 +330,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 }
             }
         }
-        Command::Remove { nodes: selectors, yes } => {
+        Command::Remove {
+            nodes: selectors,
+            yes,
+        } => {
             let selection = node_selection::parse_node_selection(&selectors)?;
             let ids = nodes::resolve_node_selection(&database_path, &selection, false)?;
             if matches!(selection, NodeSelection::All) && !yes && !confirm_remove_all()? {
@@ -342,7 +349,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             let summary = nodes::restore_nodes(&database_path, &ids)?;
             print_batch_summary("Restored", &summary, "already active");
         }
-        Command::Check { nodes: selectors, core } => {
+        Command::Check {
+            nodes: selectors,
+            core,
+        } => {
             let selection = node_selection::parse_node_selection(&selectors)?;
             let ids = nodes::resolve_node_selection(&database_path, &selection, false)?;
             crate::services::validation::check_nodes(
@@ -977,14 +987,18 @@ mod tests {
 
     #[test]
     fn node_commands_accept_lists_ranges_and_remove_all_confirmation_flag() {
-        assert!(Cli::try_parse_from(["proxyctl","show","1","2","3"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl","show","1..5"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl","remove","all"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl","remove","all","--yes"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl","restore","1..5"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl","check","1","2","--core","xray"]).is_ok());
-        let cli=Cli::try_parse_from(["proxyctl","test","--node","1","2","3","--all-cores"]).unwrap();
-        assert!(matches!(cli.command,Some(Command::Test{node,..}) if node==vec!["1","2","3"]));
+        assert!(Cli::try_parse_from(["proxyctl", "show", "1", "2", "3"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "show", "1..5"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "remove", "all"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "remove", "all", "--yes"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "restore", "1..5"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "check", "1", "2", "--core", "xray"]).is_ok());
+        let cli = Cli::try_parse_from(["proxyctl", "test", "--node", "1", "2", "3", "--all-cores"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Test { node, .. })
+                if node.iter().map(String::as_str).collect::<Vec<_>>() == vec!["1", "2", "3"]
+        ));
     }
 
     #[test]
