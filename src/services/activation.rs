@@ -311,18 +311,18 @@ fn launch_managed(
         executable.starts_with(managed_root),
         "refusing to run a core outside Proxyctl's managed directory"
     );
-    // Validate and prepare the replacement before stopping the current process.
-    write_atomic(config, config_content)?;
-    if let Err(error) = stop_locked(runtime, state_path, managed_root) {
-        let _ = fs::remove_file(config);
-        return Err(error);
-    }
     let launch_executable = fs::canonicalize(executable)
         .context("could not resolve the managed core executable")?;
     ensure!(
         launch_executable.starts_with(managed_root),
         "resolved core executable is outside Proxyctl's managed directory"
     );
+    // Validate and prepare the replacement before stopping the current process.
+    write_atomic(config, config_content)?;
+    if let Err(error) = stop_locked(runtime, state_path, managed_root) {
+        let _ = fs::remove_file(config);
+        return Err(error);
+    }
     configure_process_identity(&mut command);
     let mut child = match command
         .stdin(Stdio::null())
