@@ -200,7 +200,7 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result
 
         // Do not interrupt the existing activation until the replacement config validates.
         let config = runtime.join(format!("active-{node_id}-{}-{port}.json", core.as_str()));
-        let mut command = Command::new(executable.parent().unwrap().join(PROCESS_NAME));
+        let mut command = Command::new(&executable);
         match core {
             CoreId::SingBox | CoreId::Xray => {
                 command.arg("run").arg("-c").arg(&config);
@@ -317,13 +317,12 @@ fn launch_managed(
         let _ = fs::remove_file(config);
         return Err(error);
     }
-    let launch_path = executable
-        .parent()
-        .context("managed core executable has no parent directory")?
-        .join(PROCESS_NAME);
-    fs::hard_link(executable, &launch_path)
-        .context("could not create the unified Proxyctl executable hard link")?;
-    let launch_executable = fs::canonicalize(&launch_path)?;
+    let launch_executable = fs::canonicalize(executable)
+        .context("could not resolve the managed core executable")?;
+    ensure!(
+        launch_executable.starts_with(managed_root),
+        "resolved core executable is outside Proxyctl's managed directory"
+    );
     configure_process_identity(&mut command);
     let mut child = match command
         .stdin(Stdio::null())
@@ -334,18 +333,22 @@ fn launch_managed(
         Ok(child) => child,
         Err(error) => {
             let _ = fs::remove_file(config);
-            let _ = fs::remove_file(&launch_path);
             return Err(error).context("could not start managed core");
         }
     };
     let pid = child.id();
+    if let Err(error) = set_process_comm(pid) {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = fs::remove_file(config);
+        return Err(error);
+    }
     let start_ticks = match await_identity(pid, &launch_executable, timeout) {
         Ok(ticks) => ticks,
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
             let _ = fs::remove_file(config);
-            let _ = fs::remove_file(&launch_path);
             return Err(error);
         }
     };
@@ -363,7 +366,6 @@ fn launch_managed(
         let _ = child.kill();
         let _ = child.wait();
         let _ = fs::remove_file(config);
-        let _ = fs::remove_file(&launch_path);
         return Err(error);
     }
     // Persist ownership before readiness checks so failure can safely stop this exact process.
@@ -387,6 +389,17 @@ fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
 fn configure_process_identity(command: &mut Command) {
     // argv[0] is a stable user-facing identity. The real executable path is unchanged.
     command.arg0(PROCESS_NAME);
+}
+
+#[cfg(target_os = "linux")]
+fn set_process_comm(pid: u32) -> anyhow::Result<()> {
+    let path = format!("/proc/{pid}/comm");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("could not set the Proxyctl process name for PID {pid}"))?;
+    file.write_all(PROCESS_NAME.as_bytes())?;
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -468,13 +481,6 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
         );
     }
     let _ = fs::remove_file(state.config);
-    if state
-        .executable
-        .file_name()
-        .is_some_and(|name| name == PROCESS_NAME)
-    {
-        fs::remove_file(&state.executable)?;
-    }
     fs::remove_file(state_path)?;
     Ok(())
 }
@@ -1261,17 +1267,16 @@ mod tests {
         let dir = tempdir().unwrap();
         let sleep = find_program("sleep").unwrap();
         let executable_path = fs::canonicalize(&sleep).unwrap();
-        let alias = dir.path().join(PROCESS_NAME);
-        fs::hard_link(&executable_path, &alias).unwrap();
-        let mut command = Command::new(&alias);
+        let mut command = Command::new(&executable_path);
         command.arg("30");
         configure_process_identity(&mut command);
         let mut child = command.spawn().unwrap();
         let pid = child.id();
-        await_identity(pid, &alias, Duration::from_secs(2)).unwrap();
+        set_process_comm(pid).unwrap();
+        await_identity(pid, &executable_path, Duration::from_secs(2)).unwrap();
         let comm = fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
         assert_eq!(comm.trim(), PROCESS_NAME);
-        assert_eq!(executable(pid).as_deref(), Some(alias.as_path()));
+        assert_eq!(executable(pid).as_deref(), Some(executable_path.as_path()));
         child.kill().unwrap();
         child.wait().unwrap();
     }
@@ -1334,7 +1339,7 @@ mod tests {
         let mut previous_process: Option<(u32, PathBuf, u64)> = None;
         for (node_id, core) in [(1, "sing-box"), (2, "xray"), (3, "mihomo")] {
             let config = runtime.join(format!("active-{node_id}-{core}.json"));
-            let mut command = Command::new(fake.parent().unwrap().join(PROCESS_NAME));
+            let mut command = Command::new(&fake);
             command.arg("30");
             launch_managed(
                 &runtime,
