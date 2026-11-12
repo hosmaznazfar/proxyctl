@@ -253,9 +253,7 @@ mod tests {
             .spawn()
             .unwrap();
         let (identity, process) = pin_live_child(&child);
-        coordinator
-            .bind_core_process(&token, identity)
-            .unwrap();
+        coordinator.bind_core_process(&token, identity).unwrap();
         let worker = thread::spawn(move || {
             let mut backend = backend();
             let result = monitor_core(&coordinator, &token, &process, &mut backend);
