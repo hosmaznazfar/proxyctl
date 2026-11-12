@@ -87,6 +87,28 @@ Init/service-manager backends are responsible for starting/stopping the supervis
 
 Normal activation presents the process as `proxyctl-core` in argv[0] and Linux's short `comm` name where permitted. This is a display identity only. `/proc/PID/exe` remains the canonical upstream binary path and is authoritative for ownership checks. Never fake executable identity or signal processes based only on display names.
 
+## Reference implementation review
+
+The Linux TUN flows in v2rayN and Throne were reviewed as behavioral references, not copied as lifecycle designs.
+
+### v2rayN
+
+- The current `CoreManager` keeps the desktop process unprivileged and delegates Linux TUN core launches to `CoreAdminManager`; the main core and optional pre-service are separately tracked and stopped during normal shutdown.
+- The current startup path waits for the main proxy listener with a SOCKS5 greeting before starting the pre-service. This is a useful protocol-level readiness check, stronger than checking only whether a TCP port accepts connections. However, the timeout path logs and returns from the wait rather than aborting startup, after which the pre-service start is still attempted. Proxyctl must fail closed on readiness timeout and must not continue into route activation.
+- A Linux TUN issue also documents the consequences of starting a pre-service before its upstream local SOCKS listener is ready. Another recent issue records a change between sing-box TUN and Xray TUN paths and a core asset-path/environment regression. These reinforce that readiness and per-core launch environments need explicit tests.
+- The reference's privileged-process kill helper is not a substitute for a durable independent recovery supervisor: Proxyctl must retain exact process identity and recover after CLI termination, core SIGKILL, and reboot.
+
+### Throne
+
+- Throne explicitly keeps its GUI unprivileged and elevates only `ThroneCore` for Linux TUN, normally through `pkexec`/polkit and a SUID-root core. Its documentation also describes a five-capability alternative. This is simpler to integrate but grants a broad privilege set to the core binary; Proxyctl will keep the approved narrower broker model and will not adopt SUID or the five-capability bundle.
+- Throne's Linux TUN settings include automatic route redirection through nftables (enabled by default in its documented settings), plus private-range bypass and optional IPv6. Its troubleshooting guide calls out systemd-resolved DNS-over-TLS interactions and conflicts with Docker, virtual machines, hotspots, and other VPNs. This validates Proxyctl's decision to keep firewall redirection and system DNS mutation disabled in the first implementation, especially on hosts with Docker bridges.
+- Throne's documentation warns that force-closing while system proxy is enabled leaves the system proxy pointing at a stopped local proxy. This is a system-proxy failure rather than proof of a TUN route leak, but it demonstrates why every host mutation needs an independently recoverable owner and explicit rollback.
+- Throne's user-facing status checks include an exit-location/latency test after startup. Proxyctl's readiness contract is stricter: it requires evidence for the exact TUN interface, route policy, physical-egress bypass, unchanged DNS/firewall, and a real proxied end-to-end request before declaring the tunnel active.
+
+### Proxyctl decisions retained
+
+Use these projects for useful patterns only: unprivileged controller, narrowly elevated networking component, SOCKS-level upstream readiness, one active core, and explicit user-visible connection checks. Do not copy SUID elevation, nftables auto-redirect, implicit DNS changes, or startup that continues after readiness timeout. Proxyctl additionally requires exact resource manifests, compare-and-delete cleanup, a detached recovery supervisor, generation-scoped coordination, and fault-injection coverage before enabling TUN.
+
 ## Implemented offline groundwork (not an activation backend)
 
 The recovery-foundation batch adds a versioned route manifest model, exact resource fingerprints, a backend contract requiring compare-and-delete semantics, and a fake-backend test suite. Cleanup preflights every manifest entry before deleting, preserves changed/foreign resources, treats already-absent entries as success, and can be retried after partial backend failure. These are policy primitives only: there is not yet a production rtnetlink/iproute2 mutator or durable privileged manifest writer.
