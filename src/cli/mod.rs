@@ -101,7 +101,6 @@ enum Command {
         #[arg(long)]
         all_cores: bool,
         /// Restrict --all-cores to one stored node; otherwise use with --core.
-        #[arg(long)]
         #[arg(long, num_args = 1.., value_name = "ID|RANGE|all")]
         node: Vec<String>,
         /// Test --node with one selected managed core (mutually exclusive with --all-cores).
@@ -137,8 +136,7 @@ enum Command {
     #[command(group(ArgGroup::new("report_view").args(["history", "compare"]).multiple(false)))]
     Report {
         /// Restrict the report to one stored node.
-        #[arg(long)]
-        #[arg(long,num_args=1..,value_name="ID|RANGE|all")]
+        #[arg(long, num_args = 1.., value_name = "ID|RANGE|all")]
         node: Vec<String>,
         /// Show every benchmark run, newest first.
         #[arg(long)]
