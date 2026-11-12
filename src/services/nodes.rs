@@ -233,8 +233,11 @@ mod tests {
         let third_position = super::super::node_selection::NodeSelection::Ids(vec![3]);
         assert_eq!(resolve_node_selection(&database, &third_position, false).unwrap(), vec![4]);
 
-        // Restore takes the stable restore ID shown for deleted rows and appends it.
-        restore_nodes(&database, &[2]).unwrap();
+        // Deleted-list position 1 resolves to the old stable record ID 2 and appends it.
+        let deleted_position = super::super::node_selection::NodeSelection::Ids(vec![1]);
+        let restore_id = resolve_node_selection(&database, &deleted_position, true).unwrap();
+        assert_eq!(restore_id, vec![2]);
+        restore_nodes(&database, &restore_id).unwrap();
         let fourth_position = super::super::node_selection::NodeSelection::Ids(vec![4]);
         assert_eq!(resolve_node_selection(&database, &fourth_position, false).unwrap(), vec![2]);
         let active = list_nodes(&database, false).unwrap();
