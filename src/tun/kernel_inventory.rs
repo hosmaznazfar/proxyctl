@@ -36,6 +36,8 @@ pub fn inspect() -> Result<KernelInventory> {
 
 #[cfg(target_os = "linux")]
 const IP_COMMAND_TIMEOUT: Duration = Duration::from_secs(2);
+#[cfg(target_os = "linux")]
+const MAX_IP_COMMAND_OUTPUT_BYTES: u64 = 4 * 1024 * 1024;
 
 #[cfg(target_os = "linux")]
 fn run_ip(arguments: &[&str]) -> Result<Vec<u8>> {
@@ -63,8 +65,14 @@ fn run_ip_command(executable: &str, arguments: &[&str], timeout: Duration) -> Re
 
     let deadline = Instant::now() + timeout;
     let status = loop {
-        if let Some(status) = child.try_wait()? {
-            break status;
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("could not inspect iproute2 process status");
+            }
         }
         if Instant::now() >= deadline {
             let _ = child.kill();
@@ -81,9 +89,21 @@ fn run_ip_command(executable: &str, arguments: &[&str], timeout: Duration) -> Re
         status.success(),
         "iproute2 inspection failed for a read-only routing query"
     );
+    let output_size = output_file.metadata()?.len();
+    ensure!(
+        output_size <= MAX_IP_COMMAND_OUTPUT_BYTES,
+        "iproute2 inspection output exceeds the {}-byte safety limit",
+        MAX_IP_COMMAND_OUTPUT_BYTES
+    );
     output_file.seek(SeekFrom::Start(0))?;
-    let mut bytes = Vec::new();
-    output_file.read_to_end(&mut bytes)?;
+    let mut bytes = Vec::with_capacity(output_size as usize);
+    output_file
+        .take(MAX_IP_COMMAND_OUTPUT_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    ensure!(
+        bytes.len() as u64 <= MAX_IP_COMMAND_OUTPUT_BYTES,
+        "iproute2 inspection output exceeded the safety limit while reading"
+    );
     Ok(bytes)
 }
 
