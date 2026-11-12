@@ -91,6 +91,8 @@ Normal activation presents the process as `proxyctl-core` in argv[0] and Linux's
 
 The Linux TUN flows in v2rayN and Throne were reviewed as behavioral references, not copied as lifecycle designs.
 
+Primary references: [v2rayN CoreManager](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Manager/CoreManager.cs), [v2rayN CoreAdminManager](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Manager/CoreAdminManager.cs), [Throne TUN Mode](https://throneproj.github.io/guides/tun_mode/), and [Throne proxy modes](https://throneproj.github.io/guides/proxy_modes/). These upstream references can evolve; re-check their privilege and routing behavior before borrowing future implementation details.
+
 ### v2rayN
 
 - The current `CoreManager` keeps the desktop process unprivileged and delegates Linux TUN core launches to `CoreAdminManager`; the main core and optional pre-service are separately tracked and stopped during normal shutdown. `CoreAdminManager` writes a temporary Bash script that invokes `sudo -S`, passes the password over the script's stdin, stores the returned wrapper `ProcessService` PID, and later invokes a separate sudo kill script. This is a useful example of keeping the UI unprivileged, but Proxyctl must not copy shell-interpolated launch scripts, password piping, or wrapper-PID-based ownership; its broker must accept structured validated requests and bind cleanup to the exact core process identity.
