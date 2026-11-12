@@ -1268,17 +1268,31 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn managed_process_uses_unified_proxyctl_argv0_without_changing_executable() {
-        let sleep = find_program("sleep").unwrap();
-        let executable_path = fs::canonicalize(&sleep).unwrap();
+        // tail keeps its original argv storage intact, unlike some utilities that
+        // rewrite or clear argv after startup.
+        let tail = find_program("tail").unwrap();
+        let executable_path = fs::canonicalize(&tail).unwrap();
         let mut command = Command::new(&executable_path);
-        command.arg("30");
+        command.args(["-f", "/dev/null"]);
         configure_process_identity(&mut command);
         let mut child = command.spawn().unwrap();
         let pid = child.id();
         let _ = set_process_comm(pid);
         await_identity(pid, &executable_path, Duration::from_secs(2)).unwrap();
-        let command_line = fs::read(format!("/proc/{pid}/cmdline")).unwrap();
-        let argv0 = command_line.split(|byte| *byte == 0).next().unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let argv0 = loop {
+            let command_line = fs::read(format!("/proc/{pid}/cmdline")).unwrap();
+            let argv0 = command_line.split(|byte| *byte == 0).next().unwrap_or_default();
+            if argv0 == PROCESS_NAME.as_bytes() {
+                break argv0.to_vec();
+            }
+            assert!(
+                Instant::now() < deadline,
+                "managed child did not retain the configured Proxyctl argv[0]"
+            );
+            thread::sleep(Duration::from_millis(5));
+        };
         assert_eq!(argv0, PROCESS_NAME.as_bytes());
         assert_eq!(executable(pid).as_deref(), Some(executable_path.as_path()));
         child.kill().unwrap();
