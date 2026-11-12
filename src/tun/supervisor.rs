@@ -102,7 +102,7 @@ mod tests {
         lifecycle_coordinator::LifecycleCoordinator,
         manifest_store::{ManifestSnapshot, ManifestStore},
         ownership::{MANIFEST_VERSION, OwnedResource, ResourceState, RouteManifest},
-        process::{ProcessHandle, ProcessIdentity},
+        process::ProcessHandle,
         recovery::SupervisorPhase,
     };
     use anyhow::Result;
