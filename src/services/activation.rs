@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Context, ensure};
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
-use std::io::Read;
+use std::{io::Read, os::unix::process::CommandExt};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -20,6 +20,7 @@ use std::{
 
 const WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);
+const PROCESS_NAME: &str = "proxyctl-core";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ActiveProcess {
@@ -135,6 +136,7 @@ impl Drop for RuntimeLock {
 }
 
 pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result<()> {
+    ensure_tun_mode_disabled(tun_enabled)?;
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (node_id, core, tun_enabled);
@@ -281,6 +283,7 @@ fn launch_managed(
         let _ = fs::remove_file(config);
         return Err(error);
     }
+    configure_process_identity(&mut command);
     let mut child = match command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -326,6 +329,32 @@ fn launch_managed(
         return Err(error);
     }
     Ok(())
+}
+
+fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
+    ensure!(
+        !tun_enabled,
+        "TUN activation is temporarily disabled: the current implementation can detect incomplete network cleanup but cannot safely restore Proxyctl-owned routes after a core exits or is force-killed. Ordinary loopback activation and 'proxyctl tun status' remain available."
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn configure_process_identity(command: &mut Command) {
+    command.arg0(PROCESS_NAME);
+    // Set both argv[0] and Linux's short process comm name. The canonical executable
+    // remains the real managed core path and is still used for ownership verification.
+    // SAFETY: pre_exec runs in the child immediately before exec; prctl is a direct
+    // syscall and the static NUL-terminated name requires no allocation.
+    unsafe {
+        command.pre_exec(|| {
+            let name = b"proxyctl-core\\0";
+            if libc::prctl(libc::PR_SET_NAME, name.as_ptr(), 0, 0, 0) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
 }
 
 fn paths() -> anyhow::Result<(PathBuf, PathBuf)> {
@@ -1177,6 +1206,23 @@ mod tests {
         });
         let parsed: ActiveProcess = serde_json::from_value(state).unwrap();
         assert!(parsed.tun.is_none());
+    }
+
+    #[test]
+    fn tun_activation_is_rejected_before_any_network_or_process_operation() {
+        assert!(ensure_tun_mode_disabled(false).is_ok());
+        let error = ensure_tun_mode_disabled(true).unwrap_err().to_string();
+        assert!(error.contains("temporarily disabled"));
+        assert!(error.contains("cannot safely restore"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn managed_process_uses_unified_proxyctl_identity_without_changing_executable() {
+        let mut command = Command::new("/bin/sleep");
+        configure_process_identity(&mut command);
+        assert_eq!(command.get_program(), std::ffi::OsStr::new("/bin/sleep"));
+        assert_eq!(command.get_args().next(), Some(std::ffi::OsStr::new(PROCESS_NAME)));
     }
 
     #[cfg(target_os = "linux")]
