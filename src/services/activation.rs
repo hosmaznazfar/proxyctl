@@ -337,12 +337,9 @@ fn launch_managed(
         }
     };
     let pid = child.id();
-    if let Err(error) = set_process_comm(pid) {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = fs::remove_file(config);
-        return Err(error);
-    }
+    // argv[0] is always unified; procfs comm renaming is best-effort because
+    // some kernels/container policies prohibit writing another process's comm.
+    let _ = set_process_comm(pid);
     let start_ticks = match await_identity(pid, &launch_executable, timeout) {
         Ok(ticks) => ticks,
         Err(error) => {
@@ -1262,7 +1259,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn managed_process_uses_unified_proxyctl_identity_without_changing_executable() {
+    fn managed_process_uses_unified_proxyctl_argv0_without_changing_executable() {
         let sleep = find_program("sleep").unwrap();
         let executable_path = fs::canonicalize(&sleep).unwrap();
         let mut command = Command::new(&executable_path);
@@ -1270,10 +1267,11 @@ mod tests {
         configure_process_identity(&mut command);
         let mut child = command.spawn().unwrap();
         let pid = child.id();
-        set_process_comm(pid).unwrap();
+        let _ = set_process_comm(pid);
         await_identity(pid, &executable_path, Duration::from_secs(2)).unwrap();
-        let comm = fs::read_to_string(format!("/proc/{pid}/comm")).unwrap();
-        assert_eq!(comm.trim(), PROCESS_NAME);
+        let command_line = fs::read(format!("/proc/{pid}/cmdline")).unwrap();
+        let argv0 = command_line.split(|byte| *byte == 0).next().unwrap();
+        assert_eq!(argv0, PROCESS_NAME.as_bytes());
         assert_eq!(executable(pid).as_deref(), Some(executable_path.as_path()));
         child.kill().unwrap();
         child.wait().unwrap();
