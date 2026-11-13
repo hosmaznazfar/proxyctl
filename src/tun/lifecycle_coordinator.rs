@@ -176,6 +176,10 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
         metadata.permissions().mode() & 0o077 == 0,
         "TUN lifecycle lock permissions are not private"
     );
+    ensure!(
+        metadata.nlink() == 1,
+        "TUN lifecycle lock must not have external hard links"
+    );
 
     let deadline = Instant::now() + timeout;
     loop {
@@ -242,6 +246,17 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(1));
         drop(first);
         assert!(LifecycleLock::acquire(&path, Duration::from_secs(1)).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_lifecycle_lock_with_external_hard_link() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(LOCK_FILE);
+        let external = directory.path().join("linked-lock");
+        std::fs::write(&path, "").unwrap();
+        std::fs::hard_link(&path, &external).unwrap();
+        assert!(LifecycleLock::acquire(&path, Duration::from_millis(50)).is_err());
     }
 
     #[cfg(target_os = "linux")]
