@@ -55,7 +55,13 @@ pub fn monitor_core<B: OwnedResourceBackend>(
         .load_current()?
         .context("TUN manifest disappeared before cleanup")?;
     let report = match cleanup(&current.snapshot.manifest, backend) {
-        Ok(report) => report,
+        Ok(report) if report.conflicts.is_empty() => report,
+        Ok(report) => {
+            coordinator.apply_event(token, SupervisorEvent::CleanupConflicted)?;
+            anyhow::bail!(
+                "TUN cleanup encountered a resource identity conflict; recovery manifest was retained"
+            );
+        }
         Err(error) => {
             coordinator.apply_event(token, SupervisorEvent::CleanupConflicted)?;
             return Err(error).context("TUN cleanup failed; recovery manifest was retained");
@@ -129,7 +135,13 @@ pub fn recover_pending_cleanup<B: OwnedResourceBackend>(
         "recovery manifest is not waiting for cleanup"
     );
     let report = match cleanup(&current.snapshot.manifest, backend) {
-        Ok(report) => report,
+        Ok(report) if report.conflicts.is_empty() => report,
+        Ok(_report) => {
+            coordinator.apply_event(token, SupervisorEvent::CleanupConflicted)?;
+            anyhow::bail!(
+                "TUN recovery cleanup encountered a resource identity conflict; manifest was retained"
+            );
+        }
         Err(error) => {
             coordinator.apply_event(token, SupervisorEvent::CleanupConflicted)?;
             return Err(error).context("TUN recovery cleanup failed; manifest was retained");
@@ -162,6 +174,7 @@ mod tests {
     #[derive(Default)]
     struct FakeBackend {
         resources: BTreeMap<String, String>,
+        change_on_remove: bool,
     }
 
     impl OwnedResourceBackend for FakeBackend {
@@ -170,6 +183,11 @@ mod tests {
         }
 
         fn remove_if_matches(&mut self, key: &str, expected: &str) -> Result<ResourceState> {
+            if self.change_on_remove {
+                self.resources.insert(key.to_owned(), "foreign-after-preflight".into());
+                self.change_on_remove = false;
+                return Ok(ResourceState::ChangedOrForeign);
+            }
             match self.resources.get(key) {
                 None => Ok(ResourceState::AlreadyAbsent),
                 Some(value) if value != expected => Ok(ResourceState::ChangedOrForeign),
@@ -223,6 +241,7 @@ mod tests {
     fn backend() -> FakeBackend {
         FakeBackend {
             resources: BTreeMap::from([("route:v4-default".into(), "route-fingerprint".into())]),
+            change_on_remove: false,
         }
     }
 
@@ -307,11 +326,29 @@ mod tests {
         let (_directory, coordinator, token) = setup(SupervisorPhase::CleanupPending);
         let mut backend = FakeBackend {
             resources: BTreeMap::from([("route:v4-default".into(), "foreign".into())]),
+            change_on_remove: false,
         };
         assert!(recover_pending_cleanup(&coordinator, &token, &mut backend).is_err());
         let current = coordinator.load_current().unwrap().unwrap();
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
         assert_eq!(backend.resources.len(), 1);
+    }
+
+    #[test]
+    fn compare_and_delete_race_preserves_manifest_and_foreign_resource() {
+        let (_directory, coordinator, token) = setup(SupervisorPhase::CleanupPending);
+        let mut backend = FakeBackend {
+            resources: BTreeMap::from([("route:v4-default".into(), "route-fingerprint".into())]),
+            change_on_remove: true,
+        };
+
+        assert!(recover_pending_cleanup(&coordinator, &token, &mut backend).is_err());
+        let current = coordinator.load_current().unwrap().unwrap();
+        assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
+        assert_eq!(
+            backend.resources.get("route:v4-default").map(String::as_str),
+            Some("foreign-after-preflight")
+        );
     }
 
     #[test]
