@@ -67,9 +67,11 @@ fn valid_activation_id(value: &str) -> bool {
 /// Contract for a future broker-owned transaction backend.
 ///
 /// Each mutating method must durably journal the exact resource identity before returning.
-/// The journal must survive controller/core termination. Deletion must compare the current
-/// complete fingerprint atomically with the delete. This trait alone is not an implementation
-/// of those guarantees.
+/// The journal must survive controller/core termination. A method that returns an error after
+/// a possible kernel mutation must leave enough durable intent for restart reconciliation.
+/// Deletion must compare the current complete fingerprint atomically with the delete. A
+/// successful add must return a non-empty fingerprint. This trait alone does not implement
+/// those guarantees.
 pub trait KernelTransactionBackend {
     fn create_owned_interface(
         &mut self,
@@ -269,6 +271,7 @@ mod tests {
         journal_retained: bool,
         finalized: bool,
         committed: Option<RouteManifest>,
+        fail_commit: bool,
     }
 
     impl KernelTransactionBackend for FakeBackend {
@@ -318,6 +321,7 @@ mod tests {
 
         fn retain_recovery_journal(&mut self, _id: &str) -> Result<()> { self.journal_retained = true; Ok(()) }
         fn commit_manifest(&mut self, manifest: &RouteManifest) -> Result<()> {
+            if self.fail_commit { anyhow::bail!("injected manifest commit failure"); }
             self.committed = Some(manifest.clone());
             Ok(())
         }
@@ -382,6 +386,17 @@ mod tests {
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
+        assert!(backend.interface.is_some());
+    }
+
+    #[test]
+    fn manifest_commit_failure_retains_journal_and_owned_resources() {
+        let mut backend = FakeBackend { fail_commit: true, ..Default::default() };
+        assert!(apply(&transaction(), &mut backend).is_err());
+        assert!(backend.journal_retained);
+        assert!(!backend.finalized);
+        assert!(backend.committed.is_none());
+        assert_eq!(backend.resources.len(), 6);
         assert!(backend.interface.is_some());
     }
 
