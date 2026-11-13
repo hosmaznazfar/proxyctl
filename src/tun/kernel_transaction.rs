@@ -288,6 +288,7 @@ mod tests {
         finalized: bool,
         committed: Option<RouteManifest>,
         fail_commit: bool,
+        empty_fingerprint_at: Option<usize>,
     }
 
     impl KernelTransactionBackend for FakeBackend {
@@ -303,6 +304,7 @@ mod tests {
             let key = route_key(route);
             let fingerprint = format!("fp:{key}");
             self.resources.insert(key, fingerprint.clone());
+            if self.empty_fingerprint_at == Some(self.add_count) { return Ok(String::new()); }
             Ok(fingerprint)
         }
 
@@ -312,6 +314,7 @@ mod tests {
             let key = rule_key(rule);
             let fingerprint = format!("fp:{key}");
             self.resources.insert(key, fingerprint.clone());
+            if self.empty_fingerprint_at == Some(self.add_count) { return Ok(String::new()); }
             Ok(fingerprint)
         }
 
@@ -403,6 +406,16 @@ mod tests {
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
         assert!(backend.interface.is_some());
+    }
+
+    #[test]
+    fn empty_fingerprint_retains_journal_without_ambiguous_rollback() {
+        let mut backend = FakeBackend { empty_fingerprint_at: Some(1), ..Default::default() };
+        assert!(apply(&transaction(), &mut backend).is_err());
+        assert!(backend.journal_retained);
+        assert!(!backend.finalized);
+        assert!(backend.interface.is_some());
+        assert_eq!(backend.resources.len(), 1);
     }
 
     #[test]
