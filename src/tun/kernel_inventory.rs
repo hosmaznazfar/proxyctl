@@ -163,6 +163,34 @@ pub struct KernelSnapshot {
     pub interfaces: Vec<KernelInterfaceRecord>,
 }
 
+#[cfg(target_os = "linux")]
+fn inspect_interfaces(root: &Path) -> Result<Vec<KernelInterfaceRecord>> {
+    let mut interfaces = Vec::new();
+    for entry in fs::read_dir(root).with_context(|| format!("cannot inspect {}", root.display()))? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        ensure!(!name.is_empty() && !name.contains('/'), "kernel interface has an invalid name");
+        let index_text = fs::read_to_string(entry.path().join("ifindex"))
+            .with_context(|| format!("cannot read interface index for {name}"))?;
+        let index = index_text.trim().parse::<u32>()
+            .with_context(|| format!("interface {name} has an invalid index"))?;
+        ensure!(index > 0, "interface {name} has a zero index");
+        interfaces.push(KernelInterfaceRecord {
+            name,
+            index,
+            is_tun: entry.path().join("tun_flags").exists(),
+        });
+    }
+    interfaces.sort_by(|left, right| left.name.cmp(&right.name));
+    let unique_indices = interfaces.iter().map(|item| item.index)
+        .collect::<std::collections::BTreeSet<_>>();
+    ensure!(
+        unique_indices.len() == interfaces.len(),
+        "kernel interface inventory contains duplicate indices"
+    );
+    Ok(interfaces)
+}
+
 #[cfg(test)]
 fn parse_snapshot(
     ipv4_routes: &[u8],
