@@ -26,7 +26,7 @@ pub fn inspect() -> Result<KernelInventory> {
     Ok(inspect_snapshot()?.inventory)
 }
 
-/// Capture the read-only route/rule inventory with complete normalized JSON attributes.
+/// Capture routes, rules, and exact interface identities from read-only kernel state.
 ///
 /// Canonical attributes are retained for later exact-ownership comparison; this function
 /// still performs no reservation or mutation.
@@ -353,6 +353,7 @@ mod tests {
         assert_eq!(output, b"[{}]\n");
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn inventories_interface_name_index_and_tun_kind_from_sysfs() {
         let directory = tempfile::tempdir().unwrap();
@@ -371,6 +372,7 @@ mod tests {
         ]);
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn rejects_incomplete_or_duplicate_interface_identity() {
         let directory = tempfile::tempdir().unwrap();
