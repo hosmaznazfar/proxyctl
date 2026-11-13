@@ -32,8 +32,7 @@ pub fn inspect() -> Result<KernelInventory> {
 /// still performs no reservation or mutation.
 #[cfg(target_os = "linux")]
 pub fn inspect_snapshot() -> Result<KernelSnapshot> {
-    let mut snapshot = inspect_snapshot_with_interface_path(Path::new("/sys/class/net"))?;
-    Ok(snapshot)
+    inspect_snapshot_with_interface_path(Path::new("/sys/class/net"))
 }
 
 #[cfg(target_os = "linux")]
@@ -148,11 +147,19 @@ pub struct KernelRuleRecord {
     pub canonical_attributes: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KernelInterfaceRecord {
+    pub name: String,
+    pub index: u32,
+    pub is_tun: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct KernelSnapshot {
     pub inventory: KernelInventory,
     pub routes: Vec<KernelRouteRecord>,
     pub rules: Vec<KernelRuleRecord>,
+    pub interfaces: Vec<KernelInterfaceRecord>,
 }
 
 #[cfg(test)]
