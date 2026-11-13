@@ -505,3 +505,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - Seven offline hardening increments were added: readiness rejects port zero; manifest resource counts/strings are bounded; broker requests must match the exact manifest generation and valid lifecycle phase; policy-rule priorities use a private range; process executable paths must be normalized; lifecycle lock and manifest files reject external hard links. Synthetic tests cover each guard. No privileged or live network behavior was added; TUN activation remains disabled.
+
+
+- Core-process manifest binding now retains a pidfd across the durable write and checks the pinned process for exit immediately before persistence. The lifecycle fixture uses a persistent fake child with bounded procfs readiness retries, avoiding parallel-test startup races without weakening production identity checks. This remains offline groundwork; TUN activation is disabled.
