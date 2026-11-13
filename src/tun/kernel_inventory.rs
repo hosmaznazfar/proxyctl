@@ -169,10 +169,15 @@ fn inspect_interfaces(root: &Path) -> Result<Vec<KernelInterfaceRecord>> {
     for entry in fs::read_dir(root).with_context(|| format!("cannot inspect {}", root.display()))? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        ensure!(!name.is_empty() && !name.contains('/'), "kernel interface has an invalid name");
+        ensure!(
+            !name.is_empty() && !name.contains('/'),
+            "kernel interface has an invalid name"
+        );
         let index_text = fs::read_to_string(entry.path().join("ifindex"))
             .with_context(|| format!("cannot read interface index for {name}"))?;
-        let index = index_text.trim().parse::<u32>()
+        let index = index_text
+            .trim()
+            .parse::<u32>()
             .with_context(|| format!("interface {name} has an invalid index"))?;
         ensure!(index > 0, "interface {name} has a zero index");
         interfaces.push(KernelInterfaceRecord {
@@ -182,7 +187,9 @@ fn inspect_interfaces(root: &Path) -> Result<Vec<KernelInterfaceRecord>> {
         });
     }
     interfaces.sort_by(|left, right| left.name.cmp(&right.name));
-    let unique_indices = interfaces.iter().map(|item| item.index)
+    let unique_indices = interfaces
+        .iter()
+        .map(|item| item.index)
         .collect::<std::collections::BTreeSet<_>>();
     ensure!(
         unique_indices.len() == interfaces.len(),
