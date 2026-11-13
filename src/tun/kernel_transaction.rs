@@ -66,12 +66,12 @@ fn valid_activation_id(value: &str) -> bool {
 
 /// Contract for a future broker-owned transaction backend.
 ///
-/// Each mutating method must durably journal the exact resource identity before returning.
-/// The journal must survive controller/core termination. A method that returns an error after
-/// a possible kernel mutation must leave enough durable intent for restart reconciliation.
-/// Deletion must compare the current complete fingerprint atomically with the delete. A
-/// successful add must return a non-empty fingerprint. This trait alone does not implement
-/// those guarantees.
+/// Each mutating method must durably journal the exact resource identity before returning,
+/// and its kernel mutation plus journal update must be one recoverable operation: an error
+/// must not leave an unjournaled resource. The journal must survive controller/core
+/// termination. Deletion must compare the current complete fingerprint atomically with the
+/// delete. A successful add must return a non-empty fingerprint. This trait alone does not
+/// implement those guarantees.
 pub trait KernelTransactionBackend {
     fn create_owned_interface(
         &mut self,
@@ -142,7 +142,10 @@ pub fn apply<B: KernelTransactionBackend>(
         )
         .context("failed to create and journal the owned TUN interface")?;
 
-    if interface.name != policy.interface_name || interface.index == 0 || !interface.is_tun {
+    if interface.name != policy.interface_name
+        || interface.index != policy.interface_index
+        || !interface.is_tun
+    {
         backend
             .retain_recovery_journal(activation_id)
             .context("kernel returned an unexpected interface and recovery journal could not be retained")?;
@@ -152,12 +155,16 @@ pub fn apply<B: KernelTransactionBackend>(
     }
 
     let mut resources = Vec::with_capacity(policy.routes.len() + policy.rules.len());
+    let mut invalid_fingerprint = false;
     let apply_result = (|| -> Result<()> {
         for route in &policy.routes {
             let fingerprint = backend
                 .add_owned_route(activation_id, route)
                 .context("failed to add and journal an owned TUN route")?;
-            ensure!(!fingerprint.is_empty(), "route backend returned an empty fingerprint");
+            if fingerprint.is_empty() {
+                invalid_fingerprint = true;
+                anyhow::bail!("route backend returned an empty fingerprint");
+            }
             resources.push(super::ownership::OwnedResource {
                 key: route_key(route),
                 fingerprint,
@@ -167,7 +174,10 @@ pub fn apply<B: KernelTransactionBackend>(
             let fingerprint = backend
                 .add_owned_rule(activation_id, rule)
                 .context("failed to add and journal an owned policy rule")?;
-            ensure!(!fingerprint.is_empty(), "rule backend returned an empty fingerprint");
+            if fingerprint.is_empty() {
+                invalid_fingerprint = true;
+                anyhow::bail!("rule backend returned an empty fingerprint");
+            }
             resources.push(super::ownership::OwnedResource {
                 key: rule_key(rule),
                 fingerprint,
@@ -177,6 +187,12 @@ pub fn apply<B: KernelTransactionBackend>(
     })();
 
     if let Err(error) = apply_result {
+        if invalid_fingerprint {
+            backend
+                .retain_recovery_journal(activation_id)
+                .context("empty resource fingerprint detected and recovery journal could not be retained")?;
+            return Err(error).context("kernel backend violated the fingerprint contract; recovery journal retained");
+        }
         let rollback = rollback(
             activation_id,
             &resources,
