@@ -8,9 +8,7 @@ use anyhow::Result;
 
 use super::{
     kernel_inventory::{KernelInterfaceRecord, KernelSnapshot},
-    route_policy::{
-        AddressFamily, PlannedRoute, PlannedRule, RouteType, RoutingPolicyPlan,
-    },
+    route_policy::{AddressFamily, PlannedRoute, PlannedRule, RouteType, RoutingPolicyPlan},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
