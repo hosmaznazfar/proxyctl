@@ -156,7 +156,6 @@ fn rule_delete(rule: &PlannedRule) -> IpCommand {
     IpCommand { arguments: args }
 }
 
-
 /// Validate that a planned TUN interface name and the expected ifindex are both free
 /// before creating the interface. Route/rule table and priority collisions are checked
 /// against the same read-only snapshot. This is a preflight only; callers must re-inspect
@@ -218,7 +217,6 @@ mod tests {
     fn policy() -> RoutingPolicyPlan {
         RoutingPolicyPlan::new(42_420, 42_410, 42_420, 0x42, 0xff, "tun-proxyctl", 77)
     }
-
 
     fn snapshot(interfaces: Vec<KernelInterfaceRecord>) -> KernelSnapshot {
         KernelSnapshot {
