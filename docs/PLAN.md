@@ -481,3 +481,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - Stabilized the activation pidfd signal test with a persistent fake child and bounded identity readiness before testing that a mismatched identity cannot be signalled. No live process or networking behavior is exercised.
+
+
+- **Two-phase TUN interface identity gate:** offline preflight now rejects occupied interface names/indices and routing-policy collisions. A post-creation verifier requires the exact kernel-assigned interface name, ifindex, and TUN kind before route installation. No kernel operation is executed; the activation gate remains closed.
