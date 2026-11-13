@@ -7,6 +7,7 @@
 
 pub mod kernel_backend;
 pub mod kernel_inventory;
+pub mod kernel_transaction;
 pub mod lifecycle_coordinator;
 pub mod manifest_store;
 pub mod ownership;
