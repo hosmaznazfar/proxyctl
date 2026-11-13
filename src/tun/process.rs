@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn rejects_non_normalized_executable_identity_paths() {
-        for executable in [PathBuf::from("/bin/../bin/sleep"), PathBuf::from("/bin/")] {
+        for executable in [PathBuf::from("/bin/../bin/sleep"), PathBuf::from("/")] {
             let identity = ProcessIdentity {
                 pid: 1,
                 start_ticks: 1,
