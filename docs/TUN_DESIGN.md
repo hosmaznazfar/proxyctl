@@ -290,3 +290,11 @@ These are local validation and filesystem hardening changes with synthetic tests
 ### Pidfd-pinned manifest binding
 
 Core-process identity binding now opens and retains a pidfd while the prepared manifest is updated, checks that the pinned process has not exited immediately before persistence, and relies on the supervisor to recover if the exact process exits after that check. The lifecycle test uses a persistent fake child and a bounded procfs visibility retry, so parallel test scheduling does not turn a fixture startup race into a false production failure. No real core is launched and no host networking is changed.
+
+## Offline kernel transaction orchestration
+
+The new `src/tun/kernel_transaction.rs` layer turns a validated dual-stack policy into a deterministic apply sequence: create the owned TUN interface, add the IPv4/IPv6 default routes, then add the marked-core bypass and unmarked-proxy rules. It validates the activation UUID before invoking an injected backend, checks the returned interface name/kind/index, and builds a typed ownership manifest from returned resource fingerprints.
+
+If a route or rule operation fails, successfully recorded resources are removed in reverse order using exact fingerprints, followed by the exact interface identity. If rollback fails or detects a foreign resource, the backend is instructed to retain its recovery journal. The backend trait explicitly requires durable ownership journaling and atomic compare-and-delete; those guarantees are not supplied by this orchestration module.
+
+This is an offline execution contract with fake-backend tests, not a live Linux kernel backend. There is no iproute2 command execution, rtnetlink mutation, privilege escalation, or host network change. A concrete privileged backend and crash-window fault tests are still required before activation can be enabled.
