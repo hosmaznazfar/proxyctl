@@ -56,7 +56,7 @@ pub fn monitor_core<B: OwnedResourceBackend>(
         .context("TUN manifest disappeared before cleanup")?;
     let report = match cleanup(&current.snapshot.manifest, backend) {
         Ok(report) if report.conflicts.is_empty() => report,
-        Ok(report) => {
+        Ok(_report) => {
             coordinator.apply_event(token, SupervisorEvent::CleanupConflicted)?;
             anyhow::bail!(
                 "TUN cleanup encountered a resource identity conflict; recovery manifest was retained"
