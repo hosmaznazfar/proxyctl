@@ -216,15 +216,14 @@ fn compare_route(
                 return false;
             };
             let route_destination = value.get("dst").and_then(Value::as_str);
-            let destination_matches = route_destination.is_some_and(|actual| {
+            route_destination.is_some_and(|actual| {
                 actual == destination
                     || (actual == "default"
                         && matches!(
                             (family, destination),
                             (AddressFamily::Ipv4, "0.0.0.0/0") | (AddressFamily::Ipv6, "::/0")
                         ))
-            });
-            destination_matches
+            })
         })
         .collect::<Vec<_>>();
 
