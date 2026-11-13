@@ -26,10 +26,43 @@ impl IpCommand {
     }
 }
 
+/// Exact interface identity required by a future rtnetlink delete operation.
+///
+/// A name-only `ip link delete dev NAME` is deliberately not emitted: the name may
+/// have been reused by another application after the manifest was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterfaceDeleteGuard {
+    pub interface_name: String,
+    pub interface_index: u32,
+}
+
+impl InterfaceDeleteGuard {
+    pub fn validate(&self) -> Result<()> {
+        anyhow::ensure!(
+            !self.interface_name.is_empty()
+                && self.interface_name.len() <= 15
+                && self.interface_name.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+                }),
+            "invalid interface cleanup name"
+        );
+        anyhow::ensure!(
+            self.interface_index > 0,
+            "interface cleanup requires a non-zero ifindex"
+        );
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KernelCommandPlan {
     pub apply: Vec<IpCommand>,
+    /// Route/rule argument previews only; a privileged backend must compare full
+    /// fingerprints immediately before each deletion.
     pub cleanup: Vec<IpCommand>,
+    /// Interface removal is intentionally separate from iproute2 name-only commands.
+    /// A future backend must atomically verify both name and ifindex before deletion.
+    pub interface_cleanup: InterfaceDeleteGuard,
 }
 
 impl KernelCommandPlan {
@@ -66,14 +99,17 @@ impl KernelCommandPlan {
         for route in policy.routes.iter().rev() {
             cleanup.push(route_delete(route)?);
         }
-        cleanup.push(IpCommand::new([
-            "link",
-            "delete",
-            "dev",
-            policy.interface_name.as_str(),
-        ]));
+        let interface_cleanup = InterfaceDeleteGuard {
+            interface_name: policy.interface_name.clone(),
+            interface_index: policy.interface_index,
+        };
+        interface_cleanup.validate()?;
 
-        Ok(Self { apply, cleanup })
+        Ok(Self {
+            apply,
+            cleanup,
+            interface_cleanup,
+        })
     }
 }
 
@@ -350,11 +386,10 @@ mod tests {
     #[test]
     fn cleanup_is_exact_reverse_order_of_resource_creation() {
         let plan = KernelCommandPlan::from_policy(&policy(), 1000, 1000).unwrap();
-        // Link deletion removes both the created interface and its "up" state,
-        // so cleanup has one fewer command than setup while reversing every
-        // independently-created route/rule resource.
+        // Route/rule cleanup previews are separate from interface deletion.
+        // The latter requires an atomic name+ifindex check in a future rtnetlink backend.
         assert_eq!(plan.apply.len(), 8);
-        assert_eq!(plan.cleanup.len(), 7);
+        assert_eq!(plan.cleanup.len(), 6);
         assert!(
             plan.cleanup[..4]
                 .iter()
@@ -366,9 +401,32 @@ mod tests {
                 .all(|command| command.arguments[1..3] == ["route", "del"])
         );
         assert_eq!(
-            plan.cleanup.last().unwrap().arguments,
-            ["link", "delete", "dev", "tun-proxyctl"]
+            plan.interface_cleanup,
+            InterfaceDeleteGuard {
+                interface_name: "tun-proxyctl".into(),
+                interface_index: 77,
+            }
         );
+        plan.interface_cleanup.validate().unwrap();
+        assert!(
+            plan.cleanup
+                .iter()
+                .all(|command| command.arguments.get(1).is_none_or(|arg| arg != "link"))
+        );
+    }
+
+    #[test]
+    fn interface_cleanup_guard_rejects_missing_or_invalid_identity() {
+        let mut guard = InterfaceDeleteGuard {
+            interface_name: "tun-proxyctl".into(),
+            interface_index: 77,
+        };
+        guard.validate().unwrap();
+        guard.interface_index = 0;
+        assert!(guard.validate().is_err());
+        guard.interface_index = 77;
+        guard.interface_name = "bad/name".into();
+        assert!(guard.validate().is_err());
     }
 
     #[test]
