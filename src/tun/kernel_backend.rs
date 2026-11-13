@@ -344,12 +344,16 @@ mod tests {
         // The backend must compare each live fingerprint before removing it.
         assert_eq!(plan.apply.len(), 8);
         assert_eq!(plan.cleanup.len(), 6);
-        assert!(plan.cleanup[..4]
-            .iter()
-            .all(|target| matches!(target, CleanupTarget::Rule(_))));
-        assert!(plan.cleanup[4..]
-            .iter()
-            .all(|target| matches!(target, CleanupTarget::Route(_))));
+        assert!(
+            plan.cleanup[..4]
+                .iter()
+                .all(|target| matches!(target, CleanupTarget::Rule(_)))
+        );
+        assert!(
+            plan.cleanup[4..]
+                .iter()
+                .all(|target| matches!(target, CleanupTarget::Route(_)))
+        );
         assert_eq!(
             plan.interface_cleanup,
             InterfaceDeleteGuard {
