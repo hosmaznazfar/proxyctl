@@ -136,10 +136,14 @@ pub fn apply<B: KernelTransactionBackend>(
         )
         .context("failed to create and journal the owned TUN interface")?;
 
-    ensure!(
-        interface.name == policy.interface_name && interface.index > 0 && interface.is_tun,
-        "kernel returned an unexpected TUN interface identity"
-    );
+    if interface.name != policy.interface_name || interface.index == 0 || !interface.is_tun {
+        backend
+            .retain_recovery_journal(activation_id)
+            .context("kernel returned an unexpected interface and recovery journal could not be retained")?;
+        anyhow::bail!(
+            "kernel returned an unexpected TUN interface identity; recovery journal retained"
+        );
+    }
 
     let mut resources = Vec::with_capacity(policy.routes.len() + policy.rules.len());
     let apply_result = (|| -> Result<()> {
