@@ -128,6 +128,23 @@ impl BrokerRequest {
         );
         Ok(())
     }
+
+    /// Bind a request to the exact durable snapshot before a helper may act.
+    /// The helper must still reopen the file and repeat this check itself.
+    pub fn validate_snapshot(&self, snapshot: &ManifestSnapshot) -> Result<()> {
+        self.validate()?;
+        snapshot.validate()?;
+        ensure!(
+            self.activation_id == snapshot.manifest.activation_id
+                && self.generation == snapshot.generation,
+            "privilege-broker request does not match the durable activation"
+        );
+        match (self.action, snapshot.phase) {
+            (BrokerAction::ApplyPreparedManifest, SupervisorPhase::Prepared)
+            | (BrokerAction::CleanupManifest, SupervisorPhase::CleanupPending) => Ok(()),
+            _ => anyhow::bail!("privilege-broker action is invalid for the manifest lifecycle phase"),
+        }
+    }
 }
 
 fn valid_activation_id(value: &str) -> bool {
@@ -170,6 +187,46 @@ mod tests {
         let mut invalid = request();
         invalid.activation_id = "not-an-activation".into();
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn request_must_match_snapshot_generation_activation_and_phase() {
+        use crate::tun::{
+            manifest_store::ManifestSnapshot,
+            ownership::{MANIFEST_VERSION, OwnedResource, RouteManifest},
+            recovery::SupervisorPhase,
+        };
+        let mut snapshot = ManifestSnapshot {
+            schema_version: 1,
+            generation: 4,
+            phase: SupervisorPhase::CleanupPending,
+            #[cfg(target_os = "linux")]
+            core_process: None,
+            manifest: RouteManifest {
+                version: MANIFEST_VERSION,
+                activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+                table_id: 42420,
+                rule_priority: 42420,
+                interface_name: "tun-proxyctl".into(),
+                interface_index: 77,
+                resources: vec![OwnedResource {
+                    key: "route:v4-default".into(),
+                    fingerprint: "route-fp".into(),
+                }],
+            },
+        };
+        request().validate_snapshot(&snapshot).unwrap();
+
+        let mut invalid = request();
+        invalid.generation += 1;
+        assert!(invalid.validate_snapshot(&snapshot).is_err());
+
+        snapshot.phase = SupervisorPhase::Running;
+        assert!(request().validate_snapshot(&snapshot).is_err());
+
+        snapshot.phase = SupervisorPhase::CleanupPending;
+        snapshot.manifest.activation_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into();
+        assert!(request().validate_snapshot(&snapshot).is_err());
     }
 
     #[test]
