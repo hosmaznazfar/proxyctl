@@ -143,7 +143,7 @@ This is not yet a detached or init-managed supervisor. The caller must provide t
 
 ## Durable core-process identity and restart resumption
 
-The ownership manifest now optionally persists the launched core's PID, procfs start-time ticks, and canonical executable path. Binding is serialized under the lifecycle lock, accepted only once while the manifest is Prepared, and requires the process identity to be live at write time. The supervisor can resume after its own restart: it revalidates the exact process instance, opens a pidfd and resumes monitoring when the core is still alive, or enters cleanup when the recorded process has exited or the PID now identifies a different process. Failure to inspect a still-matching process fails closed. Legacy manifests without process identity remain readable but cannot be automatically cleaned from a Running phase.
+The ownership manifest now optionally persists the launched core's PID, procfs start-time ticks, and canonical executable path. Binding is serialized under the lifecycle lock, accepted only once while the manifest is Prepared, and opens a pidfd before persisting. The pidfd pins the exact process instance across the durable write, preventing PID reuse from redirecting the check; an exit after the final liveness check is handled by the supervisor against that pinned identity. The supervisor can resume after its own restart: it revalidates the exact process instance, opens a pidfd and resumes monitoring when the core is still alive, or enters cleanup when the recorded process has exited or the PID now identifies a different process. Failure to inspect a still-matching process fails closed. Legacy manifests without process identity remain readable but cannot be automatically cleaned from a Running phase.
 
 Tests cover durable identity binding, dead-core restart recovery, and refusal to recover a Running manifest without process identity. This is still a callable recovery runtime, not yet an independently launched supervisor service; it also has no production kernel backend or privilege broker. TUN activation remains disabled.
 
@@ -285,3 +285,8 @@ The latest offline hardening increments add the following fail-closed checks:
 7. The recovery manifest rejects hard-linked files so modifying an external alias cannot silently mutate the durable ownership record.
 
 These are local validation and filesystem hardening changes with synthetic tests only. They do not add a privileged helper, kernel mutation backend, detached supervisor, or live dataplane probes. TUN activation remains disabled.
+
+
+### Pidfd-pinned manifest binding
+
+Core-process identity binding now opens and retains a pidfd while the prepared manifest is updated, checks that the pinned process has not exited immediately before persistence, and relies on the supervisor to recover if the exact process exits after that check. The lifecycle test uses a persistent fake child and a bounded procfs visibility retry, so parallel test scheduling does not turn a fixture startup race into a false production failure. No real core is launched and no host networking is changed.
