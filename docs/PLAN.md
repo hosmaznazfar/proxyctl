@@ -499,3 +499,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Core mark validation:** routing-policy planning rejects a zero socket mark because it could match unmarked traffic and bypass the TUN table. This is pure validation; per-core socket-mark configuration and live route-loop verification remain outstanding.
+
+
+- Cleanup completion is now gated on an empty conflict list from every exact-resource deletion. If a resource changes after preflight, the supervisor retains the CleanupPending manifest for a later recovery attempt; it does not discard ownership evidence or treat a partial cleanup as success.
