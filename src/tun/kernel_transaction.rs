@@ -289,6 +289,7 @@ mod tests {
         committed: Option<RouteManifest>,
         fail_commit: bool,
         empty_fingerprint_at: Option<usize>,
+        foreign_on_remove: Option<String>,
     }
 
     impl KernelTransactionBackend for FakeBackend {
@@ -320,6 +321,11 @@ mod tests {
 
         fn remove_resource_if_matches(&mut self, _id: &str, key: &str, fp: &str) -> Result<ResourceState> {
             if self.fail_remove { anyhow::bail!("injected rollback failure"); }
+            if self.foreign_on_remove.as_deref() == Some(key) {
+                self.resources.insert(key.to_owned(), "foreign-replacement".into());
+                self.foreign_on_remove = None;
+                return Ok(ResourceState::ChangedOrForeign);
+            }
             match self.resources.get(key) {
                 None => Ok(ResourceState::AlreadyAbsent),
                 Some(current) if current == fp => { self.resources.remove(key); Ok(ResourceState::Removed) }
@@ -406,6 +412,16 @@ mod tests {
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
         assert!(backend.interface.is_some());
+    }
+
+    #[test]
+    fn rollback_conflict_preserves_foreign_resource_and_recovery_journal() {
+        let key = "route:v4:42420:0.0.0.0/0".to_owned();
+        let mut backend = FakeBackend { fail_add_at: Some(4), foreign_on_remove: Some(key.clone()), ..Default::default() };
+        assert!(apply(&transaction(), &mut backend).is_err());
+        assert!(backend.journal_retained);
+        assert!(!backend.finalized);
+        assert_eq!(backend.resources.get(&key).map(String::as_str), Some("foreign-replacement"));
     }
 
     #[test]
