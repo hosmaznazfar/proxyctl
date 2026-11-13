@@ -341,6 +341,7 @@ mod tests {
         let (manifest, _) = fixture();
         let comparison = compare_manifest(&manifest, &KernelSnapshot::default()).unwrap();
         assert!(comparison.has_no_conflicts());
+        assert_eq!(comparison.interface_state, Some(SnapshotResourceState::Absent));
         assert!(
             comparison
                 .resources
@@ -418,6 +419,13 @@ mod tests {
 
         snapshot.interfaces[0].index = 77;
         snapshot.interfaces[0].is_tun = false;
+        assert_eq!(
+            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            Some(SnapshotResourceState::ChangedOrAmbiguous)
+        );
+
+        snapshot.interfaces[0].is_tun = true;
+        snapshot.interfaces[0].name = "foreign0".into();
         assert_eq!(
             compare_manifest(&manifest, &snapshot).unwrap().interface_state,
             Some(SnapshotResourceState::ChangedOrAmbiguous)
