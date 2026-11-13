@@ -1314,13 +1314,22 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn pidfd_stop_signals_only_the_verified_fake_process_instance() {
-        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+        let mut child = Command::new("tail")
+            .args(["-f", "/dev/null"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
         let pid = child.id();
         let exe = executable(pid).unwrap();
-        let ticks = start_ticks(pid).unwrap();
+        let ticks = await_identity(pid, &exe, Duration::from_secs(2)).unwrap();
 
         assert!(signal_verified(pid, &exe, ticks.saturating_add(1), libc::SIGTERM).is_err());
-        assert!(matches_process(pid, &exe, ticks));
+        assert!(
+            matches_process(pid, &exe, ticks),
+            "a rejected identity must leave the verified child running"
+        );
 
         signal_verified(pid, &exe, ticks, libc::SIGTERM).unwrap();
         child.wait().unwrap();
