@@ -7,7 +7,9 @@ use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 
 use super::{
-    kernel_inventory::{KernelInterfaceRecord, KernelRouteRecord, KernelRuleRecord, KernelSnapshot},
+    kernel_inventory::{
+        KernelInterfaceRecord, KernelRouteRecord, KernelRuleRecord, KernelSnapshot,
+    },
     ownership::RouteManifest,
     route_policy::AddressFamily,
 };
@@ -38,8 +40,12 @@ impl SnapshotComparison {
     /// This is not permission to delete: callers must re-check atomically in the
     /// privileged backend immediately before each mutation.
     pub fn has_no_conflicts(&self) -> bool {
-        self.interface_state.is_none_or(|state| matches!(state, SnapshotResourceState::PresentAndMatching | SnapshotResourceState::Absent))
-            && self.resources.iter().all(|resource| {
+        self.interface_state.is_none_or(|state| {
+            matches!(
+                state,
+                SnapshotResourceState::PresentAndMatching | SnapshotResourceState::Absent
+            )
+        }) && self.resources.iter().all(|resource| {
             matches!(
                 resource.state,
                 SnapshotResourceState::PresentAndMatching | SnapshotResourceState::Absent
@@ -109,14 +115,23 @@ fn compare_interface(
     expected_index: u32,
     interfaces: &[KernelInterfaceRecord],
 ) -> SnapshotResourceState {
-    let by_name = interfaces.iter().filter(|item| item.name == expected_name).collect::<Vec<_>>();
-    let by_index = interfaces.iter().filter(|item| item.index == expected_index).collect::<Vec<_>>();
+    let by_name = interfaces
+        .iter()
+        .filter(|item| item.name == expected_name)
+        .collect::<Vec<_>>();
+    let by_index = interfaces
+        .iter()
+        .filter(|item| item.index == expected_index)
+        .collect::<Vec<_>>();
     match (by_name.as_slice(), by_index.as_slice()) {
         ([], []) => SnapshotResourceState::Absent,
         ([interface], [same])
             if interface.name == same.name
                 && interface.index == expected_index
-                && interface.is_tun => SnapshotResourceState::PresentAndMatching,
+                && interface.is_tun =>
+        {
+            SnapshotResourceState::PresentAndMatching
+        }
         _ => SnapshotResourceState::ChangedOrAmbiguous,
     }
 }
@@ -341,7 +356,10 @@ mod tests {
         let (manifest, _) = fixture();
         let comparison = compare_manifest(&manifest, &KernelSnapshot::default()).unwrap();
         assert!(comparison.has_no_conflicts());
-        assert_eq!(comparison.interface_state, Some(SnapshotResourceState::Absent));
+        assert_eq!(
+            comparison.interface_state,
+            Some(SnapshotResourceState::Absent)
+        );
         assert!(
             comparison
                 .resources
@@ -407,27 +425,35 @@ mod tests {
     fn interface_name_index_and_tun_kind_must_match_exactly() {
         let (manifest, mut snapshot) = fixture();
         assert_eq!(
-            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            compare_manifest(&manifest, &snapshot)
+                .unwrap()
+                .interface_state,
             Some(SnapshotResourceState::PresentAndMatching)
         );
 
         snapshot.interfaces[0].index = 78;
         assert_eq!(
-            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            compare_manifest(&manifest, &snapshot)
+                .unwrap()
+                .interface_state,
             Some(SnapshotResourceState::ChangedOrAmbiguous)
         );
 
         snapshot.interfaces[0].index = 77;
         snapshot.interfaces[0].is_tun = false;
         assert_eq!(
-            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            compare_manifest(&manifest, &snapshot)
+                .unwrap()
+                .interface_state,
             Some(SnapshotResourceState::ChangedOrAmbiguous)
         );
 
         snapshot.interfaces[0].is_tun = true;
         snapshot.interfaces[0].name = "foreign0".into();
         assert_eq!(
-            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            compare_manifest(&manifest, &snapshot)
+                .unwrap()
+                .interface_state,
             Some(SnapshotResourceState::ChangedOrAmbiguous)
         );
     }

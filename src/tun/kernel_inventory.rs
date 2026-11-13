@@ -42,7 +42,8 @@ fn inspect_snapshot_with_interface_path(interface_path: &Path) -> Result<KernelS
     let ipv4_rules = run_ip(&["-j", "-4", "rule", "show"])?;
     let ipv6_rules = run_ip(&["-j", "-6", "rule", "show"])?;
 
-    let mut snapshot = parse_detailed_snapshot(&ipv4_routes, &ipv6_routes, &ipv4_rules, &ipv6_rules)?;
+    let mut snapshot =
+        parse_detailed_snapshot(&ipv4_routes, &ipv6_routes, &ipv4_rules, &ipv6_rules)?;
     snapshot.interfaces = inspect_interfaces(interface_path)?;
     Ok(snapshot)
 }
@@ -366,10 +367,21 @@ mod tests {
         fs::write(tun.join("tun_flags"), "0001").unwrap();
 
         let interfaces = inspect_interfaces(directory.path()).unwrap();
-        assert_eq!(interfaces, [
-            KernelInterfaceRecord { name: "eth0".into(), index: 2, is_tun: false },
-            KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 77, is_tun: true },
-        ]);
+        assert_eq!(
+            interfaces,
+            [
+                KernelInterfaceRecord {
+                    name: "eth0".into(),
+                    index: 2,
+                    is_tun: false
+                },
+                KernelInterfaceRecord {
+                    name: "tun-proxyctl".into(),
+                    index: 77,
+                    is_tun: true
+                },
+            ]
+        );
     }
 
     #[cfg(target_os = "linux")]
