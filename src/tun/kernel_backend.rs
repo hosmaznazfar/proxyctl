@@ -6,8 +6,11 @@
 
 use anyhow::Result;
 
-use super::route_policy::{
-    AddressFamily, PlannedRoute, PlannedRule, RouteType, RoutingPolicyPlan, RulePurpose,
+use super::{
+    kernel_inventory::{KernelInterfaceRecord, KernelSnapshot},
+    route_policy::{
+        AddressFamily, PlannedRoute, PlannedRule, RouteType, RoutingPolicyPlan, RulePurpose,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,6 +156,60 @@ fn rule_delete(rule: &PlannedRule) -> IpCommand {
     IpCommand { arguments: args }
 }
 
+
+/// Validate that a planned TUN interface name and the expected ifindex are both free
+/// before creating the interface. Route/rule table and priority collisions are checked
+/// against the same read-only snapshot. This is a preflight only; callers must re-inspect
+/// after creation and verify the kernel-assigned identity before installing routes.
+pub fn validate_interface_preflight(
+    policy: &RoutingPolicyPlan,
+    snapshot: &KernelSnapshot,
+) -> Result<()> {
+    policy.validate_against(&snapshot.inventory)?;
+    anyhow::ensure!(
+        !snapshot
+            .interfaces
+            .iter()
+            .any(|interface| interface.name == policy.interface_name),
+        "TUN interface name is already present"
+    );
+    anyhow::ensure!(
+        !snapshot
+            .interfaces
+            .iter()
+            .any(|interface| interface.index == policy.interface_index),
+        "planned TUN interface index is already occupied"
+    );
+    Ok(())
+}
+
+/// Verify the interface identity assigned by the kernel before route installation.
+/// Both name and ifindex must match exactly, and the interface must be a TUN device.
+pub fn verify_created_interface(
+    policy: &RoutingPolicyPlan,
+    interfaces: &[KernelInterfaceRecord],
+) -> Result<()> {
+    policy.validate()?;
+    let by_name = interfaces
+        .iter()
+        .filter(|interface| interface.name == policy.interface_name)
+        .collect::<Vec<_>>();
+    let by_index = interfaces
+        .iter()
+        .filter(|interface| interface.index == policy.interface_index)
+        .collect::<Vec<_>>();
+    anyhow::ensure!(
+        by_name.len() == 1 && by_index.len() == 1,
+        "created TUN interface identity is missing, duplicated, or reused"
+    );
+    let interface = by_name[0];
+    anyhow::ensure!(
+        interface.index == policy.interface_index && interface.is_tun,
+        "created interface does not match the expected TUN identity"
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,6 +217,86 @@ mod tests {
 
     fn policy() -> RoutingPolicyPlan {
         RoutingPolicyPlan::new(42_420, 42_410, 42_420, 0x42, 0xff, "tun-proxyctl", 77)
+    }
+
+
+    fn snapshot(interfaces: Vec<KernelInterfaceRecord>) -> KernelSnapshot {
+        KernelSnapshot {
+            inventory: Default::default(),
+            routes: Vec::new(),
+            rules: Vec::new(),
+            interfaces,
+        }
+    }
+
+    #[test]
+    fn preflight_refuses_existing_interface_name_or_index() {
+        let policy = policy();
+        let existing_name = snapshot(vec![KernelInterfaceRecord {
+            name: "tun-proxyctl".into(),
+            index: 90,
+            is_tun: true,
+        }]);
+        assert!(validate_interface_preflight(&policy, &existing_name).is_err());
+
+        let existing_index = snapshot(vec![KernelInterfaceRecord {
+            name: "other0".into(),
+            index: 77,
+            is_tun: false,
+        }]);
+        assert!(validate_interface_preflight(&policy, &existing_index).is_err());
+    }
+
+    #[test]
+    fn preflight_accepts_free_interface_and_policy_resources() {
+        let policy = policy();
+        let inventory = snapshot(vec![KernelInterfaceRecord {
+            name: "wlan0".into(),
+            index: 2,
+            is_tun: false,
+        }]);
+        validate_interface_preflight(&policy, &inventory).unwrap();
+    }
+
+    #[test]
+    fn created_interface_must_match_exact_name_index_and_tun_kind() {
+        let policy = policy();
+        verify_created_interface(
+            &policy,
+            &[KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                is_tun: true,
+            }],
+        )
+        .unwrap();
+
+        for invalid in [
+            vec![KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 78,
+                is_tun: true,
+            }],
+            vec![KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                is_tun: false,
+            }],
+            vec![
+                KernelInterfaceRecord {
+                    name: "tun-proxyctl".into(),
+                    index: 77,
+                    is_tun: true,
+                },
+                KernelInterfaceRecord {
+                    name: "other0".into(),
+                    index: 77,
+                    is_tun: false,
+                },
+            ],
+        ] {
+            assert!(verify_created_interface(&policy, &invalid).is_err());
+        }
     }
 
     #[test]
