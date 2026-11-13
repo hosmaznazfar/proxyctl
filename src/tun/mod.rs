@@ -1,7 +1,7 @@
 //! Read-only Linux network inspection for the future TUN lifecycle.
 //!
-//! This module deliberately has no mutation APIs. It inspects procfs/sysfs and,
-//! when available, invokes firewall listing commands only.
+//! This module deliberately has no mutation APIs. It inspects procfs/sysfs and
+//! invokes fixed read-only route/rule inventory commands only.
 //!
 //! Runtime service-manager discovery is also read-only and distro-agnostic.
 
