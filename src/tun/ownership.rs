@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub const MANIFEST_VERSION: u32 = 1;
+const MAX_OWNED_RESOURCES: usize = 256;
+const MAX_RESOURCE_KEY_BYTES: usize = 512;
+const MAX_RESOURCE_FINGERPRINT_BYTES: usize = 16 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedResource {
@@ -51,12 +54,23 @@ impl RouteManifest {
             self.interface_index > 0,
             "TUN interface index must be non-zero"
         );
+        ensure!(
+            self.resources.len() <= MAX_OWNED_RESOURCES,
+            "TUN manifest contains too many owned resources"
+        );
         let mut keys = BTreeSet::new();
         for resource in &self.resources {
-            ensure!(!resource.key.is_empty(), "owned resource key is empty");
             ensure!(
-                !resource.fingerprint.is_empty(),
-                "owned resource fingerprint is empty"
+                !resource.key.is_empty()
+                    && resource.key.len() <= MAX_RESOURCE_KEY_BYTES
+                    && !resource.key.chars().any(char::is_control),
+                "owned resource key is empty, oversized, or contains control characters"
+            );
+            ensure!(
+                !resource.fingerprint.is_empty()
+                    && resource.fingerprint.len() <= MAX_RESOURCE_FINGERPRINT_BYTES
+                    && !resource.fingerprint.chars().any(char::is_control),
+                "owned resource fingerprint is empty, oversized, or contains control characters"
             );
             ensure!(
                 keys.insert(&resource.key),
@@ -220,6 +234,26 @@ mod tests {
         let mut invalid = original;
         invalid.resources.push(invalid.resources[0].clone());
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn manifest_rejects_oversized_or_control_character_resource_records() {
+        let mut value = manifest();
+        value.resources[0].key = "k".repeat(MAX_RESOURCE_KEY_BYTES + 1);
+        assert!(value.validate().is_err());
+
+        let mut value = manifest();
+        value.resources[0].fingerprint = "fingerprint\\nforged".into();
+        assert!(value.validate().is_err());
+
+        let mut value = manifest();
+        value.resources = (0..=MAX_OWNED_RESOURCES)
+            .map(|index| OwnedResource {
+                key: format!("resource:{index}"),
+                fingerprint: "fp".into(),
+            })
+            .collect();
+        assert!(value.validate().is_err());
     }
 
     #[test]
