@@ -9,6 +9,7 @@ pub const RT_TABLE_MAIN: u32 = 254;
 pub const RT_TABLE_LOCAL: u32 = 255;
 pub const RT_TABLE_DEFAULT: u32 = 253;
 pub const RT_TABLE_MIN_PROXYCTL: u32 = 10_000;
+pub const RPDB_PRIORITY_MIN_PROXYCTL: u32 = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AddressFamily {
@@ -147,10 +148,10 @@ impl RoutingPolicyPlan {
             "Proxyctl routing table ID is reserved or below the private allocation floor"
         );
         ensure!(
-            self.bypass_priority > 0
-                && self.proxy_priority > 0
+            self.bypass_priority >= RPDB_PRIORITY_MIN_PROXYCTL
+                && self.proxy_priority >= RPDB_PRIORITY_MIN_PROXYCTL
                 && self.bypass_priority < self.proxy_priority,
-            "core bypass rule must have a non-zero priority before the proxy rule"
+            "Proxyctl policy priorities must be in the private range with core bypass before proxy traffic"
         );
         ensure!(
             self.core_mark != 0
@@ -307,6 +308,19 @@ mod tests {
         let mut plan = sample_plan();
         plan.core_mark = 0;
         assert!(plan.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_policy_priorities_in_reserved_low_range() {
+        let mut plan = sample_plan();
+        plan.bypass_priority = 100;
+        plan.proxy_priority = 200;
+        assert!(plan.validate().is_err());
+
+        let mut plan = sample_plan();
+        plan.bypass_priority = RPDB_PRIORITY_MIN_PROXYCTL;
+        plan.proxy_priority = RPDB_PRIORITY_MIN_PROXYCTL + 1;
+        plan.validate().unwrap();
     }
 
     #[test]
