@@ -254,7 +254,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(LOCK_FILE);
         let external = directory.path().join("linked-lock");
+        use std::os::unix::fs::PermissionsExt;
         std::fs::write(&path, "").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         std::fs::hard_link(&path, &external).unwrap();
         assert!(LifecycleLock::acquire(&path, Duration::from_millis(50)).is_err());
     }
