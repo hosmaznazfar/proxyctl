@@ -108,6 +108,10 @@ pub trait KernelTransactionBackend {
     /// Keep the durable journal when rollback is incomplete or detects foreign state.
     fn retain_recovery_journal(&mut self, activation_id: &str) -> Result<()>;
 
+    /// Atomically promote the write-ahead journal to the durable active manifest.
+    /// This must succeed before the controller is allowed to launch a core.
+    fn commit_manifest(&mut self, manifest: &RouteManifest) -> Result<()>;
+
     /// Remove the journal only after all resources have been verified absent.
     fn finish_transaction(&mut self, activation_id: &str) -> Result<()>;
 }
@@ -198,6 +202,12 @@ pub fn apply<B: KernelTransactionBackend>(
         resources,
     };
     manifest.validate()?;
+    if let Err(error) = backend.commit_manifest(&manifest) {
+        backend
+            .retain_recovery_journal(activation_id)
+            .context("manifest commit failed and recovery journal could not be retained")?;
+        return Err(error).context("could not commit the active TUN ownership manifest");
+    }
     Ok(AppliedKernelTransaction { manifest })
 }
 
@@ -258,6 +268,7 @@ mod tests {
         fail_remove: bool,
         journal_retained: bool,
         finalized: bool,
+        committed: Option<RouteManifest>,
     }
 
     impl KernelTransactionBackend for FakeBackend {
@@ -306,6 +317,11 @@ mod tests {
         }
 
         fn retain_recovery_journal(&mut self, _id: &str) -> Result<()> { self.journal_retained = true; Ok(()) }
+        fn commit_manifest(&mut self, manifest: &RouteManifest) -> Result<()> {
+            self.committed = Some(manifest.clone());
+            Ok(())
+        }
+
         fn finish_transaction(&mut self, _id: &str) -> Result<()> { self.finalized = true; Ok(()) }
     }
 
@@ -346,6 +362,7 @@ mod tests {
         assert_eq!(result.manifest.resources.len(), 6);
         result.manifest.validate().unwrap();
         assert_eq!(backend.resources.len(), 6);
+        assert_eq!(backend.committed.as_ref(), Some(&result.manifest));
         assert!(!backend.finalized);
     }
 
@@ -380,6 +397,7 @@ mod tests {
             fn remove_resource_if_matches(&mut self, id: &str, key: &str, fp: &str) -> Result<ResourceState> { self.0.remove_resource_if_matches(id, key, fp) }
             fn remove_interface_if_matches(&mut self, id: &str, name: &str, index: u32) -> Result<ResourceState> { self.0.remove_interface_if_matches(id, name, index) }
             fn retain_recovery_journal(&mut self, id: &str) -> Result<()> { self.0.retain_recovery_journal(id) }
+            fn commit_manifest(&mut self, manifest: &RouteManifest) -> Result<()> { self.0.commit_manifest(manifest) }
             fn finish_transaction(&mut self, id: &str) -> Result<()> { self.0.finish_transaction(id) }
         }
         let mut backend = WrongInterface(FakeBackend::default());
