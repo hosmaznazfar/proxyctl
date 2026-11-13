@@ -496,3 +496,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Loopback readiness enforcement:** dataplane readiness now accepts only IPv4/IPv6 loopback listener addresses and rejects wildcard or LAN exposure. This is an offline evidence check; live listener probing is still outstanding.
+
+
+- **Core mark validation:** routing-policy planning rejects a zero socket mark because it could match unmarked traffic and bypass the TUN table. This is pure validation; per-core socket-mark configuration and live route-loop verification remain outstanding.
