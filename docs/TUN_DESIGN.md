@@ -259,3 +259,8 @@ Runtime detection and enum mapping identify which init system is present; they d
 ### Loopback-only readiness gate
 
 Readiness now rejects wildcard, LAN, and other non-loopback listener addresses. Both IPv4 and IPv6 loopback are accepted. This makes the readiness contract enforce the same local-only exposure policy as ordinary Proxyctl activation; a listening socket on a non-loopback address can never satisfy the TUN readiness gate.
+
+
+### Non-zero core bypass mark
+
+The routing-policy validator now rejects a zero core socket mark. A zero-valued `fwmark` selector could also match ordinary unmarked traffic, causing the bypass rule to capture traffic that should enter the TUN table. The mark must be non-zero, fit its non-zero mask, and have a higher-priority bypass rule than the unmarked proxy rule.
