@@ -264,3 +264,6 @@ Readiness now rejects wildcard, LAN, and other non-loopback listener addresses. 
 ### Non-zero core bypass mark
 
 The routing-policy validator now rejects a zero core socket mark. A zero-valued `fwmark` selector could also match ordinary unmarked traffic, causing the bypass rule to capture traffic that should enter the TUN table. The mark must be non-zero, fit its non-zero mask, and have a higher-priority bypass rule than the unmarked proxy rule.
+
+
+- **Cleanup race hardening:** the supervisor now treats a resource that changes between the read-only preflight and atomic compare-and-delete as a cleanup conflict. It retains the CleanupPending manifest and never reports cleanup complete when any resource deletion conflicts. A fake backend test injects this race and verifies the foreign replacement survives.
