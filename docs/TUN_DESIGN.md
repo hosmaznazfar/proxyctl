@@ -267,3 +267,6 @@ The routing-policy validator now rejects a zero core socket mark. A zero-valued 
 
 
 - **Cleanup race hardening:** the supervisor now treats a resource that changes between the read-only preflight and atomic compare-and-delete as a cleanup conflict. It retains the CleanupPending manifest and never reports cleanup complete when any resource deletion conflicts. A fake backend test injects this race and verifies the foreign replacement survives.
+
+
+- Readiness listener validation now requires both a loopback IP and a non-zero bound port. A configured-but-not-bound ephemeral port cannot be used as evidence that the core listener is ready.
