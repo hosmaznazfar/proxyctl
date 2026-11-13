@@ -129,6 +129,24 @@ fn family_args(family: AddressFamily) -> &'static str {
     }
 }
 
+fn rule_add(rule: &PlannedRule) -> IpCommand {
+    let mut arguments = vec![
+        family_args(rule.family).to_owned(),
+        "rule".into(),
+        "add".into(),
+        "priority".into(),
+        rule.priority.to_string(),
+    ];
+    if let Some(mark) = rule.mark {
+        arguments.extend([
+            "fwmark".into(),
+            format!("{:#x}/{:#x}", mark.value, mark.mask),
+        ]);
+    }
+    arguments.extend(["lookup".into(), rule.lookup_table.to_string()]);
+    IpCommand { arguments }
+}
+
 fn route_add(route: &PlannedRoute) -> Result<IpCommand> {
     anyhow::ensure!(
         route.route_type == RouteType::Unicast,
