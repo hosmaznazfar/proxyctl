@@ -243,7 +243,7 @@ mod tests {
         assert!(value.validate().is_err());
 
         let mut value = manifest();
-        value.resources[0].fingerprint = "fingerprint\\nforged".into();
+        value.resources[0].fingerprint = "fingerprint\nforged".into();
         assert!(value.validate().is_err());
 
         let mut value = manifest();
