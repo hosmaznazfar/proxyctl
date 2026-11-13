@@ -38,8 +38,15 @@ impl ProcessIdentity {
         ensure!(self.pid > 0, "process ID must be non-zero");
         ensure!(self.start_ticks > 0, "process start time must be non-zero");
         ensure!(
-            self.executable.is_absolute(),
-            "process executable identity must be an absolute path"
+            self.executable.is_absolute()
+                && self.executable.file_name().is_some()
+                && self.executable.components().all(|component| {
+                    !matches!(
+                        component,
+                        std::path::Component::CurDir | std::path::Component::ParentDir
+                    )
+                }),
+            "process executable identity must be a normalized absolute file path"
         );
         Ok(())
     }
@@ -236,6 +243,18 @@ mod tests {
         handle.signal(libc::SIGTERM).unwrap();
         assert!(handle.wait_exit(Duration::from_secs(2)).unwrap());
         child.wait().unwrap();
+    }
+
+    #[test]
+    fn rejects_non_normalized_executable_identity_paths() {
+        for executable in [PathBuf::from("/bin/../bin/sleep"), PathBuf::from("/bin/")] {
+            let identity = ProcessIdentity {
+                pid: 1,
+                start_ticks: 1,
+                executable,
+            };
+            assert!(identity.validate().is_err());
+        }
     }
 
     #[test]
