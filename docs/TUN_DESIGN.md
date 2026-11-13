@@ -244,3 +244,8 @@ route or rule is installed by this code.
 ### Interface deletion must be identity-bound
 
 The offline kernel command planner does not emit `ip link delete dev NAME`. Interface removal is represented separately by an `InterfaceDeleteGuard` containing the manifest interface name and non-zero kernel ifindex. A production backend must re-read the link and atomically verify both values (and TUN kind / ownership metadata where available) at the mutation boundary before deleting it. A stale name, reused ifindex, or changed interface is a cleanup conflict; it must be preserved and the manifest retained. Route and rule command previews are also not authorization to delete: each requires full manifest fingerprint comparison immediately before mutation. This change is planner/test groundwork only; no rtnetlink mutation or privileged command execution exists.
+
+
+### Typed cleanup identities (no destructive command previews)
+
+The kernel planner now represents route/rule teardown as typed resource identities in reverse creation order rather than emitting `ip route del` or `ip rule del` strings. Each production deletion must resolve the exact live resource, compare its complete canonical fingerprint with the persisted manifest, and perform an atomic compare-and-delete. The interface remains a separate name+ifindex guard. These typed targets are not executable operations and do not authorize mutation; a concrete rtnetlink backend is still required.
