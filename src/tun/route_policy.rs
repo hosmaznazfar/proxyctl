@@ -153,8 +153,10 @@ impl RoutingPolicyPlan {
             "core bypass rule must have a non-zero priority before the proxy rule"
         );
         ensure!(
-            self.core_mark_mask != 0 && self.core_mark & !self.core_mark_mask == 0,
-            "core socket mark must fit a non-zero mark mask"
+            self.core_mark != 0
+                && self.core_mark_mask != 0
+                && self.core_mark & !self.core_mark_mask == 0,
+            "core socket mark must be non-zero and fit a non-zero mark mask"
         );
         ensure!(
             !self.interface_name.is_empty()
@@ -297,6 +299,13 @@ mod tests {
         let mut plan = sample_plan();
         plan.core_mark = 0x100;
         plan.core_mark_mask = 0xff;
+        assert!(plan.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_core_mark_that_would_match_unmarked_traffic() {
+        let mut plan = sample_plan();
+        plan.core_mark = 0;
         assert!(plan.validate().is_err());
     }
 
