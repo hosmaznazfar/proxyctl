@@ -42,6 +42,12 @@ impl RecoveryBackendKind {
             Self::Unsupported => "unsupported",
         }
     }
+
+    /// Detection identifies the init system only. No concrete service-manager
+    /// supervisor backend is implemented or activation-approved yet.
+    pub const fn is_implemented(self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +120,21 @@ mod tests {
             RecoveryBackendKind::for_manager(ServiceManager::Unknown).as_str(),
             "unsupported"
         );
+        for manager in [
+            ServiceManager::Systemd,
+            ServiceManager::OpenRc,
+            ServiceManager::Runit,
+            ServiceManager::S6,
+            ServiceManager::Dinit,
+            ServiceManager::SysVinit,
+            ServiceManager::Unknown,
+        ] {
+            let backend = RecoveryBackendKind::for_manager(manager);
+            assert!(
+                !backend.is_implemented(),
+                "detection must not be mistaken for a working recovery backend"
+            );
+        }
     }
 
     #[test]
