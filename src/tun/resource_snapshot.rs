@@ -81,12 +81,9 @@ pub fn compare_manifest(
                     &snapshot.routes,
                 )
             }
-            Ok(ResourceKey::Rule { family, priority }) if priority > 0 => compare_rule(
-                family,
-                priority,
-                &resource.fingerprint,
-                &snapshot.rules,
-            ),
+            Ok(ResourceKey::Rule { family, priority }) if priority > 0 => {
+                compare_rule(family, priority, &resource.fingerprint, &snapshot.rules)
+            }
             Ok(_) | Err(_) => SnapshotResourceState::UnsupportedIdentity,
         };
         comparison.resources.push(ResourceComparison {
@@ -126,7 +123,10 @@ fn parse_resource_key(key: &str) -> Result<ResourceKey> {
                 .next()
                 .context("route resource key has no destination")?;
             ensure!(table_id > 0, "route resource table ID must be non-zero");
-            ensure!(!destination.is_empty(), "route resource destination is empty");
+            ensure!(
+                !destination.is_empty(),
+                "route resource destination is empty"
+            );
             Ok(ResourceKey::Route {
                 family,
                 table_id,
@@ -139,7 +139,10 @@ fn parse_resource_key(key: &str) -> Result<ResourceKey> {
                 .context("rule resource key has no priority")?
                 .parse::<u32>()
                 .context("rule resource key has an invalid priority")?;
-            ensure!(fields.next().is_none(), "rule resource key has extra fields");
+            ensure!(
+                fields.next().is_none(),
+                "rule resource key has extra fields"
+            );
             Ok(ResourceKey::Rule { family, priority })
         }
         _ => anyhow::bail!("unsupported manifest resource kind"),
@@ -177,8 +180,7 @@ fn compare_route(
                     || (actual == "default"
                         && matches!(
                             (family, destination),
-                            (AddressFamily::Ipv4, "0.0.0.0/0")
-                                | (AddressFamily::Ipv6, "::/0")
+                            (AddressFamily::Ipv4, "0.0.0.0/0") | (AddressFamily::Ipv6, "::/0")
                         ))
             });
             destination_matches
@@ -227,8 +229,10 @@ mod tests {
     use crate::tun::ownership::{MANIFEST_VERSION, OwnedResource};
 
     fn fixture() -> (RouteManifest, KernelSnapshot) {
-        let ipv4_route = r#"{"dev":"tun-proxyctl","dst":"default","protocol":"static","table":42420}"#;
-        let ipv6_route = r#"{"dev":"tun-proxyctl","dst":"default","protocol":"static","table":42420}"#;
+        let ipv4_route =
+            r#"{"dev":"tun-proxyctl","dst":"default","protocol":"static","table":42420}"#;
+        let ipv6_route =
+            r#"{"dev":"tun-proxyctl","dst":"default","protocol":"static","table":42420}"#;
         let ipv4_rule = r#"{"fwmark":"0x42/0xff","priority":42410,"table":254}"#;
         let snapshot = KernelSnapshot {
             inventory: Default::default(),
@@ -294,9 +298,10 @@ mod tests {
         assert!(comparison.has_no_conflicts());
         assert_eq!(comparison.resources.len(), 3);
         assert!(
-            comparison.resources.iter().all(|resource| {
-                resource.state == SnapshotResourceState::PresentAndMatching
-            })
+            comparison
+                .resources
+                .iter()
+                .all(|resource| { resource.state == SnapshotResourceState::PresentAndMatching })
         );
     }
 
@@ -316,7 +321,8 @@ mod tests {
     #[test]
     fn changed_route_or_rule_attributes_are_conflicts() {
         let (manifest, mut snapshot) = fixture();
-        snapshot.routes[0].canonical_attributes = r#"{"dev":"eth0","dst":"default","protocol":"static","table":42420}"#.into();
+        snapshot.routes[0].canonical_attributes =
+            r#"{"dev":"eth0","dst":"default","protocol":"static","table":42420}"#.into();
         snapshot.rules[0].canonical_attributes = r#"{"priority":42410,"table":254}"#.into();
         let comparison = compare_manifest(&manifest, &snapshot).unwrap();
         assert_eq!(
