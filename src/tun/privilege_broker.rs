@@ -3,6 +3,7 @@
 //! This module deliberately does not execute sudo/doas/pkexec or perform privileged work.
 //! A candidate executable is not proof that authorization is available or safe.
 
+use crate::tun::{manifest_store::ManifestSnapshot, recovery::SupervisorPhase};
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -193,11 +194,7 @@ mod tests {
 
     #[test]
     fn request_must_match_snapshot_generation_activation_and_phase() {
-        use crate::tun::{
-            manifest_store::ManifestSnapshot,
-            ownership::{MANIFEST_VERSION, OwnedResource, RouteManifest},
-            recovery::SupervisorPhase,
-        };
+        use crate::tun::ownership::{MANIFEST_VERSION, OwnedResource, RouteManifest};
         let mut snapshot = ManifestSnapshot {
             schema_version: 1,
             generation: 4,
