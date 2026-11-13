@@ -317,9 +317,15 @@ mod tests {
         plan.proxy_priority = 200;
         assert!(plan.validate().is_err());
 
-        let mut plan = sample_plan();
-        plan.bypass_priority = RPDB_PRIORITY_MIN_PROXYCTL;
-        plan.proxy_priority = RPDB_PRIORITY_MIN_PROXYCTL + 1;
+        let plan = RoutingPolicyPlan::new(
+            42_420,
+            RPDB_PRIORITY_MIN_PROXYCTL,
+            RPDB_PRIORITY_MIN_PROXYCTL + 1,
+            0x42,
+            0xff,
+            "tun-proxyctl",
+            77,
+        );
         plan.validate().unwrap();
     }
 
