@@ -281,10 +281,14 @@ fn set_private_file(_file: &File) -> Result<()> {
 
 #[cfg(unix)]
 fn verify_private_file(metadata: &fs::Metadata) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
     ensure!(
         metadata.permissions().mode() & 0o077 == 0,
         "TUN manifest permissions are not private"
+    );
+    ensure!(
+        metadata.nlink() == 1,
+        "TUN manifest must not have external hard links"
     );
     Ok(())
 }
@@ -499,6 +503,17 @@ mod tests {
         let target = directory.path().join("outside.json");
         fs::write(&target, serde_json::to_vec(&snapshot()).unwrap()).unwrap();
         symlink(&target, store.path()).unwrap();
+        assert!(store.load().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_manifest_with_external_hard_link() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        store.write(&snapshot()).unwrap();
+        let external = directory.path().join("linked-manifest.json");
+        fs::hard_link(store.path(), external).unwrap();
         assert!(store.load().is_err());
     }
 
