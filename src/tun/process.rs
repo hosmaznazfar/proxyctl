@@ -210,8 +210,7 @@ mod tests {
     #[test]
     fn pidfd_wait_observes_only_the_pinned_child_exit() {
         let mut child = child();
-        let identity = ProcessIdentity::capture(child.id()).unwrap();
-        let handle = ProcessHandle::open(identity).unwrap();
+        let (_identity, handle) = pin_live_child(&child);
         assert!(!handle.is_exited().unwrap());
         child.kill().unwrap();
         child.wait().unwrap();
