@@ -487,3 +487,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Identity-bound interface teardown:** the offline kernel planner no longer emits a name-only TUN link deletion. It carries a separate interface cleanup guard with the manifest name and non-zero ifindex; production teardown must atomically re-check exact identity and ownership before deleting. Route/rule command previews likewise require full fingerprint comparison at mutation time. No kernel mutation is implemented and TUN remains disabled.
+
+
+- **Typed cleanup planning:** route and policy-rule teardown is now represented as typed exact identities in reverse creation order, not raw destructive iproute2 command strings. A future backend must perform full fingerprint comparison and atomic compare-and-delete for each resource; interface deletion separately requires exact name+ifindex verification. Offline only; TUN remains disabled.
