@@ -493,3 +493,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Recovery backend capability gate:** detecting systemd/OpenRC/runit/s6/dinit/SysVinit is now explicitly separate from having an implemented supervisor backend. Every current backend reports not implemented; TUN activation must refuse all of them until concrete lifecycle integration and fault-injection validation are complete.
+
+
+- **Loopback readiness enforcement:** dataplane readiness now accepts only IPv4/IPv6 loopback listener addresses and rejects wildcard or LAN exposure. This is an offline evidence check; live listener probing is still outstanding.
