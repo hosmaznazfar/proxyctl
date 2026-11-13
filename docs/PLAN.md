@@ -484,3 +484,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Two-phase TUN interface identity gate:** offline preflight now rejects occupied interface names/indices and routing-policy collisions. A post-creation verifier requires the exact kernel-assigned interface name, ifindex, and TUN kind before route installation. No kernel operation is executed; the activation gate remains closed.
+
+
+- **Identity-bound interface teardown:** the offline kernel planner no longer emits a name-only TUN link deletion. It carries a separate interface cleanup guard with the manifest name and non-zero ifindex; production teardown must atomically re-check exact identity and ownership before deleting. Route/rule command previews likewise require full fingerprint comparison at mutation time. No kernel mutation is implemented and TUN remains disabled.
