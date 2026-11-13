@@ -270,3 +270,18 @@ The routing-policy validator now rejects a zero core socket mark. A zero-valued 
 
 
 - Readiness listener validation now requires both a loopback IP and a non-zero bound port. A configured-but-not-bound ephemeral port cannot be used as evidence that the core listener is ready.
+
+
+## Offline hardening batch (seven increments)
+
+The latest offline hardening increments add the following fail-closed checks:
+
+1. Readiness requires a loopback listener with a non-zero bound port; a wildcard, LAN, or unbound port is not readiness evidence.
+2. Ownership manifests cap the number and size of resource records and reject control characters in keys/fingerprints.
+3. Privilege-broker requests are checked against the exact durable activation UUID, generation, and lifecycle phase. Applying is permitted only for Prepared; cleanup only for CleanupPending.
+4. Proxyctl policy-rule priorities must be in the private range (at least 10,000), while the core-bypass rule remains ordered before the proxy rule.
+5. Persisted process executable identities must be normalized absolute file paths, not paths containing dot or parent traversal components.
+6. The lifecycle lock rejects hard-linked lock files so an external alias cannot bypass the private-lock assumption.
+7. The recovery manifest rejects hard-linked files so modifying an external alias cannot silently mutate the durable ownership record.
+
+These are local validation and filesystem hardening changes with synthetic tests only. They do not add a privileged helper, kernel mutation backend, detached supervisor, or live dataplane probes. TUN activation remains disabled.
