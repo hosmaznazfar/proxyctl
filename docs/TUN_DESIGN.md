@@ -227,3 +227,15 @@ identity to become observable before exercising rejected and accepted signal
 requests. This keeps the test focused on the ownership guarantee rather than
 short-lived fixture startup timing. It does not launch a managed core or alter
 host networking.
+
+
+### Two-phase TUN interface identity gate
+
+Kernel preparation is explicitly split around the kernel-assigned interface identity.
+Before interface creation, the offline preflight rejects an occupied interface name,
+an occupied expected ifindex, or any route-table / rule-priority collision in the
+read-only snapshot. After creation, a second verifier requires exactly one interface
+with the planned name and ifindex and confirms its TUN kind before any route command
+may be considered. This prevents a stale or guessed ifindex from being used for
+route installation. These are pure validation gates; no interface is created and no
+route or rule is installed by this code.
