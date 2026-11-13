@@ -249,3 +249,8 @@ The offline kernel command planner does not emit `ip link delete dev NAME`. Inte
 ### Typed cleanup identities (no destructive command previews)
 
 The kernel planner now represents route/rule teardown as typed resource identities in reverse creation order rather than emitting `ip route del` or `ip rule del` strings. Each production deletion must resolve the exact live resource, compare its complete canonical fingerprint with the persisted manifest, and perform an atomic compare-and-delete. The interface remains a separate name+ifindex guard. These typed targets are not executable operations and do not authorize mutation; a concrete rtnetlink backend is still required.
+
+
+### Detected init manager is not a supported recovery backend
+
+Runtime detection and enum mapping identify which init system is present; they do not imply that Proxyctl can safely install, supervise, or recover a TUN service through it. The recovery backend contract now exposes an explicit implementation capability, currently false for systemd, OpenRC, runit, s6, dinit, SysVinit, and unknown managers. TUN must refuse activation until a concrete backend is implemented and passes the shared crash/reboot fault-injection suite. This prevents a detected manager from being reported as supported prematurely.
