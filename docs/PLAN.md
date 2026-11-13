@@ -475,3 +475,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Manifest/snapshot comparison:** an offline comparator now maps stable manifest route/rule keys (constrained to its dedicated default-route table) to dual-stack kernel snapshot records and checks full canonical fingerprints, including route device and rule selectors. Missing resources are idempotently absent; changed, duplicated, or unsupported identities fail closed. This snapshot is advisory only and never authorizes deletion; production still requires atomic compare-and-delete, exact interface-index verification, and durable per-resource cleanup progress.
+
+
+- **Exact interface identity snapshot:** the read-only kernel inventory now includes sysfs interface name, ifindex, and TUN-kind evidence. The manifest comparator requires both the recorded name and index to match and rejects index/name reuse or a non-TUN replacement. Missing interfaces are idempotently absent. This is advisory read-only evidence only; atomic privileged verification and mutation remain unimplemented.
