@@ -502,3 +502,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - Cleanup completion is now gated on an empty conflict list from every exact-resource deletion. If a resource changes after preflight, the supervisor retains the CleanupPending manifest for a later recovery attempt; it does not discard ownership evidence or treat a partial cleanup as success.
+
+
+- Seven offline hardening increments were added: readiness rejects port zero; manifest resource counts/strings are bounded; broker requests must match the exact manifest generation and valid lifecycle phase; policy-rule priorities use a private range; process executable paths must be normalized; lifecycle lock and manifest files reject external hard links. Synthetic tests cover each guard. No privileged or live network behavior was added; TUN activation remains disabled.
