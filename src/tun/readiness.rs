@@ -126,7 +126,12 @@ mod tests {
 
     #[test]
     fn rejects_wildcard_and_non_loopback_proxy_listeners() {
-        for address in ["0.0.0.0:1080", "192.0.2.10:1080", "[::]:1080", "127.0.0.1:0"] {
+        for address in [
+            "0.0.0.0:1080",
+            "192.0.2.10:1080",
+            "[::]:1080",
+            "127.0.0.1:0",
+        ] {
             let mut evidence = healthy();
             evidence.local_listener = Some(address.parse().unwrap());
             assert!(

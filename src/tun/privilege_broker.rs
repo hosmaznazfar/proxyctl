@@ -142,7 +142,9 @@ impl BrokerRequest {
         match (self.action, snapshot.phase) {
             (BrokerAction::ApplyPreparedManifest, SupervisorPhase::Prepared)
             | (BrokerAction::CleanupManifest, SupervisorPhase::CleanupPending) => Ok(()),
-            _ => anyhow::bail!("privilege-broker action is invalid for the manifest lifecycle phase"),
+            _ => {
+                anyhow::bail!("privilege-broker action is invalid for the manifest lifecycle phase")
+            }
         }
     }
 }
