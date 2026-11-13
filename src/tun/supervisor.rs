@@ -184,7 +184,8 @@ mod tests {
 
         fn remove_if_matches(&mut self, key: &str, expected: &str) -> Result<ResourceState> {
             if self.change_on_remove {
-                self.resources.insert(key.to_owned(), "foreign-after-preflight".into());
+                self.resources
+                    .insert(key.to_owned(), "foreign-after-preflight".into());
                 self.change_on_remove = false;
                 return Ok(ResourceState::ChangedOrForeign);
             }
@@ -346,7 +347,10 @@ mod tests {
         let current = coordinator.load_current().unwrap().unwrap();
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
         assert_eq!(
-            backend.resources.get("route:v4-default").map(String::as_str),
+            backend
+                .resources
+                .get("route:v4-default")
+                .map(String::as_str),
             Some("foreign-after-preflight")
         );
     }
