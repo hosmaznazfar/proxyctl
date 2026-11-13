@@ -239,3 +239,8 @@ with the planned name and ifindex and confirms its TUN kind before any route com
 may be considered. This prevents a stale or guessed ifindex from being used for
 route installation. These are pure validation gates; no interface is created and no
 route or rule is installed by this code.
+
+
+### Interface deletion must be identity-bound
+
+The offline kernel command planner does not emit `ip link delete dev NAME`. Interface removal is represented separately by an `InterfaceDeleteGuard` containing the manifest interface name and non-zero kernel ifindex. A production backend must re-read the link and atomically verify both values (and TUN kind / ownership metadata where available) at the mutation boundary before deleting it. A stale name, reused ifindex, or changed interface is a cleanup conflict; it must be preserved and the manifest retained. Route and rule command previews are also not authorization to delete: each requires full manifest fingerprint comparison immediately before mutation. This change is planner/test groundwork only; no rtnetlink mutation or privileged command execution exists.
