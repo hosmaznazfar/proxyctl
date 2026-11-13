@@ -39,9 +39,12 @@ pub fn verify_readiness(
         evidence.core_process_verified,
         "TUN core process identity is not verified"
     );
+    let listener = evidence
+        .local_listener
+        .ok_or_else(|| anyhow::anyhow!("TUN core local proxy listener is not ready"))?;
     ensure!(
-        evidence.local_listener.is_some(),
-        "TUN core local proxy listener is not ready"
+        listener.ip().is_loopback(),
+        "TUN core proxy listener is not restricted to loopback"
     );
     let interface = evidence
         .tun_interface
@@ -119,6 +122,21 @@ mod tests {
         evidence.physical_egress_bypass_verified = true;
         evidence.proxied_traffic_verified = false;
         assert!(verify_readiness(&expected(), &evidence).is_err());
+    }
+
+    #[test]
+    fn rejects_wildcard_and_non_loopback_proxy_listeners() {
+        for address in ["0.0.0.0:1080", "192.0.2.10:1080", "[::]:1080"] {
+            let mut evidence = healthy();
+            evidence.local_listener = Some(address.parse().unwrap());
+            assert!(
+                verify_readiness(&expected(), &evidence).is_err(),
+                "accepted non-loopback listener {address}"
+            );
+        }
+        let mut evidence = healthy();
+        evidence.local_listener = Some("[::1]:1080".parse().unwrap());
+        verify_readiness(&expected(), &evidence).unwrap();
     }
 
     #[test]
