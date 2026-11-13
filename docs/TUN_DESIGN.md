@@ -204,3 +204,17 @@ The loopback port reservation test asserts that the OS returned a non-zero ephem
 A new offline comparison layer maps versioned manifest keys to exact IPv4/IPv6 route and policy-rule identities in a captured kernel snapshot. Route keys are accepted only for the manifest's dedicated table and the family default destination; they identify family, table, and destination. The complete canonical route JSON is the fingerprint, so gateway, device, metric, protocol, and other attribute changes are conflicts. Default-route aliases are normalized for identity matching, and a route fingerprint must still name the manifest's exact TUN interface. Rule keys identify family and priority, while the full canonical rule JSON retains fwmark, mask, source/destination selectors, lookup table, and other returned attributes.
 
 A missing resource is reported as already absent; duplicate identities, changed fingerprints, and unknown key kinds fail closed. The comparison is read-only and **is not an authorization to delete**: a route or rule can change after the snapshot. The eventual privileged backend must perform an atomic compare-and-delete immediately before each mutation, then persist cleanup progress so interrupted cleanup can be retried. Interface name/index verification and link deletion remain separate exact-resource checks. No command is executed and TUN activation remains disabled.
+
+
+## Read-only interface identity snapshot
+
+The bounded Linux kernel snapshot now also inventories every interface from
+`/sys/class/net`, retaining its exact name, numeric ifindex, and whether the
+kernel exposes TUN flags. Missing or malformed ifindex data and duplicate
+indices fail the snapshot closed. The manifest comparator checks the recorded
+interface name and ifindex together and requires the interface to be a TUN
+device; a missing interface is treated as already absent, while a reused name,
+reused index, or non-TUN replacement is a conflict. This remains read-only
+evidence: it does not open the TUN device, create/delete links, or authorize
+cleanup. The privileged backend must still verify the current link identity
+atomically with each mutation.
