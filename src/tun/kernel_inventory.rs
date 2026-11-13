@@ -354,6 +354,40 @@ mod tests {
     }
 
     #[test]
+    fn inventories_interface_name_index_and_tun_kind_from_sysfs() {
+        let directory = tempfile::tempdir().unwrap();
+        let ethernet = directory.path().join("eth0");
+        let tun = directory.path().join("tun-proxyctl");
+        fs::create_dir_all(&ethernet).unwrap();
+        fs::create_dir_all(&tun).unwrap();
+        fs::write(ethernet.join("ifindex"), "2\n").unwrap();
+        fs::write(tun.join("ifindex"), "77\n").unwrap();
+        fs::write(tun.join("tun_flags"), "0001").unwrap();
+
+        let interfaces = inspect_interfaces(directory.path()).unwrap();
+        assert_eq!(interfaces, [
+            KernelInterfaceRecord { name: "eth0".into(), index: 2, is_tun: false },
+            KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 77, is_tun: true },
+        ]);
+    }
+
+    #[test]
+    fn rejects_incomplete_or_duplicate_interface_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let first = directory.path().join("eth0");
+        let second = directory.path().join("eth1");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        fs::write(first.join("ifindex"), "2").unwrap();
+        fs::write(second.join("ifindex"), "2").unwrap();
+        assert!(inspect_interfaces(directory.path()).is_err());
+
+        fs::remove_dir_all(second).unwrap();
+        fs::remove_file(first.join("ifindex")).unwrap();
+        assert!(inspect_interfaces(directory.path()).is_err());
+    }
+
+    #[test]
     fn detailed_snapshot_retains_full_route_and_rule_selectors() {
         let snapshot = parse_detailed_snapshot(
             br#"[{"dst":"default","dev":"tun0","table":42420,"protocol":"static","metric":10}]"#,
