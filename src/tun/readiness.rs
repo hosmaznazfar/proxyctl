@@ -43,8 +43,8 @@ pub fn verify_readiness(
         .local_listener
         .ok_or_else(|| anyhow::anyhow!("TUN core local proxy listener is not ready"))?;
     ensure!(
-        listener.ip().is_loopback(),
-        "TUN core proxy listener is not restricted to loopback"
+        listener.ip().is_loopback() && listener.port() != 0,
+        "TUN core proxy listener must use a non-zero port bound to loopback"
     );
     let interface = evidence
         .tun_interface
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn rejects_wildcard_and_non_loopback_proxy_listeners() {
-        for address in ["0.0.0.0:1080", "192.0.2.10:1080", "[::]:1080"] {
+        for address in ["0.0.0.0:1080", "192.0.2.10:1080", "[::]:1080", "127.0.0.1:0"] {
             let mut evidence = healthy();
             evidence.local_listener = Some(address.parse().unwrap());
             assert!(
