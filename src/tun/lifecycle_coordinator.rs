@@ -1,5 +1,5 @@
 #[cfg(target_os = "linux")]
-use super::process::ProcessIdentity;
+use super::process::{ProcessHandle, ProcessIdentity};
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
@@ -73,7 +73,9 @@ impl LifecycleCoordinator {
     }
 
     /// Bind the exact launched core process to a prepared activation before committing startup.
-    /// The process must still match its procfs identity when the durable write is performed.
+    /// A pidfd pins the process instance throughout the durable write, preventing PID reuse from
+    /// redirecting the identity check. If the process exits after the final liveness check, the
+    /// supervisor observes that exact exit and recovers the prepared manifest.
     #[cfg(target_os = "linux")]
     pub fn bind_core_process(
         &self,
@@ -82,9 +84,10 @@ impl LifecycleCoordinator {
     ) -> Result<()> {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         process.validate()?;
+        let process_handle = ProcessHandle::open(process.clone())?;
         ensure!(
-            process.verify()?,
-            "managed core process identity is no longer live"
+            !process_handle.is_exited()?,
+            "managed core process exited before its identity could be bound"
         );
         let mut snapshot = self
             .store
@@ -98,6 +101,10 @@ impl LifecycleCoordinator {
         ensure!(
             snapshot.phase == SupervisorPhase::Prepared && snapshot.core_process.is_none(),
             "core process can only be bound once to a prepared TUN activation"
+        );
+        ensure!(
+            !process_handle.is_exited()?,
+            "managed core process exited before its identity could be persisted"
         );
         snapshot.core_process = Some(process);
         self.store.write(&snapshot)
@@ -273,14 +280,26 @@ mod tests {
         let token = coordinator
             .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
             .unwrap();
-        let mut child = Command::new("sleep")
-            .arg("30")
+        let mut child = Command::new("tail")
+            .args(["-f", "/dev/null"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let identity = ProcessIdentity::capture(child.id()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let identity = loop {
+            assert!(
+                Instant::now() < deadline,
+                "fake child did not remain available long enough to capture its identity"
+            );
+            if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && identity.verify().unwrap_or(false)
+            {
+                break identity;
+            }
+            thread::sleep(Duration::from_millis(5));
+        };
         coordinator
             .bind_core_process(&token, identity.clone())
             .unwrap();
