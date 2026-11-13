@@ -218,3 +218,12 @@ reused index, or non-TUN replacement is a conflict. This remains read-only
 evidence: it does not open the TUN device, create/delete links, or authorize
 cleanup. The privileged backend must still verify the current link identity
 atomically with each mutation.
+
+
+### Process-identity test stability
+
+The activation pidfd test uses a persistent fake child and waits for its
+identity to become observable before exercising rejected and accepted signal
+requests. This keeps the test focused on the ownership guarantee rather than
+short-lived fixture startup timing. It does not launch a managed core or alter
+host networking.
