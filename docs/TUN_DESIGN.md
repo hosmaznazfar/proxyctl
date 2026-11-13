@@ -254,3 +254,8 @@ The kernel planner now represents route/rule teardown as typed resource identiti
 ### Detected init manager is not a supported recovery backend
 
 Runtime detection and enum mapping identify which init system is present; they do not imply that Proxyctl can safely install, supervise, or recover a TUN service through it. The recovery backend contract now exposes an explicit implementation capability, currently false for systemd, OpenRC, runit, s6, dinit, SysVinit, and unknown managers. TUN must refuse activation until a concrete backend is implemented and passes the shared crash/reboot fault-injection suite. This prevents a detected manager from being reported as supported prematurely.
+
+
+### Loopback-only readiness gate
+
+Readiness now rejects wildcard, LAN, and other non-loopback listener addresses. Both IPv4 and IPv6 loopback are accepted. This makes the readiness contract enforce the same local-only exposure policy as ordinary Proxyctl activation; a listening socket on a non-loopback address can never satisfy the TUN readiness gate.
