@@ -490,3 +490,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Typed cleanup planning:** route and policy-rule teardown is now represented as typed exact identities in reverse creation order, not raw destructive iproute2 command strings. A future backend must perform full fingerprint comparison and atomic compare-and-delete for each resource; interface deletion separately requires exact name+ifindex verification. Offline only; TUN remains disabled.
+
+
+- **Recovery backend capability gate:** detecting systemd/OpenRC/runit/s6/dinit/SysVinit is now explicitly separate from having an implemented supervisor backend. Every current backend reports not implemented; TUN activation must refuse all of them until concrete lifecycle integration and fault-injection validation are complete.
