@@ -9,7 +9,7 @@ use anyhow::Result;
 use super::{
     kernel_inventory::{KernelInterfaceRecord, KernelSnapshot},
     route_policy::{
-        AddressFamily, PlannedRoute, PlannedRule, RouteType, RoutingPolicyPlan, RulePurpose,
+        AddressFamily, PlannedRoute, PlannedRule, RouteType, RoutingPolicyPlan,
     },
 };
 
