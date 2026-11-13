@@ -508,3 +508,5 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - Core-process manifest binding now retains a pidfd across the durable write and checks the pinned process for exit immediately before persistence. The lifecycle fixture uses a persistent fake child with bounded procfs readiness retries, avoiding parallel-test startup races without weakening production identity checks. This remains offline groundwork; TUN activation is disabled.
+
+- **Offline TUN transaction orchestration:** added a typed transaction sequence for interface creation, dual-stack route installation, and policy-rule installation. The backend contract requires durable per-operation ownership journaling and atomic fingerprint-checked deletion. Failure rolls back recorded resources in reverse order; incomplete rollback retains the recovery journal. Fake-backend tests cover ordering, invalid requests, successful manifest construction, partial-apply rollback, rollback failure, and unexpected interface identity. This is orchestration only: no production kernel mutator or privilege broker is connected, and TUN activation remains disabled.
