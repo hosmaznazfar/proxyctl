@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 
 use super::{
-    kernel_inventory::{KernelRouteRecord, KernelRuleRecord, KernelSnapshot},
+    kernel_inventory::{KernelInterfaceRecord, KernelRouteRecord, KernelRuleRecord, KernelSnapshot},
     ownership::RouteManifest,
     route_policy::AddressFamily,
 };
@@ -29,6 +29,7 @@ pub struct ResourceComparison {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SnapshotComparison {
     pub resources: Vec<ResourceComparison>,
+    pub interface_state: Option<SnapshotResourceState>,
 }
 
 impl SnapshotComparison {
@@ -37,7 +38,8 @@ impl SnapshotComparison {
     /// This is not permission to delete: callers must re-check atomically in the
     /// privileged backend immediately before each mutation.
     pub fn has_no_conflicts(&self) -> bool {
-        self.resources.iter().all(|resource| {
+        self.interface_state.is_none_or(|state| matches!(state, SnapshotResourceState::PresentAndMatching | SnapshotResourceState::Absent))
+            && self.resources.iter().all(|resource| {
             matches!(
                 resource.state,
                 SnapshotResourceState::PresentAndMatching | SnapshotResourceState::Absent
@@ -63,7 +65,14 @@ pub fn compare_manifest(
     snapshot: &KernelSnapshot,
 ) -> Result<SnapshotComparison> {
     manifest.validate()?;
-    let mut comparison = SnapshotComparison::default();
+    let mut comparison = SnapshotComparison {
+        interface_state: Some(compare_interface(
+            &manifest.interface_name,
+            manifest.interface_index,
+            &snapshot.interfaces,
+        )),
+        ..SnapshotComparison::default()
+    };
 
     for resource in &manifest.resources {
         let state = match parse_resource_key(&resource.key) {
@@ -93,6 +102,23 @@ pub fn compare_manifest(
     }
 
     Ok(comparison)
+}
+
+fn compare_interface(
+    expected_name: &str,
+    expected_index: u32,
+    interfaces: &[KernelInterfaceRecord],
+) -> SnapshotResourceState {
+    let by_name = interfaces.iter().filter(|item| item.name == expected_name).collect::<Vec<_>>();
+    let by_index = interfaces.iter().filter(|item| item.index == expected_index).collect::<Vec<_>>();
+    match (by_name.as_slice(), by_index.as_slice()) {
+        ([], []) => SnapshotResourceState::Absent,
+        ([interface], [same])
+            if interface.name == same.name
+                && interface.index == expected_index
+                && interface.is_tun => SnapshotResourceState::PresentAndMatching,
+        _ => SnapshotResourceState::ChangedOrAmbiguous,
+    }
 }
 
 enum ResourceKey {
@@ -248,6 +274,11 @@ mod tests {
                     canonical_attributes: ipv6_route.into(),
                 },
             ],
+            interfaces: vec![KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                is_tun: true,
+            }],
             rules: vec![
                 KernelRuleRecord {
                     family: AddressFamily::Ipv4,
@@ -368,6 +399,28 @@ mod tests {
         assert_eq!(
             compare_manifest(&manifest, &snapshot).unwrap().resources[0].state,
             SnapshotResourceState::UnsupportedIdentity
+        );
+    }
+
+    #[test]
+    fn interface_name_index_and_tun_kind_must_match_exactly() {
+        let (manifest, mut snapshot) = fixture();
+        assert_eq!(
+            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            Some(SnapshotResourceState::PresentAndMatching)
+        );
+
+        snapshot.interfaces[0].index = 78;
+        assert_eq!(
+            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            Some(SnapshotResourceState::ChangedOrAmbiguous)
+        );
+
+        snapshot.interfaces[0].index = 77;
+        snapshot.interfaces[0].is_tun = false;
+        assert_eq!(
+            compare_manifest(&manifest, &snapshot).unwrap().interface_state,
+            Some(SnapshotResourceState::ChangedOrAmbiguous)
         );
     }
 
