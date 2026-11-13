@@ -478,3 +478,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Exact interface identity snapshot:** the read-only kernel inventory now includes sysfs interface name, ifindex, and TUN-kind evidence. The manifest comparator requires both the recorded name and index to match and rejects index/name reuse or a non-TUN replacement. Missing interfaces are idempotently absent. This is advisory read-only evidence only; atomic privileged verification and mutation remain unimplemented.
+
+
+- Stabilized the activation pidfd signal test with a persistent fake child and bounded identity readiness before testing that a mismatched identity cannot be signalled. No live process or networking behavior is exercised.
