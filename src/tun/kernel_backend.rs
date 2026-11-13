@@ -55,13 +55,18 @@ impl InterfaceDeleteGuard {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CleanupTarget {
+    Rule(PlannedRule),
+    Route(PlannedRoute),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KernelCommandPlan {
     pub apply: Vec<IpCommand>,
-    /// Route/rule argument previews only; a privileged backend must compare full
-    /// fingerprints immediately before each deletion.
-    pub cleanup: Vec<IpCommand>,
-    /// Interface removal is intentionally separate from iproute2 name-only commands.
-    /// A future backend must atomically verify both name and ifindex before deletion.
+    /// Typed cleanup identities in reverse creation order. No destructive command
+    /// strings are emitted; a privileged backend must compare full fingerprints first.
+    pub cleanup: Vec<CleanupTarget>,
+    /// Interface removal is separate and requires an atomic name+ifindex ownership check.
     pub interface_cleanup: InterfaceDeleteGuard,
 }
 
@@ -92,12 +97,16 @@ impl KernelCommandPlan {
             apply.push(rule_add(rule));
         }
 
-        let mut cleanup = Vec::with_capacity(apply.len());
+        let mut cleanup = Vec::with_capacity(policy.rules.len() + policy.routes.len());
         for rule in policy.rules.iter().rev() {
-            cleanup.push(rule_delete(rule));
+            cleanup.push(CleanupTarget::Rule(rule.clone()));
         }
         for route in policy.routes.iter().rev() {
-            cleanup.push(route_delete(route)?);
+            anyhow::ensure!(
+                route.route_type == RouteType::Unicast,
+                "only unicast routes may be planned"
+            );
+            cleanup.push(CleanupTarget::Route(route.clone()));
         }
         let interface_cleanup = InterfaceDeleteGuard {
             interface_name: policy.interface_name.clone(),
@@ -135,61 +144,6 @@ fn route_add(route: &PlannedRoute) -> Result<IpCommand> {
         "table".into(),
         route.table_id.to_string(),
     ]))
-}
-
-fn route_delete(route: &PlannedRoute) -> Result<IpCommand> {
-    anyhow::ensure!(
-        route.route_type == RouteType::Unicast,
-        "only unicast routes may be planned"
-    );
-    Ok(IpCommand::new(vec![
-        family_args(route.family).into(),
-        "route".into(),
-        "del".into(),
-        route.destination.clone(),
-        "dev".into(),
-        route.interface_name.clone(),
-        "table".into(),
-        route.table_id.to_string(),
-    ]))
-}
-
-fn rule_add(rule: &PlannedRule) -> IpCommand {
-    let mut args = vec![
-        family_args(rule.family).to_owned(),
-        "rule".into(),
-        "add".into(),
-        "priority".into(),
-        rule.priority.to_string(),
-    ];
-    if let Some(mark) = rule.mark {
-        args.extend([
-            "fwmark".into(),
-            format!("{:#x}/{:#x}", mark.value, mark.mask),
-        ]);
-    } else {
-        debug_assert_eq!(rule.purpose, RulePurpose::ProxyTraffic);
-    }
-    args.extend(["lookup".into(), rule.lookup_table.to_string()]);
-    IpCommand { arguments: args }
-}
-
-fn rule_delete(rule: &PlannedRule) -> IpCommand {
-    let mut args = vec![
-        family_args(rule.family).to_owned(),
-        "rule".into(),
-        "del".into(),
-        "priority".into(),
-        rule.priority.to_string(),
-    ];
-    if let Some(mark) = rule.mark {
-        args.extend([
-            "fwmark".into(),
-            format!("{:#x}/{:#x}", mark.value, mark.mask),
-        ]);
-    }
-    args.extend(["lookup".into(), rule.lookup_table.to_string()]);
-    IpCommand { arguments: args }
 }
 
 /// Validate that a planned TUN interface name and the expected ifindex are both free
@@ -386,20 +340,16 @@ mod tests {
     #[test]
     fn cleanup_is_exact_reverse_order_of_resource_creation() {
         let plan = KernelCommandPlan::from_policy(&policy(), 1000, 1000).unwrap();
-        // Route/rule cleanup previews are separate from interface deletion.
-        // The latter requires an atomic name+ifindex check in a future rtnetlink backend.
+        // Cleanup is represented as typed identities, never destructive CLI strings.
+        // The backend must compare each live fingerprint before removing it.
         assert_eq!(plan.apply.len(), 8);
         assert_eq!(plan.cleanup.len(), 6);
-        assert!(
-            plan.cleanup[..4]
-                .iter()
-                .all(|command| command.arguments[1..3] == ["rule", "del"])
-        );
-        assert!(
-            plan.cleanup[4..6]
-                .iter()
-                .all(|command| command.arguments[1..3] == ["route", "del"])
-        );
+        assert!(plan.cleanup[..4]
+            .iter()
+            .all(|target| matches!(target, CleanupTarget::Rule(_))));
+        assert!(plan.cleanup[4..]
+            .iter()
+            .all(|target| matches!(target, CleanupTarget::Route(_))));
         assert_eq!(
             plan.interface_cleanup,
             InterfaceDeleteGuard {
@@ -408,11 +358,12 @@ mod tests {
             }
         );
         plan.interface_cleanup.validate().unwrap();
-        assert!(
-            plan.cleanup
-                .iter()
-                .all(|command| command.arguments.get(1).is_none_or(|arg| arg != "link"))
-        );
+        assert!(plan.cleanup.iter().all(|target| match target {
+            CleanupTarget::Rule(rule) => rule.priority > 0,
+            CleanupTarget::Route(route) => {
+                route.interface_name == "tun-proxyctl" && route.interface_index == 77
+            }
+        }));
     }
 
     #[test]
