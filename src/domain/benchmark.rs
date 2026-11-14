@@ -50,6 +50,7 @@ pub enum BenchmarkSampleStatus {
     Invalid,
     Timeout,
     Unavailable,
+    Skipped,
     Cancelled,
 }
 
