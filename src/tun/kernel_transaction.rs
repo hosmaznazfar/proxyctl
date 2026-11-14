@@ -81,17 +81,9 @@ pub trait KernelTransactionBackend {
         gid: u32,
     ) -> Result<KernelInterfaceRecord>;
 
-    fn add_owned_route(
-        &mut self,
-        activation_id: &str,
-        route: &PlannedRoute,
-    ) -> Result<String>;
+    fn add_owned_route(&mut self, activation_id: &str, route: &PlannedRoute) -> Result<String>;
 
-    fn add_owned_rule(
-        &mut self,
-        activation_id: &str,
-        rule: &PlannedRule,
-    ) -> Result<String>;
+    fn add_owned_rule(&mut self, activation_id: &str, rule: &PlannedRule) -> Result<String>;
 
     fn remove_resource_if_matches(
         &mut self,
@@ -146,9 +138,9 @@ pub fn apply<B: KernelTransactionBackend>(
         || interface.index != policy.interface_index
         || !interface.is_tun
     {
-        backend
-            .retain_recovery_journal(activation_id)
-            .context("kernel returned an unexpected interface and recovery journal could not be retained")?;
+        backend.retain_recovery_journal(activation_id).context(
+            "kernel returned an unexpected interface and recovery journal could not be retained",
+        )?;
         anyhow::bail!(
             "kernel returned an unexpected TUN interface identity; recovery journal retained"
         );
@@ -188,10 +180,12 @@ pub fn apply<B: KernelTransactionBackend>(
 
     if let Err(error) = apply_result {
         if invalid_fingerprint {
-            backend
-                .retain_recovery_journal(activation_id)
-                .context("empty resource fingerprint detected and recovery journal could not be retained")?;
-            return Err(error).context("kernel backend violated the fingerprint contract; recovery journal retained");
+            backend.retain_recovery_journal(activation_id).context(
+                "empty resource fingerprint detected and recovery journal could not be retained",
+            )?;
+            return Err(error).context(
+                "kernel backend violated the fingerprint contract; recovery journal retained",
+            );
         }
         let rollback = rollback(
             activation_id,
@@ -202,7 +196,9 @@ pub fn apply<B: KernelTransactionBackend>(
         );
         if rollback.is_err() {
             let _ = backend.retain_recovery_journal(activation_id);
-            return Err(error).context("kernel transaction failed and rollback is incomplete; recovery journal retained");
+            return Err(error).context(
+                "kernel transaction failed and rollback is incomplete; recovery journal retained",
+            );
         }
         backend
             .finish_transaction(activation_id)
@@ -244,7 +240,10 @@ fn rollback<B: KernelTransactionBackend>(
         )? {
             ResourceState::Removed | ResourceState::AlreadyAbsent => {}
             ResourceState::ChangedOrForeign => {
-                anyhow::bail!("rollback found a changed or foreign resource: {}", resource.key)
+                anyhow::bail!(
+                    "rollback found a changed or foreign resource: {}",
+                    resource.key
+                )
             }
         }
     }
@@ -293,65 +292,110 @@ mod tests {
     }
 
     impl KernelTransactionBackend for FakeBackend {
-        fn create_owned_interface(&mut self, _id: &str, name: &str, _uid: u32, _gid: u32) -> Result<KernelInterfaceRecord> {
-            let interface = KernelInterfaceRecord { name: name.into(), index: 77, is_tun: true };
+        fn create_owned_interface(
+            &mut self,
+            _id: &str,
+            name: &str,
+            _uid: u32,
+            _gid: u32,
+        ) -> Result<KernelInterfaceRecord> {
+            let interface = KernelInterfaceRecord {
+                name: name.into(),
+                index: 77,
+                is_tun: true,
+            };
             self.interface = Some(interface.clone());
             Ok(interface)
         }
 
         fn add_owned_route(&mut self, _id: &str, route: &PlannedRoute) -> Result<String> {
             self.add_count += 1;
-            if self.fail_add_at == Some(self.add_count) { anyhow::bail!("injected route failure"); }
+            if self.fail_add_at == Some(self.add_count) {
+                anyhow::bail!("injected route failure");
+            }
             let key = route_key(route);
             let fingerprint = format!("fp:{key}");
             self.resources.insert(key, fingerprint.clone());
-            if self.empty_fingerprint_at == Some(self.add_count) { return Ok(String::new()); }
+            if self.empty_fingerprint_at == Some(self.add_count) {
+                return Ok(String::new());
+            }
             Ok(fingerprint)
         }
 
         fn add_owned_rule(&mut self, _id: &str, rule: &PlannedRule) -> Result<String> {
             self.add_count += 1;
-            if self.fail_add_at == Some(self.add_count) { anyhow::bail!("injected rule failure"); }
+            if self.fail_add_at == Some(self.add_count) {
+                anyhow::bail!("injected rule failure");
+            }
             let key = rule_key(rule);
             let fingerprint = format!("fp:{key}");
             self.resources.insert(key, fingerprint.clone());
-            if self.empty_fingerprint_at == Some(self.add_count) { return Ok(String::new()); }
+            if self.empty_fingerprint_at == Some(self.add_count) {
+                return Ok(String::new());
+            }
             Ok(fingerprint)
         }
 
-        fn remove_resource_if_matches(&mut self, _id: &str, key: &str, fp: &str) -> Result<ResourceState> {
-            if self.fail_remove { anyhow::bail!("injected rollback failure"); }
+        fn remove_resource_if_matches(
+            &mut self,
+            _id: &str,
+            key: &str,
+            fp: &str,
+        ) -> Result<ResourceState> {
+            if self.fail_remove {
+                anyhow::bail!("injected rollback failure");
+            }
             if self.foreign_on_remove.as_deref() == Some(key) {
-                self.resources.insert(key.to_owned(), "foreign-replacement".into());
+                self.resources
+                    .insert(key.to_owned(), "foreign-replacement".into());
                 self.foreign_on_remove = None;
                 return Ok(ResourceState::ChangedOrForeign);
             }
             match self.resources.get(key) {
                 None => Ok(ResourceState::AlreadyAbsent),
-                Some(current) if current == fp => { self.resources.remove(key); Ok(ResourceState::Removed) }
-                Some(_) => Ok(ResourceState::ChangedOrForeign),
-            }
-        }
-
-        fn remove_interface_if_matches(&mut self, _id: &str, name: &str, index: u32) -> Result<ResourceState> {
-            if self.fail_remove { anyhow::bail!("injected interface rollback failure"); }
-            match &self.interface {
-                None => Ok(ResourceState::AlreadyAbsent),
-                Some(item) if item.name == name && item.index == index && item.is_tun => {
-                    self.interface = None; Ok(ResourceState::Removed)
+                Some(current) if current == fp => {
+                    self.resources.remove(key);
+                    Ok(ResourceState::Removed)
                 }
                 Some(_) => Ok(ResourceState::ChangedOrForeign),
             }
         }
 
-        fn retain_recovery_journal(&mut self, _id: &str) -> Result<()> { self.journal_retained = true; Ok(()) }
+        fn remove_interface_if_matches(
+            &mut self,
+            _id: &str,
+            name: &str,
+            index: u32,
+        ) -> Result<ResourceState> {
+            if self.fail_remove {
+                anyhow::bail!("injected interface rollback failure");
+            }
+            match &self.interface {
+                None => Ok(ResourceState::AlreadyAbsent),
+                Some(item) if item.name == name && item.index == index && item.is_tun => {
+                    self.interface = None;
+                    Ok(ResourceState::Removed)
+                }
+                Some(_) => Ok(ResourceState::ChangedOrForeign),
+            }
+        }
+
+        fn retain_recovery_journal(&mut self, _id: &str) -> Result<()> {
+            self.journal_retained = true;
+            Ok(())
+        }
         fn commit_manifest(&mut self, manifest: &RouteManifest) -> Result<()> {
-            if self.fail_commit { anyhow::bail!("injected manifest commit failure"); }
+            if self.fail_commit {
+                anyhow::bail!("injected manifest commit failure");
+            }
             self.committed = Some(manifest.clone());
             Ok(())
         }
 
-        fn finish_transaction(&mut self, _id: &str) -> Result<()> { self.finalized = true; Ok(()) }
+        fn finish_transaction(&mut self, _id: &str) -> Result<()> {
+            self.finalized = true;
+            Ok(())
+        }
     }
 
     fn transaction() -> KernelTransaction {
@@ -367,9 +411,20 @@ mod tests {
     fn emits_fixed_dual_stack_steps_with_interface_first() {
         let steps = transaction().steps().unwrap();
         assert_eq!(steps.len(), 7);
-        assert!(matches!(steps.first(), Some(ApplyStep::CreateInterface { .. })));
-        assert!(steps[1..3].iter().all(|step| matches!(step, ApplyStep::AddRoute(_))));
-        assert!(steps[3..].iter().all(|step| matches!(step, ApplyStep::AddRule(_))));
+        assert!(matches!(
+            steps.first(),
+            Some(ApplyStep::CreateInterface { .. })
+        ));
+        assert!(
+            steps[1..3]
+                .iter()
+                .all(|step| matches!(step, ApplyStep::AddRoute(_)))
+        );
+        assert!(
+            steps[3..]
+                .iter()
+                .all(|step| matches!(step, ApplyStep::AddRule(_)))
+        );
     }
 
     #[test]
@@ -397,7 +452,10 @@ mod tests {
 
     #[test]
     fn failed_apply_rolls_back_in_reverse_and_finalizes_only_after_success() {
-        let mut backend = FakeBackend { fail_add_at: Some(4), ..Default::default() };
+        let mut backend = FakeBackend {
+            fail_add_at: Some(4),
+            ..Default::default()
+        };
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.resources.is_empty());
         assert!(backend.interface.is_none());
@@ -407,7 +465,11 @@ mod tests {
 
     #[test]
     fn failed_rollback_retains_recovery_journal_and_preserves_resources() {
-        let mut backend = FakeBackend { fail_add_at: Some(3), fail_remove: true, ..Default::default() };
+        let mut backend = FakeBackend {
+            fail_add_at: Some(3),
+            fail_remove: true,
+            ..Default::default()
+        };
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
@@ -417,16 +479,26 @@ mod tests {
     #[test]
     fn rollback_conflict_preserves_foreign_resource_and_recovery_journal() {
         let key = "route:v4:42420:0.0.0.0/0".to_owned();
-        let mut backend = FakeBackend { fail_add_at: Some(4), foreign_on_remove: Some(key.clone()), ..Default::default() };
+        let mut backend = FakeBackend {
+            fail_add_at: Some(4),
+            foreign_on_remove: Some(key.clone()),
+            ..Default::default()
+        };
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
-        assert_eq!(backend.resources.get(&key).map(String::as_str), Some("foreign-replacement"));
+        assert_eq!(
+            backend.resources.get(&key).map(String::as_str),
+            Some("foreign-replacement")
+        );
     }
 
     #[test]
     fn empty_fingerprint_retains_journal_without_ambiguous_rollback() {
-        let mut backend = FakeBackend { empty_fingerprint_at: Some(1), ..Default::default() };
+        let mut backend = FakeBackend {
+            empty_fingerprint_at: Some(1),
+            ..Default::default()
+        };
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
@@ -436,7 +508,10 @@ mod tests {
 
     #[test]
     fn manifest_commit_failure_retains_journal_and_owned_resources() {
-        let mut backend = FakeBackend { fail_commit: true, ..Default::default() };
+        let mut backend = FakeBackend {
+            fail_commit: true,
+            ..Default::default()
+        };
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
@@ -449,16 +524,50 @@ mod tests {
     fn rejects_unexpected_kernel_interface_identity_and_does_not_add_routes() {
         struct WrongInterface(FakeBackend);
         impl KernelTransactionBackend for WrongInterface {
-            fn create_owned_interface(&mut self, _: &str, _: &str, _: u32, _: u32) -> Result<KernelInterfaceRecord> {
-                Ok(KernelInterfaceRecord { name: "foreign0".into(), index: 99, is_tun: true })
+            fn create_owned_interface(
+                &mut self,
+                _: &str,
+                _: &str,
+                _: u32,
+                _: u32,
+            ) -> Result<KernelInterfaceRecord> {
+                Ok(KernelInterfaceRecord {
+                    name: "foreign0".into(),
+                    index: 99,
+                    is_tun: true,
+                })
             }
-            fn add_owned_route(&mut self, id: &str, route: &PlannedRoute) -> Result<String> { self.0.add_owned_route(id, route) }
-            fn add_owned_rule(&mut self, id: &str, rule: &PlannedRule) -> Result<String> { self.0.add_owned_rule(id, rule) }
-            fn remove_resource_if_matches(&mut self, id: &str, key: &str, fp: &str) -> Result<ResourceState> { self.0.remove_resource_if_matches(id, key, fp) }
-            fn remove_interface_if_matches(&mut self, id: &str, name: &str, index: u32) -> Result<ResourceState> { self.0.remove_interface_if_matches(id, name, index) }
-            fn retain_recovery_journal(&mut self, id: &str) -> Result<()> { self.0.retain_recovery_journal(id) }
-            fn commit_manifest(&mut self, manifest: &RouteManifest) -> Result<()> { self.0.commit_manifest(manifest) }
-            fn finish_transaction(&mut self, id: &str) -> Result<()> { self.0.finish_transaction(id) }
+            fn add_owned_route(&mut self, id: &str, route: &PlannedRoute) -> Result<String> {
+                self.0.add_owned_route(id, route)
+            }
+            fn add_owned_rule(&mut self, id: &str, rule: &PlannedRule) -> Result<String> {
+                self.0.add_owned_rule(id, rule)
+            }
+            fn remove_resource_if_matches(
+                &mut self,
+                id: &str,
+                key: &str,
+                fp: &str,
+            ) -> Result<ResourceState> {
+                self.0.remove_resource_if_matches(id, key, fp)
+            }
+            fn remove_interface_if_matches(
+                &mut self,
+                id: &str,
+                name: &str,
+                index: u32,
+            ) -> Result<ResourceState> {
+                self.0.remove_interface_if_matches(id, name, index)
+            }
+            fn retain_recovery_journal(&mut self, id: &str) -> Result<()> {
+                self.0.retain_recovery_journal(id)
+            }
+            fn commit_manifest(&mut self, manifest: &RouteManifest) -> Result<()> {
+                self.0.commit_manifest(manifest)
+            }
+            fn finish_transaction(&mut self, id: &str) -> Result<()> {
+                self.0.finish_transaction(id)
+            }
         }
         let mut backend = WrongInterface(FakeBackend::default());
         assert!(apply(&transaction(), &mut backend).is_err());
