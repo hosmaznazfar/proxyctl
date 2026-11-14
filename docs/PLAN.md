@@ -1,6 +1,6 @@
 # Proxyctl — Plan and Architecture Decisions
 
-> Status: approved baseline for implementation  
+> Status: approved baseline; benchmark performance optimization is planned in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`  
 > Repository: https://github.com/hosmaznazfar/proxyctl  
 > Last updated: 2026-11-10
 
@@ -542,3 +542,12 @@ Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listene
 ## Configurable result presentation
 
 **Approved and implemented on main:** `proxyctl show` uses a persistent table profile, with compact as the default. Compact contains node, core, latency, download, and upload. Normal and Full expose progressively more context. Each profile can be customized independently using `proxyctl config display add-field` and `remove-field`; users can switch the active profile with `proxyctl config display profile`. The table renderer uses the Rust `tabled` crate. Ordinary output never includes fingerprints or credentials. `not-run`, `unavailable`, `unsupported`, and `invalid` remain distinct.
+
+
+## Benchmark performance optimization
+
+**Approved for staged implementation; not yet implemented.** The current benchmark starts one core process per node/core pair and performs samples sequentially. The optimization target is to batch compatible nodes per core while still running only one managed core process at a time. Latency probes will use bounded concurrency (initial target 3), preserve three samples and median aggregation, and follow the Throne latency reference. Download/upload will use v2rayN as the user's throughput-quality reference, but transfers remain sequential by default to avoid competing transfers distorting rates.
+
+The full plan defines adapter batch configuration, per-listener readiness, failure isolation, independent latency/throughput timeouts, cancellation, progress, run metadata, offline tests, and separately approved real-world comparison. See [Benchmark Optimization Plan](BENCHMARK_OPTIMIZATION_PLAN.md).
+
+Until implementation stages pass local verification, the existing scheduler remains authoritative. No stage may start multiple managed cores concurrently, alter system networking, enable TUN, or contact public test endpoints during automated tests.
