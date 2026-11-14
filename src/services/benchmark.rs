@@ -40,6 +40,7 @@ const MAX_PROBE_CONCURRENCY: usize = 3;
 pub struct BenchmarkOptions {
     pub all_cores: bool,
     pub node_id: Option<u64>,
+    pub node_ids: Vec<u64>,
     pub core: Option<CoreId>,
     pub settings: BenchmarkSettings,
     pub metric_selection: BenchmarkMetricSelection,
@@ -78,6 +79,7 @@ impl Default for BenchmarkOptions {
         Self {
             all_cores: true,
             node_id: None,
+            node_ids: Vec::new(),
             core: None,
             settings: default_settings(),
             metric_selection: BenchmarkMetricSelection::All,
@@ -102,10 +104,20 @@ pub fn default_settings() -> BenchmarkSettings {
 
 /// Run the requested benchmark scope and persist each node/core sample batch after its core exits.
 pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow::Result<u64> {
+    let has_node_selector = options.node_id.is_some() || !options.node_ids.is_empty();
+    ensure!(
+        !(options.node_id.is_some() && !options.node_ids.is_empty()),
+        "use either node_id or node_ids, not both"
+    );
     ensure!(
         (options.all_cores && options.core.is_none())
-            || (!options.all_cores && options.node_id.is_some() && options.core.is_some()),
+            || (!options.all_cores && has_node_selector && options.core.is_some()),
         "choose --all-cores (optionally with --node), or both --node and --core"
+    );
+    ensure!(
+        options.node_ids.iter().copied().collect::<std::collections::BTreeSet<_>>().len()
+            == options.node_ids.len(),
+        "selected node IDs must be unique"
     );
     validate_settings(&options.settings)?;
     install_cancellation_handler();
@@ -198,41 +210,41 @@ fn load_scope(
     options: &BenchmarkOptions,
 ) -> anyhow::Result<(Vec<NodeRecord>, Vec<CoreId>)> {
     let database = NodeDatabase::open(database_path)?;
-    if options.all_cores {
-        let nodes = if let Some(node_id) = options.node_id {
-            let record = database
-                .get_node(node_id)?
-                .with_context(|| format!("node #{node_id} was not found"))?;
-            ensure!(
-                !record.is_deleted(),
-                "node #{node_id} is deleted; restore it before benchmarking"
-            );
-            vec![record]
-        } else {
-            database.list_nodes(false)?
-        };
-        ensure!(!nodes.is_empty(), "there are no active nodes to benchmark");
-        let cores = CoreId::ALL
+    let nodes = if !options.node_ids.is_empty() {
+        options
+            .node_ids
+            .iter()
+            .map(|node_id| {
+                database
+                    .get_node(*node_id)?
+                    .with_context(|| format!("node #{node_id} was not found"))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?
+    } else if let Some(node_id) = options.node_id {
+        vec![database
+            .get_node(node_id)?
+            .with_context(|| format!("node #{node_id} was not found"))?]
+    } else {
+        database.list_nodes(false)?
+    };
+    ensure!(!nodes.is_empty(), "there are no active nodes to benchmark");
+    ensure!(
+        nodes.iter().all(|record| !record.is_deleted()),
+        "one or more selected nodes are deleted; restore them before benchmarking"
+    );
+    let cores = if options.all_cores {
+        CoreId::ALL
             .into_iter()
             .filter(|core| core_binary_path(*core).is_ok_and(|path| path.is_file()))
-            .collect::<Vec<_>>();
-        ensure!(
-            !cores.is_empty(),
-            "no Proxyctl-managed core is installed; run proxyctl setup first"
-        );
-        Ok((nodes, cores))
+            .collect::<Vec<_>>()
     } else {
-        let node_id = options.node_id.expect("validated node selector");
-        let core = options.core.expect("validated core selector");
-        let record = database
-            .get_node(node_id)?
-            .with_context(|| format!("node #{node_id} was not found"))?;
-        ensure!(
-            !record.is_deleted(),
-            "node #{node_id} is deleted; restore it before benchmarking"
-        );
-        Ok((vec![record], vec![core]))
-    }
+        vec![options.core.expect("validated core selector")]
+    };
+    ensure!(
+        !cores.is_empty(),
+        "no Proxyctl-managed core is installed; run proxyctl setup first"
+    );
+    Ok((nodes, cores))
 }
 
 fn installed_core_versions(cores: &[CoreId]) -> BTreeMap<String, String> {
