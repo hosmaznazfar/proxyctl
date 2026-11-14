@@ -447,7 +447,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     anyhow::bail!(
                         "--core cannot be used with --sort tcp-ping because TCP ping is measured directly"
                     );
-                }                let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;                print_sorted_node_list(&ranked, metric, &display_numbers, &deleted_display_numbers);            } else {
+                }
+                let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
+                print_sorted_node_list(&ranked, metric, &display_numbers, &deleted_display_numbers);
+            } else {
                 print_node_list(&records, &display_numbers, &deleted_display_numbers);
             }
         }
@@ -892,11 +895,14 @@ fn print_node_results(
                                     if target.target == "direct" {
                                         "-".into()
                                     } else {
-                                        metric_cell(download)                                    }                                }
+                                        metric_cell(download)
+                                    }
+                                }
                                 F::Upload => {
                                     if target.target == "direct" {
                                         "-".into()
-                                    } else {                                        metric_cell(upload)
+                                    } else {
+                                        metric_cell(upload)
                                     }
                                 }
                                 F::Status => aggregate_target_status(&summaries, run.run.status),
@@ -1340,12 +1346,15 @@ fn print_sorted_node_list(
             } else {
                 "-".into()
             },
-            if record.node.is_deleted() {                format!(                    "D{}",
+            if record.node.is_deleted() {
+                format!(
+                    "D{}",
                     deleted_display_numbers
                         .get(&record.node.id)
                         .copied()
                         .unwrap_or_default()
-                )            } else {
+                )
+            } else {
                 display_numbers
                     .get(&record.node.id)
                     .copied()
@@ -1377,15 +1386,7 @@ fn print_node_details(records: &[NodeRecord], display_numbers: &HashMap<u64, usi
 
     let mut builder = Builder::default();
     builder.push_record([
-        "NODE",
-        "PROTOCOL",
-        "SERVER",
-        "PORT",
-        "NAME",
-        "STATUS",
-        "IDENTITY",
-        "SECRET",
-        "OPTIONS",
+        "NODE", "PROTOCOL", "SERVER", "PORT", "NAME", "STATUS", "IDENTITY", "SECRET", "OPTIONS",
     ]);
     for record in records {
         let node = &record.node;
@@ -1414,9 +1415,24 @@ fn print_node_details(records: &[NodeRecord], display_numbers: &HashMap<u64, usi
                 .as_deref()
                 .map(|name| safe_field(name, 200))
                 .unwrap_or_else(|| "-".to_owned()),
-            if record.is_deleted() { "deleted" } else { "active" }.to_owned(),
-            if node.identity.is_some() { "[masked]" } else { "-" }.to_owned(),
-            if node.secret.is_some() { "[masked]" } else { "-" }.to_owned(),
+            if record.is_deleted() {
+                "deleted"
+            } else {
+                "active"
+            }
+            .to_owned(),
+            if node.identity.is_some() {
+                "[masked]"
+            } else {
+                "-"
+            }
+            .to_owned(),
+            if node.secret.is_some() {
+                "[masked]"
+            } else {
+                "-"
+            }
+            .to_owned(),
             options,
         ]);
     }
