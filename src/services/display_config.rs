@@ -26,7 +26,7 @@ impl std::str::FromStr for DisplayProfile {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum DisplayField {
-    Node, Name, Server, Port, Protocol, Core, Version, Latency, Download, Upload,
+    Node, Name, Server, Port, Protocol, Core, Version, Latency, TcpPing, Download, Upload,
     Status, Samples, Failures, Run, Tested,
 }
 impl std::fmt::Display for DisplayField {
@@ -34,7 +34,7 @@ impl std::fmt::Display for DisplayField {
         write!(f, "{}", match self {
             Self::Node => "node", Self::Name => "name", Self::Server => "server", Self::Port => "port",
             Self::Protocol => "protocol", Self::Core => "core", Self::Version => "version",
-            Self::Latency => "latency", Self::Download => "download", Self::Upload => "upload",
+            Self::Latency => "latency", Self::TcpPing => "tcp-ping", Self::Download => "download", Self::Upload => "upload",
             Self::Status => "status", Self::Samples => "samples", Self::Failures => "failures",
             Self::Run => "run", Self::Tested => "tested",
         })
@@ -46,7 +46,7 @@ impl std::str::FromStr for DisplayField {
         match s.to_ascii_lowercase().replace('_', "-").as_str() {
             "node" => Ok(Self::Node), "name" => Ok(Self::Name), "server" => Ok(Self::Server),
             "port" => Ok(Self::Port), "protocol" => Ok(Self::Protocol), "core" => Ok(Self::Core),
-            "version" => Ok(Self::Version), "latency" | "ping" => Ok(Self::Latency),
+            "version" => Ok(Self::Version), "latency" | "ping" => Ok(Self::Latency), "tcp-ping" => Ok(Self::TcpPing),
             "download" => Ok(Self::Download), "upload" => Ok(Self::Upload), "status" => Ok(Self::Status),
             "samples" => Ok(Self::Samples), "failures" => Ok(Self::Failures), "run" => Ok(Self::Run),
             "tested" | "time" => Ok(Self::Tested), _ => anyhow::bail!("unknown display field '{s}'"),
@@ -63,7 +63,7 @@ impl Default for DisplayConfig {
     fn default() -> Self {
         let mut profiles = BTreeMap::new();
         profiles.insert(DisplayProfile::Compact, vec![
-            DisplayField::Node, DisplayField::Core, DisplayField::Latency,
+            DisplayField::Node, DisplayField::Core, DisplayField::Latency, DisplayField::TcpPing,
             DisplayField::Download, DisplayField::Upload,
         ]);
         profiles.insert(DisplayProfile::Normal, vec![
@@ -72,7 +72,7 @@ impl Default for DisplayConfig {
         ]);
         profiles.insert(DisplayProfile::Full, vec![
             DisplayField::Node, DisplayField::Name, DisplayField::Server, DisplayField::Port,
-            DisplayField::Protocol, DisplayField::Core, DisplayField::Version, DisplayField::Latency,
+            DisplayField::Protocol, DisplayField::Core, DisplayField::Version, DisplayField::Latency, DisplayField::TcpPing,
             DisplayField::Download, DisplayField::Upload, DisplayField::Status, DisplayField::Samples,
             DisplayField::Failures, DisplayField::Run, DisplayField::Tested,
         ]);
