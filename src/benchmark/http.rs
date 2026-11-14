@@ -85,7 +85,22 @@ pub struct BenchmarkHttpClient {
 
 impl BenchmarkHttpClient {
     pub fn new(port: u16, settings: &BenchmarkSettings) -> anyhow::Result<Self> {
+        Self::new_with_timeout(
+            port,
+            settings,
+            Duration::from_millis(settings.request_timeout_ms),
+        )
+    }
+
+    /// Build an isolated local-proxy client with a metric-specific request deadline.
+    pub fn new_with_timeout(
+        port: u16,
+        settings: &BenchmarkSettings,
+        timeout: Duration,
+    ) -> anyhow::Result<Self> {
         validate_settings(settings)?;
+        ensure!(port != 0, "benchmark proxy port must be non-zero");
+        ensure!(!timeout.is_zero(), "benchmark request timeout must be non-zero");
         let latency_url = validate_endpoint(&settings.latency_url)?;
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
@@ -94,7 +109,7 @@ impl BenchmarkHttpClient {
             Proxy::new(&proxy_url).context("could not configure the local benchmark HTTP proxy")?;
         let config = Agent::config_builder()
             .proxy(Some(proxy))
-            .timeout_global(Some(Duration::from_millis(settings.request_timeout_ms)))
+            .timeout_global(Some(timeout))
             .build();
         let agent: Agent = config.into();
         Ok(Self {
