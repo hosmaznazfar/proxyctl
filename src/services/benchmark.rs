@@ -175,7 +175,14 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
     );
     let cancelled = CANCELLED.load(Ordering::Relaxed);
     if cancelled {
-        record_cancelled_remainder(database_path, run_id, &nodes, &cores, options.metric_selection)?;
+        record_cancelled_remainder(
+            database_path,
+            run_id,
+            &nodes,
+            &cores,
+            &core_versions,
+            options.metric_selection,
+        )?;
     }
     let (status, summary) = if cancelled {
         (
@@ -218,6 +225,7 @@ fn record_cancelled_remainder(
     run_id: u64,
     nodes: &[NodeRecord],
     cores: &[CoreId],
+    core_versions: &BTreeMap<String, String>,
     selection: BenchmarkMetricSelection,
 ) -> anyhow::Result<()> {
     let existing = NodeDatabase::open(database_path)?.list_benchmark_samples(run_id)?;
@@ -258,7 +266,7 @@ fn record_cancelled_remainder(
                 run_id,
                 node_id: node.id,
                 target: core.as_str().to_owned(),
-                version: None,
+                version: core_versions.get(core.as_str()).cloned(),
             };
             for &metric in selection.metrics() {
                 if has_sample(node.id, core.as_str(), metric, 0) {
@@ -1166,6 +1174,7 @@ mod tests {
                 deleted_at: None,
             }],
             &[CoreId::SingBox],
+            &BTreeMap::new(),
             BenchmarkMetricSelection::All,
         )
         .unwrap();
