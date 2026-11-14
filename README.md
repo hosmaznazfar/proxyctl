@@ -38,13 +38,19 @@ proxyctl check 1 2 3
 
 Imported source files are read-only. Credentials are masked in normal output.
 
-### Benchmark result tables
+### Configurable benchmark result tables
 
-`proxyctl show` displays the latest benchmark results in a table. The default profile is **compact** and shows one row per node/core with node number, core, latency, download, and upload. Use `--details` only when you want the node's connection metadata; fingerprints are not part of normal result output.
+`proxyctl show` and `proxyctl report` use the same persistent table profile and column selection. `show` displays the latest results; `report` supports latest, history, and comparison views in the same table layout. The default profile is **compact** and shows one row per node/core with node number, core, latency, download, and upload. Use `--details` only when you want the node's connection metadata; fingerprints are not part of normal result output.
 
 ~~~sh
 proxyctl show 1..10
 proxyctl show 1 --details
+
+# Reports use the same configured table columns
+proxyctl report
+proxyctl report --history
+proxyctl report --compare --core xray
+proxyctl report --history --verbose
 
 # Inspect and select a persistent profile
 proxyctl config display
@@ -64,7 +70,7 @@ Built-in profiles:
 - **normal**: node, server, protocol, core, latency, download, upload, status.
 - **full**: expanded connection, core-version, direct TCP ping, sample, failure, run, and test-time context.
 
-Available fields: `node`, `name`, `server`, `port`, `protocol`, `core`, `version`, `latency`, `tcp-ping`, `download`, `upload`, `status`, `samples`, `failures`, `run`, and `tested`. The configuration is stored privately and persists across sessions. `not-run` means a metric was not attempted; `unavailable` means a preflight or runtime availability check explicitly failed. These states are never merged.
+Available fields: `node`, `name`, `server`, `port`, `protocol`, `core`, `version`, `latency`, `tcp-ping`, `download`, `upload`, `status`, `samples`, `failures`, `run`, and `tested`. The configuration is stored privately and persists across sessions. It applies consistently to `show`, `report`, `report --history`, and `report --compare`. In history mode each row represents one node/core/run; in comparison mode each row represents the latest completed node/core result. `--verbose` expands core version metadata without changing the selected columns. `not-run` means a metric was not attempted; `unavailable` means a preflight or runtime availability check explicitly failed. These states are never merged.
  Proxyctl's data directory is private (0700 on Unix), and the database is protected (0600).
 
 ## Managed cores
