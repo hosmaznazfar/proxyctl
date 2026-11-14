@@ -235,7 +235,8 @@ pub fn apply<B: KernelTransactionBackend>(
         backend
             .retain_recovery_journal(activation_id)
             .context("manifest validation failed and recovery journal could not be retained")?;
-        return Err(error).context("generated ownership manifest is invalid; recovery journal retained");
+        return Err(error)
+            .context("generated ownership manifest is invalid; recovery journal retained");
     }
     if let Err(error) = backend.commit_manifest(&manifest) {
         backend
