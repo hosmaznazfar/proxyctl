@@ -1,6 +1,6 @@
 # Proxyctl — Plan and Architecture Decisions
 
-> Status: approved baseline; benchmark performance optimization is planned in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`  
+> Status: approved baseline; benchmark batching and bounded probes are implemented pending local verification in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`  
 > Repository: https://github.com/hosmaznazfar/proxyctl  
 > Last updated: 2026-11-10
 
@@ -35,7 +35,7 @@ Initial cores: sing-box, Xray, and Mihomo. Proxyctl orchestrates official core b
 | Database lifecycle | Open only for a command's read/write phase, then close; no database daemon |
 | Benchmark history | Keep multiple runs and individual samples |
 | Default URL display | Mask credentials and sensitive URL fields |
-| Default benchmark concurrency | Sequential |
+| Benchmark probe concurrency | Bounded to three concurrent latency/TCP probes; throughput transfers sequential |
 | TUN | Disabled until exact route ownership, crash-safe recovery, and isolation are proven |
 
 ### 3.1 Managed core binaries
@@ -446,6 +446,10 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 13. Hardening: integration tests, documentation, packaging, security review, and performance checks.
 
 Each stage should leave the default branch buildable and tested. Apply related CLI, service, tests, and documentation together when they share a command contract. Update this plan when a material design decision changes.
+
+## Benchmark optimization implementation status
+
+Stages 1–3 are now committed on `main`: adapters can generate independently routed multi-node configs; the process manager starts one core for a batch and waits for every loopback listener; the scheduler is core-first; real HTTP latency and direct TCP probes use at most three workers; latency has a five-second request deadline. Download/upload remain sequential and the existing full-mode latency gate is preserved. These changes await local formatting, Clippy, and test verification. The later throughput-accuracy, persistence/run-scope, offline performance, and separately approved real-world comparison stages remain outstanding.
 
 ## 8. Open implementation details
 
