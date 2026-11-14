@@ -131,7 +131,12 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         nodes.len(),
         cores.len()
     );
-    println!("Direct TCP ping runs once per node; HTTP tests run through each compatible core.");
+    match options.metric_selection {
+        BenchmarkMetricSelection::All => println!("Direct TCP ping runs once per node; all HTTP metrics run through each compatible core."),
+        BenchmarkMetricSelection::Latency => println!("Latency-only mode: direct TCP ping runs once per node; HTTP latency runs through each compatible core."),
+        BenchmarkMetricSelection::Download => println!("Download-only mode: download tests run through each compatible core."),
+        BenchmarkMetricSelection::Upload => println!("Upload-only mode: upload tests run through each compatible core."),
+    }
     let execution = execute_run(
         database_path,
         run_id,
@@ -272,6 +277,7 @@ fn execute_run(
                 record_preflight(
                     database_path,
                     &context,
+                    metric_selection.metrics(),
                     BenchmarkSampleStatus::Unavailable,
                     "core_missing",
                     "the selected managed core is not installed",
@@ -299,7 +305,7 @@ fn execute_run(
                     ),
                     crate::cores::adapters::CompatibilityStatus::Supported => unreachable!(),
                 };
-                record_preflight(database_path, &context, status, category, reason)?;
+                record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
                 println!("run #{run_id} node #{} {core}: {category}", display_number);
                 continue;
             }
@@ -314,7 +320,7 @@ fn execute_run(
                 Ok(process) => process,
                 Err(error) => {
                     let (status, category, reason) = classify_core_start_failure(&error);
-                    record_preflight(database_path, &context, status, category, reason)?;
+                    record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
                     println!("run #{run_id} node #{} {core}: {reason}", display_number);
                     continue;
                 }
@@ -327,6 +333,7 @@ fn execute_run(
                     record_preflight(
                         database_path,
                         &context,
+                        metric_selection.metrics(),
                         BenchmarkSampleStatus::Invalid,
                         "measurement_settings",
                         "the configured measurement endpoint settings are invalid",
@@ -664,15 +671,12 @@ fn failed_sample(
 fn record_preflight(
     database_path: &Path,
     context: &SampleContext,
+    metrics: &[BenchmarkMetric],
     status: BenchmarkSampleStatus,
     category: &str,
     reason: &str,
 ) -> anyhow::Result<()> {
-    for metric in [
-        BenchmarkMetric::Latency,
-        BenchmarkMetric::Download,
-        BenchmarkMetric::Upload,
-    ] {
+    for &metric in metrics {
         persist_sample(
             database_path,
             failed_sample(context, metric, 0, status, category, reason),
@@ -720,6 +724,29 @@ fn install_cancellation_handler() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metric_selection_runs_only_the_requested_metric() {
+        assert_eq!(
+            BenchmarkMetricSelection::All.metrics(),
+            &[BenchmarkMetric::Latency, BenchmarkMetric::Download, BenchmarkMetric::Upload]
+        );
+        assert_eq!(
+            BenchmarkMetricSelection::Latency.metrics(),
+            &[BenchmarkMetric::Latency]
+        );
+        assert_eq!(
+            BenchmarkMetricSelection::Download.metrics(),
+            &[BenchmarkMetric::Download]
+        );
+        assert_eq!(
+            BenchmarkMetricSelection::Upload.metrics(),
+            &[BenchmarkMetric::Upload]
+        );
+        assert!(BenchmarkMetricSelection::Latency.includes_latency());
+        assert!(!BenchmarkMetricSelection::Download.includes_latency());
+        assert!(!BenchmarkMetricSelection::Upload.includes_latency());
+    }
 
     #[test]
     fn core_start_failures_distinguish_invalid_config_from_runtime_startup() {
