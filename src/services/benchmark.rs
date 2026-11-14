@@ -729,8 +729,13 @@ fn measure_interruptibly(
             let result = match metric {
                 BenchmarkMetric::TcpPing => Err(MeasurementFailure::InvalidResponse),
                 BenchmarkMetric::Latency => client.latency(),
-                BenchmarkMetric::Download => client.download(settings.download_bytes, |bytes| {
-                    print!("\r{label}: {bytes} bytes received");
+                BenchmarkMetric::Download => client.download(settings.download_bytes, |progress| {
+                    let rate = progress.bits_per_second.unwrap_or_default() / 1_000_000.0;
+                    print!(
+                        "\r{label}: {}/{} bytes ({rate:.2} Mbps)",
+                        progress.transferred_bytes,
+                        progress.target_bytes
+                    );
                     let _ = std::io::stdout().flush();
                 }),
                 BenchmarkMetric::Upload => client.upload(settings.upload_bytes),
