@@ -323,6 +323,10 @@ fn classify_error(error: ureq::Error) -> MeasurementFailure {
 fn classify_response_error(error: ureq::Error) -> MeasurementFailure {
     match error {
         ureq::Error::Io(error) => classify_body_io_error(error),
+        // ureq can surface a truncated Content-Length body as a protocol error
+        // rather than an UnexpectedEof I/O error. Headers have already arrived,
+        // so this is an incomplete exchange, not a request/setup failure.
+        ureq::Error::Protocol(_) => MeasurementFailure::IncompleteResponse,
         other => classify_error(other),
     }
 }
