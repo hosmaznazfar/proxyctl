@@ -210,6 +210,9 @@ Persistent database IDs are never renumbered. Benchmark runs and samples continu
 proxyctl show 1 2 3
 proxyctl check 1..5 --core xray
 proxyctl test --node 1 2 3 --all-cores
+proxyctl test --all-cores --latency-only
+proxyctl test --all-cores --download-only
+proxyctl test --all-cores --upload-only
 proxyctl report --node 1..5 --history
 proxyctl remove all
 proxyctl restore all
