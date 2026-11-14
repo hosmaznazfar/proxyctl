@@ -291,6 +291,8 @@ mod tests {
         fail_commit: bool,
         empty_fingerprint_at: Option<usize>,
         foreign_on_remove: Option<String>,
+        assigned_interface_index: Option<u32>,
+        route_interface_indexes: Vec<u32>,
     }
 
     impl KernelTransactionBackend for FakeBackend {
@@ -303,7 +305,7 @@ mod tests {
         ) -> Result<KernelInterfaceRecord> {
             let interface = KernelInterfaceRecord {
                 name: name.into(),
-                index: 77,
+                index: self.assigned_interface_index.unwrap_or(77),
                 is_tun: true,
             };
             self.interface = Some(interface.clone());
@@ -311,6 +313,7 @@ mod tests {
         }
 
         fn add_owned_route(&mut self, _id: &str, route: &PlannedRoute) -> Result<String> {
+            self.route_interface_indexes.push(route.interface_index);
             self.add_count += 1;
             if self.fail_add_at == Some(self.add_count) {
                 anyhow::bail!("injected route failure");
@@ -427,6 +430,18 @@ mod tests {
                 .iter()
                 .all(|step| matches!(step, ApplyStep::AddRule(_)))
         );
+    }
+
+    #[test]
+    fn binds_routes_and_manifest_to_kernel_assigned_interface_index() {
+        let mut backend = FakeBackend {
+            assigned_interface_index: Some(143),
+            ..Default::default()
+        };
+        let result = apply(&transaction(), &mut backend).unwrap();
+        assert_eq!(result.manifest.interface_index, 143);
+        assert_eq!(backend.route_interface_indexes, [143, 143]);
+        assert!(result.manifest.validate().is_ok());
     }
 
     #[test]
