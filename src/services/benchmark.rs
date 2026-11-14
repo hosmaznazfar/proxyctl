@@ -368,15 +368,10 @@ fn execute_run(
             }
         };
 
-        struct Entry {
-            display_number: usize,
-            context: SampleContext,
-            port: u16,
-        }
         let entries = eligible
             .into_iter()
             .zip(ports)
-            .map(|((_, display_number, context), port)| Entry {
+            .map(|((_, display_number, context), port)| LatencyBatchEntry {
                 display_number,
                 context,
                 port,
@@ -524,7 +519,7 @@ fn execute_run(
 fn execute_latency_batch(
     core: CoreId,
     run_id: u64,
-    entries: &[impl LatencyBatchEntry],
+    entries: &[LatencyBatchEntry],
     settings: &BenchmarkSettings,
     concurrency: usize,
     process: &mut Option<ManagedCoreProcess>,
@@ -544,7 +539,7 @@ fn execute_latency_batch(
                     let sender = sender.clone();
                     scope.spawn(move || {
                         let result = BenchmarkHttpClient::new_with_timeout(
-                            entry.listener_port(),
+                            entry.port,
                             settings,
                             timeout,
                         )
@@ -569,13 +564,13 @@ fn execute_latency_batch(
                             let entry = &entries[index];
                             let label = format!(
                                 "run #{run_id} node #{} {core} real latency sample {sample_index}/{SAMPLES_PER_METRIC}",
-                                entry.display_number()
+                                entry.display_number
                             );
                             let sample = match result {
                                 Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
                                     println!("{label}: {:.2} ms", measurement.value);
                                     succeeded[index] = true;
-                                    successful_sample(entry.sample_context(), BenchmarkMetric::Latency, sample_index, measurement)
+                                    successful_sample(&entry.context, BenchmarkMetric::Latency, sample_index, measurement)
                                 }
                                 Ok(_) | Err(MeasurementFailure::Cancelled) => failed_sample(
                                     entry.sample_context(),
@@ -613,10 +608,10 @@ fn execute_latency_batch(
     Ok(succeeded)
 }
 
-trait LatencyBatchEntry: Sync {
-    fn listener_port(&self) -> u16;
-    fn display_number(&self) -> usize;
-    fn sample_context(&self) -> &SampleContext;
+struct LatencyBatchEntry {
+    display_number: usize,
+    context: SampleContext,
+    port: u16,
 }
 
 fn execute_tcp_ping_batch(
