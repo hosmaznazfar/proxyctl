@@ -1571,6 +1571,34 @@ mod tests {
     }
 
     #[test]
+    fn test_command_exposes_bounded_concurrency_and_separate_timeouts() {
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "test",
+                "--all-cores",
+                "--latency-timeout-secs",
+                "4",
+                "--request-timeout-secs",
+                "25",
+                "--concurrency",
+                "2"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "test",
+                "--all-cores",
+                "--concurrency",
+                "4"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
     fn test_command_accepts_all_cores_scope() {
         let cli = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
         assert!(matches!(
