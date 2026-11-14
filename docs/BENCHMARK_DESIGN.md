@@ -230,7 +230,7 @@ A median based on one or two successful samples is explicitly labelled partial. 
 
 ## 13. Configurable CLI result tables
 
-`proxyctl show NODE...` renders the latest persisted benchmark results as a table. Its active profile defaults to compact. Compact shows node, core, real HTTP latency, download, and upload. Normal adds server, protocol, and outcome status. Full adds node metadata, core version, direct TCP ping, sample/failure counts, run ID, and test timestamp. The profiles are independently customizable through `proxyctl config display add-field` and `remove-field`; the active profile is selected with `proxyctl config display profile`. Profile configuration is private, persisted separately from the database, and does not contain node credentials.
+`proxyctl show NODE...` and all `proxyctl report` modes render persisted benchmark results with the same configurable table renderer. The active profile defaults to compact. Compact shows node, core, real HTTP latency, download, and upload. Normal adds server, protocol, and outcome status. Full adds node metadata, core version, direct TCP ping, sample/failure counts, run ID, and test timestamp. The profiles are independently customizable through `proxyctl config display add-field` and `remove-field`; the active profile is selected with `proxyctl config display profile`. Latest reports render one row per node/core, history renders one row per node/core/run (including running, cancelled, and interrupted runs), and comparison renders one row per node/core using the latest completed run. `--verbose` expands core version metadata but does not change the profile's columns. Profile configuration is private, persisted separately from the database, and does not contain node credentials.
 
 Metric outcomes must remain semantically distinct:
 - `not-run`: no sample was attempted and there is no preflight outcome.
@@ -238,4 +238,4 @@ Metric outcomes must remain semantically distinct:
 - `unsupported` and `invalid`: adapter compatibility outcomes, not network failures.
 - `timeout`, `unreachable`, and `cancelled`: attempted measurements with their own outcomes.
 
-Use the Rust `tabled` crate for terminal table layout rather than hand-calculated column widths. The table renderer is presentation-only; report aggregation and persisted benchmark records remain in the service/domain layers. Sensitive source URLs, credentials, fingerprints, and internal database IDs are not default display fields.
+Use the Rust `tabled` crate for terminal table layout rather than hand-calculated column widths. The table renderer is presentation-only; report aggregation and persisted benchmark records remain in the service/domain layers. Sensitive source URLs, credentials, fingerprints, and internal database IDs are not display fields. `show --details` remains the explicit connection-metadata view and is separate from benchmark tables.
