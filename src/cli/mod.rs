@@ -39,7 +39,10 @@ enum ConfigAction {
     /// Restore a setting to its built-in default.
     Reset { key: String },
     /// Configure table profiles used by show.
-    Display { #[command(subcommand)] action: Option<DisplayAction> },
+    Display {
+        #[command(subcommand)]
+        action: Option<DisplayAction>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -451,7 +454,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 print_node_list(&records, &display_numbers, &deleted_display_numbers);
             }
         }
-        Command::Show { nodes: selectors, details } => {
+        Command::Show {
+            nodes: selectors,
+            details,
+        } => {
             let selection = node_selection::parse_node_selection(&selectors)?;
             let ids = nodes::resolve_node_selection(&database_path, &selection, false)?;
             if ids.is_empty() {
@@ -474,7 +480,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 for id in ids {
                     reports.push(reporting::build_report(
                         &database_path,
-                        ReportOptions { mode: ReportMode::Latest, node_id: Some(id), core: None },
+                        ReportOptions {
+                            mode: ReportMode::Latest,
+                            node_id: Some(id),
+                            core: None,
+                        },
                     )?);
                 }
                 print_node_results(&reports, &config, &display_numbers);
@@ -747,11 +757,24 @@ fn selected_ids(path: &std::path::Path, selectors: &[String]) -> anyhow::Result<
 fn print_display_config(config: &crate::services::display_config::DisplayConfig) {
     use crate::services::display_config::DisplayProfile;
     println!("Active profile: {}", config.active_profile);
-    for profile in [DisplayProfile::Compact, DisplayProfile::Normal, DisplayProfile::Full] {
+    for profile in [
+        DisplayProfile::Compact,
+        DisplayProfile::Normal,
+        DisplayProfile::Full,
+    ] {
         let fields = config.profiles.get(&profile).cloned().unwrap_or_default();
-        println!("{profile}: {}", fields.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "));
+        println!(
+            "{profile}: {}",
+            fields
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
-    println!("Available fields: node, name, server, port, protocol, core, version, latency, tcp-ping, download, upload, status, samples, failures, run, tested");
+    println!(
+        "Available fields: node, name, server, port, protocol, core, version, latency, tcp-ping, download, upload, status, samples, failures, run, tested"
+    );
     println!("Add:    proxyctl config display add-field <compact|normal|full> <field>");
     println!("Remove: proxyctl config display remove-field <compact|normal|full> <field>");
 }
@@ -768,16 +791,29 @@ fn print_node_results(
     let mut found = false;
     for report in reports {
         for node in &report.nodes {
-            let number = display_numbers.get(&node.node.id).copied().unwrap_or(node.node.id as usize).to_string();
+            let number = display_numbers
+                .get(&node.node.id)
+                .copied()
+                .unwrap_or(node.node.id as usize)
+                .to_string();
             if node.runs.is_empty() {
                 found = true;
-                builder.push_record(fields.iter().map(|field| match field {
-                    F::Node => number.clone(), F::Name => node.node.node.name.clone().unwrap_or_else(|| "-".into()),
-                    F::Server => safe_field(&node.node.node.server, 48), F::Port => node.node.node.port.to_string(),
-                    F::Protocol => node.node.node.protocol.to_string(), F::Core | F::Version => "-".into(),
-                    F::Latency | F::TcpPing | F::Download | F::Upload => "not-run".into(), F::Status => "not-run".into(),
-                    F::Samples | F::Failures | F::Run | F::Tested => "-".into(),
-                }).collect::<Vec<_>>());
+                builder.push_record(
+                    fields
+                        .iter()
+                        .map(|field| match field {
+                            F::Node => number.clone(),
+                            F::Name => node.node.node.name.clone().unwrap_or_else(|| "-".into()),
+                            F::Server => safe_field(&node.node.node.server, 48),
+                            F::Port => node.node.node.port.to_string(),
+                            F::Protocol => node.node.node.protocol.to_string(),
+                            F::Core | F::Version => "-".into(),
+                            F::Latency | F::TcpPing | F::Download | F::Upload => "not-run".into(),
+                            F::Status => "not-run".into(),
+                            F::Samples | F::Failures | F::Run | F::Tested => "-".into(),
+                        })
+                        .collect::<Vec<_>>(),
+                );
                 continue;
             }
             for run in &node.runs {
@@ -786,55 +822,163 @@ fn print_node_results(
                         continue;
                     }
                     found = true;
-                    let latency = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Latency);
-                    let tcp_ping = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::TcpPing);
-                    let download = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Download);
-                    let upload = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Upload);
-                    let summaries = [latency, tcp_ping, download, upload].into_iter().flatten().collect::<Vec<_>>();
+                    let latency = target
+                        .metrics
+                        .iter()
+                        .find(|m| m.metric == crate::domain::BenchmarkMetric::Latency);
+                    let tcp_ping = target
+                        .metrics
+                        .iter()
+                        .find(|m| m.metric == crate::domain::BenchmarkMetric::TcpPing);
+                    let download = target
+                        .metrics
+                        .iter()
+                        .find(|m| m.metric == crate::domain::BenchmarkMetric::Download);
+                    let upload = target
+                        .metrics
+                        .iter()
+                        .find(|m| m.metric == crate::domain::BenchmarkMetric::Upload);
+                    let summaries = [latency, tcp_ping, download, upload]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>();
                     let successes: usize = summaries.iter().map(|m| m.successful).sum();
                     let attempted: usize = summaries.iter().map(|m| m.attempted).sum();
-                    let failures: usize = summaries.iter().map(|m| m.failures.iter().map(|f| f.count).sum::<usize>()).sum();
-                    let metric_cell = |summary: Option<&reporting::MetricSummary>| summary.map(metric_summary_cell).unwrap_or_else(|| "not-run".into());
-                    builder.push_record(fields.iter().map(|field| match field {
-                        F::Node => number.clone(), F::Name => node.node.node.name.clone().unwrap_or_else(|| "-".into()),
-                        F::Server => safe_field(&node.node.node.server, 48), F::Port => node.node.node.port.to_string(),
-                        F::Protocol => node.node.node.protocol.to_string(), F::Core => target.target.clone(),
-                        F::Version => target.core_version.as_deref().map(|v| display_core_version(v, false)).unwrap_or_else(|| "-".into()),
-                        F::Latency => if target.target == "direct" { "-".into() } else { metric_cell(latency) },
-                        F::TcpPing => if target.target == "direct" { metric_cell(tcp_ping) } else { "-".into() },
-                        F::Download => if target.target == "direct" { "-".into() } else { metric_cell(download) },
-                        F::Upload => if target.target == "direct" { "-".into() } else { metric_cell(upload) },
-                        F::Status => aggregate_target_status(&summaries, run.run.status),
-                        F::Samples => format!("{successes}/{attempted}"), F::Failures => failures.to_string(),
-                        F::Run => run.run.id.to_string(), F::Tested => run.run.completed_at.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
-                    }).collect::<Vec<_>>());
+                    let failures: usize = summaries
+                        .iter()
+                        .map(|m| m.failures.iter().map(|f| f.count).sum::<usize>())
+                        .sum();
+                    let metric_cell = |summary: Option<&reporting::MetricSummary>| {
+                        summary
+                            .map(metric_summary_cell)
+                            .unwrap_or_else(|| "not-run".into())
+                    };
+                    builder.push_record(
+                        fields
+                            .iter()
+                            .map(|field| match field {
+                                F::Node => number.clone(),
+                                F::Name => {
+                                    node.node.node.name.clone().unwrap_or_else(|| "-".into())
+                                }
+                                F::Server => safe_field(&node.node.node.server, 48),
+                                F::Port => node.node.node.port.to_string(),
+                                F::Protocol => node.node.node.protocol.to_string(),
+                                F::Core => target.target.clone(),
+                                F::Version => target
+                                    .core_version
+                                    .as_deref()
+                                    .map(|v| display_core_version(v, false))
+                                    .unwrap_or_else(|| "-".into()),
+                                F::Latency => {
+                                    if target.target == "direct" {
+                                        "-".into()
+                                    } else {
+                                        metric_cell(latency)
+                                    }
+                                }
+                                F::TcpPing => {
+                                    if target.target == "direct" {
+                                        metric_cell(tcp_ping)
+                                    } else {
+                                        "-".into()
+                                    }
+                                }
+                                F::Download => {
+                                    if target.target == "direct" {
+                                        "-".into()
+                                    } else {
+                                        metric_cell(download)
+                                    }
+                                }
+                                F::Upload => {
+                                    if target.target == "direct" {
+                                        "-".into()
+                                    } else {
+                                        metric_cell(upload)
+                                    }
+                                }
+                                F::Status => aggregate_target_status(&summaries, run.run.status),
+                                F::Samples => format!("{successes}/{attempted}"),
+                                F::Failures => failures.to_string(),
+                                F::Run => run.run.id.to_string(),
+                                F::Tested => run
+                                    .run
+                                    .completed_at
+                                    .map(|v| v.to_string())
+                                    .unwrap_or_else(|| "-".into()),
+                            })
+                            .collect::<Vec<_>>(),
+                    );
                 }
             }
         }
     }
-    if !found { println!("No benchmark results."); return; }
+    if !found {
+        println!("No benchmark results.");
+        return;
+    }
     println!("{}", builder.build().with(Style::rounded()));
 }
 
-fn aggregate_target_status(summaries: &[&reporting::MetricSummary], run_status: crate::domain::BenchmarkRunStatus) -> String {
+fn aggregate_target_status(
+    summaries: &[&reporting::MetricSummary],
+    run_status: crate::domain::BenchmarkRunStatus,
+) -> String {
     use crate::domain::BenchmarkSampleStatus as S;
-    for (status, label) in [(S::Unavailable, "unavailable"), (S::Unsupported, "unsupported"), (S::Invalid, "invalid"), (S::Timeout, "timeout"), (S::Unreachable, "unreachable"), (S::Cancelled, "cancelled")] {
-        if summaries.iter().any(|summary| summary.preflight == Some(status) || summary.failures.iter().any(|failure| failure.status == status)) { return label.into(); }
+    for (status, label) in [
+        (S::Unavailable, "unavailable"),
+        (S::Unsupported, "unsupported"),
+        (S::Invalid, "invalid"),
+        (S::Timeout, "timeout"),
+        (S::Unreachable, "unreachable"),
+        (S::Cancelled, "cancelled"),
+    ] {
+        if summaries.iter().any(|summary| {
+            summary.preflight == Some(status)
+                || summary
+                    .failures
+                    .iter()
+                    .any(|failure| failure.status == status)
+        }) {
+            return label.into();
+        }
     }
-    if summaries.iter().all(|summary| summary.attempted == 0 && summary.preflight.is_none()) { return "not-run".into(); }
+    if summaries
+        .iter()
+        .all(|summary| summary.attempted == 0 && summary.preflight.is_none())
+    {
+        return "not-run".into();
+    }
     run_status_label(run_status).into()
 }
 
 fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
     if let Some(value) = summary.median {
-        let formatted = if summary.metric == crate::domain::BenchmarkMetric::Download || summary.metric == crate::domain::BenchmarkMetric::Upload {
+        let formatted = if summary.metric == crate::domain::BenchmarkMetric::Download
+            || summary.metric == crate::domain::BenchmarkMetric::Upload
+        {
             format!("{:.2} Mbps", value / 1_000_000.0)
-        } else { format!("{value:.2} ms") };
-        if summary.successful < 3 { format!("{formatted} ({}/3)", summary.successful) } else { formatted }
+        } else {
+            format!("{value:.2} ms")
+        };
+        if summary.successful < 3 {
+            format!("{formatted} ({}/3)", summary.successful)
+        } else {
+            formatted
+        }
     } else if let Some(status) = summary.preflight {
         sample_status_label(status).to_owned()
-    } else if summary.attempted == 0 { "not-run".into() }
-    else { summary.failures.iter().map(|f| format!("{}×{}", sample_status_label(f.status), f.count)).collect::<Vec<_>>().join(", ") }
+    } else if summary.attempted == 0 {
+        "not-run".into()
+    } else {
+        summary
+            .failures
+            .iter()
+            .map(|f| format!("{}×{}", sample_status_label(f.status), f.count))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 fn print_benchmark_report(
@@ -1263,9 +1407,31 @@ mod tests {
     #[test]
     fn display_profiles_can_be_selected_and_customized() {
         assert!(Cli::try_parse_from(["proxyctl", "config", "display"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl", "config", "display", "profile", "compact"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl", "config", "display", "add-field", "full", "tcp-ping"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl", "config", "display", "remove-field", "normal", "protocol"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["proxyctl", "config", "display", "profile", "compact"]).is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "config",
+                "display",
+                "add-field",
+                "full",
+                "tcp-ping"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "config",
+                "display",
+                "remove-field",
+                "normal",
+                "protocol"
+            ])
+            .is_ok()
+        );
     }
 
     #[test]
