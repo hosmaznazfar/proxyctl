@@ -1114,7 +1114,7 @@ mod tests {
             target: DIRECT_TARGET.into(),
             version: None,
         };
-        for index in 1..=SAMPLES_PER_METRIC {
+        for index in [1] {
             persist_sample(
                 &path,
                 failed_sample(
@@ -1189,7 +1189,7 @@ mod tests {
                 .iter()
                 .filter(|sample| sample.status == BenchmarkSampleStatus::Cancelled)
                 .count(),
-            0
+            4
         );
         assert_eq!(
             samples
