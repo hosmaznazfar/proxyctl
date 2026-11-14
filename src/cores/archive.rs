@@ -65,7 +65,14 @@ fn extract_zip(bytes: &[u8], executable: &str) -> anyhow::Result<Vec<u8>> {
         let entry = archive
             .by_index(index)
             .context("could not read ZIP archive entry")?;
-        if entry.is_dir() || entry.name().rsplit('/').next() != Some(executable) {
+        if entry.is_dir()
+            || entry
+                .name()
+                .context("ZIP archive entry has an invalid name")?
+                .rsplit('/')
+                .next()
+                != Some(executable)
+        {
             continue;
         }
         if let Some(mode) = entry.unix_mode() {
