@@ -1,6 +1,6 @@
 # Benchmark design
 
-> Status: Stages 1–3 implementation committed; local verification pending in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`
+> Status: Stages 1–3 implemented and user-verified; Stages 4–5 committed and awaiting local verification
 > Last updated: 2026-11-14
 
 ## 1. Goals and scope
@@ -131,7 +131,7 @@ Keep distinct outcomes for success, unreachable, unsupported, invalid, timeout, 
 
 For the full benchmark selection, latency is the gate for throughput: run three real-ping samples first. If at least one succeeds, continue with download and upload. If all three fail, record download and upload as unavailable with the `latency_gate` reason and send no transfer requests. Metric-only modes remain independent and run only the selected metric. Unsupported/invalid compatibility and core preflight failures skip all metrics for that node/core pair.
 
-**Current implementation:** scheduling is node-first and starts one temporary core process per supported node/core pair. **Target implementation:** process one core at a time but batch multiple compatible nodes into one core process, then run bounded-concurrent latency probes and conservative sequential throughput transfers. The staged design, Throne latency reference, v2rayN throughput reference, acceptance criteria, and offline-only test policy are specified in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`. Stage 1 now adds an unused adapter contract and multi-node config generators; local verification is pending and the benchmark service still uses its original per-node process lifecycle. Do not treat the target architecture as implemented until its stages pass local verification.
+**Current implementation:** scheduling is node-first and starts one temporary core process per supported node/core pair. **Target implementation:** process one core at a time but batch multiple compatible nodes into one core process, then run bounded-concurrent latency probes and conservative sequential throughput transfers. The staged design, Throne latency reference, v2rayN throughput reference, acceptance criteria, and offline-only test policy are specified in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`. The service now uses multi-node adapter configs and one managed process per core batch, with bounded concurrent latency/TCP probes. Stages 4–5 add exact throughput accounting, per-run timeout/concurrency metadata, shared run IDs for selected node sets, and explicit cancellation outcomes; local verification is pending.
 
 ## 8. Persistence and crash recovery
 
