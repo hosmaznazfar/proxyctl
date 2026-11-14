@@ -389,14 +389,13 @@ mod tests {
         let directory = tempdir().unwrap();
         let executable = directory.path().join("fake-sing-box");
         let pid_file = directory.path().join("child.pid");
-        let script = format!(
-            r#"#!/bin/sh
+        let script = r#"#!/bin/sh
 if [ "$1" = "check" ]; then exit 0; fi
-echo "$" > '{}'
+echo "PID_PLACEHOLDER" > "PID_FILE_PLACEHOLDER"
 exec sleep 30
-"#,
-            pid_file.display()
-        );
+"#
+        .replace("PID_PLACEHOLDER", "$$")
+        .replace("PID_FILE_PLACEHOLDER", &pid_file.display().to_string());
         fs::write(&executable, script).unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
         let node = crate::parser::parse_proxy_url(
