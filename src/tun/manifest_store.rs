@@ -140,14 +140,20 @@ pub fn plan_journal_recovery(
                     JournalRecoveryDecision::PreserveAndReportConflict
                 }
             }
-            JournalOperationState::Applied => match (operation.fingerprint.as_ref(), current) {
-                (Some(_), None) => JournalRecoveryDecision::MarkRemoved,
-                (Some(expected), Some(actual)) if *expected == actual => {
-                    JournalRecoveryDecision::CompareAndDelete {
-                        expected_fingerprint: expected.clone(),
+            JournalOperationState::Applied => {
+                if !observed.contains_key(&operation.resource_key) {
+                    JournalRecoveryDecision::PreserveAndReportConflict
+                } else {
+                    match (operation.fingerprint.as_ref(), current) {
+                        (Some(_), None) => JournalRecoveryDecision::MarkRemoved,
+                        (Some(expected), Some(actual)) if *expected == actual => {
+                            JournalRecoveryDecision::CompareAndDelete {
+                                expected_fingerprint: expected.clone(),
+                            }
+                        }
+                        _ => JournalRecoveryDecision::PreserveAndReportConflict,
                     }
                 }
-                _ => JournalRecoveryDecision::PreserveAndReportConflict,
             },
             JournalOperationState::Removed | JournalOperationState::Absent => {
                 JournalRecoveryDecision::Skip
@@ -963,6 +969,24 @@ mod tests {
         ]);
         let plan = plan_journal_recovery(&journal, &observed).unwrap();
         assert!(plan.iter().all(|(_, decision)| *decision == JournalRecoveryDecision::PreserveAndReportConflict));
+    }
+
+    #[test]
+    fn recovery_planner_does_not_treat_missing_inventory_as_absence_for_applied_resource() {
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 7,
+            operations: vec![JournalOperation {
+                sequence: 0,
+                kind: JournalOperationKind::AddRoute,
+                resource_key: "route:v4:42420:default".into(),
+                state: JournalOperationState::Applied,
+                fingerprint: Some("route-fp".into()),
+            }],
+        };
+        let plan = plan_journal_recovery(&journal, &std::collections::BTreeMap::new()).unwrap();
+        assert_eq!(plan[0].1, JournalRecoveryDecision::PreserveAndReportConflict);
     }
 
     #[test]
