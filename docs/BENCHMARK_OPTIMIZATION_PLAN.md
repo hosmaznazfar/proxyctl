@@ -1,6 +1,6 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: Stages 1–5 implemented and user-verified; Stage 6 offline fault/performance coverage added and awaiting local verification
+> Status: Stages 1–5 user-verified; Stage 6 focused offline tests user-verified, full offline verification pending; Stage 7 real-world runbook prepared for user execution
 > Last updated: 2026-11-14
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
@@ -175,22 +175,23 @@ Acceptance: offline service tests cover multi-node scope resolution and cancella
 - Existing offline tests cover per-listener readiness, startup timeout, adapter isolation, latency worker caps, throughput gating, truncated downloads, cancellation remainder persistence, and benchmark history.
 - This is synthetic structural/fault coverage, not a real performance benchmark; it does not claim an elapsed-time or RSS improvement measurement.
 
-### Stage 6 — offline performance and fault-injection tests- Add synthetic benchmarks for scheduler overhead and batch scaling.
-- Compare process starts, elapsed orchestration time, peak child count, and bounded concurrency against the old per-pair baseline.
-- Inject failures at config generation, validation, startup, listener readiness, latency, download, upload, persistence, and cancellation.
-- No real remote proxy nodes or public speed-test endpoints.
+### Stage 6 — remaining offline acceptance work
+- Run the complete local verification batch after the focused Stage 6 tests: formatting, all tests, Clippy with warnings denied, and release build.
+- Review test coverage against every boundary: config generation, native validation, startup, listener readiness, latency, download, upload, persistence, and cancellation. Add a deterministic local fault fixture for any uncovered boundary before calling this stage complete.
+- The current 1/10/50-node adapter scaling test proves structural batch growth and routing isolation; it does not measure elapsed-time or peak-RSS improvement. Treat those as optional profiling measurements, not claims established by unit tests.
+- No real remote proxy nodes or public speed-test endpoints are used by this stage.
 
 Acceptance: demonstrate fewer core starts (up to one per selected core batch), bounded active requests, no leaked child/listener/config, correct partial persistence, and no system network mutation.
 
-### Stage 7 — separately approved real-world validation
-- Only after offline stages pass and the user explicitly approves, compare the same nodes/endpoints across Proxyctl, Throne, and v2rayN under controlled conditions.
-- Keep one active core at a time; do not run Proxyctl TUN mode.
-- Record environment, endpoint, sample counts, payload sizes, timeout, and test order.
-- Repeat tests in alternating order to reduce time-of-day/server-load bias.
-- Compare latency medians and throughput medians, not one lucky sample.
+### Stage 7 — user-run real-world validation (runbook prepared)
+- The user will run the commands in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md` after the complete offline verification batch passes.
+- Start with one known-good node and one managed core, then expand to the other cores and a small multi-node set.
+- Use explicit, identical latency/download/upload URLs, payload sizes, and timeouts for every compared client.
+- Keep one active core at a time; do not run Proxyctl TUN mode or change system networking.
+- For Throne/v2rayN comparison, alternate client order and compare three-sample medians with individual statuses.
 - Do not change defaults based on one run.
 
-Acceptance: user reviews results and approves any final default changes.
+Acceptance: user reviews the results and separately approves any final default changes.
 
 ## 7. Test strategy
 
