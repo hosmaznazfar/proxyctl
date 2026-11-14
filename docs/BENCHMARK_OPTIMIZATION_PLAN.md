@@ -7,7 +7,7 @@
 
 ## 1. Goals
 
-Proxyctl's current benchmark is too slow for large node sets. The current service iterates node-first, then core, starts and validates a separate managed core for each supported node/core pair, and performs the three samples of each metric sequentially. This repeats expensive process startup and readiness work and serializes independent latency requests.
+Proxyctl's original benchmark was too slow for large node sets because it iterated node-first, started a separate managed core for every node/core pair, and performed all probes sequentially. Stages 2 and 3 now change the scheduler to core-first batches, with one process per core batch, isolated loopback listeners, bounded-concurrent latency/TCP probes, and sequential throughput transfers. Local verification of this implementation is still pending.
 
 The optimization must improve elapsed time without sacrificing trustworthy measurements, low memory use, safe process ownership, or the existing persisted history/report semantics.
 
