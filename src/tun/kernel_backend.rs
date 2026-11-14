@@ -178,13 +178,8 @@ pub fn validate_interface_preflight(
             .any(|interface| interface.name == policy.interface_name),
         "TUN interface name is already present"
     );
-    anyhow::ensure!(
-        !snapshot
-            .interfaces
-            .iter()
-            .any(|interface| interface.index == policy.interface_index),
-        "planned TUN interface index is already occupied"
-    );
+    // ifindex is allocated by Linux at creation time and cannot be predicted safely.
+    // The exact assigned value is bound and checked after the interface exists.
     Ok(())
 }
 
@@ -199,18 +194,22 @@ pub fn verify_created_interface(
         .iter()
         .filter(|interface| interface.name == policy.interface_name)
         .collect::<Vec<_>>();
-    let by_index = interfaces
-        .iter()
-        .filter(|interface| interface.index == policy.interface_index)
-        .collect::<Vec<_>>();
     anyhow::ensure!(
-        by_name.len() == 1 && by_index.len() == 1,
-        "created TUN interface identity is missing, duplicated, or reused"
+        by_name.len() == 1,
+        "created TUN interface name is missing or duplicated"
     );
     let interface = by_name[0];
     anyhow::ensure!(
-        interface.index == policy.interface_index && interface.is_tun,
-        "created interface does not match the expected TUN identity"
+        interface.index > 0 && interface.is_tun,
+        "created interface has an invalid ifindex or is not a TUN device"
+    );
+    let duplicate_index = interfaces
+        .iter()
+        .filter(|candidate| candidate.index == interface.index)
+        .count();
+    anyhow::ensure!(
+        duplicate_index == 1,
+        "kernel interface inventory contains a duplicate assigned ifindex"
     );
     Ok(())
 }
@@ -243,12 +242,14 @@ mod tests {
         }]);
         assert!(validate_interface_preflight(&policy, &existing_name).is_err());
 
-        let existing_index = snapshot(vec![KernelInterfaceRecord {
+        // The kernel-assigned ifindex is unknown before creation; an existing interface
+        // using the placeholder value does not constitute a collision.
+        let placeholder_index = snapshot(vec![KernelInterfaceRecord {
             name: "other0".into(),
             index: 77,
             is_tun: false,
         }]);
-        assert!(validate_interface_preflight(&policy, &existing_index).is_err());
+        validate_interface_preflight(&policy, &placeholder_index).unwrap();
     }
 
     #[test]
@@ -275,10 +276,21 @@ mod tests {
         )
         .unwrap();
 
+        // Any non-zero kernel-assigned ifindex is accepted; it is bound to the plan later.
+        verify_created_interface(
+            &policy,
+            &[KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 143,
+                is_tun: true,
+            }],
+        )
+        .unwrap();
+
         for invalid in [
             vec![KernelInterfaceRecord {
                 name: "tun-proxyctl".into(),
-                index: 78,
+                index: 0,
                 is_tun: true,
             }],
             vec![KernelInterfaceRecord {
