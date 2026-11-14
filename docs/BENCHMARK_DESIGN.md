@@ -1,6 +1,6 @@
 # Benchmark design
 
-> Status: benchmark engine, metric sorting, and reporting implemented
+> Status: existing benchmark engine implemented; performance optimization is planned in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`
 > Last updated: 2026-11-10
 
 ## 1. Goals and scope
@@ -131,7 +131,7 @@ Keep distinct outcomes for success, unreachable, unsupported, invalid, timeout, 
 
 For the full benchmark selection, latency is the gate for throughput: run three real-ping samples first. If at least one succeeds, continue with download and upload. If all three fail, record download and upload as unavailable with the `latency_gate` reason and send no transfer requests. Metric-only modes remain independent and run only the selected metric. Unsupported/invalid compatibility and core preflight failures skip all metrics for that node/core pair.
 
-Benchmark scheduling is sequential, with one temporary core process per node/core pair. Each process configuration targets one node, so grouping the outer loop by core would not reduce process starts or network measurements. Concurrent node tests could reduce elapsed time but would increase RAM use; the implementation deliberately favors low resource consumption.
+**Current implementation:** scheduling is node-first and starts one temporary core process per supported node/core pair. **Target implementation:** process one core at a time but batch multiple compatible nodes into one core process, then run bounded-concurrent latency probes and conservative sequential throughput transfers. The staged design, Throne latency reference, v2rayN throughput reference, acceptance criteria, and offline-only test policy are specified in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`. Do not treat the target architecture as implemented until its stages pass local verification.
 
 ## 8. Persistence and crash recovery
 
@@ -248,3 +248,14 @@ Use the Rust `tabled` crate for terminal table layout rather than hand-calculate
 ## 14. Automatic history retention
 
 After each benchmark run is finalized, Proxyctl retains at most the three newest runs independently for every node/target pair (including the separate direct target). This includes completed, interrupted, and cancelled runs; a running run is never pruned. For older multi-node or multi-core runs, samples are removed only for the expired node/target pair. Shared run metadata remains while another target still has retained samples, and reports omit target rows whose samples have expired. This keeps per-target history bounded without deleting another node's or core's recent results.
+
+
+## 15. Benchmark performance optimization roadmap
+
+The current per-node/core process lifecycle is a known performance bottleneck. The approved target is **core-batch scheduling**: one managed core process at a time, with multiple compatible node outbounds and isolated loopback inbounds in its temporary config. Latency probes will use bounded concurrency (initial target 3) and retain three samples per node. Throughput transfers remain sequential by default to protect measurement quality.
+
+The user's comparative observations guide optimization priorities: Throne is the latency reference; v2rayN is the download/upload reference. This does not justify copying either project's exact sample policy or assuming their endpoint semantics are interchangeable. Proxyctl retains three samples, medians, explicit outcomes, and the full-mode latency gate.
+
+Implementation is staged: batch adapter config generation; batch process/readiness lifecycle; bounded-concurrent latency and direct TCP; accurate sequential throughput and progress; orchestration/persistence/report integration; offline performance and fault-injection tests; separately approved real-world comparison. See `docs/BENCHMARK_OPTIMIZATION_PLAN.md` for details and acceptance criteria.
+
+No public endpoint benchmarking, real proxy-core startup, system networking mutation, or TUN activation is part of ordinary tests. Real-world comparative validation requires separate explicit approval.
