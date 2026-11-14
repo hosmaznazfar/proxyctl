@@ -13,6 +13,7 @@ use crate::{
 };
 use clap::{ArgGroup, Parser, Subcommand};
 use std::{collections::HashMap, path::PathBuf};
+use tabled::{builder::Builder, settings::Style};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -37,6 +38,15 @@ enum ConfigAction {
     Set { key: String, value: u16 },
     /// Restore a setting to its built-in default.
     Reset { key: String },
+    /// Configure table profiles used by show.
+    Display { #[command(subcommand)] action: Option<DisplayAction> },
+}
+
+#[derive(Debug, Subcommand)]
+enum DisplayAction {
+    Profile { name: String },
+    AddField { profile: String, field: String },
+    RemoveField { profile: String, field: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -70,6 +80,9 @@ enum Command {
     Show {
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
+        /// Show connection/configuration details instead of benchmark results.
+        #[arg(long)]
+        details: bool,
     },
     Remove {
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
@@ -290,6 +303,35 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         settings::DEFAULT_LISTEN_PORT
                     );
                 }
+                Some(ConfigAction::Display { action }) => {
+                    use crate::services::display_config as display;
+                    match action {
+                        None => print_display_config(&display::load()?),
+                        Some(DisplayAction::Profile { name }) => {
+                            let profile = name.parse::<display::DisplayProfile>()?;
+                            let mut config = display::load()?;
+                            config.active_profile = profile;
+                            display::save(&config)?;
+                            println!("Active display profile: {profile}");
+                        }
+                        Some(DisplayAction::AddField { profile, field }) => {
+                            let profile = profile.parse::<display::DisplayProfile>()?;
+                            let field = field.parse::<display::DisplayField>()?;
+                            let mut config = display::load()?;
+                            display::add_field(&mut config, profile, field)?;
+                            display::save(&config)?;
+                            println!("Added '{field}' to the {profile} profile.");
+                        }
+                        Some(DisplayAction::RemoveField { profile, field }) => {
+                            let profile = profile.parse::<display::DisplayProfile>()?;
+                            let field = field.parse::<display::DisplayField>()?;
+                            let mut config = display::load()?;
+                            display::remove_field(&mut config, profile, field)?;
+                            display::save(&config)?;
+                            println!("Removed '{field}' from the {profile} profile.");
+                        }
+                    }
+                }
             }
             return Ok(());
         }
@@ -409,21 +451,33 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 print_node_list(&records, &display_numbers, &deleted_display_numbers);
             }
         }
-        Command::Show { nodes: selectors } => {
+        Command::Show { nodes: selectors, details } => {
             let selection = node_selection::parse_node_selection(&selectors)?;
             let ids = nodes::resolve_node_selection(&database_path, &selection, false)?;
             if ids.is_empty() {
                 println!("No matching nodes.");
-            }
-            for id in ids {
-                match nodes::get_node(&database_path, id)? {
-                    Some(record) => {
-                        let number = nodes::active_display_number(&database_path, id)?
-                            .unwrap_or(id as usize);
-                        print_node_details(&record, number);
+            } else if details {
+                for id in ids {
+                    match nodes::get_node(&database_path, id)? {
+                        Some(record) => {
+                            let number = nodes::active_display_number(&database_path, id)?
+                                .unwrap_or(id as usize);
+                            print_node_details(&record, number);
+                        }
+                        None => println!("Node #{id}: not found."),
                     }
-                    None => println!("Node #{id}: not found."),
                 }
+            } else {
+                let config = crate::services::display_config::load()?;
+                let display_numbers = active_display_numbers(&database_path)?;
+                let mut reports = Vec::new();
+                for id in ids {
+                    reports.push(reporting::build_report(
+                        &database_path,
+                        ReportOptions { mode: ReportMode::Latest, node_id: Some(id), core: None },
+                    )?);
+                }
+                print_node_results(&reports, &config, &display_numbers);
             }
         }
         Command::Remove {
@@ -690,6 +744,83 @@ fn selected_ids(path: &std::path::Path, selectors: &[String]) -> anyhow::Result<
     }
     Ok(ids)
 }
+fn print_display_config(config: &crate::services::display_config::DisplayConfig) {
+    use crate::services::display_config::DisplayProfile;
+    println!("Active profile: {}", config.active_profile);
+    for profile in [DisplayProfile::Compact, DisplayProfile::Normal, DisplayProfile::Full] {
+        let fields = config.profiles.get(&profile).cloned().unwrap_or_default();
+        println!("{profile}: {}", fields.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "));
+    }
+    println!("Available fields: node, name, server, port, protocol, core, version, latency, download, upload, status, samples, failures, run, tested");
+    println!("Add:    proxyctl config display add-field <compact|normal|full> <field>");
+    println!("Remove: proxyctl config display remove-field <compact|normal|full> <field>");
+}
+
+fn print_node_results(
+    reports: &[reporting::BenchmarkReport],
+    config: &crate::services::display_config::DisplayConfig,
+    display_numbers: &HashMap<u64, usize>,
+) {
+    use crate::services::display_config::DisplayField as F;
+    let fields = config.fields();
+    let mut builder = Builder::default();
+    builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
+    let mut found = false;
+    for report in reports {
+        for node in &report.nodes {
+            let number = display_numbers.get(&node.node.id).copied().unwrap_or(node.node.id as usize).to_string();
+            if node.runs.is_empty() {
+                found = true;
+                builder.push_record(fields.iter().map(|field| match field {
+                    F::Node => number.clone(), F::Name => node.node.node.name.clone().unwrap_or_else(|| "-".into()),
+                    F::Server => safe_field(&node.node.node.server, 48), F::Port => node.node.node.port.to_string(),
+                    F::Protocol => node.node.node.protocol.to_string(), F::Core | F::Version => "-".into(),
+                    F::Latency | F::Download | F::Upload => "not-run".into(), F::Status => "not-run".into(),
+                    F::Samples | F::Failures | F::Run | F::Tested => "-".into(),
+                }).collect::<Vec<_>>());
+                continue;
+            }
+            for run in &node.runs {
+                for target in &run.targets {
+                    found = true;
+                    let latency = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Latency);
+                    let download = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Download);
+                    let upload = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Upload);
+                    let summaries = [latency, download, upload].into_iter().flatten().collect::<Vec<_>>();
+                    let successes: usize = summaries.iter().map(|m| m.successful).sum();
+                    let attempted: usize = summaries.iter().map(|m| m.attempted).sum();
+                    let failures: usize = summaries.iter().map(|m| m.failures.iter().map(|f| f.count).sum::<usize>()).sum();
+                    let metric_cell = |summary: Option<&reporting::MetricSummary>| summary.map(metric_summary_cell).unwrap_or_else(|| "not-run".into());
+                    builder.push_record(fields.iter().map(|field| match field {
+                        F::Node => number.clone(), F::Name => node.node.node.name.clone().unwrap_or_else(|| "-".into()),
+                        F::Server => safe_field(&node.node.node.server, 48), F::Port => node.node.node.port.to_string(),
+                        F::Protocol => node.node.node.protocol.to_string(), F::Core => target.target.clone(),
+                        F::Version => target.core_version.as_deref().map(|v| display_core_version(v, false)).unwrap_or_else(|| "-".into()),
+                        F::Latency => metric_cell(latency), F::Download => metric_cell(download), F::Upload => metric_cell(upload),
+                        F::Status => if summaries.iter().any(|m| m.preflight == Some(crate::domain::BenchmarkSampleStatus::Unavailable)) { "unavailable".into() } else { run_status_label(run.run.status).into() },
+                        F::Samples => format!("{successes}/{attempted}"), F::Failures => failures.to_string(),
+                        F::Run => run.run.id.to_string(), F::Tested => run.run.completed_at.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
+                    }).collect::<Vec<_>>());
+                }
+            }
+        }
+    }
+    if !found { println!("No benchmark results."); return; }
+    println!("{}", builder.build().with(Style::rounded()));
+}
+
+fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
+    if let Some(value) = summary.median {
+        let formatted = if summary.metric == crate::domain::BenchmarkMetric::Download || summary.metric == crate::domain::BenchmarkMetric::Upload {
+            format!("{:.2} Mbps", value / 1_000_000.0)
+        } else { format!("{value:.2} ms") };
+        if summary.successful < 3 { format!("{formatted} ({}/3)", summary.successful) } else { formatted }
+    } else if let Some(status) = summary.preflight {
+        sample_status_label(status).to_owned()
+    } else if summary.attempted == 0 { "not-run".into() }
+    else { summary.failures.iter().map(|f| format!("{}×{}", sample_status_label(f.status), f.count)).collect::<Vec<_>>().join(", ") }
+}
+
 fn print_benchmark_report(
     report: &reporting::BenchmarkReport,
     verbose: bool,
