@@ -32,6 +32,14 @@ enum TunCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum ConfigAction {
+    /// Set the persistent shared HTTP/SOCKS5 listener port.
+    Set { key: String, value: u16 },
+    /// Restore a setting to its built-in default.
+    Reset { key: String },
+}
+
+#[derive(Debug, Subcommand)]
 enum Command {
     Add {
         url: String,
@@ -88,10 +96,15 @@ enum Command {
         id: u64,
         #[arg(long, value_name = "CORE", required = true)]
         core: String,
+        /// Override the persistent shared HTTP/SOCKS5 listener port for this activation only.
+        #[arg(long, value_name = "PORT")]
+        port: Option<u16>,
         /// TUN activation is temporarily disabled pending safe route ownership and crash recovery.
         #[arg(long)]
         tun: bool,
     },
+    /// Show or change persistent listener settings.
+    Config { #[command(subcommand)] action: Option<ConfigAction> },
     /// Stop only the exact process tracked by Proxyctl.
     Stop,
     /// Install all supported cores, or one selected core.
@@ -218,7 +231,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        Command::Use { id, core, tun } => {
+        Command::Use { id, core, tun, port } => {
             let core = parse_core(Some(&core))?
                 .ok_or_else(|| anyhow::anyhow!("--core is required for activation"))?;
             let database_path = default_database_path()?;
@@ -230,7 +243,24 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             let stable_id = *selected
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
-            crate::services::activation::activate(stable_id, core, tun)?;
+            crate::services::activation::activate(stable_id, core, tun, port)?;
+            return Ok(());
+        }
+        Command::Config { action } => {
+            use crate::services::listener_config as settings;
+            match action {
+                None => println!("Shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::listen_port()?),
+                Some(ConfigAction::Set { key, value }) => {
+                    anyhow::ensure!(key == "listen-port", "unknown config key '{key}'; expected 'listen-port'");
+                    settings::set_listen_port(value)?;
+                    println!("Saved shared HTTP/SOCKS5 listen port: 127.0.0.1:{value}");
+                }
+                Some(ConfigAction::Reset { key }) => {
+                    anyhow::ensure!(key == "listen-port", "unknown config key '{key}'; expected 'listen-port'");
+                    settings::reset_listen_port()?;
+                    println!("Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::DEFAULT_LISTEN_PORT);
+                }
+            }
             return Ok(());
         }
         Command::Stop => {
@@ -545,6 +575,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         | Command::Setup { .. }
         | Command::Update { .. }
         | Command::Use { .. }
+        | Command::Config { .. }
         | Command::Stop
         | Command::Tun { .. } => {
             unreachable!("management commands are dispatched before database access")
