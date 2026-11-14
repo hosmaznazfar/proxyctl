@@ -24,7 +24,7 @@ The user's comparative observations are explicit product requirements:
 3. Never change system proxy settings, DNS, routes, firewall, TUN, or other network state.
 4. Keep benchmark inbounds loopback-only and ephemeral.
 5. Compatibility outcomes remain per node/core. Unsupported or Invalid means skip that node/core entirely; it must not poison a valid peer in a batch.
-6. In full mode, run three real-latency samples first. Run download/upload only if at least one latency sample succeeds. If all three fail, mark throughput skipped with `latency_gate`; do not send transfer requests.
+6. In full mode, run three real-latency samples first. Run download/upload only if at least one latency sample succeeds. If all three fail, persist throughput as `skipped` with `latency_gate`; do not send transfer requests.
 7. Metric-only modes remain independent and continue to run only the explicitly selected metric.
 8. Keep three samples per metric and use successful-sample medians. Never represent failures as zero.
 9. Keep redb closed during process execution and network I/O. Persist completed batch results after the managed child has stopped.
