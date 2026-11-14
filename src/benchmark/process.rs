@@ -390,7 +390,7 @@ mod tests {
         let executable = directory.path().join("fake-sing-box");
         let pid_file = directory.path().join("child.pid");
         let script = format!(
-            "#!/bin/sh\nif [ \"$1\" = \"check\" ]; then exit 0; fi\necho $ > '{}'\nexec sleep 30\n",
+            "#!/bin/sh\nif [ \"$1\" = \"check\" ]; then exit 0; fi\nprintf '%s\n' "$" > '{}'\nexec sleep 30\n",
             pid_file.display()
         );
         fs::write(&executable, script).unwrap();
