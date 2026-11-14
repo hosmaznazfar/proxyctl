@@ -59,7 +59,7 @@ On cleanup, delete only exact resources still matching the manifest. Treat alrea
 
 ## Recovery and lifecycle
 
-A serialized operation coordinator uses activation generations to prevent concurrent start/stop/switch races. The recovery supervisor is independent of the CLI and monitors the exact core process instance (PID plus start time/pidfd and canonical executable). Core exit triggers cleanup.
+A serialized operation coordinator uses activation generations to prevent concurrent start/stop/switch races. The recovery supervisor is independent of the CLI and monitors the exact core process instance (PID plus start time/pidfd and canonical executable). Opening a pidfd is race-aware: if the pinned pidfd is already readable, the process has exited and recovery may proceed; otherwise the PID start-time and executable must still match. A PID reused by a live replacement is never accepted. Core exit triggers cleanup.
 
 The recovery path must not depend solely on the CLI receiving SIGINT/SIGTERM. It must cover CLI SIGKILL, core SIGKILL, supervisor failure, and machine reboot. Kernel teardown of a non-persistent TUN device should be used as a safety net; routing rules must be designed so an orphaned rule with an empty table falls through safely. At next Proxyctl startup, reconcile only stale resources whose exact ownership markers match a valid Proxyctl manifest. Never sweep a priority range or table based only on a numeric range.
 
