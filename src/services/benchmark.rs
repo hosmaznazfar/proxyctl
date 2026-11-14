@@ -331,6 +331,12 @@ fn execute_run(
                 println!("run #{run_id} node #{display_number} {core}: {category}");
                 continue;
             }
+            if let Err(error) = ManagedCoreProcess::validate_node_config(*core, &record.node, &executable) {
+                let (status, category, reason) = classify_core_start_failure(&error);
+                record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
+                println!("run #{run_id} node #{display_number} {core}: {reason}");
+                continue;
+            }
             eligible.push((record, display_number, context));
         }
         if eligible.is_empty() {
