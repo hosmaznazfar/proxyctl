@@ -63,7 +63,19 @@ pub struct BenchmarkSettings {
     pub download_bytes: u64,
     pub upload_bytes: u64,
     pub request_timeout_ms: u64,
+    #[serde(default = "default_latency_timeout_ms")]
+    pub latency_timeout_ms: u64,
+    #[serde(default = "default_probe_concurrency")]
+    pub probe_concurrency: u8,
     pub startup_timeout_ms: u64,
+}
+
+fn default_latency_timeout_ms() -> u64 {
+    5_000
+}
+
+fn default_probe_concurrency() -> u8 {
+    3
 }
 
 /// Persisted benchmark run metadata.
