@@ -1470,8 +1470,11 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn pidfd_stop_signals_only_the_verified_fake_process_instance() {
-        let mut child = Command::new("tail")
-            .args(["-f", "/dev/null"])
+        // Use a bounded-duration sleeper rather than tail -f /dev/null. Some
+        // environments or test runners can terminate follow-mode tail processes,
+        // which makes the identity assertion flaky before the test sends a signal.
+        let mut child = Command::new("sleep")
+            .arg("60")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
