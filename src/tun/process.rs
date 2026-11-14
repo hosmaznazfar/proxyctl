@@ -241,11 +241,31 @@ mod tests {
         }
     }
 
+    fn wait_until_unreaped_child_exits(pid: u32) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let stat = fs::read_to_string(format!("/proc/{pid}/stat"))
+                .expect("unreaped child must remain visible in procfs");
+            let close = stat.rfind(')').expect("process stat must close command name");
+            let state = stat[close + 1..]
+                .split_whitespace()
+                .next()
+                .expect("process stat must include state");
+            if matches!(state, "Z" | "X") {
+                return;
+            }
+            assert!(Instant::now() < deadline, "child did not exit after SIGKILL");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
     #[test]
     fn pidfd_open_accepts_an_already_exited_but_unreaped_child() {
         let mut child = child();
         let identity = ProcessIdentity::capture(child.id()).unwrap();
         child.kill().unwrap();
+        // kill() only queues the signal; wait for the zombie state without reaping the child.
+        wait_until_unreaped_child_exits(child.id());
 
         let handle = ProcessHandle::open(identity).unwrap();
         assert!(handle.is_exited().unwrap());
