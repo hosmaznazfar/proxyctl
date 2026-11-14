@@ -448,6 +448,48 @@ mod tests {
         server.join().unwrap();
     }
 
+    #[test]
+    fn download_rejects_early_eof_instead_of_scoring_a_short_sample() {
+        use std::{io::{BufReader, Write}, net::TcpListener, thread};
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let _ = read_fake_request(&mut reader);
+            let stream = reader.get_mut();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndata").unwrap();
+            stream.flush().unwrap();
+        });
+        let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
+        let agent: Agent = Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_secs(2)))
+            .build()
+            .into();
+        let client = BenchmarkHttpClient {
+            agent,
+            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
+        };
+        assert_eq!(
+            client.download(8, |_| {}),
+            Err(MeasurementFailure::IncompleteResponse)
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn transfer_progress_reports_exact_target_and_monotonic_rate() {
+        let progress = TransferProgress::new(1_024, 2_048, Duration::from_secs(2));
+        assert_eq!(progress.transferred_bytes, 1_024);
+        assert_eq!(progress.target_bytes, 2_048);
+        assert_eq!(progress.elapsed, Duration::from_secs(2));
+        assert_eq!(progress.bits_per_second, Some(4_096.0));
+    }
+
     fn read_fake_request(
         reader: &mut std::io::BufReader<std::net::TcpStream>,
     ) -> (String, String, Vec<u8>) {
