@@ -30,6 +30,7 @@ use crate::{
 
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 const SAMPLES_PER_METRIC: u8 = 3;
+const BENCHMARK_HISTORY_LIMIT: usize = 3;
 const METHODOLOGY: &str = "proxyctl-benchmark-v2";
 const DIRECT_TARGET: &str = "direct";
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -172,9 +173,13 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         )
     };
 
-    NodeDatabase::open(database_path)?
+    let database = NodeDatabase::open(database_path)?;
+    database
         .finish_benchmark_run(run_id, status, unix_timestamp(), summary)
         .context("could not finalize benchmark run")?;
+    database
+        .prune_benchmark_history(BENCHMARK_HISTORY_LIMIT)
+        .context("could not enforce benchmark history retention")?;
 
     execution?;
     if cancelled {
