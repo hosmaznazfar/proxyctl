@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn profile_must_keep_at_least_one_field() {
         let mut config = DisplayConfig::default();
-        for field in config.fields().into_iter().take(4) {
+        for field in config.fields().into_iter().skip(1) {
             remove_field(&mut config, DisplayProfile::Compact, field).unwrap();
         }
         assert_eq!(config.fields(), vec![DisplayField::Node]);
