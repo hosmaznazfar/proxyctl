@@ -251,7 +251,9 @@ mod tests {
         loop {
             let stat = fs::read_to_string(format!("/proc/{pid}/stat"))
                 .expect("unreaped child must remain visible in procfs");
-            let close = stat.rfind(')').expect("process stat must close command name");
+            let close = stat
+                .rfind(')')
+                .expect("process stat must close command name");
             let state = stat[close + 1..]
                 .split_whitespace()
                 .next()
@@ -259,7 +261,10 @@ mod tests {
             if matches!(state, "Z" | "X") {
                 return;
             }
-            assert!(Instant::now() < deadline, "child did not exit after SIGKILL");
+            assert!(
+                Instant::now() < deadline,
+                "child did not exit after SIGKILL"
+            );
             std::thread::sleep(Duration::from_millis(1));
         }
     }
