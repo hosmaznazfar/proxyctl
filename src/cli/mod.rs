@@ -244,7 +244,12 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        Command::Use { id, core, tun, port } => {
+        Command::Use {
+            id,
+            core,
+            tun,
+            port,
+        } => {
             let core = parse_core(Some(&core))?
                 .ok_or_else(|| anyhow::anyhow!("--core is required for activation"))?;
             let database_path = default_database_path()?;
@@ -1164,12 +1169,26 @@ mod tests {
         for selector in ["--latency-only", "--download-only", "--upload-only"] {
             assert!(Cli::try_parse_from(["proxyctl", "test", "--all-cores", selector]).is_ok());
         }
-        assert!(Cli::try_parse_from([
-            "proxyctl", "test", "--all-cores", "--latency-only", "--download-only"
-        ]).is_err());
-        assert!(Cli::try_parse_from([
-            "proxyctl", "test", "--all-cores", "--download-only", "--upload-only"
-        ]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "test",
+                "--all-cores",
+                "--latency-only",
+                "--download-only"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "test",
+                "--all-cores",
+                "--download-only",
+                "--upload-only"
+            ])
+            .is_err()
+        );
     }
 
     #[test]

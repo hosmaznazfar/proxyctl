@@ -135,10 +135,18 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         cores.len()
     );
     match options.metric_selection {
-        BenchmarkMetricSelection::All => println!("Direct TCP ping runs once per node; all HTTP metrics run through each compatible core."),
-        BenchmarkMetricSelection::Latency => println!("Latency-only mode: HTTP latency runs through each compatible core."),
-        BenchmarkMetricSelection::Download => println!("Download-only mode: download tests run through each compatible core."),
-        BenchmarkMetricSelection::Upload => println!("Upload-only mode: upload tests run through each compatible core."),
+        BenchmarkMetricSelection::All => println!(
+            "Direct TCP ping runs once per node; all HTTP metrics run through each compatible core."
+        ),
+        BenchmarkMetricSelection::Latency => {
+            println!("Latency-only mode: HTTP latency runs through each compatible core.")
+        }
+        BenchmarkMetricSelection::Download => {
+            println!("Download-only mode: download tests run through each compatible core.")
+        }
+        BenchmarkMetricSelection::Upload => {
+            println!("Upload-only mode: upload tests run through each compatible core.")
+        }
     }
     let execution = execute_run(
         database_path,
@@ -308,7 +316,14 @@ fn execute_run(
                     ),
                     crate::cores::adapters::CompatibilityStatus::Supported => unreachable!(),
                 };
-                record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
+                record_preflight(
+                    database_path,
+                    &context,
+                    metric_selection.metrics(),
+                    status,
+                    category,
+                    reason,
+                )?;
                 println!("run #{run_id} node #{} {core}: {category}", display_number);
                 continue;
             }
@@ -323,7 +338,14 @@ fn execute_run(
                 Ok(process) => process,
                 Err(error) => {
                     let (status, category, reason) = classify_core_start_failure(&error);
-                    record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
+                    record_preflight(
+                        database_path,
+                        &context,
+                        metric_selection.metrics(),
+                        status,
+                        category,
+                        reason,
+                    )?;
                     println!("run #{run_id} node #{} {core}: {reason}", display_number);
                     continue;
                 }
@@ -732,7 +754,11 @@ mod tests {
     fn metric_selection_runs_only_the_requested_metric() {
         assert_eq!(
             BenchmarkMetricSelection::All.metrics(),
-            &[BenchmarkMetric::Latency, BenchmarkMetric::Download, BenchmarkMetric::Upload]
+            &[
+                BenchmarkMetric::Latency,
+                BenchmarkMetric::Download,
+                BenchmarkMetric::Upload
+            ]
         );
         assert_eq!(
             BenchmarkMetricSelection::Latency.metrics(),

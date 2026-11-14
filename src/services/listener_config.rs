@@ -13,7 +13,9 @@ struct Config {
 
 fn config_path() -> anyhow::Result<PathBuf> {
     let database = crate::database::default_database_path()?;
-    let directory = database.parent().context("Proxyctl data directory is unavailable")?;
+    let directory = database
+        .parent()
+        .context("Proxyctl data directory is unavailable")?;
     Ok(directory.join(CONFIG_FILE))
 }
 
@@ -47,7 +49,8 @@ pub fn set_listen_port(port: u16) -> anyhow::Result<()> {
     set_private_file(file.as_file())?;
     file.write_all(&bytes)?;
     file.as_file().sync_all()?;
-    file.persist(&path).context("could not atomically save Proxyctl config")?;
+    file.persist(&path)
+        .context("could not atomically save Proxyctl config")?;
     Ok(())
 }
 
@@ -118,7 +121,11 @@ mod tests {
     fn persisted_config_round_trips_and_reset_restores_default() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(CONFIG_FILE);
-        fs::write(&path, serde_json::to_vec(&Config { listen_port: 10910 }).unwrap()).unwrap();
+        fs::write(
+            &path,
+            serde_json::to_vec(&Config { listen_port: 10910 }).unwrap(),
+        )
+        .unwrap();
         let parsed: Config = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
         assert_eq!(parsed.listen_port, 10910);
         assert_eq!(DEFAULT_LISTEN_PORT, 10909);

@@ -418,7 +418,10 @@ fn paths() -> anyhow::Result<(PathBuf, PathBuf)> {
 }
 /// Validate and preflight the shared loopback HTTP/SOCKS listener port.
 pub fn validate_listen_port(port: u16) -> anyhow::Result<()> {
-    anyhow::ensure!((1024..=u16::MAX).contains(&port), "listen port must be between 1024 and 65535");
+    anyhow::ensure!(
+        (1024..=u16::MAX).contains(&port),
+        "listen port must be between 1024 and 65535"
+    );
     Ok(())
 }
 
