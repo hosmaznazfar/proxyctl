@@ -673,31 +673,17 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             } else {
                 selected_ids(&database_path, &node)?
             };
-            if selected.is_empty() {
-                crate::services::benchmark::run_benchmark(
-                    &database_path,
-                    crate::services::benchmark::BenchmarkOptions {
-                        all_cores,
-                        node_id: None,
-                        core: parse_core(core.as_deref())?,
-                        settings,
-                        metric_selection,
-                    },
-                )?;
-            } else {
-                for id in selected {
-                    crate::services::benchmark::run_benchmark(
-                        &database_path,
-                        crate::services::benchmark::BenchmarkOptions {
-                            all_cores,
-                            node_id: Some(id),
-                            core: parse_core(core.as_deref())?,
-                            settings: settings.clone(),
-                            metric_selection,
-                        },
-                    )?;
-                }
-            }
+            crate::services::benchmark::run_benchmark(
+                &database_path,
+                crate::services::benchmark::BenchmarkOptions {
+                    all_cores,
+                    node_id: None,
+                    node_ids: selected,
+                    core: parse_core(core.as_deref())?,
+                    settings,
+                    metric_selection,
+                },
+            )?;
         }
         Command::Cores
         | Command::Setup { .. }
