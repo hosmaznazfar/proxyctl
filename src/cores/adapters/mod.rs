@@ -1,4 +1,5 @@
 //! Core-independent adapter contract and dispatch.
+mod benchmark_batch;
 mod mihomo;
 mod shared;
 mod sing_box;
@@ -12,11 +13,22 @@ use std::path::Path;
 
 use crate::{cores::CoreId, domain::ProxyNode};
 
+pub use benchmark_batch::BenchmarkTarget;
 pub use shared::{Compatibility, CompatibilityStatus, GeneratedConfig};
 
 /// A core adapter must either represent every retained connection option or explain why it
 /// cannot. It must never emit a partial configuration after silently dropping an option.
 pub trait CoreAdapter {
+    /// Generate one native core config for several independently routed benchmark nodes.
+    /// Callers must exclude Unsupported and Invalid nodes before building a batch.
+    fn generate_benchmark_batch_config(
+        &self,
+        targets: &[BenchmarkTarget<'_>],
+    ) -> anyhow::Result<GeneratedConfig> {
+        benchmark_batch::generate(self, targets)
+    }
+
+
     fn core(&self) -> CoreId;
     fn compatibility(&self, node: &ProxyNode) -> Compatibility;
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig>;
