@@ -573,7 +573,7 @@ fn execute_latency_batch(
                                     successful_sample(&entry.context, BenchmarkMetric::Latency, sample_index, measurement)
                                 }
                                 Ok(_) | Err(MeasurementFailure::Cancelled) => failed_sample(
-                                    entry.sample_context(),
+                                    &entry.context,
                                     BenchmarkMetric::Latency,
                                     sample_index,
                                     BenchmarkSampleStatus::Cancelled,
@@ -687,58 +687,6 @@ fn throughput_allowed(
     selection != BenchmarkMetricSelection::All
         || !matches!(metric, BenchmarkMetric::Download | BenchmarkMetric::Upload)
         || latency_succeeded
-}
-
-fn execute_tcp_ping(
-    database_path: &Path,
-    run_id: u64,
-    record: &NodeRecord,
-    display_number: usize,
-) -> anyhow::Result<()> {
-    let context = SampleContext {
-        run_id,
-        node_id: record.id,
-        target: DIRECT_TARGET.to_owned(),
-        version: None,
-    };
-    for sample_index in 1..=SAMPLES_PER_METRIC {
-        if CANCELLED.load(Ordering::Relaxed) {
-            break;
-        }
-        let label = format!(
-            "run #{run_id} node #{} direct TCP ping sample {sample_index}/{SAMPLES_PER_METRIC}",
-            display_number
-        );
-        println!(
-            "{label}: connecting to {}:{}...",
-            record.node.server, record.node.port
-        );
-        let sample = match tcp::ping(&record.node.server, record.node.port, TCP_CONNECT_TIMEOUT) {
-            Ok(measurement) => {
-                println!("{label}: {:.2} ms", measurement.value);
-                successful_sample(
-                    &context,
-                    BenchmarkMetric::TcpPing,
-                    sample_index,
-                    measurement,
-                )
-            }
-            Err(error) => {
-                let reason = error.reason();
-                println!("{label}: {reason}");
-                failed_sample(
-                    &context,
-                    BenchmarkMetric::TcpPing,
-                    sample_index,
-                    status_for_failure(error),
-                    error.category(),
-                    &reason,
-                )
-            }
-        };
-        persist_sample(database_path, sample)?;
-    }
-    Ok(())
 }
 
 fn measure_interruptibly(
