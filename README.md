@@ -2,7 +2,7 @@
 
 A lightweight Rust CLI for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> Project status: node management, managed-core inventory and updates, adapters, sequential benchmarking, metric-specific sorting, benchmark reports/history, compatibility-aware pruning, and Linux single-core loopback activation are implemented. TUN inspection is read-only; TUN activation is temporarily disabled pending safe route ownership and crash recovery.
+> Project status: node management, managed-core inventory and updates, adapters, core-batched benchmarking with bounded probes, metric-specific sorting, benchmark reports/history, compatibility-aware pruning, and Linux single-core loopback activation are implemented. TUN inspection is read-only; TUN activation is temporarily disabled pending safe route ownership and crash recovery.
 
 ## Goals
 
@@ -148,7 +148,7 @@ The self-updater requires a published proxyctl GitHub Release. Core updates use 
 
 ## Benchmarking
 
-Run the initial sequential benchmark against all active nodes and installed compatible cores, or select one node/core pair:
+Run the benchmark against all active nodes and installed compatible cores, or select one node/core pair. Proxyctl now prepares one process per selected core batch, rather than restarting the core for every node:
 
 ~~~sh
 # Test every active node against all installed compatible cores
@@ -164,7 +164,7 @@ proxyctl test --node 12..18 --all-cores
 
 Each selected node receives three direct TCP-ping samples. For each compatible node/core pair, Proxyctl first takes three real-latency samples. Download and upload are attempted only if at least one latency sample succeeds; otherwise both throughput metrics are recorded as skipped (`latency_gate`) and no transfer request is sent. Unsupported/invalid compatibility or core preflight failures skip all metrics for that node/core pair. The revised defaults follow v2rayN where applicable: Google `generate_204` for real ping and CacheFly's 10 MB test file for download, sampling only the first 2 MiB per sample to keep data use modest. Upload remains separately configurable and initially uses Cloudflare's upload endpoint, with a 256 KiB synthetic payload per sample to keep the default usable on slower upstream links. Cloudflare documents aggregated measurement collection; Proxyctl sends only a generated synthetic body, not user files or proxy credentials. All endpoint URLs, payload limits, and timeouts are configurable.
 
-Benchmarking is explicit and sequential. The CLI reports live node/core/metric/sample progress, and Ctrl-C stops the active core so an in-flight request can be interrupted and cleaned up. Every node/core pair needs its own core process because each generated config contains one selected node; grouping work by core rather than node would not reduce the number of process starts or measurements. Running several node/core pairs concurrently could reduce wall-clock time but would use more RAM and is intentionally avoided. When `--node` contains multiple IDs or a range, Proxyctl processes the selected nodes within the same benchmark run. The temporary HTTP proxy listener binds only to 127.0.0.1. Benchmarking does not change system proxy, DNS, routes, firewall, or TUN settings. See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) for the measurement definitions, endpoint contract, and privacy notes.
+Core batches run one at a time in deterministic core order; Proxyctl never runs multiple managed cores concurrently. Each compatible node has its own uniquely routed loopback listener and outbound inside the batch. Node compatibility and native single-node config validation happen independently before batching, so an unsupported or invalid node is excluded without preventing its peers from running. Real-latency and direct TCP probes use a hard limit of three concurrent workers; each node still receives three latency samples, with a five-second latency request deadline. Download and upload remain sequential per node and retain the full-mode latency gate. Ctrl-C stops and reaps the active managed core and waits for in-flight probe workers to finish. These changes are in local-verification status; no public endpoint or real core is used by automated tests. When `--node` contains multiple IDs or a range, Proxyctl processes the selected nodes within the same benchmark run. The temporary HTTP proxy listener binds only to 127.0.0.1. Benchmarking does not change system proxy, DNS, routes, firewall, or TUN settings. See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md) for the measurement definitions, endpoint contract, and privacy notes.
 
 Sort nodes independently by each benchmark metric:
 
