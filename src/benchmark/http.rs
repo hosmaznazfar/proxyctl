@@ -75,6 +75,26 @@ impl MeasurementFailure {
     }
 }
 
+/// Throttled progress snapshot for one bounded download sample.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TransferProgress {
+    pub transferred_bytes: u64,
+    pub target_bytes: u64,
+    pub elapsed: Duration,
+    pub bits_per_second: Option<f64>,
+}
+
+impl TransferProgress {
+    fn new(transferred_bytes: u64, target_bytes: u64, elapsed: Duration) -> Self {
+        Self {
+            transferred_bytes,
+            target_bytes,
+            elapsed,
+            bits_per_second: crate::domain::throughput_bps(transferred_bytes, elapsed),
+        }
+    }
+}
+
 /// HTTP client pinned to the selected core's loopback inbound.
 pub struct BenchmarkHttpClient {
     agent: Agent,
@@ -144,17 +164,21 @@ impl BenchmarkHttpClient {
         })
     }
 
-    /// Measure up to `max_bytes` from a download response, reporting throttled byte progress.
+    /// Measure exactly `max_bytes` from a download response, reporting throttled progress.
     ///
-    /// Larger remote objects are intentionally cut short; smaller objects are measured to EOF.
+    /// Larger remote objects are intentionally cut short. An early EOF before the target size
+    /// is an incomplete sample, never a successful smaller-than-requested throughput result.
     pub fn download<F>(
         &self,
         max_bytes: u64,
         mut progress: F,
     ) -> Result<Measurement, MeasurementFailure>
     where
-        F: FnMut(u64),
+        F: FnMut(TransferProgress),
     {
+        if max_bytes == 0 {
+            return Err(MeasurementFailure::InvalidResponse);
+        }
         let started = Instant::now();
         let mut response = self
             .agent
@@ -177,15 +201,16 @@ impl BenchmarkHttpClient {
                 return Err(MeasurementFailure::InvalidResponse);
             }
             if last_progress.elapsed() >= PROGRESS_INTERVAL {
-                progress(received);
+                let elapsed = started.elapsed();
+                progress(TransferProgress::new(received, max_bytes, elapsed));
                 last_progress = Instant::now();
             }
         }
 
         let duration = started.elapsed();
-        progress(received);
-        if received == 0 {
-            return Err(MeasurementFailure::InvalidResponse);
+        progress(TransferProgress::new(received, max_bytes, duration));
+        if received < max_bytes {
+            return Err(MeasurementFailure::IncompleteResponse);
         }
         Ok(Measurement {
             value: throughput_bps(received, duration).ok_or(MeasurementFailure::InvalidResponse)?,
@@ -407,9 +432,10 @@ mod tests {
 
         assert!(client.latency().unwrap().value >= 0.0);
         let mut progress = Vec::new();
-        let download = client.download(8, |bytes| progress.push(bytes)).unwrap();
+        let download = client.download(8, |snapshot| progress.push(snapshot)).unwrap();
         assert_eq!(download.transferred_bytes, Some(8));
-        assert_eq!(progress.last(), Some(&8));
+        assert_eq!(progress.last().map(|value| value.transferred_bytes), Some(8));
+        assert_eq!(progress.last().map(|value| value.target_bytes), Some(8));
         assert!(client.upload(8).unwrap().value > 0.0);
         server.join().unwrap();
     }
