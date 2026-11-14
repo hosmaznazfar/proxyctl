@@ -128,7 +128,7 @@ enum Command {
         /// Test selected --node values with one managed core (mutually exclusive with --all-cores).
         #[arg(long, value_name = "CORE", requires = "node")]
         core: Option<String>,
-        /// Run only HTTP latency (and the separate direct TCP ping).
+        /// Run only HTTP latency through the selected core.
         #[arg(long, group = "metric_selection")]
         latency_only: bool,
         /// Run only download throughput measurements.
