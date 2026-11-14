@@ -299,6 +299,14 @@ mod tests {
     }
 
     #[test]
+    fn binds_every_default_route_to_the_actual_kernel_interface_index() {
+        let plan = sample_plan().bind_interface_index(143).unwrap();
+        assert_eq!(plan.interface_index, 143);
+        assert!(plan.routes.iter().all(|route| route.interface_index == 143));
+        assert!(plan.bind_interface_index(0).is_err());
+    }
+
+    #[test]
     fn rejects_reserved_or_low_routing_table_ids() {
         for table in [0, RT_TABLE_DEFAULT, RT_TABLE_MAIN, RT_TABLE_LOCAL, 9999] {
             let mut plan = sample_plan();
