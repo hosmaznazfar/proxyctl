@@ -38,7 +38,7 @@ enum ConfigAction {
     Set { key: String, value: u16 },
     /// Restore a setting to its built-in default.
     Reset { key: String },
-    /// Configure table profiles used by show.
+    /// Configure table profiles used by show and report.
     Display {
         #[command(subcommand)]
         action: Option<DisplayAction>,
@@ -536,6 +536,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 ReportMode::Latest
             };
             let core = parse_core(core.as_deref())?;
+            let display_config = crate::services::display_config::load()?;
             let display_numbers = active_display_numbers(&database_path)?;
             if node.is_empty() {
                 let report = reporting::build_report(
@@ -546,7 +547,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         core,
                     },
                 )?;
-                print_benchmark_report(&report, verbose, &display_numbers);
+                print_benchmark_report(&report, &display_config, verbose, &display_numbers);
             } else {
                 for id in selected_ids(&database_path, &node)? {
                     let report = reporting::build_report(
@@ -983,97 +984,134 @@ fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
 
 fn print_benchmark_report(
     report: &reporting::BenchmarkReport,
+    config: &crate::services::display_config::DisplayConfig,
     verbose: bool,
     display_numbers: &HashMap<u64, usize>,
 ) {
+    use crate::services::display_config::DisplayField as F;
     use reporting::ReportMode;
 
-    if report.mode == ReportMode::Compare {
-        if report.comparisons.is_empty() {
-            println!("No completed benchmark comparisons found.");
-            return;
-        }
-        for comparison in &report.comparisons {
-            println!(
-                "Node #{} {}:{} — {} — run #{}{}",
-                display_numbers
-                    .get(&comparison.node.id)
-                    .copied()
-                    .unwrap_or(comparison.node.id as usize),
-                safe_field(&comparison.node.node.server, 48),
-                comparison.node.node.port,
-                comparison.target,
-                comparison.run_id,
-                comparison
-                    .core_version
-                    .as_deref()
-                    .map(|version| format!(" ({})", display_core_version(version, verbose)))
-                    .unwrap_or_default()
-            );
-            for metric in &comparison.metrics {
-                print_metric_summary(metric);
-            }
-            println!();
-        }
-        return;
-    }
+    let fields = config.fields();
+    let mut builder = Builder::default();
+    builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
+    let mut found = false;
 
-    if report.nodes.is_empty() {
-        println!("No proxy nodes found.");
-        return;
-    }
-    for node in &report.nodes {
-        println!(
-            "Node #{} {}:{}{}",
-            display_numbers
-                .get(&node.node.id)
-                .copied()
-                .unwrap_or(node.node.id as usize),
-            safe_field(&node.node.node.server, 48),
-            node.node.node.port,
-            node.node
-                .node
-                .name
-                .as_deref()
-                .map(|name| format!(" — {}", safe_field(name, 48)))
-                .unwrap_or_default()
-        );
-        if node.runs.is_empty() {
-            println!("  No benchmark history.");
-            println!();
-            continue;
+    if report.mode == ReportMode::Compare {
+        for comparison in &report.comparisons {
+            found = true;
+            builder.push_record(report_row(
+                &fields,
+                &comparison.node,
+                display_numbers,
+                &comparison.target,
+                comparison.core_version.as_deref(),
+                &comparison.metrics,
+                Some(comparison.run_id),
+                None,
+                Some(crate::domain::BenchmarkRunStatus::Completed),
+                verbose,
+            ));
         }
-        for run in &node.runs {
-            println!(
-                "  Run #{} — {} — started {} — completed {}",
-                run.run.id,
-                run_status_label(run.run.status),
-                run.run.started_at,
-                run.run
-                    .completed_at
-                    .map(|timestamp| timestamp.to_string())
-                    .unwrap_or_else(|| "-".into())
-            );
-            if let Some(summary) = run.run.summary.as_deref() {
-                println!("    Summary: {}", safe_field(summary, 160));
+    } else {
+        for node in &report.nodes {
+            if node.runs.is_empty() {
+                found = true;
+                builder.push_record(report_empty_node_row(&fields, &node.node, display_numbers));
+                continue;
             }
-            for target in &run.targets {
-                println!(
-                    "    {}{}",
-                    target.target,
-                    target
-                        .core_version
-                        .as_deref()
-                        .map(|version| format!(" ({})", display_core_version(version, verbose)))
-                        .unwrap_or_default()
-                );
-                for metric in &target.metrics {
-                    print_metric_summary(metric);
+            for run in &node.runs {
+                for target in &run.targets {
+                    found = true;
+                    builder.push_record(report_row(
+                        &fields,
+                        &node.node,
+                        display_numbers,
+                        &target.target,
+                        target.core_version.as_deref(),
+                        &target.metrics,
+                        Some(run.run.id),
+                        run.run.completed_at.or(Some(run.run.started_at)),
+                        Some(run.run.status),
+                        verbose,
+                    ));
                 }
             }
         }
-        println!();
     }
+
+    if !found {
+        println!(
+            "{}",
+            match report.mode {
+                ReportMode::Latest => "No benchmark results.",
+                ReportMode::History => "No benchmark history.",
+                ReportMode::Compare => "No completed benchmark comparisons found.",
+            }
+        );
+        return;
+    }
+    println!("{}", builder.build().with(Style::rounded()));
+}
+
+fn report_empty_node_row(
+    fields: &[crate::services::display_config::DisplayField],
+    node: &NodeRecord,
+    display_numbers: &HashMap<u64, usize>,
+) -> Vec<String> {
+    use crate::services::display_config::DisplayField as F;
+    fields.iter().map(|field| match field {
+        F::Node => display_numbers.get(&node.id).copied().unwrap_or(node.id as usize).to_string(),
+        F::Name => node.node.name.clone().unwrap_or_else(|| "-".into()),
+        F::Server => safe_field(&node.node.server, 48),
+        F::Port => node.node.port.to_string(),
+        F::Protocol => node.node.protocol.to_string(),
+        F::Core | F::Version | F::Samples | F::Failures | F::Run | F::Tested => "-".into(),
+        F::Latency | F::TcpPing | F::Download | F::Upload | F::Status => "not-run".into(),
+    }).collect()
+}
+
+fn report_row(
+    fields: &[crate::services::display_config::DisplayField],
+    node: &NodeRecord,
+    display_numbers: &HashMap<u64, usize>,
+    target: &str,
+    core_version: Option<&str>,
+    metrics: &[reporting::MetricSummary],
+    run_id: Option<u64>,
+    tested: Option<u64>,
+    run_status: Option<crate::domain::BenchmarkRunStatus>,
+    verbose: bool,
+) -> Vec<String> {
+    use crate::services::display_config::DisplayField as F;
+    let find = |metric| metrics.iter().find(|summary| summary.metric == metric);
+    let latency = find(crate::domain::BenchmarkMetric::Latency);
+    let tcp_ping = find(crate::domain::BenchmarkMetric::TcpPing);
+    let download = find(crate::domain::BenchmarkMetric::Download);
+    let upload = find(crate::domain::BenchmarkMetric::Upload);
+    let summaries = [latency, tcp_ping, download, upload].into_iter().flatten().collect::<Vec<_>>();
+    let successes: usize = summaries.iter().map(|summary| summary.successful).sum();
+    let attempted: usize = summaries.iter().map(|summary| summary.attempted).sum();
+    let failures: usize = summaries.iter().map(|summary| summary.failures.iter().map(|failure| failure.count).sum::<usize>()).sum();
+    let metric_cell = |summary: Option<&reporting::MetricSummary>| summary.map(metric_summary_cell).unwrap_or_else(|| "not-run".into());
+
+    fields.iter().map(|field| match field {
+        F::Node => display_numbers.get(&node.id).copied().unwrap_or(node.id as usize).to_string(),
+        F::Name => node.node.name.clone().unwrap_or_else(|| "-".into()),
+        F::Server => safe_field(&node.node.server, 48),
+        F::Port => node.node.port.to_string(),
+        F::Protocol => node.node.protocol.to_string(),
+        F::Core => target.to_owned(),
+        F::Version => core_version.map(|version| display_core_version(version, verbose)).unwrap_or_else(|| "-".into()),
+        F::Latency => if target == "direct" { "-".into() } else { metric_cell(latency) },
+        F::TcpPing => if target == "direct" { metric_cell(tcp_ping) } else { "-".into() },
+        F::Download => if target == "direct" { "-".into() } else { metric_cell(download) },
+        F::Upload => if target == "direct" { "-".into() } else { metric_cell(upload) },
+        F::Status => aggregate_target_status(&summaries, run_status.unwrap_or(crate::domain::BenchmarkRunStatus::Completed)),
+        F::Samples => format!("{successes}/{attempted}"),
+        F::Failures => failures.to_string(),
+        F::Run => run_id.map(|id| id.to_string()).unwrap_or_else(|| "-".into()),
+        F::Tested => tested.map(|timestamp| timestamp.to_string()).unwrap_or_else(|| "-".into()),
+    }).collect()
 }
 
 fn display_core_version(version: &str, verbose: bool) -> String {
