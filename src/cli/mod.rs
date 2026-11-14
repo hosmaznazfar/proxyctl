@@ -198,10 +198,10 @@ enum Command {
         #[arg(long)]
         verbose: bool,
     },
-    /// Soft-delete nodes proven unreachable through every compatible core.
+    /// Soft-delete nodes that have no successful real-ping path through any of the three cores.
     #[command(group(ArgGroup::new("prune_scope").args(["unavailable_all", "unavailable"]).required(true).multiple(false)))]
     Prune {
-        /// Evaluate all installed cores that currently support each node.
+        /// Evaluate sing-box, Xray, and Mihomo; unsupported and invalid combinations count as unusable.
         #[arg(long)]
         unavailable_all: bool,
         /// Evaluate one selected core; requires --core.
