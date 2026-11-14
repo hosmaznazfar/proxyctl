@@ -219,6 +219,12 @@ impl BenchmarkHttpClient {
         let status = easy
             .response_code()
             .map_err(|_| MeasurementFailure::InvalidResponse)?;
+        if status == 0 {
+            return match transfer_result {
+                Err(error) => Err(classify_curl_error(error)),
+                Ok(()) => Err(MeasurementFailure::InvalidResponse),
+            };
+        }
         if !(200..300).contains(&status) {
             return Err(MeasurementFailure::HttpStatus(
                 u16::try_from(status).unwrap_or_default(),
