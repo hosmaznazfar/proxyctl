@@ -55,18 +55,21 @@ pub enum BenchmarkMetricSelection {
 impl BenchmarkMetricSelection {
     fn metrics(self) -> &'static [BenchmarkMetric] {
         match self {
-            Self::All => &[BenchmarkMetric::Latency, BenchmarkMetric::Download, BenchmarkMetric::Upload],
+            Self::All => &[
+                BenchmarkMetric::Latency,
+                BenchmarkMetric::Download,
+                BenchmarkMetric::Upload,
+            ],
             Self::Latency => &[BenchmarkMetric::Latency],
             Self::Download => &[BenchmarkMetric::Download],
             Self::Upload => &[BenchmarkMetric::Upload],
         }
     }
 
-    fn includes_latency(self) -> bool {
-        matches!(self, Self::All | Self::Latency)
+    fn includes_direct_tcp(self) -> bool {
+        matches!(self, Self::All)
     }
 }
-
 
 impl Default for BenchmarkOptions {
     fn default() -> Self {
@@ -133,7 +136,7 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
     );
     match options.metric_selection {
         BenchmarkMetricSelection::All => println!("Direct TCP ping runs once per node; all HTTP metrics run through each compatible core."),
-        BenchmarkMetricSelection::Latency => println!("Latency-only mode: direct TCP ping runs once per node; HTTP latency runs through each compatible core."),
+        BenchmarkMetricSelection::Latency => println!("Latency-only mode: HTTP latency runs through each compatible core."),
         BenchmarkMetricSelection::Download => println!("Download-only mode: download tests run through each compatible core."),
         BenchmarkMetricSelection::Upload => println!("Upload-only mode: upload tests run through each compatible core."),
     }
@@ -258,7 +261,7 @@ fn execute_run(
         if CANCELLED.load(Ordering::Relaxed) {
             return Ok(());
         }
-        if metric_selection.includes_latency() {
+        if metric_selection.includes_direct_tcp() {
             execute_tcp_ping(database_path, run_id, record, display_number)?;
         }
 
@@ -743,9 +746,10 @@ mod tests {
             BenchmarkMetricSelection::Upload.metrics(),
             &[BenchmarkMetric::Upload]
         );
-        assert!(BenchmarkMetricSelection::Latency.includes_latency());
-        assert!(!BenchmarkMetricSelection::Download.includes_latency());
-        assert!(!BenchmarkMetricSelection::Upload.includes_latency());
+        assert!(BenchmarkMetricSelection::All.includes_direct_tcp());
+        assert!(!BenchmarkMetricSelection::Latency.includes_direct_tcp());
+        assert!(!BenchmarkMetricSelection::Download.includes_direct_tcp());
+        assert!(!BenchmarkMetricSelection::Upload.includes_direct_tcp());
     }
 
     #[test]
