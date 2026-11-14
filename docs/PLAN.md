@@ -513,3 +513,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Kernel-assigned TUN ifindex:** corrected the planning model so Linux's dynamically allocated ifindex is captured after interface creation and bound into both dual-stack routes and the durable manifest. Preflight no longer treats a placeholder ifindex as a reservation. Post-create checks require the exact name, a unique non-zero assigned index, and TUN-kind evidence. This remains offline orchestration; no kernel interface is created.
+
+
+- **Transaction journal failure-path hardening:** the offline kernel transaction now retains the recovery journal on policy-binding and generated-manifest validation failures. It no longer claims rollback evidence was retained when the backend's retention call failed, and it handles journal-finalization failure after rollback explicitly. Fake-backend tests and the concrete write-ahead journal remain required before live mutation.
