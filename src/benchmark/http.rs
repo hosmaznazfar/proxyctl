@@ -194,12 +194,10 @@ impl BenchmarkHttpClient {
         // Set the ureq body limit to the requested sample size before creating
         // the reader. This prevents its default small-body buffering from trying
         // to consume a truncated Content-Length response before we can count bytes.
-        let body_limit =
-            usize::try_from(max_bytes).map_err(|_| MeasurementFailure::InvalidResponse)?;
         let mut reader = response
             .body_mut()
             .with_config()
-            .limit(body_limit)
+            .limit(max_bytes)
             .reader()
             .take(max_bytes);
         let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
