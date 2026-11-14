@@ -93,9 +93,9 @@ pub fn default_settings() -> BenchmarkSettings {
         latency_url: "https://www.google.com/generate_204".into(),
         download_url: "https://cachefly.cachefly.net/10mb.test".into(),
         upload_url: "https://speed.cloudflare.com/__up".into(),
-        download_bytes: 2 * 1024 * 1024,
-        upload_bytes: 262_144,
-        request_timeout_ms: 15_000,
+        download_bytes: 1_048_576,
+        upload_bytes: 1_048_576,
+        request_timeout_ms: 3_000,
         latency_timeout_ms: 5_000,
         probe_concurrency: 3,
         startup_timeout_ms: 10_000,
@@ -541,7 +541,7 @@ fn execute_run(
                         &entry.context,
                         metric,
                         0,
-                        BenchmarkSampleStatus::Unavailable,
+                        BenchmarkSampleStatus::Skipped,
                         "latency_gate",
                         reason,
                     ));
@@ -1364,9 +1364,9 @@ mod tests {
             "https://cachefly.cachefly.net/10mb.test"
         );
         assert_eq!(settings.upload_url, "https://speed.cloudflare.com/__up");
-        assert_eq!(settings.download_bytes, 2 * 1024 * 1024);
-        assert_eq!(settings.upload_bytes, 262_144);
-        assert_eq!(settings.request_timeout_ms, 15_000);
+        assert_eq!(settings.download_bytes, 1_048_576);
+        assert_eq!(settings.upload_bytes, 1_048_576);
+        assert_eq!(settings.request_timeout_ms, 3_000);
         assert_eq!(settings.latency_timeout_ms, 5_000);
         assert_eq!(settings.probe_concurrency, 3);
     }
