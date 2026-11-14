@@ -953,7 +953,9 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
         load_output.status.success(),
         "could not inspect the recorded Proxyctl TUN service; refusing cleanup"
     );
-    let load_state = String::from_utf8_lossy(&load_output.stdout).trim().to_owned();
+    let load_state = String::from_utf8_lossy(&load_output.stdout)
+        .trim()
+        .to_owned();
 
     // Older TUN activation state stored only a whole-machine baseline, not exact
     // resource fingerprints. Retire it only when the service is absent, no
@@ -969,8 +971,13 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
             state.config.parent() == Some(runtime),
             "TUN config path is outside the private runtime directory; refusing cleanup"
         );
-        fs::remove_file(&state.config)
-            .or_else(|error| if error.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(error) })?;
+        fs::remove_file(&state.config).or_else(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(error)
+            }
+        })?;
         fs::remove_file(state_path)?;
         println!(
             "Retired stale Proxyctl TUN runtime state for node #{}; no network resources were changed.",
@@ -1066,10 +1073,7 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
 }
 
 #[cfg(target_os = "linux")]
-fn legacy_tun_snapshot_is_safe_to_retire(
-    baseline: &TunBaseline,
-    current: &TunBaseline,
-) -> bool {
+fn legacy_tun_snapshot_is_safe_to_retire(baseline: &TunBaseline, current: &TunBaseline) -> bool {
     // Legacy state has no per-resource ownership fingerprints. It is safe to
     // discard only when the baseline itself had no TUN interface, none exists
     // now, and every current route/rule was already present in the baseline.
@@ -1077,10 +1081,22 @@ fn legacy_tun_snapshot_is_safe_to_retire(
     // any newly observed route/rule keeps recovery fail-closed.
     baseline.tun_interfaces.is_empty()
         && current.tun_interfaces.is_empty()
-        && current.ipv4_routes.iter().all(|entry| baseline.ipv4_routes.contains(entry))
-        && current.ipv6_routes.iter().all(|entry| baseline.ipv6_routes.contains(entry))
-        && current.ipv4_rules.iter().all(|entry| baseline.ipv4_rules.contains(entry))
-        && current.ipv6_rules.iter().all(|entry| baseline.ipv6_rules.contains(entry))
+        && current
+            .ipv4_routes
+            .iter()
+            .all(|entry| baseline.ipv4_routes.contains(entry))
+        && current
+            .ipv6_routes
+            .iter()
+            .all(|entry| baseline.ipv6_routes.contains(entry))
+        && current
+            .ipv4_rules
+            .iter()
+            .all(|entry| baseline.ipv4_rules.contains(entry))
+        && current
+            .ipv6_rules
+            .iter()
+            .all(|entry| baseline.ipv6_rules.contains(entry))
 }
 
 #[cfg(target_os = "linux")]
