@@ -392,7 +392,7 @@ mod tests {
         let script = format!(
             r#"#!/bin/sh
 if [ "$1" = "check" ]; then exit 0; fi
-printf '%s\\n' "$$" > '{}'
+printf '%s\n' "$" > '{}'
 exec sleep 30
 "#,
             pid_file.display()
