@@ -95,6 +95,12 @@ impl ProcessHandle {
         // SAFETY: successful pidfd_open returns a new owned file descriptor.
         let pidfd = unsafe { OwnedFd::from_raw_fd(raw) };
         let handle = Self { identity, pidfd };
+        // The process may exit after pidfd_open but before /proc identity verification.
+        // A readable pidfd proves that the pinned instance has exited, so monitoring can
+        // safely treat it as dead without consulting a possibly vanished or reused PID.
+        if handle.wait_exit(Duration::ZERO)? {
+            return Ok(handle);
+        }
         ensure!(
             handle.identity.verify()?,
             "process identity changed while opening pidfd"
@@ -233,6 +239,17 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    #[test]
+    fn pidfd_open_accepts_an_already_exited_but_unreaped_child() {
+        let mut child = child();
+        let identity = ProcessIdentity::capture(child.id()).unwrap();
+        child.kill().unwrap();
+
+        let handle = ProcessHandle::open(identity).unwrap();
+        assert!(handle.is_exited().unwrap());
+        child.wait().unwrap();
     }
 
     #[test]
