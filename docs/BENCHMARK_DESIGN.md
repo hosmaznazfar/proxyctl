@@ -129,6 +129,10 @@ TCP ping is independent of core compatibility. An unsupported or invalid node/co
 
 Keep distinct outcomes for success, unreachable, unsupported, invalid, timeout, unavailable, and cancelled. Never store a numeric value for a failed sample. Store the direct TCP metric under a reserved `direct` target rather than pretending it belongs to a proxy core; the run scope must explicitly include that target.
 
+For the full benchmark selection, latency is the gate for throughput: run three real-ping samples first. If at least one succeeds, continue with download and upload. If all three fail, record download and upload as unavailable with the `latency_gate` reason and send no transfer requests. Metric-only modes remain independent and run only the selected metric. Unsupported/invalid compatibility and core preflight failures skip all metrics for that node/core pair.
+
+Benchmark scheduling is sequential, with one temporary core process per node/core pair. Each process configuration targets one node, so grouping the outer loop by core would not reduce process starts or network measurements. Concurrent node tests could reduce elapsed time but would increase RAM use; the implementation deliberately favors low resource consumption.
+
 ## 8. Persistence and crash recovery
 
 Use the existing redb benchmark run/sample tables. A run records:
