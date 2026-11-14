@@ -10,8 +10,7 @@ use url::Url;
 use crate::domain::{BenchmarkSettings, throughput_bps};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
-/// Keep each body read at the useful-partial threshold so a later framing error
-/// cannot discard an entire multi-threshold buffer inside ureq's strict reader.
+/// Minimum body bytes required before a failed download can be retained as a partial sample.
 const MIN_PARTIAL_DOWNLOAD_BYTES: u64 = 16 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -605,13 +604,6 @@ mod tests {
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
             let mut reader = BufReader::new(stream);
-            let (method, _, _) = read_fake_request(&mut reader);
-            assert_eq!(method, "CONNECT");
-            reader
-                .get_mut()
-                .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
-                .unwrap();
-            reader.get_mut().flush().unwrap();
             let (method, _, _) = read_fake_request(&mut reader);
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
