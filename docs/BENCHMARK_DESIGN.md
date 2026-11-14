@@ -1,7 +1,7 @@
 # Benchmark design
 
-> Status: existing benchmark engine implemented; performance optimization is planned in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`
-> Last updated: 2026-11-10
+> Status: Stages 1–3 implementation committed; local verification pending in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`
+> Last updated: 2026-11-14
 
 ## 1. Goals and scope
 
