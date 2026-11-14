@@ -1115,7 +1115,8 @@ mod tests {
             target: DIRECT_TARGET.into(),
             version: None,
         };
-        for index in [1] {
+        {
+            let index = 1;
             persist_sample(
                 &path,
                 failed_sample(
@@ -1135,7 +1136,8 @@ mod tests {
             target: CoreId::SingBox.as_str().into(),
             version: None,
         };
-        for index in 1..=SAMPLES_PER_METRIC {
+        {
+            let index = 1;
             persist_sample(
                 &path,
                 failed_sample(
