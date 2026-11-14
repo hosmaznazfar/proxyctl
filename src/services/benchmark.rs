@@ -378,10 +378,7 @@ fn execute_run(
             );
             let mut latency_succeeded = false;
             for &metric in metric_selection.metrics() {
-                if matches!(metric, BenchmarkMetric::Download | BenchmarkMetric::Upload)
-                    && metric_selection == BenchmarkMetricSelection::All
-                    && !latency_succeeded
-                {
+                if !throughput_allowed(metric, metric_selection, latency_succeeded) {
                     let reason = "throughput test skipped because all real-latency samples failed";
                     println!(
                         "run #{run_id} node #{} {core} {}: skipped — {reason}",
@@ -477,6 +474,16 @@ fn execute_run(
         }
     }
     Ok(())
+}
+
+fn throughput_allowed(
+    metric: BenchmarkMetric,
+    selection: BenchmarkMetricSelection,
+    latency_succeeded: bool,
+) -> bool {
+    selection != BenchmarkMetricSelection::All
+        || !matches!(metric, BenchmarkMetric::Download | BenchmarkMetric::Upload)
+        || latency_succeeded
 }
 
 fn execute_tcp_ping(
@@ -806,6 +813,45 @@ mod tests {
         assert!(!BenchmarkMetricSelection::Latency.includes_direct_tcp());
         assert!(!BenchmarkMetricSelection::Download.includes_direct_tcp());
         assert!(!BenchmarkMetricSelection::Upload.includes_direct_tcp());
+    }
+
+    #[test]
+    fn full_benchmark_skips_throughput_until_latency_has_succeeded() {
+        assert!(throughput_allowed(
+            BenchmarkMetric::Latency,
+            BenchmarkMetricSelection::All,
+            false
+        ));
+        assert!(!throughput_allowed(
+            BenchmarkMetric::Download,
+            BenchmarkMetricSelection::All,
+            false
+        ));
+        assert!(!throughput_allowed(
+            BenchmarkMetric::Upload,
+            BenchmarkMetricSelection::All,
+            false
+        ));
+        assert!(throughput_allowed(
+            BenchmarkMetric::Download,
+            BenchmarkMetricSelection::All,
+            true
+        ));
+        assert!(throughput_allowed(
+            BenchmarkMetric::Upload,
+            BenchmarkMetricSelection::All,
+            true
+        ));
+        assert!(throughput_allowed(
+            BenchmarkMetric::Download,
+            BenchmarkMetricSelection::Download,
+            false
+        ));
+        assert!(throughput_allowed(
+            BenchmarkMetric::Upload,
+            BenchmarkMetricSelection::Upload,
+            false
+        ));
     }
 
     #[test]
