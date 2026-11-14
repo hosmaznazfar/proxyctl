@@ -297,7 +297,7 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let identity = ProcessIdentity::capture(child.id()).unwrap();
+        let (identity, _pinned_handle) = pin_live_child(&child);
         coordinator.bind_core_process(&token, identity).unwrap();
         coordinator
             .apply_event(&token, SupervisorEvent::StartCommitted)
