@@ -1,4 +1,4 @@
-//! Conservative, compatibility-aware pruning based on completed benchmark evidence.
+//! Prune nodes that have no successful real-ping path through any managed core.
 
 use std::path::Path;
 
@@ -44,21 +44,18 @@ pub struct PruneReport {
     pub applied: bool,
 }
 
-/// Preview or apply soft-deletion using only completed benchmark records.
+/// Preview or apply soft-deletion using only persisted benchmark evidence.
 ///
-/// Only installed cores are considered in all-compatible mode. Unsupported adapters are
-/// excluded, invalid combinations and missing/ambiguous evidence prevent deletion. For a
-/// compatible core, all three real-ping samples must exist and be Unreachable before that
-/// core can contribute an unavailable result. A single successful sample keeps the node.
+/// All-core mode evaluates sing-box, Xray, and Mihomo, including adapter-level Unsupported
+/// and Invalid outcomes. A node is eligible only when every core is proven unusable and no
+/// core has a successful real-ping sample. Missing runs and cancelled/incomplete evidence
+/// remain inconclusive. No core is started and no network request is made.
 pub fn prune_nodes(path: &Path, options: PruneOptions) -> anyhow::Result<PruneReport> {
     let (nodes, runs, samples, cores) = {
         let database = NodeDatabase::open(path)?;
         let nodes = database.list_nodes(false)?;
         let cores = match options.scope {
-            PruneScope::AllCompatible => CoreId::ALL
-                .into_iter()
-                .filter(|core| core_binary_path(*core).is_ok_and(|binary| binary.is_file()))
-                .collect::<Vec<_>>(),
+            PruneScope::AllCompatible => CoreId::ALL.to_vec(),
             PruneScope::Core(core) => vec![core],
         };
         (
@@ -103,34 +100,36 @@ fn evaluate_node(
     runs: &[BenchmarkRun],
     samples: &[BenchmarkSample],
 ) -> (PruneDecision, String) {
-    let mut compatible = 0usize;
-    let mut unreachable = 0usize;
+    let mut unavailable = 0usize;
     let mut reachable = false;
     let mut incomplete = Vec::new();
-    let mut unsupported = Vec::new();
+    let mut reasons = Vec::new();
 
     for core in cores {
         let compatibility = adapters::adapter(*core).compatibility(&node.node);
         match compatibility.status {
             CompatibilityStatus::Unsupported => {
-                unsupported.push(core.as_str());
+                unavailable += 1;
+                reasons.push(format!("{core}: unsupported by this core"));
                 continue;
             }
             CompatibilityStatus::Invalid => {
-                incomplete.push(format!("{core}: current node semantics are invalid"));
+                unavailable += 1;
+                reasons.push(format!("{core}: node configuration is invalid"));
                 continue;
             }
             CompatibilityStatus::Supported => {}
         }
-        compatible += 1;
 
         match evaluate_core(node.id, *core, runs, samples) {
             CoreConnectivity::Reachable => reachable = true,
-            CoreConnectivity::Unreachable => unreachable += 1,
+            CoreConnectivity::Unreachable => {
+                unavailable += 1;
+                reasons.push(format!("{core}: no successful real-ping sample"));
+            }
             CoreConnectivity::Unsupported => {
-                incomplete.push(format!(
-                    "{core}: stored preflight disagrees with current compatibility"
-                ));
+                unavailable += 1;
+                reasons.push(format!("{core}: stored preflight marked unsupported"));
             }
             CoreConnectivity::Incomplete(reason) => {
                 incomplete.push(format!("{core}: {reason}"));
@@ -144,39 +143,33 @@ fn evaluate_node(
             "at least one compatible core has a successful real-ping sample".into(),
         );
     }
-    if compatible == 0 {
-        if !incomplete.is_empty() {
-            return (PruneDecision::InsufficientEvidence, incomplete.join("; "));
-        }
-        let detail = if unsupported.is_empty() {
-            "no installed compatible core is available".to_owned()
-        } else {
-            format!(
-                "no compatible core; unsupported by {}",
-                unsupported.join(", ")
-            )
-        };
-        return (PruneDecision::NoCompatibleCore, detail);
-    }
     if !incomplete.is_empty() {
         return (
             PruneDecision::InsufficientEvidence,
             format!(
-                "{unreachable}/{compatible} compatible core(s) confirmed unreachable; {}",
+                "{unavailable}/{} core(s) proven unusable; {}",
+                cores.len(),
                 incomplete.join("; ")
             ),
         );
     }
-    if unreachable == compatible {
+    if unavailable == cores.len() {
         return (
             PruneDecision::Candidate,
-            format!("all {compatible} compatible core(s) have three unreachable real-ping samples"),
+            format!(
+                "no successful real-ping path through any of the {} managed cores ({})",
+                cores.len(),
+                reasons.join("; ")
+            ),
         );
     }
 
     (
         PruneDecision::InsufficientEvidence,
-        "not every compatible core has a complete connectivity evaluation".into(),
+        format!(
+            "{unavailable}/{} core(s) proven unusable; at least one core has no complete failure evidence",
+            cores.len()
+        ),
     )
 }
 
@@ -222,17 +215,15 @@ fn evaluate_core(
         .map(|sample| sample.status)
     {
         Some(BenchmarkSampleStatus::Unsupported) => return CoreConnectivity::Unsupported,
-        Some(BenchmarkSampleStatus::Invalid) => {
-            return CoreConnectivity::Incomplete("preflight marked the node invalid".into());
+        Some(BenchmarkSampleStatus::Invalid)
+        | Some(BenchmarkSampleStatus::Unavailable)
+        | Some(BenchmarkSampleStatus::Timeout)
+        | Some(BenchmarkSampleStatus::Unreachable) => return CoreConnectivity::Unreachable,
+        Some(BenchmarkSampleStatus::Cancelled) => {
+            return CoreConnectivity::Incomplete("preflight was cancelled".into());
         }
         Some(BenchmarkSampleStatus::Success) => {
             return CoreConnectivity::Incomplete("invalid successful preflight record".into());
-        }
-        Some(BenchmarkSampleStatus::Unavailable)
-        | Some(BenchmarkSampleStatus::Timeout)
-        | Some(BenchmarkSampleStatus::Unreachable)
-        | Some(BenchmarkSampleStatus::Cancelled) => {
-            return CoreConnectivity::Incomplete("compatible-core preflight failed".into());
         }
         None => {}
     }
@@ -263,14 +254,12 @@ fn evaluate_core(
     }
     if attempts
         .iter()
-        .all(|sample| sample.status == BenchmarkSampleStatus::Unreachable)
+        .all(|sample| sample.status != BenchmarkSampleStatus::Cancelled)
     {
         return CoreConnectivity::Unreachable;
     }
 
-    CoreConnectivity::Incomplete(
-        "failed samples include timeout, cancellation, or local/HTTP errors; treating them as ambiguous".into(),
-    )
+    CoreConnectivity::Incomplete("one or more real-ping samples were cancelled".into())
 }
 
 #[cfg(test)]
