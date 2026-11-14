@@ -131,6 +131,7 @@ pub fn build_report(path: &Path, options: ReportOptions) -> anyhow::Result<Bench
             let runs = node_runs
                 .into_iter()
                 .map(|run| build_run_report(run, node.id, &samples))
+                .filter(|report| !report.targets.is_empty())
                 .collect();
             NodeReport { node, runs }
         })
@@ -147,26 +148,29 @@ fn build_run_report(run: &BenchmarkRun, node_id: u64, samples: &[BenchmarkSample
     let targets = run
         .cores
         .iter()
-        .map(|target| {
+        .filter_map(|target| {
             let metrics = metrics_for_target(target);
             let target_samples = samples
                 .iter()
                 .filter(|sample| sample.run_id == run.id && sample.node_id == node_id)
                 .filter(|sample| sample.core == *target)
                 .collect::<Vec<_>>();
+            if target_samples.is_empty() {
+                return None;
+            }
             let core_version = run.core_versions.get(target).cloned().or_else(|| {
                 target_samples
                     .iter()
                     .find_map(|sample| sample.core_version.clone())
             });
-            TargetReport {
+            Some(TargetReport {
                 target: target.clone(),
                 core_version,
                 metrics: metrics
                     .into_iter()
                     .map(|metric| summarize_metric(metric, &target_samples))
                     .collect(),
-            }
+            })
         })
         .collect();
 
@@ -205,14 +209,14 @@ fn build_comparisons(
         }
 
         for target in targets {
-            let Some(run) = latest_completed_run(&node_runs, &target) else {
+            let Some(run) = latest_completed_run(&node_runs, node.id, &target, samples) else {
                 continue;
             };
             comparisons.push(comparison_for(node, run, &target, samples));
         }
 
         if selected_core.is_none()
-            && let Some(run) = latest_completed_run(&node_runs, DIRECT_TARGET)
+            && let Some(run) = latest_completed_run(&node_runs, node.id, DIRECT_TARGET, samples)
         {
             comparisons.push(comparison_for(node, run, DIRECT_TARGET, samples));
         }
@@ -227,10 +231,20 @@ fn build_comparisons(
     comparisons
 }
 
-fn latest_completed_run<'a>(runs: &[&'a BenchmarkRun], target: &str) -> Option<&'a BenchmarkRun> {
+fn latest_completed_run<'a>(
+    runs: &[&'a BenchmarkRun],
+    node_id: u64,
+    target: &str,
+    samples: &[BenchmarkSample],
+) -> Option<&'a BenchmarkRun> {
     runs.iter()
         .copied()
         .filter(|run| run.cores.iter().any(|core| core == target))
+        .filter(|run| {
+            samples.iter().any(|sample| {
+                sample.run_id == run.id && sample.node_id == node_id && sample.core == target
+            })
+        })
         .max_by_key(|run| (run.completed_at.unwrap_or(run.started_at), run.id))
 }
 
