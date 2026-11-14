@@ -347,7 +347,7 @@ mod tests {
     use super::*;
 
     #[cfg(target_os = "linux")]
-    use std::{fs, os::unix::fs::PermissionsExt};
+    use std::fs;
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -383,12 +383,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn captures_command_output_to_file_without_pipe_backpressure() {
-        let output = run_ip_command(
-            "printf",
-            &["[{}]\\n"],
-            Duration::from_secs(1),
-        )
-        .unwrap();
+        let output = run_ip_command("printf", &["[{}]\\n"], Duration::from_secs(1)).unwrap();
         assert_eq!(output, b"[{}]\n");
     }
 
