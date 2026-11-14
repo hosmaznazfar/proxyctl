@@ -519,3 +519,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Durable TUN write-ahead journal foundation:** the private manifest store now persists bounded, generation-scoped interface/route/rule operation intents, observed fingerprints, and cleanup progress as atomic fsynced records. It rejects unsafe file identities, invalid state transitions, duplicate keys, stale generations, and incomplete journal removal. This is not yet connected to a concrete rtnetlink mutator. A crash after an intent but before its fingerprint remains ambiguous and must fail closed pending exact kernel inspection.
+
+
+- Journal recovery now distinguishes unresolved intent, applied, removed, and explicitly confirmed-absent operations. An intent cannot authorize deletion; exact inspection must establish absence or ownership first. Applied resources require fingerprint compare-and-delete before cleanup progress is committed.
