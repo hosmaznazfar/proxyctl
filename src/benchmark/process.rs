@@ -368,6 +368,34 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(2));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn batch_readiness_requires_every_listener_and_identifies_missing_ports() {
+        let first = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let second = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let first_port = first.local_addr().unwrap().port();
+        let second_port = second.local_addr().unwrap().port();
+        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+        assert!(wait_for_listeners(
+            &mut child,
+            &[first_port, second_port],
+            Duration::from_millis(200)
+        )
+        .is_ok());
+        terminate_child(&mut child);
+
+        let missing_port = reserve_loopback_port().unwrap();
+        let mut child = Command::new("sleep").arg("30").spawn().unwrap();
+        let error = wait_for_listeners(
+            &mut child,
+            &[first_port, missing_port],
+            Duration::from_millis(200),
+        )
+        .unwrap_err();
+        assert!(error.contains(&missing_port.to_string()));
+        terminate_child(&mut child);
+    }
+
     #[test]
     fn startup_diagnostic_summary_never_exposes_raw_log_lines() {
         let log = NamedTempFile::new().unwrap();
