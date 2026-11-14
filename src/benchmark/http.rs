@@ -191,6 +191,8 @@ impl BenchmarkHttpClient {
             .and_then(|_| easy.timeout(self.timeout))
             .and_then(|_| easy.connect_timeout(self.timeout))
             .and_then(|_| easy.accept_encoding("identity"))
+            .and_then(|_| easy.follow_location(true))
+            .and_then(|_| easy.max_redirections(10))
             .and_then(|_| easy.get(true))
             .map_err(|_| MeasurementFailure::Unavailable)?;
 
