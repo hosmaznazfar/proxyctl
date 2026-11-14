@@ -66,12 +66,14 @@ fn valid_activation_id(value: &str) -> bool {
 
 /// Contract for a future broker-owned transaction backend.
 ///
-/// Each mutating method must durably journal the exact resource identity before returning,
-/// and its kernel mutation plus journal update must be one recoverable operation: an error
-/// must not leave an unjournaled resource. The journal must survive controller/core
+/// Each mutating method must persist a generation-scoped operation intent before issuing
+/// the kernel mutation, then persist the observed exact fingerprint before reporting success.
+/// A crash between those writes leaves an ambiguous intent that recovery must inspect; it must
+/// never delete a resource based on a guessed name. The journal must survive controller/core
 /// termination. Deletion must compare the current complete fingerprint atomically with the
-/// delete. A successful add must return a non-empty fingerprint. This trait alone does not
-/// implement those guarantees.
+/// delete, then durably mark cleanup progress. A successful add must return a non-empty
+/// fingerprint. The filesystem journal primitives exist in ManifestStore, but this trait has
+/// no concrete backend wired to them yet.
 pub trait KernelTransactionBackend {
     fn create_owned_interface(
         &mut self,
