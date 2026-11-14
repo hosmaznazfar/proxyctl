@@ -260,29 +260,28 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
             };
             !name.is_empty()
                 && name.len() <= 15
-                && name.bytes().all(|byte| {
-                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
-                })
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
         }
         JournalOperationKind::AddRoute => {
             let mut parts = key.splitn(4, ':');
             matches!(parts.next(), Some("route"))
                 && matches!(parts.next(), Some("v4" | "v6"))
-                && parts.next().is_some_and(|table| {
-                    table.parse::<u32>().is_ok_and(|value| value > 0)
-                })
+                && parts
+                    .next()
+                    .is_some_and(|table| table.parse::<u32>().is_ok_and(|value| value > 0))
                 && parts.next().is_some_and(|destination| {
-                    !destination.is_empty()
-                        && !destination.chars().any(char::is_whitespace)
+                    !destination.is_empty() && !destination.chars().any(char::is_whitespace)
                 })
         }
         JournalOperationKind::AddRule => {
             let mut parts = key.split(':');
             matches!(parts.next(), Some("rule"))
                 && matches!(parts.next(), Some("v4" | "v6"))
-                && parts.next().is_some_and(|priority| {
-                    priority.parse::<u32>().is_ok_and(|value| value > 0)
-                })
+                && parts
+                    .next()
+                    .is_some_and(|priority| priority.parse::<u32>().is_ok_and(|value| value > 0))
                 && parts.next().is_none()
         }
     }
@@ -1054,7 +1053,10 @@ mod tests {
             ],
         };
         let observed = std::collections::BTreeMap::from([
-            ("route:v4:42420:default".into(), Some("possibly-foreign".into())),
+            (
+                "route:v4:42420:default".into(),
+                Some("possibly-foreign".into()),
+            ),
             ("rule:v4:42421".into(), Some("changed".into())),
         ]);
         let plan = plan_journal_recovery(&journal, &observed).unwrap();
@@ -1274,8 +1276,6 @@ mod tests {
         assert!(journal.validate().is_err());
     }
 
-
-
     #[test]
     fn journal_validation_requires_interface_routes_then_rules_order() {
         let make = |operations| TransactionJournal {
@@ -1291,19 +1291,39 @@ mod tests {
             state: JournalOperationState::Intent,
             fingerprint: None,
         };
-        assert!(make(vec![
-            operation(0, JournalOperationKind::AddRoute, "route:v4:42420:default"),
-            operation(1, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
-        ]).validate().is_err());
-        assert!(make(vec![
-            operation(0, JournalOperationKind::AddRule, "rule:v4:42420"),
-            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:default"),
-        ]).validate().is_err());
-        assert!(make(vec![
-            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
-            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:default"),
-            operation(2, JournalOperationKind::AddRule, "rule:v4:42420"),
-        ]).validate().is_ok());
+        assert!(
+            make(vec![
+                operation(0, JournalOperationKind::AddRoute, "route:v4:42420:default"),
+                operation(
+                    1,
+                    JournalOperationKind::CreateInterface,
+                    "interface:tun-proxyctl"
+                ),
+            ])
+            .validate()
+            .is_err()
+        );
+        assert!(
+            make(vec![
+                operation(0, JournalOperationKind::AddRule, "rule:v4:42420"),
+                operation(1, JournalOperationKind::AddRoute, "route:v4:42420:default"),
+            ])
+            .validate()
+            .is_err()
+        );
+        assert!(
+            make(vec![
+                operation(
+                    0,
+                    JournalOperationKind::CreateInterface,
+                    "interface:tun-proxyctl"
+                ),
+                operation(1, JournalOperationKind::AddRoute, "route:v4:42420:default"),
+                operation(2, JournalOperationKind::AddRule, "rule:v4:42420"),
+            ])
+            .validate()
+            .is_ok()
+        );
     }
 
     #[test]
