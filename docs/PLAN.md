@@ -1,6 +1,6 @@
 # Proxyctl — Plan and Architecture Decisions
 
-> Status: approved baseline; benchmark batching and bounded probes are implemented pending local verification in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`  
+> Status: approved baseline; benchmark optimization Stages 1–5 are user-verified; Stage 6 offline fault/performance coverage awaits local verification in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`  
 > Repository: https://github.com/hosmaznazfar/proxyctl  
 > Last updated: 2026-11-14
 
