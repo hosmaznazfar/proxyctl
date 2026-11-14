@@ -751,7 +751,7 @@ fn print_display_config(config: &crate::services::display_config::DisplayConfig)
         let fields = config.profiles.get(&profile).cloned().unwrap_or_default();
         println!("{profile}: {}", fields.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "));
     }
-    println!("Available fields: node, name, server, port, protocol, core, version, latency, download, upload, status, samples, failures, run, tested");
+    println!("Available fields: node, name, server, port, protocol, core, version, latency, tcp-ping, download, upload, status, samples, failures, run, tested");
     println!("Add:    proxyctl config display add-field <compact|normal|full> <field>");
     println!("Remove: proxyctl config display remove-field <compact|normal|full> <field>");
 }
@@ -775,7 +775,7 @@ fn print_node_results(
                     F::Node => number.clone(), F::Name => node.node.node.name.clone().unwrap_or_else(|| "-".into()),
                     F::Server => safe_field(&node.node.node.server, 48), F::Port => node.node.node.port.to_string(),
                     F::Protocol => node.node.node.protocol.to_string(), F::Core | F::Version => "-".into(),
-                    F::Latency | F::Download | F::Upload => "not-run".into(), F::Status => "not-run".into(),
+                    F::Latency | F::TcpPing | F::Download | F::Upload => "not-run".into(), F::Status => "not-run".into(),
                     F::Samples | F::Failures | F::Run | F::Tested => "-".into(),
                 }).collect::<Vec<_>>());
                 continue;
@@ -784,9 +784,10 @@ fn print_node_results(
                 for target in &run.targets {
                     found = true;
                     let latency = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Latency);
+                    let tcp_ping = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::TcpPing);
                     let download = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Download);
                     let upload = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Upload);
-                    let summaries = [latency, download, upload].into_iter().flatten().collect::<Vec<_>>();
+                    let summaries = [latency, tcp_ping, download, upload].into_iter().flatten().collect::<Vec<_>>();
                     let successes: usize = summaries.iter().map(|m| m.successful).sum();
                     let attempted: usize = summaries.iter().map(|m| m.attempted).sum();
                     let failures: usize = summaries.iter().map(|m| m.failures.iter().map(|f| f.count).sum::<usize>()).sum();
@@ -796,8 +797,8 @@ fn print_node_results(
                         F::Server => safe_field(&node.node.node.server, 48), F::Port => node.node.node.port.to_string(),
                         F::Protocol => node.node.node.protocol.to_string(), F::Core => target.target.clone(),
                         F::Version => target.core_version.as_deref().map(|v| display_core_version(v, false)).unwrap_or_else(|| "-".into()),
-                        F::Latency => metric_cell(latency), F::Download => metric_cell(download), F::Upload => metric_cell(upload),
-                        F::Status => if summaries.iter().any(|m| m.preflight == Some(crate::domain::BenchmarkSampleStatus::Unavailable)) { "unavailable".into() } else { run_status_label(run.run.status).into() },
+                        F::Latency => metric_cell(latency), F::TcpPing => metric_cell(tcp_ping), F::Download => metric_cell(download), F::Upload => metric_cell(upload),
+                        F::Status => aggregate_target_status(&summaries, run.run.status),
                         F::Samples => format!("{successes}/{attempted}"), F::Failures => failures.to_string(),
                         F::Run => run.run.id.to_string(), F::Tested => run.run.completed_at.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
                     }).collect::<Vec<_>>());
@@ -807,6 +808,15 @@ fn print_node_results(
     }
     if !found { println!("No benchmark results."); return; }
     println!("{}", builder.build().with(Style::rounded()));
+}
+
+fn aggregate_target_status(summaries: &[&reporting::MetricSummary], run_status: crate::domain::BenchmarkRunStatus) -> String {
+    use crate::domain::BenchmarkSampleStatus as S;
+    for (status, label) in [(S::Unavailable, "unavailable"), (S::Unsupported, "unsupported"), (S::Invalid, "invalid"), (S::Timeout, "timeout"), (S::Unreachable, "unreachable"), (S::Cancelled, "cancelled")] {
+        if summaries.iter().any(|summary| summary.preflight == Some(status) || summary.failures.iter().any(|failure| failure.status == status)) { return label.into(); }
+    }
+    if summaries.iter().all(|summary| summary.attempted == 0 && summary.preflight.is_none()) { return "not-run".into(); }
+    run_status_label(run_status).into()
 }
 
 fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
