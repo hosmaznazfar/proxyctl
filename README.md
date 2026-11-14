@@ -196,7 +196,7 @@ proxyctl report --node 18 19 20
 proxyctl report --node 18..25
 ~~~
 
-Show the full run history (newest first), including cancelled and interrupted runs:
+Show the retained run history (newest first), including cancelled and interrupted runs. Proxyctl automatically keeps at most the three newest runs per node/core target and removes older target samples:
 
 ~~~sh
 proxyctl report --history
@@ -235,7 +235,7 @@ proxyctl prune --core xray --unavailable
 proxyctl prune --core xray --unavailable --apply
 ~~~
 
-Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core mode, unsupported core/node combinations are excluded rather than counted as failures. A node is eligible only when every currently compatible core has a latest completed benchmark run with three distinct real-ping samples, all marked unreachable. One successful sample keeps the node. Missing runs, partial samples, invalid compatibility, startup/preflight errors, timeouts, cancellations, and other ambiguous HTTP/runtime failures prevent pruning. A newer completed run supersedes older evidence; cancelled/interrupted runs do not. Use `list --include-deleted` to see deleted positions (`D1`, `D2`, ...), then run `proxyctl restore 1` to restore the first deleted row.
+Preview is the default; only `--apply` soft-deletes eligible nodes. In all-core mode, Proxyctl evaluates sing-box, Xray, and Mihomo, regardless of whether a node is currently supported by each adapter. A core counts as unusable when the current adapter marks the node unsupported/invalid, or when its latest completed benchmark evidence shows no successful real-ping sample (including timeout, unreachable, or unavailable outcomes). A node is eligible only when all three cores are proven unusable. One successful real-ping sample through any core keeps the node. Missing runs, incomplete samples, and cancelled runs remain inconclusive and prevent pruning. Pruning is based only on stored evidence; it never starts cores or contacts the Internet. A newer completed run supersedes older evidence; cancelled/interrupted runs do not. Use `list --include-deleted` to see deleted positions (`D1`, `D2`, ...), then run `proxyctl restore 1` to restore the first deleted row.
 
 ## Shared node selection
 
