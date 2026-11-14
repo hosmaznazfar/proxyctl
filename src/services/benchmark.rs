@@ -1108,6 +1108,7 @@ mod tests {
                 summary: None,
             })
             .unwrap();
+        drop(database);
         let direct_context = SampleContext {
             run_id,
             node_id: 1,
