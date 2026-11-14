@@ -31,11 +31,10 @@ use crate::{
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 const SAMPLES_PER_METRIC: u8 = 3;
 const BENCHMARK_HISTORY_LIMIT: usize = 3;
-const METHODOLOGY: &str = "proxyctl-benchmark-v2";
+const METHODOLOGY: &str = "proxyctl-benchmark-v3";
 const DIRECT_TARGET: &str = "direct";
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROBE_CONCURRENCY: usize = 3;
-const LATENCY_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
 pub struct BenchmarkOptions {
@@ -95,6 +94,8 @@ pub fn default_settings() -> BenchmarkSettings {
         download_bytes: 2 * 1024 * 1024,
         upload_bytes: 262_144,
         request_timeout_ms: 15_000,
+        latency_timeout_ms: 5_000,
+        probe_concurrency: 3,
         startup_timeout_ms: 10_000,
     }
 }
@@ -266,7 +267,7 @@ fn execute_run(
     settings: &BenchmarkSettings,
     metric_selection: BenchmarkMetricSelection,
 ) -> anyhow::Result<()> {
-    let latency_concurrency = MAX_PROBE_CONCURRENCY;
+    let latency_concurrency = usize::from(settings.probe_concurrency);
     let active_nodes = NodeDatabase::open(database_path)?.list_nodes(false)?;
     let display_numbers = nodes
         .iter()
@@ -534,7 +535,7 @@ fn execute_latency_batch(
     samples: &mut Vec<BenchmarkSample>,
 ) -> anyhow::Result<Vec<bool>> {
     let mut succeeded = vec![false; entries.len()];
-    let timeout = LATENCY_REQUEST_TIMEOUT;
+    let timeout = Duration::from_millis(settings.latency_timeout_ms);
     let batch_width = concurrency.clamp(1, MAX_PROBE_CONCURRENCY);
     for sample_index in 1..=SAMPLES_PER_METRIC {
         if CANCELLED.load(Ordering::Relaxed) {
