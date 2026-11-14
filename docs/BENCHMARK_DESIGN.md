@@ -1,6 +1,6 @@
 # Benchmark design
 
-> Status: Stages 1–5 implemented and user-verified; Stage 6 offline fault/performance coverage added and awaiting local verification
+> Status: Stages 1–5 user-verified; Stage 6 focused offline tests user-verified, full offline verification pending; real-world runbook prepared for user execution
 > Last updated: 2026-11-14
 
 ## 1. Goals and scope
@@ -92,7 +92,7 @@ A failure in one metric must not erase successful samples from another metric.
 
 ## 5. Offline optimization verification
 
-Stages 1–5 have been locally verified by the user. Stage 6 adds synthetic batch-size coverage (1/10/50 nodes across all three adapter formats), a failed-startup child-reaping assertion, and local fake-proxy HTTP-status failure tests for both download and upload. These tests do not launch real proxy cores or contact public endpoints. Stage 6 remains pending local verification; real-world comparisons remain a separate, explicitly approved stage.
+Stages 1–5 have been locally verified. Stage 6 adds synthetic batch-size coverage (1/10/50 nodes across all three adapter formats), a failed-startup child-reaping assertion, and local fake-proxy HTTP-status failure tests for both download and upload. The focused Stage 6 tests have passed locally; the full formatting/test/Clippy/release verification batch remains pending. Real-world testing is user-run and documented in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`; ordinary automated tests remain offline.
 
 ## 5. Progress and cancellation
 
