@@ -172,9 +172,15 @@ enum Command {
         /// Upload payload size for each sample (default 256 KiB).
         #[arg(long, default_value_t = 262_144)]
         upload_bytes: u64,
-        /// Maximum duration of each HTTP measurement request, in seconds.
-        #[arg(long, default_value_t = 15)]
+        /// Maximum duration of each download/upload HTTP request, in seconds.
+        #[arg(long, alias = "throughput-timeout-secs", default_value_t = 15)]
         request_timeout_secs: u64,
+        /// Maximum duration of each real-latency HTTP request, in seconds.
+        #[arg(long, default_value_t = 5)]
+        latency_timeout_secs: u64,
+        /// Maximum concurrent latency/TCP probes (1–3).
+        #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u8).range(1..=3))]
+        concurrency: u8,
         /// Maximum startup/readiness wait for a managed core, in seconds.
         #[arg(long, default_value_t = 10)]
         startup_timeout_secs: u64,
@@ -630,11 +636,16 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             download_bytes,
             upload_bytes,
             request_timeout_secs,
+            latency_timeout_secs,
+            concurrency,
             startup_timeout_secs,
         } => {
             let request_timeout_ms = request_timeout_secs
                 .checked_mul(1_000)
                 .ok_or_else(|| anyhow::anyhow!("request timeout is too large"))?;
+            let latency_timeout_ms = latency_timeout_secs
+                .checked_mul(1_000)
+                .ok_or_else(|| anyhow::anyhow!("latency timeout is too large"))?;
             let startup_timeout_ms = startup_timeout_secs
                 .checked_mul(1_000)
                 .ok_or_else(|| anyhow::anyhow!("startup timeout is too large"))?;
@@ -645,6 +656,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             settings.download_bytes = download_bytes;
             settings.upload_bytes = upload_bytes;
             settings.request_timeout_ms = request_timeout_ms;
+            settings.latency_timeout_ms = latency_timeout_ms;
+            settings.probe_concurrency = concurrency;
             settings.startup_timeout_ms = startup_timeout_ms;
             let metric_selection = if latency_only {
                 crate::services::benchmark::BenchmarkMetricSelection::Latency
