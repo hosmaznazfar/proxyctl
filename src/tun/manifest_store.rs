@@ -180,7 +180,23 @@ impl TransactionJournal {
             "too many journal operations"
         );
         let mut keys = std::collections::BTreeSet::new();
+        let mut interface_seen = false;
+        let mut rules_started = false;
         for (index, operation) in self.operations.iter().enumerate() {
+            match operation.kind {
+                JournalOperationKind::CreateInterface => {
+                    ensure!(
+                        index == 0 && !interface_seen,
+                        "interface creation must be the first and only interface operation"
+                    );
+                    interface_seen = true;
+                }
+                JournalOperationKind::AddRoute => ensure!(
+                    !rules_started,
+                    "routes cannot be journaled after policy rules"
+                ),
+                JournalOperationKind::AddRule => rules_started = true,
+            }
             ensure!(
                 operation.sequence as usize == index,
                 "journal operation sequence is not contiguous"
@@ -1258,6 +1274,37 @@ mod tests {
         assert!(journal.validate().is_err());
     }
 
+
+
+    #[test]
+    fn journal_validation_requires_interface_routes_then_rules_order() {
+        let make = |operations| TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 1,
+            operations,
+        };
+        let operation = |sequence, kind, resource_key: &str| JournalOperation {
+            sequence,
+            kind,
+            resource_key: resource_key.into(),
+            state: JournalOperationState::Intent,
+            fingerprint: None,
+        };
+        assert!(make(vec![
+            operation(0, JournalOperationKind::AddRoute, "route:v4:42420:default"),
+            operation(1, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+        ]).validate().is_err());
+        assert!(make(vec![
+            operation(0, JournalOperationKind::AddRule, "rule:v4:42420"),
+            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:default"),
+        ]).validate().is_err());
+        assert!(make(vec![
+            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:default"),
+            operation(2, JournalOperationKind::AddRule, "rule:v4:42420"),
+        ]).validate().is_ok());
+    }
 
     #[test]
     fn journal_validation_binds_resource_key_shape_to_operation_kind() {
