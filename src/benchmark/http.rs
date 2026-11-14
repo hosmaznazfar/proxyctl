@@ -524,6 +524,41 @@ mod tests {
     }
 
     #[test]
+    fn upload_rejects_unsuccessful_http_response() {
+        use std::{io::{BufReader, Write}, net::TcpListener, thread};
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let (method, _, body) = read_fake_request(&mut reader);
+            assert_eq!(method, "POST");
+            assert_eq!(body, vec![0x5a; 8]);
+            let stream = reader.get_mut();
+            stream
+                .write_all(b"HTTP/1.1 500 Internal Server Error\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
+                .unwrap();
+            stream.flush().unwrap();
+        });
+        let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
+        let agent: Agent = Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_secs(2)))
+            .build()
+            .into();
+        let client = BenchmarkHttpClient {
+            agent,
+            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
+        };
+
+        assert_eq!(client.upload(8), Err(MeasurementFailure::HttpStatus(500)));
+        server.join().unwrap();
+    }
+
+    #[test]
     fn transfer_progress_reports_exact_target_and_monotonic_rate() {
         let progress = TransferProgress::new(1_024, 2_048, Duration::from_secs(2));
         assert_eq!(progress.transferred_bytes, 1_024);
