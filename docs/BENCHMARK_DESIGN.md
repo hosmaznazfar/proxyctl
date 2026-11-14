@@ -238,7 +238,7 @@ Metric outcomes must remain semantically distinct:
 - `unsupported` and `invalid`: adapter compatibility outcomes, not network failures.
 - `timeout`, `unreachable`, and `cancelled`: attempted measurements with their own outcomes.
 
-Use the Rust `tabled` crate for terminal table layout rather than hand-calculated column widths. The table renderer is presentation-only; report aggregation and persisted benchmark records remain in the service/domain layers. Sensitive source URLs, credentials, fingerprints, and internal database IDs are not display fields. `show --details` remains the explicit connection-metadata view and is separate from benchmark tables.
+Use the Rust `tabled` crate for terminal table layout rather than hand-calculated column widths. The table renderer is presentation-only; report aggregation and persisted benchmark records remain in the service/domain layers. Sensitive source URLs, credentials, fingerprints, and internal database IDs are not display fields. `show --details` renders a separate connection-metadata table (protocol, server, port, name, status, masked identity/secret presence, and option keys with values hidden); it does not reuse the benchmark profile columns.
 
 
 ## 14. Automatic history retention
