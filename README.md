@@ -160,6 +160,9 @@ proxyctl test --node 12 13 14 --core sing-box
 proxyctl test --node 12..18 --core sing-box
 proxyctl test --node 12 13 14 --all-cores
 proxyctl test --node 12..18 --all-cores
+
+# Tune the bounded latency workers and independent request deadlines
+proxyctl test --all-cores --concurrency 3 --latency-timeout-secs 5 --request-timeout-secs 30
 ~~~
 
 Each selected node receives three direct TCP-ping samples. Multiple IDs or ranges supplied to one `--node` option are executed under one shared benchmark run ID. For each compatible node/core pair, Proxyctl first takes three real-latency samples. Download and upload are attempted only if at least one latency sample succeeds; otherwise both throughput metrics are recorded as skipped (`latency_gate`) and no transfer request is sent. Unsupported/invalid compatibility or core preflight failures skip all metrics for that node/core pair. The revised defaults follow v2rayN where applicable: Google `generate_204` for real ping and CacheFly's 10 MB test file for download, sampling only the first 2 MiB per sample to keep data use modest. Upload remains separately configurable and initially uses Cloudflare's upload endpoint, with a 256 KiB synthetic payload per sample to keep the default usable on slower upstream links. Cloudflare documents aggregated measurement collection; Proxyctl sends only a generated synthetic body, not user files or proxy credentials. Endpoint URLs, payload limits, and separate latency/throughput request timeouts are configurable. Probe concurrency is configurable from 1 to 3 (default 3). Download samples count exactly the configured byte target; an early EOF is recorded as incomplete rather than scoring a smaller sample. Progress reports transferred/target bytes and the current measured rate. Upload timing includes sending the complete synthetic body and receiving the server response.
