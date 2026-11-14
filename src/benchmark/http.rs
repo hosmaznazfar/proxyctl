@@ -12,9 +12,10 @@ use url::Url;
 use crate::domain::{BenchmarkSettings, throughput_bps};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
-const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
-/// Ignore tiny fragments that do not provide a useful throughput measurement.
+/// Keep each body read at the useful-partial threshold so a later framing error
+/// cannot discard an entire multi-threshold buffer inside ureq's strict reader.
 const MIN_PARTIAL_DOWNLOAD_BYTES: u64 = 16 * 1024;
+const DOWNLOAD_CHUNK_BYTES: usize = MIN_PARTIAL_DOWNLOAD_BYTES as usize;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
 
 /// A successful, timed HTTP measurement.
