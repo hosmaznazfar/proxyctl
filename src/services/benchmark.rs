@@ -626,8 +626,8 @@ fn execute_tcp_ping_batch(
             break;
         }
         for chunk in nodes.chunks(concurrency.max(1)) {
-            let (sender, receiver) = mpsc::channel();
-            thread::scope(|scope| {
+            let batch_samples = thread::scope(|scope| {
+                let (sender, receiver) = mpsc::channel();
                 for record in chunk {
                     let sender = sender.clone();
                     scope.spawn(move || {
@@ -640,6 +640,7 @@ fn execute_tcp_ping_batch(
                     });
                 }
                 drop(sender);
+                let mut batch_samples = Vec::with_capacity(chunk.len());
                 for _ in 0..chunk.len() {
                     if let Ok((node_id, result)) = receiver.recv() {
                         let context = SampleContext {
@@ -670,10 +671,14 @@ fn execute_tcp_ping_batch(
                                 )
                             }
                         };
-                        persist_sample(database_path, sample)?;
+                        batch_samples.push(sample);
                     }
                 }
+                batch_samples
             });
+            for sample in batch_samples {
+                persist_sample(database_path, sample)?;
+            }
         }
     }
     Ok(())
