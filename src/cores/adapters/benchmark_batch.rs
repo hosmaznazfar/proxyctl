@@ -336,4 +336,52 @@ mod tests {
         ];
         assert!(generate(adapter(CoreId::Xray), &targets).is_err());
     }
+    #[test]
+    fn synthetic_batch_scaling_keeps_one_listener_and_route_per_node() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@batch.example:443",
+        )
+        .unwrap();
+
+        for count in [1_usize, 10, 50] {
+            let targets = (0..count)
+                .map(|index| BenchmarkTarget {
+                    node_id: index as u64 + 1,
+                    node: &node,
+                    listen_port: 20_000 + index as u16,
+                })
+                .collect::<Vec<_>>();
+
+            for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+                let generated = generate(adapter(core), &targets).unwrap();
+                let document: Value = serde_json::from_slice(&generated.content).unwrap();
+                let (inbounds, outbounds) = match core {
+                    CoreId::SingBox => (
+                        document["inbounds"].as_array().unwrap().len(),
+                        document["outbounds"].as_array().unwrap().len(),
+                    ),
+                    CoreId::Xray => (
+                        document["inbounds"].as_array().unwrap().len(),
+                        document["outbounds"].as_array().unwrap().len(),
+                    ),
+                    CoreId::Mihomo => (
+                        document["listeners"].as_array().unwrap().len(),
+                        document["proxies"].as_array().unwrap().len(),
+                    ),
+                };
+                assert_eq!(inbounds, count, "{core} listener count at batch size {count}");
+                assert_eq!(outbounds, count, "{core} outbound count at batch size {count}");
+                match core {
+                    CoreId::SingBox => {
+                        assert_eq!(document["route"]["rules"].as_array().unwrap().len(), count);
+                    }
+                    CoreId::Xray => {
+                        assert_eq!(document["routing"]["rules"].as_array().unwrap().len(), count);
+                    }
+                    CoreId::Mihomo => {}
+                }
+            }
+        }
+    }
+
 }
