@@ -933,7 +933,6 @@ fn aggregate_target_status(
 ) -> String {
     use crate::domain::BenchmarkSampleStatus as S;
     for (status, label) in [
-        (S::Skipped, "skipped"),
         (S::Unavailable, "unavailable"),
         (S::Unsupported, "unsupported"),
         (S::Invalid, "invalid"),
