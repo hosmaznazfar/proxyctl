@@ -204,6 +204,25 @@ mod tests {
     }
 
     #[test]
+    fn legacy_benchmark_settings_receive_safe_optimization_defaults() {
+        let settings: BenchmarkSettings = serde_json::from_str(
+            r#"{
+                "methodology":"proxyctl-benchmark-v2",
+                "latency_url":"https://example.com/ping",
+                "download_url":"https://example.com/down",
+                "upload_url":"https://example.com/up",
+                "download_bytes":1024,
+                "upload_bytes":1024,
+                "request_timeout_ms":15000,
+                "startup_timeout_ms":10000
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(settings.latency_timeout_ms, 5_000);
+        assert_eq!(settings.probe_concurrency, 3);
+    }
+
+    #[test]
     fn median_uses_successful_samples_only() {
         let samples = [
             sample(BenchmarkSampleStatus::Success, Some(40.0)),
