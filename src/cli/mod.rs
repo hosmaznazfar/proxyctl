@@ -257,12 +257,18 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     settings::listen_port()?
                 ),
                 Some(ConfigAction::Set { key, value }) => {
-                    anyhow::ensure!(key == "listen-port", "unknown config key '{key}'; expected 'listen-port'");
+                    anyhow::ensure!(
+                        key == "listen-port",
+                        "unknown config key '{key}'; expected 'listen-port'"
+                    );
                     settings::set_listen_port(value)?;
                     println!("Saved shared HTTP/SOCKS5 listen port: 127.0.0.1:{value}");
                 }
                 Some(ConfigAction::Reset { key }) => {
-                    anyhow::ensure!(key == "listen-port", "unknown config key '{key}'; expected 'listen-port'");
+                    anyhow::ensure!(
+                        key == "listen-port",
+                        "unknown config key '{key}'; expected 'listen-port'"
+                    );
                     settings::reset_listen_port()?;
                     println!(
                         "Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}",
