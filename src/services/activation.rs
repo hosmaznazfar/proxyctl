@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
-    net::{TcpListener, TcpStream},
+    net::TcpStream,
     os::fd::AsRawFd,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -1145,6 +1145,7 @@ fn private_fd(_fd: i32) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
     #[cfg(target_os = "linux")]
     #[test]
     fn tun_preflight_refuses_foreign_tun_interfaces_but_allows_its_own_for_switching() {
@@ -1280,6 +1281,13 @@ mod tests {
         });
         let parsed: ActiveProcess = serde_json::from_value(state).unwrap();
         assert!(parsed.tun.is_none());
+    }
+
+    #[test]
+    fn listen_port_preflight_rejects_an_occupied_loopback_port() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert!(ensure_port_available(port).is_err());
     }
 
     #[test]
