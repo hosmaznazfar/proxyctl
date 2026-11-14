@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::domain::{BenchmarkSettings, throughput_bps};
 
-const MAX_PAYLOAD_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -257,11 +257,11 @@ pub fn validate_settings(settings: &BenchmarkSettings) -> anyhow::Result<()> {
     validate_endpoint(&settings.upload_url)?;
     ensure!(
         settings.download_bytes > 0 && settings.download_bytes <= MAX_PAYLOAD_BYTES,
-        "download safety limit must be between 1 byte and 64 MiB"
+        "download sample must be between 1 byte and 1 MiB"
     );
     ensure!(
         settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES,
-        "upload payload must be between 1 byte and 64 MiB"
+        "upload payload must be between 1 byte and 1 MiB"
     );
     ensure!(
         settings.request_timeout_ms > 0,
