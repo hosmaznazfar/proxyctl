@@ -101,10 +101,15 @@ impl ProcessHandle {
         if handle.wait_exit(Duration::ZERO)? {
             return Ok(handle);
         }
-        ensure!(
-            handle.identity.verify()?,
-            "process identity changed while opening pidfd"
-        );
+        if !handle.identity.verify()? {
+            // Close the race where the process exits after the first pidfd poll but before
+            // /proc identity verification. A now-readable pidfd proves the pinned instance
+            // exited; a live replacement PID remains unreadable and is rejected.
+            ensure!(
+                handle.wait_exit(Duration::ZERO)?,
+                "process identity changed while opening pidfd"
+            );
+        }
         Ok(handle)
     }
 
