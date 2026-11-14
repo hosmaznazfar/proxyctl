@@ -1013,13 +1013,15 @@ fn print_benchmark_report(
                 &fields,
                 &comparison.node,
                 display_numbers,
-                &comparison.target,
-                comparison.core_version.as_deref(),
-                &comparison.metrics,
-                Some(comparison.run_id),
-                None,
-                Some(crate::domain::BenchmarkRunStatus::Completed),
-                verbose,
+                ReportRowData {
+                    target: &comparison.target,
+                    core_version: comparison.core_version.as_deref(),
+                    metrics: &comparison.metrics,
+                    run_id: Some(comparison.run_id),
+                    tested: None,
+                    run_status: Some(crate::domain::BenchmarkRunStatus::Completed),
+                    verbose,
+                },
             ));
         }
     } else {
@@ -1039,13 +1041,15 @@ fn print_benchmark_report(
                         &fields,
                         &node.node,
                         display_numbers,
-                        &target.target,
-                        target.core_version.as_deref(),
-                        &target.metrics,
-                        Some(run.run.id),
-                        run.run.completed_at.or(Some(run.run.started_at)),
-                        Some(run.run.status),
-                        verbose,
+                        ReportRowData {
+                            target: &target.target,
+                            core_version: target.core_version.as_deref(),
+                            metrics: &target.metrics,
+                            run_id: Some(run.run.id),
+                            tested: run.run.completed_at.or(Some(run.run.started_at)),
+                            run_status: Some(run.run.status),
+                            verbose,
+                        },
                     ));
                 }
             }
@@ -1083,48 +1087,114 @@ fn report_empty_node_row(
     }).collect()
 }
 
-fn report_row(
-    fields: &[crate::services::display_config::DisplayField],
-    node: &NodeRecord,
-    display_numbers: &HashMap<u64, usize>,
-    target: &str,
-    core_version: Option<&str>,
-    metrics: &[reporting::MetricSummary],
+struct ReportRowData<'a> {
+    target: &'a str,
+    core_version: Option<&'a str>,
+    metrics: &'a [reporting::MetricSummary],
     run_id: Option<u64>,
     tested: Option<u64>,
     run_status: Option<crate::domain::BenchmarkRunStatus>,
     verbose: bool,
+}
+
+fn report_row(
+    fields: &[crate::services::display_config::DisplayField],
+    node: &NodeRecord,
+    display_numbers: &HashMap<u64, usize>,
+    data: ReportRowData<'_>,
 ) -> Vec<String> {
     use crate::services::display_config::DisplayField as F;
-    let find = |metric| metrics.iter().find(|summary| summary.metric == metric);
+
+    let find = |metric| data.metrics.iter().find(|summary| summary.metric == metric);
     let latency = find(crate::domain::BenchmarkMetric::Latency);
     let tcp_ping = find(crate::domain::BenchmarkMetric::TcpPing);
     let download = find(crate::domain::BenchmarkMetric::Download);
     let upload = find(crate::domain::BenchmarkMetric::Upload);
-    let summaries = [latency, tcp_ping, download, upload].into_iter().flatten().collect::<Vec<_>>();
+    let summaries = [latency, tcp_ping, download, upload]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
     let successes: usize = summaries.iter().map(|summary| summary.successful).sum();
     let attempted: usize = summaries.iter().map(|summary| summary.attempted).sum();
-    let failures: usize = summaries.iter().map(|summary| summary.failures.iter().map(|failure| failure.count).sum::<usize>()).sum();
-    let metric_cell = |summary: Option<&reporting::MetricSummary>| summary.map(metric_summary_cell).unwrap_or_else(|| "not-run".into());
+    let failures: usize = summaries
+        .iter()
+        .map(|summary| {
+            summary
+                .failures
+                .iter()
+                .map(|failure| failure.count)
+                .sum::<usize>()
+        })
+        .sum();
+    let metric_cell = |summary: Option<&reporting::MetricSummary>| {
+        summary
+            .map(metric_summary_cell)
+            .unwrap_or_else(|| "not-run".into())
+    };
 
-    fields.iter().map(|field| match field {
-        F::Node => display_numbers.get(&node.id).copied().unwrap_or(node.id as usize).to_string(),
-        F::Name => node.node.name.clone().unwrap_or_else(|| "-".into()),
-        F::Server => safe_field(&node.node.server, 48),
-        F::Port => node.node.port.to_string(),
-        F::Protocol => node.node.protocol.to_string(),
-        F::Core => target.to_owned(),
-        F::Version => core_version.map(|version| display_core_version(version, verbose)).unwrap_or_else(|| "-".into()),
-        F::Latency => if target == "direct" { "-".into() } else { metric_cell(latency) },
-        F::TcpPing => if target == "direct" { metric_cell(tcp_ping) } else { "-".into() },
-        F::Download => if target == "direct" { "-".into() } else { metric_cell(download) },
-        F::Upload => if target == "direct" { "-".into() } else { metric_cell(upload) },
-        F::Status => aggregate_target_status(&summaries, run_status.unwrap_or(crate::domain::BenchmarkRunStatus::Completed)),
-        F::Samples => format!("{successes}/{attempted}"),
-        F::Failures => failures.to_string(),
-        F::Run => run_id.map(|id| id.to_string()).unwrap_or_else(|| "-".into()),
-        F::Tested => tested.map(|timestamp| timestamp.to_string()).unwrap_or_else(|| "-".into()),
-    }).collect()
+    fields
+        .iter()
+        .map(|field| match field {
+            F::Node => display_numbers
+                .get(&node.id)
+                .copied()
+                .unwrap_or(node.id as usize)
+                .to_string(),
+            F::Name => node.node.name.clone().unwrap_or_else(|| "-".into()),
+            F::Server => safe_field(&node.node.server, 48),
+            F::Port => node.node.port.to_string(),
+            F::Protocol => node.node.protocol.to_string(),
+            F::Core => data.target.to_owned(),
+            F::Version => data
+                .core_version
+                .map(|version| display_core_version(version, data.verbose))
+                .unwrap_or_else(|| "-".into()),
+            F::Latency => {
+                if data.target == "direct" {
+                    "-".into()
+                } else {
+                    metric_cell(latency)
+                }
+            }
+            F::TcpPing => {
+                if data.target == "direct" {
+                    metric_cell(tcp_ping)
+                } else {
+                    "-".into()
+                }
+            }
+            F::Download => {
+                if data.target == "direct" {
+                    "-".into()
+                } else {
+                    metric_cell(download)
+                }
+            }
+            F::Upload => {
+                if data.target == "direct" {
+                    "-".into()
+                } else {
+                    metric_cell(upload)
+                }
+            }
+            F::Status => aggregate_target_status(
+                &summaries,
+                data
+                    .run_status
+                    .unwrap_or(crate::domain::BenchmarkRunStatus::Completed),
+            ),
+            F::Samples => format!("{successes}/{attempted}"),
+            F::Failures => failures.to_string(),
+            F::Run => data
+                .run_id
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| "-".into()),
+            F::Tested => data
+                .tested
+                .map(|timestamp| timestamp.to_string())
+                .unwrap_or_else(|| "-".into()),
+        })
+        .collect()
 }
 
 fn display_core_version(version: &str, verbose: bool) -> String {
