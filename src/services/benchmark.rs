@@ -1100,6 +1100,26 @@ mod tests {
                 summary: None,
             })
             .unwrap();
+        let direct_context = SampleContext {
+            run_id,
+            node_id: 1,
+            target: DIRECT_TARGET.into(),
+            version: None,
+        };
+        for index in 1..=SAMPLES_PER_METRIC {
+            persist_sample(
+                &path,
+                failed_sample(
+                    &direct_context,
+                    BenchmarkMetric::TcpPing,
+                    index,
+                    BenchmarkSampleStatus::Timeout,
+                    "timeout",
+                    "test timeout",
+                ),
+            )
+            .unwrap();
+        }
         let context = SampleContext {
             run_id,
             node_id: 1,
@@ -1154,7 +1174,7 @@ mod tests {
             .unwrap()
             .list_benchmark_samples(run_id)
             .unwrap();
-        assert_eq!(samples.len(), 5);
+        assert_eq!(samples.len(), 8);
         assert_eq!(
             samples
                 .iter()
