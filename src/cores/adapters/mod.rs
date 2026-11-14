@@ -28,7 +28,6 @@ pub trait CoreAdapter {
         benchmark_batch::generate(self, targets)
     }
 
-
     fn core(&self) -> CoreId;
     fn compatibility(&self, node: &ProxyNode) -> Compatibility;
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig>;
