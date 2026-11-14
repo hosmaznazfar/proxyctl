@@ -192,8 +192,8 @@ impl BenchmarkHttpClient {
             // begun sending a response (for example, a truncated Content-Length).
             .map_err(classify_response_error)?;
         // Set the ureq body limit to the requested sample size before creating
-        // the reader. This prevents its default small-body buffering from trying
-        // to consume a truncated Content-Length response before we can count bytes.
+        // the reader. When the advertised response is larger than this cap, ureq
+        // streams it so a later truncation can be scored using bytes already read.
         let mut reader = response
             .body_mut()
             .with_config()
@@ -508,7 +508,7 @@ mod tests {
             let stream = reader.get_mut();
             stream
                 .write_all(
-                    b"HTTP/1.1 200 OK\r\nContent-Length: 65536\r\nConnection: close\r\n\r\n",
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 131072\r\nConnection: close\r\n\r\n",
                 )
                 .unwrap();
             stream.write_all(&body).unwrap();
