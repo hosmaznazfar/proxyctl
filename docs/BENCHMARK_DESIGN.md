@@ -214,7 +214,7 @@ proxyctl report --compare --core xray
 proxyctl report --compare --node 18 --core mihomo
 ~~~
 
-Latest mode selects the most recent run containing each selected node, regardless of lifecycle status, so an interrupted or cancelled latest run is visible rather than silently replaced by an older run. History mode shows every matching run newest first.
+Latest mode selects the most recent run containing each selected node, regardless of lifecycle status, so an interrupted or cancelled latest run is visible rather than silently replaced by an older run. History mode shows the retained matching runs newest first. Automatic retention keeps at most the three newest runs independently for each node/target pair; older samples for that pair are removed, and run metadata is removed when no retained target samples remain.
 
 Comparison mode is intentionally different: it selects the latest **completed** run independently for each node/core pair. A newer completed run supersedes an older one even if it has no successful samples; comparison never falls back to stale measurements. Cancelled, interrupted, and running runs remain visible in history but do not replace the latest completed comparison. Direct TCP ping is shown as its own `direct` row and is not attributed to a proxy core.
 
