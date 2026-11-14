@@ -40,7 +40,33 @@ pub struct BenchmarkOptions {
     pub node_id: Option<u64>,
     pub core: Option<CoreId>,
     pub settings: BenchmarkSettings,
+    pub metric_selection: BenchmarkMetricSelection,
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BenchmarkMetricSelection {
+    #[default]
+    All,
+    Latency,
+    Download,
+    Upload,
+}
+
+impl BenchmarkMetricSelection {
+    fn metrics(self) -> &'static [BenchmarkMetric] {
+        match self {
+            Self::All => &[BenchmarkMetric::Latency, BenchmarkMetric::Download, BenchmarkMetric::Upload],
+            Self::Latency => &[BenchmarkMetric::Latency],
+            Self::Download => &[BenchmarkMetric::Download],
+            Self::Upload => &[BenchmarkMetric::Upload],
+        }
+    }
+
+    fn includes_latency(self) -> bool {
+        matches!(self, Self::All | Self::Latency)
+    }
+}
+
 
 impl Default for BenchmarkOptions {
     fn default() -> Self {
@@ -49,6 +75,7 @@ impl Default for BenchmarkOptions {
             node_id: None,
             core: None,
             settings: default_settings(),
+            metric_selection: BenchmarkMetricSelection::All,
         }
     }
 }
@@ -112,6 +139,7 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         &cores,
         &core_versions,
         &options.settings,
+        options.metric_selection,
     );
     let cancelled = CANCELLED.load(Ordering::Relaxed);
     let (status, summary) = if cancelled {
@@ -213,6 +241,7 @@ fn execute_run(
     cores: &[CoreId],
     core_versions: &BTreeMap<String, String>,
     settings: &BenchmarkSettings,
+    metric_selection: BenchmarkMetricSelection,
 ) -> anyhow::Result<()> {
     let active_nodes = NodeDatabase::open(database_path)?.list_nodes(false)?;
     for record in nodes {
@@ -224,7 +253,9 @@ fn execute_run(
         if CANCELLED.load(Ordering::Relaxed) {
             return Ok(());
         }
-        execute_tcp_ping(database_path, run_id, record, display_number)?;
+        if metric_selection.includes_latency() {
+            execute_tcp_ping(database_path, run_id, record, display_number)?;
+        }
 
         for core in cores {
             if CANCELLED.load(Ordering::Relaxed) {
@@ -305,12 +336,10 @@ fn execute_run(
             };
 
             let mut process = Some(process);
-            let mut completed_samples = Vec::with_capacity(usize::from(SAMPLES_PER_METRIC) * 3);
-            for metric in [
-                BenchmarkMetric::Latency,
-                BenchmarkMetric::Download,
-                BenchmarkMetric::Upload,
-            ] {
+            let mut completed_samples = Vec::with_capacity(
+                usize::from(SAMPLES_PER_METRIC) * metric_selection.metrics().len(),
+            );
+            for &metric in metric_selection.metrics() {
                 for sample_index in 1..=SAMPLES_PER_METRIC {
                     let label = format!(
                         "run #{run_id} node #{} {core} {} sample {sample_index}/{SAMPLES_PER_METRIC}",
