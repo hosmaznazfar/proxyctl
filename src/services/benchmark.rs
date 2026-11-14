@@ -1053,6 +1053,123 @@ fn install_cancellation_handler() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{database::NodeDatabase, parser::parse_proxy_url};
+    use tempfile::tempdir;
+
+    #[test]
+    fn selected_node_ids_resolve_to_one_multi_node_scope() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("proxyctl.redb");
+        let database = NodeDatabase::open(&path).unwrap();
+        let first = parse_proxy_url("vless://first@example-one.com:443?security=tls").unwrap();
+        let second = parse_proxy_url("vless://second@example-two.com:443?security=tls").unwrap();
+        database.add_node(&first).unwrap();
+        database.add_node(&second).unwrap();
+        drop(database);
+
+        let options = BenchmarkOptions {
+            all_cores: false,
+            node_id: None,
+            node_ids: vec![1, 2],
+            core: Some(CoreId::Xray),
+            settings: default_settings(),
+            metric_selection: BenchmarkMetricSelection::All,
+        };
+        let (nodes, cores) = load_scope(&path, &options).unwrap();
+        assert_eq!(nodes.iter().map(|node| node.id).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(cores, vec![CoreId::Xray]);
+    }
+
+    #[test]
+    fn cancelled_remainder_preserves_existing_and_latency_gate_samples() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("proxyctl.redb");
+        let database = NodeDatabase::open(&path).unwrap();
+        let node = parse_proxy_url("vless://first@example.com:443?security=tls").unwrap();
+        database.add_node(&node).unwrap();
+        let run_id = database
+            .start_benchmark_run(BenchmarkRun {
+                id: 0,
+                status: BenchmarkRunStatus::Running,
+                started_at: 1,
+                completed_at: None,
+                node_ids: vec![1],
+                cores: vec![DIRECT_TARGET.into(), CoreId::SingBox.as_str().into()],
+                settings: default_settings(),
+                core_versions: BTreeMap::new(),
+                summary: None,
+            })
+            .unwrap();
+        let context = SampleContext {
+            run_id,
+            node_id: 1,
+            target: CoreId::SingBox.as_str().into(),
+            version: None,
+        };
+        for index in 1..=SAMPLES_PER_METRIC {
+            persist_sample(
+                &path,
+                failed_sample(
+                    &context,
+                    BenchmarkMetric::Latency,
+                    index,
+                    BenchmarkSampleStatus::Timeout,
+                    "timeout",
+                    "test timeout",
+                ),
+            )
+            .unwrap();
+        }
+        for metric in [BenchmarkMetric::Download, BenchmarkMetric::Upload] {
+            persist_sample(
+                &path,
+                failed_sample(
+                    &context,
+                    metric,
+                    0,
+                    BenchmarkSampleStatus::Unavailable,
+                    "latency_gate",
+                    "throughput skipped",
+                ),
+            )
+            .unwrap();
+        }
+
+        record_cancelled_remainder(
+            &path,
+            run_id,
+            &[NodeRecord {
+                id: 1,
+                node,
+                created_at: 1,
+                active_order: 1,
+                deleted_at: None,
+            }],
+            &[CoreId::SingBox],
+            BenchmarkMetricSelection::All,
+        )
+        .unwrap();
+
+        let samples = NodeDatabase::open(&path)
+            .unwrap()
+            .list_benchmark_samples(run_id)
+            .unwrap();
+        assert_eq!(samples.len(), 5);
+        assert_eq!(
+            samples
+                .iter()
+                .filter(|sample| sample.status == BenchmarkSampleStatus::Cancelled)
+                .count(),
+            0
+        );
+        assert_eq!(
+            samples
+                .iter()
+                .filter(|sample| sample.failure_category.as_deref() == Some("latency_gate"))
+                .count(),
+            2
+        );
+    }
 
     #[test]
     fn probe_workers_are_hard_bounded_to_three() {
