@@ -194,6 +194,10 @@ impl TransactionJournal {
                 "journal resource key contains control characters"
             );
             ensure!(
+                valid_journal_resource_key(operation.kind, &operation.resource_key),
+                "journal resource key does not match its operation kind"
+            );
+            ensure!(
                 keys.insert(operation.resource_key.as_str()),
                 "duplicate journal resource key"
             );
@@ -230,6 +234,42 @@ fn valid_journal_activation_id(value: &str) -> bool {
                 byte.is_ascii_hexdigit()
             }
         })
+}
+
+fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
+    match kind {
+        JournalOperationKind::CreateInterface => {
+            let Some(name) = key.strip_prefix("interface:") else {
+                return false;
+            };
+            !name.is_empty()
+                && name.len() <= 15
+                && name.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+                })
+        }
+        JournalOperationKind::AddRoute => {
+            let mut parts = key.splitn(4, ':');
+            matches!(parts.next(), Some("route"))
+                && matches!(parts.next(), Some("v4" | "v6"))
+                && parts.next().is_some_and(|table| {
+                    table.parse::<u32>().is_ok_and(|value| value > 0)
+                })
+                && parts.next().is_some_and(|destination| {
+                    !destination.is_empty()
+                        && !destination.chars().any(char::is_whitespace)
+                })
+        }
+        JournalOperationKind::AddRule => {
+            let mut parts = key.split(':');
+            matches!(parts.next(), Some("rule"))
+                && matches!(parts.next(), Some("v4" | "v6"))
+                && parts.next().is_some_and(|priority| {
+                    priority.parse::<u32>().is_ok_and(|value| value > 0)
+                })
+                && parts.next().is_none()
+        }
+    }
 }
 
 /// Private manifest storage rooted in Proxyctl's runtime directory.
@@ -1216,6 +1256,53 @@ mod tests {
             })
             .collect();
         assert!(journal.validate().is_err());
+    }
+
+
+    #[test]
+    fn journal_validation_binds_resource_key_shape_to_operation_kind() {
+        let mut journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 1,
+            operations: vec![JournalOperation {
+                sequence: 0,
+                kind: JournalOperationKind::CreateInterface,
+                resource_key: "route:v4:42420:default".into(),
+                state: JournalOperationState::Intent,
+                fingerprint: None,
+            }],
+        };
+        assert!(journal.validate().is_err());
+        journal.operations[0].resource_key = "interface:tun-proxyctl".into();
+        assert!(journal.validate().is_ok());
+        journal.operations[0].kind = JournalOperationKind::AddRule;
+        assert!(journal.validate().is_err());
+    }
+
+    #[test]
+    fn journal_validation_rejects_malformed_route_and_rule_identities() {
+        for (kind, key) in [
+            (JournalOperationKind::AddRoute, "route:v4:0:default"),
+            (JournalOperationKind::AddRoute, "route:v9:42420:default"),
+            (JournalOperationKind::AddRoute, "route:v4:42420:"),
+            (JournalOperationKind::AddRule, "rule:v6:0"),
+            (JournalOperationKind::AddRule, "rule:v4:10000:extra"),
+        ] {
+            let journal = TransactionJournal {
+                schema_version: 1,
+                activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+                generation: 1,
+                operations: vec![JournalOperation {
+                    sequence: 0,
+                    kind,
+                    resource_key: key.into(),
+                    state: JournalOperationState::Intent,
+                    fingerprint: None,
+                }],
+            };
+            assert!(journal.validate().is_err(), "accepted {key}");
+        }
     }
 
     #[test]
