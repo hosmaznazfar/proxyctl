@@ -282,14 +282,10 @@ mod tests {
 
     #[test]
     fn batch_generation_rejects_duplicate_ids_and_ports() {
-        let first = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@first.example:443",
-        )
-        .unwrap();
-        let second = parse_proxy_url(
-            "trojan://second-secret@second.example:8443",
-        )
-        .unwrap();
+        let first =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@first.example:443")
+                .unwrap();
+        let second = parse_proxy_url("trojan://second-secret@second.example:8443").unwrap();
 
         let duplicate_id = [
             BenchmarkTarget {
@@ -322,10 +318,9 @@ mod tests {
 
     #[test]
     fn unsupported_node_is_rejected_before_batch_document_is_emitted() {
-        let first = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@first.example:443",
-        )
-        .unwrap();
+        let first =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@first.example:443")
+                .unwrap();
         let unsupported = parse_proxy_url("hysteria2://secret@second.example:443").unwrap();
         let targets = [
             BenchmarkTarget {
