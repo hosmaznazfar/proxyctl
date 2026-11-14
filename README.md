@@ -40,7 +40,7 @@ Imported source files are read-only. Credentials are masked in normal output.
 
 ### Configurable benchmark result tables
 
-`proxyctl show` and `proxyctl report` use the same persistent table profile and column selection. `show` displays the latest results; `report` supports latest, history, and comparison views in the same table layout. The default profile is **compact** and shows one row per node/core with node number, core, latency, download, and upload. Use `--details` only when you want the node's connection metadata; fingerprints are not part of normal result output.
+`proxyctl show` and `proxyctl report` use the same persistent table profile and column selection. `show` displays the latest results; `report` supports latest, history, and comparison views in the same table layout. The default profile is **compact** and shows one row per node/core with node number, core, latency, download, and upload. `show --details` switches to a separate connection-metadata table with protocol, server, port, name, active/deleted status, whether identity/secret values exist (masked), and option keys (values hidden).
 
 ~~~sh
 proxyctl show 1..10
