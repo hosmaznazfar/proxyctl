@@ -861,6 +861,8 @@ mod tests {
                 download_bytes: 1_048_576,
                 upload_bytes: 1_048_576,
                 request_timeout_ms: 15_000,
+                latency_timeout_ms: 5_000,
+                probe_concurrency: 3,
                 startup_timeout_ms: 10_000,
             },
             core_versions: BTreeMap::new(),
