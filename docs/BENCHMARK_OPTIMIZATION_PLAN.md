@@ -1,13 +1,13 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: Stages 1–3 implemented and user-verified; Stages 4–5 implementation committed to main, local verification pending
+> Status: Stages 1–5 implemented and user-verified; Stage 6 offline fault/performance coverage added and awaiting local verification
 > Last updated: 2026-11-14
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
 
 ## 1. Goals
 
-Proxyctl's original benchmark was too slow for large node sets because it iterated node-first, started a separate managed core for every node/core pair, and performed all probes sequentially. Stages 2 and 3 change the scheduler to core-first batches, with one process per core batch, isolated loopback listeners, bounded-concurrent latency/TCP probes, and sequential throughput transfers; the user has verified those stages. Stages 4 and 5 add exact throughput accounting, configurable persisted timeouts/concurrency, shared multi-node run IDs, and explicit cancellation records; these changes await local verification.
+Proxyctl's original benchmark was too slow for large node sets because it iterated node-first, started a separate managed core for every node/core pair, and performed all probes sequentially. Stages 2 and 3 change the scheduler to core-first batches, with one process per core batch, isolated loopback listeners, bounded-concurrent latency/TCP probes, and sequential throughput transfers; the user has verified those stages. Stages 4 and 5 add exact throughput accounting, configurable persisted timeouts/concurrency, shared multi-node run IDs, and explicit cancellation records; the user has verified these stages.
 
 The optimization must improve elapsed time without sacrificing trustworthy measurements, low memory use, safe process ownership, or the existing persisted history/report semantics.
 
@@ -168,8 +168,14 @@ Acceptance: offline tests cover exact byte counts, early EOF, upload body size, 
 
 Acceptance: offline service tests cover multi-node scope resolution and cancellation remainder semantics; local full-suite verification must confirm existing retention, reporting, sorting, and pruning behavior.
 
-### Stage 6 — offline performance and fault-injection tests
-- Add synthetic benchmarks for scheduler overhead and batch scaling.
+### Stage 6 — offline performance and fault-injection tests (implementation added; verification pending)
+- Added synthetic batch-scaling coverage at 1, 10, and 50 nodes for all three adapter formats. It checks one loopback listener and outbound per node, plus one explicit route per node for sing-box and Xray.
+- Strengthened failed-startup coverage: the fake managed child writes its PID, and the test verifies the child has been reaped after readiness timeout.
+- Added a local fake-proxy HTTP 503 case to ensure download response status failures remain distinct from truncated-body failures.
+- Existing offline tests cover per-listener readiness, startup timeout, adapter isolation, latency worker caps, throughput gating, truncated downloads, cancellation remainder persistence, and benchmark history.
+- This is synthetic structural/fault coverage, not a real performance benchmark; it does not claim an elapsed-time or RSS improvement measurement.
+
+### Stage 6 — offline performance and fault-injection tests- Add synthetic benchmarks for scheduler overhead and batch scaling.
 - Compare process starts, elapsed orchestration time, peak child count, and bounded concurrency against the old per-pair baseline.
 - Inject failures at config generation, validation, startup, listener readiness, latency, download, upload, persistence, and cancellation.
 - No real remote proxy nodes or public speed-test endpoints.
