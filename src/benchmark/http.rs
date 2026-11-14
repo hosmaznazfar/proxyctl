@@ -511,8 +511,13 @@ mod tests {
                     b"HTTP/1.1 200 OK\r\nContent-Length: 131072\r\nConnection: close\r\n\r\n",
                 )
                 .unwrap();
-            stream.write_all(&body).unwrap();
-            stream.flush().unwrap();
+            // Deliver the body over multiple socket writes so the HTTP reader can
+            // yield already-received bytes before the peer closes the truncated stream.
+            for chunk in body.chunks(8 * 1024) {
+                stream.write_all(chunk).unwrap();
+                stream.flush().unwrap();
+                thread::sleep(Duration::from_millis(20));
+            }
         });
         let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
         let agent: Agent = Agent::config_builder()
