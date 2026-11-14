@@ -529,3 +529,8 @@ Resolve these choices with evidence and document them before the affected featur
 - **Journal identity validation:** operation kinds are now checked against strict interface, route, and rule key formats; malformed or mismatched resource identities are rejected before recovery.
 
 - Journal ordering validation requires interface creation first, then routes, then rules; duplicate or misplaced interface operations and routes after rules are rejected.
+
+
+## Persistent shared proxy listener port
+
+Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listener setting. The built-in default is **10909**. The setting is stored as a small private JSON file under the Proxyctl XDG data directory, independently of benchmark state, and therefore survives terminal closure and reboot. `proxyctl config` displays the effective value; `config set listen-port PORT` validates the unprivileged port range and checks the actual 127.0.0.1 bind before saving; `config reset listen-port` returns to 10909. An occupied requested port is rejected and the effective setting falls back to the built-in default. `use --port PORT` is a one-run override and does not modify the persistent setting. Activation repeats the port preflight before it stops/replaces a managed core. The OS can still allocate the port to another process after preflight and before the core binds; that race is reported as a startup failure, never handled by silently selecting a different port. Benchmark listeners remain independently ephemeral.
