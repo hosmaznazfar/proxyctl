@@ -500,14 +500,14 @@ mod tests {
             assert_eq!(method, "CONNECT");
             reader
                 .get_mut()
-                .write_all(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
+                .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
                 .unwrap();
             reader.get_mut().flush().unwrap();
             let (method, _, _) = read_fake_request(&mut reader);
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
             stream
-                .write_all(b"HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
+                .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 .unwrap();
             stream.flush().unwrap();
         });
@@ -544,7 +544,7 @@ mod tests {
             assert_eq!(method, "CONNECT");
             reader
                 .get_mut()
-                .write_all(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
+                .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
                 .unwrap();
             reader.get_mut().flush().unwrap();
             let (method, _, body) = read_fake_request(&mut reader);
@@ -552,7 +552,7 @@ mod tests {
             assert_eq!(body, vec![0x5a; 8]);
             let stream = reader.get_mut();
             stream
-                .write_all(b"HTTP/1.1 500 Internal Server Error\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
+                .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 .unwrap();
             stream.flush().unwrap();
         });
