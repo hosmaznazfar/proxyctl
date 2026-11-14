@@ -36,7 +36,36 @@ proxyctl restore all
 proxyctl check 1 2 3
 ~~~
 
-Imported source files are read-only. Credentials are masked in normal output. Proxyctl's data directory is private (0700 on Unix), and the database is protected (0600).
+Imported source files are read-only. Credentials are masked in normal output.
+
+### Benchmark result tables
+
+`proxyctl show` displays the latest benchmark results in a table. The default profile is **compact** and shows one row per node/core with node number, core, latency, download, and upload. Use `--details` only when you want the node's connection metadata; fingerprints are not part of normal result output.
+
+~~~sh
+proxyctl show 1..10
+proxyctl show 1 --details
+
+# Inspect and select a persistent profile
+proxyctl config display
+proxyctl config display profile compact
+proxyctl config display profile normal
+proxyctl config display profile full
+
+# Customize each profile independently
+proxyctl config display add-field compact server
+proxyctl config display remove-field normal protocol
+proxyctl config display add-field full tcp-ping
+proxyctl config display remove-field full failures
+~~~
+
+Built-in profiles:
+- **compact** (default): node, core, latency, download, upload.
+- **normal**: node, server, protocol, core, latency, download, upload, status.
+- **full**: expanded connection, core-version, direct TCP ping, sample, failure, run, and test-time context.
+
+Available fields: `node`, `name`, `server`, `port`, `protocol`, `core`, `version`, `latency`, `tcp-ping`, `download`, `upload`, `status`, `samples`, `failures`, `run`, and `tested`. The configuration is stored privately and persists across sessions. `not-run` means a metric was not attempted; `unavailable` means a preflight or runtime availability check explicitly failed. These states are never merged.
+ Proxyctl's data directory is private (0700 on Unix), and the database is protected (0600).
 
 ## Managed cores
 
