@@ -285,6 +285,9 @@ impl ManifestStore {
     pub fn journal_path(&self) -> PathBuf { self.directory.join(JOURNAL_FILE) }
 
     /// Create the write-ahead journal before the first kernel mutation.
+    ///
+    /// The caller must hold the process-wide lifecycle lock across journal creation and every
+    /// subsequent update. This store deliberately does not acquire a second lock internally.
     pub fn create_transaction_journal(&self, activation_id: &str, generation: u64) -> Result<()> {
         let journal = TransactionJournal { schema_version: 1, activation_id: activation_id.to_owned(), generation, operations: Vec::new() };
         journal.validate()?;
@@ -782,6 +785,43 @@ mod tests {
         assert!(store.record_operation_intent(id, 19, JournalOperationKind::AddRule, "rule:v4:42410").is_err());
         store.mark_operation_applied(id, 19, "rule:v4:42410", "sha256:rule").unwrap();
         assert!(store.mark_operation_applied(id, 19, "rule:v4:42410", "sha256:again").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn journal_file_uses_private_permissions_and_is_bounded() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let id = "12345678-1234-4234-8234-123456789abc";
+        store.create_transaction_journal(id, 22).unwrap();
+        assert_eq!(fs::metadata(store.journal_path()).unwrap().permissions().mode() & 0o777, 0o600);
+        let mut journal = store.load_transaction_journal().unwrap().unwrap();
+        journal.operations = (0..=MAX_JOURNAL_OPERATIONS).map(|index| JournalOperation {
+            sequence: index as u32,
+            kind: JournalOperationKind::AddRule,
+            resource_key: format!("rule:v4:{index}"),
+            state: JournalOperationState::Intent,
+            fingerprint: None,
+        }).collect();
+        assert!(journal.validate().is_err());
+    }
+
+    #[test]
+    fn journal_validation_rejects_duplicate_keys_and_non_contiguous_sequences() {
+        let mut journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 23,
+            operations: vec![
+                JournalOperation { sequence: 0, kind: JournalOperationKind::AddRoute, resource_key: "route:v4:42420:default".into(), state: JournalOperationState::Intent, fingerprint: None },
+                JournalOperation { sequence: 1, kind: JournalOperationKind::AddRule, resource_key: "route:v4:42420:default".into(), state: JournalOperationState::Intent, fingerprint: None },
+            ],
+        };
+        assert!(journal.validate().is_err());
+        journal.operations[1].resource_key = "rule:v4:42410".into();
+        journal.operations[1].sequence = 4;
+        assert!(journal.validate().is_err());
     }
 
     #[cfg(unix)]
