@@ -71,7 +71,7 @@ fn generate_sing_box<A: CoreAdapter + ?Sized>(
 
     for target in targets {
         let mut document = node_config(adapter, target.node)?;
-        let mut node_outbounds = document
+        let node_outbounds = document
             .get_mut("outbounds")
             .and_then(Value::as_array_mut)
             .context("sing-box node config must contain an outbound array")?;
@@ -193,7 +193,7 @@ fn generate_mihomo<A: CoreAdapter + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse_proxy_url;
+    use crate::{cores::adapters::adapter, parser::parse_proxy_url};
 
     fn targets<'a>(
         first: &'a ProxyNode,
