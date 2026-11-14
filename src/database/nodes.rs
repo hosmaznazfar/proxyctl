@@ -443,7 +443,10 @@ impl NodeDatabase {
     /// Samples for expired pairs are removed even when a multi-node run remains for another pair.
     /// Running runs are never modified.
     pub fn prune_benchmark_history(&self, limit: usize) -> anyhow::Result<usize> {
-        ensure!(limit > 0, "benchmark history retention limit must be at least one");
+        ensure!(
+            limit > 0,
+            "benchmark history retention limit must be at least one"
+        );
 
         let write_txn = self.inner.begin_write()?;
         let run_records = {
@@ -521,8 +524,7 @@ impl NodeDatabase {
         let expired_run_ids = run_records
             .iter()
             .filter(|run| {
-                run.status != BenchmarkRunStatus::Running
-                    && !remaining_run_ids.contains(&run.id)
+                run.status != BenchmarkRunStatus::Running && !remaining_run_ids.contains(&run.id)
             })
             .map(|run| run.id)
             .collect::<Vec<_>>();
@@ -751,10 +753,17 @@ mod tests {
 
         assert_eq!(database.prune_benchmark_history(3).unwrap(), 2);
         let runs = database.list_benchmark_runs().unwrap();
-        assert_eq!(runs.iter().map(|run| run.id).collect::<Vec<_>>(), vec![3, 4, 5]);
+        assert_eq!(
+            runs.iter().map(|run| run.id).collect::<Vec<_>>(),
+            vec![3, 4, 5]
+        );
         let samples = database.list_all_benchmark_samples().unwrap();
         assert_eq!(samples.len(), 3);
-        assert!(samples.iter().all(|sample| (3..=5).contains(&sample.run_id)));
+        assert!(
+            samples
+                .iter()
+                .all(|sample| (3..=5).contains(&sample.run_id))
+        );
     }
 
     #[test]

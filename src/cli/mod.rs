@@ -1076,15 +1076,22 @@ fn report_empty_node_row(
     display_numbers: &HashMap<u64, usize>,
 ) -> Vec<String> {
     use crate::services::display_config::DisplayField as F;
-    fields.iter().map(|field| match field {
-        F::Node => display_numbers.get(&node.id).copied().unwrap_or(node.id as usize).to_string(),
-        F::Name => node.node.name.clone().unwrap_or_else(|| "-".into()),
-        F::Server => safe_field(&node.node.server, 48),
-        F::Port => node.node.port.to_string(),
-        F::Protocol => node.node.protocol.to_string(),
-        F::Core | F::Version | F::Samples | F::Failures | F::Run | F::Tested => "-".into(),
-        F::Latency | F::TcpPing | F::Download | F::Upload | F::Status => "not-run".into(),
-    }).collect()
+    fields
+        .iter()
+        .map(|field| match field {
+            F::Node => display_numbers
+                .get(&node.id)
+                .copied()
+                .unwrap_or(node.id as usize)
+                .to_string(),
+            F::Name => node.node.name.clone().unwrap_or_else(|| "-".into()),
+            F::Server => safe_field(&node.node.server, 48),
+            F::Port => node.node.port.to_string(),
+            F::Protocol => node.node.protocol.to_string(),
+            F::Core | F::Version | F::Samples | F::Failures | F::Run | F::Tested => "-".into(),
+            F::Latency | F::TcpPing | F::Download | F::Upload | F::Status => "not-run".into(),
+        })
+        .collect()
 }
 
 struct ReportRowData<'a> {
@@ -1179,8 +1186,7 @@ fn report_row(
             }
             F::Status => aggregate_target_status(
                 &summaries,
-                data
-                    .run_status
+                data.run_status
                     .unwrap_or(crate::domain::BenchmarkRunStatus::Completed),
             ),
             F::Samples => format!("{successes}/{attempted}"),

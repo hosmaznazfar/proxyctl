@@ -446,7 +446,12 @@ mod tests {
         node.node = parse_proxy_url("vless://uuid@example.test:443?type=ws&type=grpc").unwrap();
         let runs = [run(1, BenchmarkRunStatus::Completed, 20)];
         let samples = evidence(1, [BenchmarkSampleStatus::Timeout; 3]);
-        let result = evaluate_node(&node, &[CoreId::SingBox, CoreId::Xray, CoreId::Mihomo], &runs, &samples);
+        let result = evaluate_node(
+            &node,
+            &[CoreId::SingBox, CoreId::Xray, CoreId::Mihomo],
+            &runs,
+            &samples,
+        );
         assert_eq!(result.0, PruneDecision::Candidate);
     }
 
