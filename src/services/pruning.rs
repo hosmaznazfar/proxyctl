@@ -340,6 +340,25 @@ mod tests {
     }
 
     #[test]
+    fn non_cancelled_timeout_unavailable_and_invalid_samples_confirm_unusable_core() {
+        for status in [
+            BenchmarkSampleStatus::Timeout,
+            BenchmarkSampleStatus::Unavailable,
+            BenchmarkSampleStatus::Invalid,
+        ] {
+            let runs = [run(1, BenchmarkRunStatus::Completed, 20)];
+            let samples = evidence(1, [status; 3]);
+            assert!(
+                matches!(
+                    evaluate_core(1, CoreId::SingBox, &runs, &samples),
+                    CoreConnectivity::Unreachable
+                ),
+                "{status:?} should count as no working real-ping path"
+            );
+        }
+    }
+
+    #[test]
     fn one_successful_sample_keeps_the_node() {
         let runs = [run(1, BenchmarkRunStatus::Completed, 20)];
         let samples = evidence(
