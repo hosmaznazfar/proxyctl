@@ -174,6 +174,9 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         options.metric_selection,
     );
     let cancelled = CANCELLED.load(Ordering::Relaxed);
+    if cancelled {
+        record_cancelled_remainder(database_path, run_id, &nodes, &cores, options.metric_selection)?;
+    }
     let (status, summary) = if cancelled {
         (
             BenchmarkRunStatus::Cancelled,
@@ -189,6 +192,10 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
     };
 
     let database = NodeDatabase::open(database_path)?;
+    let samples = database.list_benchmark_samples(run_id)?;
+    let success_count = samples.iter().filter(|sample| sample.status == BenchmarkSampleStatus::Success).count();
+    let failed_count = samples.len().saturating_sub(success_count);
+    let summary = Some(format!("{}: {success_count} successful sample(s), {failed_count} failed/skipped/cancelled sample(s)", summary.unwrap_or_else(|| "completed".to_owned())));
     database
         .finish_benchmark_run(run_id, status, unix_timestamp(), summary)
         .context("could not finalize benchmark run")?;
@@ -203,6 +210,79 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         println!("Benchmark run #{run_id} completed.");
     }
     Ok(run_id)
+}
+
+
+fn record_cancelled_remainder(
+    database_path: &Path,
+    run_id: u64,
+    nodes: &[NodeRecord],
+    cores: &[CoreId],
+    selection: BenchmarkMetricSelection,
+) -> anyhow::Result<()> {
+    let existing = NodeDatabase::open(database_path)?.list_benchmark_samples(run_id)?;
+    let has_sample = |node_id: u64, target: &str, metric: BenchmarkMetric, index: u8| {
+        existing.iter().any(|sample| {
+            sample.node_id == node_id
+                && sample.core == target
+                && sample.metric == metric
+                && sample.sample_index == index
+        })
+    };
+    for node in nodes {
+        if selection.includes_direct_tcp() {
+            let context = SampleContext {
+                run_id,
+                node_id: node.id,
+                target: DIRECT_TARGET.to_owned(),
+                version: None,
+            };
+            for index in 1..=SAMPLES_PER_METRIC {
+                if !has_sample(node.id, DIRECT_TARGET, BenchmarkMetric::TcpPing, index) {
+                    persist_sample(
+                        database_path,
+                        failed_sample(
+                            &context,
+                            BenchmarkMetric::TcpPing,
+                            index,
+                            BenchmarkSampleStatus::Cancelled,
+                            "cancelled",
+                            "sample was not run because the benchmark was cancelled",
+                        ),
+                    )?;
+                }
+            }
+        }
+        for core in cores {
+            let context = SampleContext {
+                run_id,
+                node_id: node.id,
+                target: core.as_str().to_owned(),
+                version: None,
+            };
+            for &metric in selection.metrics() {
+                if has_sample(node.id, core.as_str(), metric, 0) {
+                    continue;
+                }
+                for index in 1..=SAMPLES_PER_METRIC {
+                    if !has_sample(node.id, core.as_str(), metric, index) {
+                        persist_sample(
+                            database_path,
+                            failed_sample(
+                                &context,
+                                metric,
+                                index,
+                                BenchmarkSampleStatus::Cancelled,
+                                "cancelled",
+                                "sample was not run because the benchmark was cancelled",
+                            ),
+                        )?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn load_scope(
