@@ -376,7 +376,29 @@ fn execute_run(
             let mut completed_samples = Vec::with_capacity(
                 usize::from(SAMPLES_PER_METRIC) * metric_selection.metrics().len(),
             );
+            let mut latency_succeeded = false;
             for &metric in metric_selection.metrics() {
+                if matches!(metric, BenchmarkMetric::Download | BenchmarkMetric::Upload)
+                    && metric_selection == BenchmarkMetricSelection::All
+                    && !latency_succeeded
+                {
+                    let reason = "throughput test skipped because all real-latency samples failed";
+                    println!(
+                        "run #{run_id} node #{} {core} {}: skipped — {reason}",
+                        display_number,
+                        metric.label()
+                    );
+                    completed_samples.push(failed_sample(
+                        &context,
+                        metric,
+                        0,
+                        BenchmarkSampleStatus::Unavailable,
+                        "latency_gate",
+                        reason,
+                    ));
+                    continue;
+                }
+
                 for sample_index in 1..=SAMPLES_PER_METRIC {
                     let label = format!(
                         "run #{run_id} node #{} {core} {} sample {sample_index}/{SAMPLES_PER_METRIC}",
@@ -397,6 +419,9 @@ fn execute_run(
                                 metric.unit(),
                                 measurement.duration.as_secs_f64()
                             );
+                            if metric == BenchmarkMetric::Latency {
+                                latency_succeeded = true;
+                            }
                             successful_sample(&context, metric, sample_index, measurement)
                         }
                         Ok(_) | Err(MeasurementFailure::Cancelled) => {
