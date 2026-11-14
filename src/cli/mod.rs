@@ -117,6 +117,7 @@ enum Command {
     },
     /// Run direct TCP ping and real-ping/download/upload tests through managed proxy cores.
     #[command(group(ArgGroup::new("test_scope").args(["all_cores", "core"]).required(true).multiple(false)))]
+    #[command(group(ArgGroup::new("metric_selection").args(["latency_only", "download_only", "upload_only"]).multiple(false)))]
     Test {
         /// Test all active nodes, or only --node, against all installed compatible managed cores.
         #[arg(long)]
@@ -127,6 +128,15 @@ enum Command {
         /// Test selected --node values with one managed core (mutually exclusive with --all-cores).
         #[arg(long, value_name = "CORE", requires = "node")]
         core: Option<String>,
+        /// Run only HTTP latency (and the separate direct TCP ping).
+        #[arg(long, group = "metric_selection")]
+        latency_only: bool,
+        /// Run only download throughput measurements.
+        #[arg(long, group = "metric_selection")]
+        download_only: bool,
+        /// Run only upload throughput measurements.
+        #[arg(long, group = "metric_selection")]
+        upload_only: bool,
         /// HTTPS URL used for real HTTP ping through the selected core.
         #[arg(long, default_value = "https://www.google.com/generate_204")]
         latency_url: String,
@@ -538,6 +548,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             latency_url,
             download_url,
             upload_url,
+            latency_only,
+            download_only,
+            upload_only,
             download_bytes,
             upload_bytes,
             request_timeout_secs,
@@ -557,6 +570,15 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             settings.upload_bytes = upload_bytes;
             settings.request_timeout_ms = request_timeout_ms;
             settings.startup_timeout_ms = startup_timeout_ms;
+            let metric_selection = if latency_only {
+                crate::services::benchmark::BenchmarkMetricSelection::Latency
+            } else if download_only {
+                crate::services::benchmark::BenchmarkMetricSelection::Download
+            } else if upload_only {
+                crate::services::benchmark::BenchmarkMetricSelection::Upload
+            } else {
+                crate::services::benchmark::BenchmarkMetricSelection::All
+            };
             let selected = if node.is_empty() {
                 Vec::new()
             } else {
@@ -570,6 +592,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         node_id: None,
                         core: parse_core(core.as_deref())?,
                         settings,
+                        metric_selection,
                     },
                 )?;
             } else {
@@ -581,6 +604,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                             node_id: Some(id),
                             core: parse_core(core.as_deref())?,
                             settings: settings.clone(),
+                            metric_selection,
                         },
                     )?;
                 }
