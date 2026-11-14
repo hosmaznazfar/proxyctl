@@ -527,3 +527,5 @@ Resolve these choices with evidence and document them before the affected featur
 - **Journal recovery planning:** added a pure reverse-order planner for durable transaction journals and fresh exact inventory observations. It distinguishes proven absence, exact fingerprint compare-and-delete, already-absent applied resources, and conflicts; unresolved intents never authorize deletion. This is planning only, not a live recovery backend.
 
 - **Journal identity validation:** operation kinds are now checked against strict interface, route, and rule key formats; malformed or mismatched resource identities are rejected before recovery.
+
+- Journal ordering validation requires interface creation first, then routes, then rules; duplicate or misplaced interface operations and routes after rules are rejected.
