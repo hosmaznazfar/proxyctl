@@ -1,6 +1,6 @@
 # Benchmark design
 
-> Status: Stages 1–3 implemented and user-verified; Stages 4–5 committed and awaiting local verification
+> Status: Stages 1–5 implemented and user-verified; Stage 6 offline fault/performance coverage added and awaiting local verification
 > Last updated: 2026-11-14
 
 ## 1. Goals and scope
@@ -89,6 +89,10 @@ POST a deterministic in-memory payload containing no user data. Start timing imm
 - Keep all individual samples and calculate medians from successful samples only.
 
 A failure in one metric must not erase successful samples from another metric.
+
+## 5. Offline optimization verification
+
+Stages 1–5 have been locally verified by the user. Stage 6 adds synthetic batch-size coverage (1/10/50 nodes across all three adapter formats), a failed-startup child-reaping assertion, and a local fake-proxy HTTP-status failure test. These tests do not launch real proxy cores or contact public endpoints. Stage 6 remains pending local verification; real-world comparisons remain a separate, explicitly approved stage.
 
 ## 5. Progress and cancellation
 
