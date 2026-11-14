@@ -1,6 +1,6 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: Stages 1–3 implementation committed to main; local verification pending
+> Status: Stages 1–5 implementation committed to main; local verification pending
 > Last updated: 2026-11-14
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
@@ -149,23 +149,24 @@ Acceptance: fake-child/fake-listener integration tests cover startup, partial re
 
 Acceptance: the hard worker cap has an offline unit test; deterministic fake-proxy tests must still verify all three samples, failure isolation, prompt timeout/cancellation, and the latency gate. Local test verification remains pending.
 
-### Stage 4 — throughput accuracy and progress
-- Rework download/upload execution around accurate byte accounting, monotonic timing, response validation, and bounded response bodies.
-- Keep throughput transfers sequential by default.
-- Add independent throughput timeout and throttled progress.
-- Review default endpoint compatibility and privacy; do not silently change defaults.
-- Verify upload success semantics and ensure request-body transmission is included in timing.
+### Stage 4 — throughput accuracy and progress (implementation committed; awaiting local verification)
+- Downloads count exactly the configured byte target, stop at the cap, and classify early EOF as incomplete; progress snapshots include transferred/target bytes, elapsed time, and current rate.
+- Upload timing begins before request transmission and ends after a successful HTTP response and bounded response-body consumption.
+- Keep throughput transfers sequential by default; preserve the configured throughput timeout and endpoint defaults.
+- Add separate persisted latency timeout and bounded concurrency settings; expose the latency timeout and 1–3 concurrency setting in the CLI.
+- Preserve HTTPS endpoint validation and do not silently change defaults.
 
-Acceptance: local controlled HTTP test servers verify exact byte counts, early EOF, status errors, timeout, upload body size, successful response requirements, rate calculation, progress throttling, and cancellation. No external endpoint is contacted.
+Acceptance: offline tests cover exact byte counts, early EOF, upload body size, progress-rate calculation, legacy settings deserialization, and CLI bounds. Additional controlled tests for status errors, timeout, progress throttling, and cancellation remain part of verification. No external endpoint is contacted.
 
-### Stage 5 — orchestration, persistence, and reporting integration
+### Stage 5 — orchestration, persistence, and reporting integration (implementation committed; awaiting local verification)
 - Run the new core-batch scheduler through the existing benchmark service.
-- Make selected multi-node runs use one consistent run ID if the CLI currently splits them; preserve per-node/core target identity.
-- Keep run/sample retention, latest/history/compare reports, sorting, and pruning semantics correct.
-- Store effective concurrency, timeout, endpoint, payload, and methodology settings.
+- Selected multi-node ID/range selections now use one consistent run ID; target identity remains per node/core.
+- Preserve run/sample retention, latest/history/compare reports, sorting, and pruning semantics.
+- Persist effective concurrency, separate latency/throughput timeout, endpoint, payload, and methodology settings; older run settings deserialize with safe defaults.
+- On handled cancellation, persist explicit cancelled samples for scheduled work not reached, without replacing preflight or latency-gate outcomes; persist a run summary with success/failure counts.
 - Preserve metric-only modes and the full-mode latency gate.
 
-Acceptance: service/database tests cover all-active and selected-node batches, all three cores, mixed compatibility, partial failures, retention, interrupted/cancelled histories, and no stale fallback.
+Acceptance: offline service tests cover multi-node scope resolution and cancellation remainder semantics; local full-suite verification must confirm existing retention, reporting, sorting, and pruning behavior.
 
 ### Stage 6 — offline performance and fault-injection tests
 - Add synthetic benchmarks for scheduler overhead and batch scaling.
