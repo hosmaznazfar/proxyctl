@@ -447,8 +447,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     anyhow::bail!(
                         "--core cannot be used with --sort tcp-ping because TCP ping is measured directly"
                     );
-                }
-                let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
+                }                let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
                 print_sorted_node_list(&ranked, metric, &display_numbers, &deleted_display_numbers);
             } else {
                 print_node_list(&records, &display_numbers, &deleted_display_numbers);
@@ -463,16 +462,18 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             if ids.is_empty() {
                 println!("No matching nodes.");
             } else if details {
-                for id in ids {
-                    match nodes::get_node(&database_path, id)? {
-                        Some(record) => {
-                            let number = nodes::active_display_number(&database_path, id)?
-                                .unwrap_or(id as usize);
-                            print_node_details(&record, number);
+                let display_numbers = active_display_numbers(&database_path)?;
+                let records = ids
+                    .into_iter()
+                    .filter_map(|id| match nodes::get_node(&database_path, id) {
+                        Ok(record) => record,
+                        Err(error) => {
+                            eprintln!("Node #{id}: {error:#}");
+                            None
                         }
-                        None => println!("Node #{id}: not found."),
-                    }
-                }
+                    })
+                    .collect::<Vec<_>>();
+                print_node_details(&records, &display_numbers);
             } else {
                 let config = crate::services::display_config::load()?;
                 let display_numbers = active_display_numbers(&database_path)?;
@@ -897,8 +898,7 @@ fn print_node_results(
                                         "-".into()
                                     } else {
                                         metric_cell(download)
-                                    }
-                                }
+                                    }                                }
                                 F::Upload => {
                                     if target.target == "direct" {
                                         "-".into()
@@ -1347,8 +1347,7 @@ fn print_sorted_node_list(
             } else {
                 "-".into()
             },
-            if record.node.is_deleted() {
-                format!(
+            if record.node.is_deleted() {                format!(
                     "D{}",
                     deleted_display_numbers
                         .get(&record.node.id)
@@ -1379,52 +1378,59 @@ fn print_sorted_node_list(
     }
 }
 
-fn print_node_details(record: &NodeRecord, display_number: usize) {
-    let node = &record.node;
-    println!("Node: #{display_number}");
-    println!("Protocol: {}", node.protocol);
-    println!("Server: {}", safe_field(&node.server, 200));
-    println!("Port: {}", node.port);
-    println!(
-        "Name: {}",
-        node.name
-            .as_deref()
-            .map(|name| safe_field(name, 200))
-            .unwrap_or_else(|| "-".to_owned())
-    );
-    println!(
-        "Status: {}",
-        if record.is_deleted() {
-            "deleted"
-        } else {
-            "active"
-        }
-    );
-    println!(
-        "Identity: {}",
-        if node.identity.is_some() {
-            "[masked]"
-        } else {
-            "-"
-        }
-    );
-    println!(
-        "Secret: {}",
-        if node.secret.is_some() {
-            "[masked]"
-        } else {
-            "-"
-        }
-    );
-    if !node.options.is_empty() {
-        let keys = node
-            .options
-            .keys()
-            .map(|key| safe_field(key, 48))
-            .collect::<Vec<_>>()
-            .join(", ");
-        println!("Options: {keys} (values hidden)");
+fn print_node_details(records: &[NodeRecord], display_numbers: &HashMap<u64, usize>) {
+    if records.is_empty() {
+        println!("No matching nodes.");
+        return;
     }
+
+    let mut builder = Builder::default();
+    builder.push_record([
+        "NODE",
+        "PROTOCOL",
+        "SERVER",
+        "PORT",
+        "NAME",
+        "STATUS",
+        "IDENTITY",
+        "SECRET",
+        "OPTIONS",
+    ]);
+    for record in records {
+        let node = &record.node;
+        let options = if node.options.is_empty() {
+            "-".to_owned()
+        } else {
+            format!(
+                "{} (values hidden)",
+                node.options
+                    .keys()
+                    .map(|key| safe_field(key, 48))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        builder.push_record([
+            display_numbers
+                .get(&record.id)
+                .copied()
+                .unwrap_or(record.id as usize)
+                .to_string(),
+            node.protocol.to_string(),
+            safe_field(&node.server, 200),
+            node.port.to_string(),
+            node.name
+                .as_deref()
+                .map(|name| safe_field(name, 200))
+                .unwrap_or_else(|| "-".to_owned()),
+            if record.is_deleted() { "deleted" } else { "active" }.to_owned(),
+            if node.identity.is_some() { "[masked]" } else { "-" }.to_owned(),
+            if node.secret.is_some() { "[masked]" } else { "-" }.to_owned(),
+            options,
+        ]);
+    }
+
+    println!("{}", builder.build().with(Style::rounded()));
 }
 
 fn safe_field(value: &str, max_chars: usize) -> String {
