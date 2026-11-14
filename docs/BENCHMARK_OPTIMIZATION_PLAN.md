@@ -1,13 +1,13 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: Stages 1–5 implementation committed to main; local verification pending
+> Status: Stages 1–3 implemented and user-verified; Stages 4–5 implementation committed to main, local verification pending
 > Last updated: 2026-11-14
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
 
 ## 1. Goals
 
-Proxyctl's original benchmark was too slow for large node sets because it iterated node-first, started a separate managed core for every node/core pair, and performed all probes sequentially. Stages 2 and 3 now change the scheduler to core-first batches, with one process per core batch, isolated loopback listeners, bounded-concurrent latency/TCP probes, and sequential throughput transfers. Local verification of this implementation is still pending.
+Proxyctl's original benchmark was too slow for large node sets because it iterated node-first, started a separate managed core for every node/core pair, and performed all probes sequentially. Stages 2 and 3 change the scheduler to core-first batches, with one process per core batch, isolated loopback listeners, bounded-concurrent latency/TCP probes, and sequential throughput transfers; the user has verified those stages. Stages 4 and 5 add exact throughput accounting, configurable persisted timeouts/concurrency, shared multi-node run IDs, and explicit cancellation records; these changes await local verification.
 
 The optimization must improve elapsed time without sacrificing trustworthy measurements, low memory use, safe process ownership, or the existing persisted history/report semantics.
 
@@ -122,7 +122,7 @@ Acceptance: planning docs agree; no claim that selected multi-node CLI calls sha
 ### Stage 1 — batch configuration foundation (implemented; user reported all checks passing)
 - Added an object-safe adapter batch-config contract and core-specific multi-node generators for sing-box, Xray, and Mihomo. Each target has a unique outbound and loopback inbound; sing-box/Xray routing rules and Mihomo listener-to-proxy mappings keep traffic isolated. Follow-up fixes corrected the inline test-module registration, adapter test imports, unused mutability, and rustfmt layout.
 - Added offline structural tests for all three core formats, distinct routing, duplicate IDs/ports, and unsupported-node rejection.
-- The benchmark service does not use this generator yet; process batching is a later stage.
+- The benchmark service now uses these generators through the core-batch process lifecycle implemented in Stage 2.
 - Model each node's compatibility and local inbound/outbound mapping independently.
 - Add native-validation fixtures for mixed supported/unsupported nodes and multiple valid nodes.
 - Ensure one invalid node can be isolated without rejecting the entire batch.
@@ -130,7 +130,7 @@ Acceptance: planning docs agree; no claim that selected multi-node CLI calls sha
 
 Acceptance: unit and native config tests prove unique loopback ports, correct node-to-outbound routing, no cross-node leakage, and safe failure isolation. No live core startup is required for ordinary tests.
 
-### Stage 2 — core-batch process lifecycle (implementation committed; awaiting local verification)
+### Stage 2 — core-batch process lifecycle (implemented and user-verified)
 - Start one selected core for a batch, not one process per node/core pair.
 - Validate every node's single-node native config independently before admitting it to the batch.
 - Readiness confirms every expected local listener; timeout diagnostics identify missing ports and no measurements start until all are ready.
@@ -140,7 +140,7 @@ Acceptance: unit and native config tests prove unique loopback ports, correct no
 
 Acceptance: fake-child/fake-listener integration tests cover startup, partial readiness, cancellation, crash, cleanup, and sequential core batches. Peak active managed-core count is always one. The multi-listener readiness unit test is added; broader batch process lifecycle tests remain to be verified.
 
-### Stage 3 — concurrent latency and direct TCP (implementation committed; awaiting local verification)
+### Stage 3 — concurrent latency and direct TCP (implemented and user-verified)
 - Add bounded concurrency with a hard maximum of 3 workers.
 - Preserve three samples and median semantics.
 - Use an independent five-second latency request deadline; throughput retains the configured request timeout.
