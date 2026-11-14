@@ -371,26 +371,24 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn rejects_command_output_above_the_fixed_memory_limit() {
-        let directory = tempfile::tempdir().unwrap();
-        let executable = directory.path().join("oversized");
-        fs::write(&executable, "#!/bin/sh\nhead -c 4194305 /dev/zero\n").unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
-
-        let error =
-            run_ip_command(executable.to_str().unwrap(), &[], Duration::from_secs(2)).unwrap_err();
+        let error = run_ip_command(
+            "head",
+            &["-c", "4194305", "/dev/zero"],
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("safety limit"));
     }
 
     #[cfg(target_os = "linux")]
     #[test]
     fn captures_command_output_to_file_without_pipe_backpressure() {
-        let directory = tempfile::tempdir().unwrap();
-        let executable = directory.path().join("emit");
-        fs::write(&executable, "#!/bin/sh\nprintf '[{}]\n'\n").unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
-
-        let output =
-            run_ip_command(executable.to_str().unwrap(), &[], Duration::from_secs(1)).unwrap();
+        let output = run_ip_command(
+            "printf",
+            &["[{}]\\n"],
+            Duration::from_secs(1),
+        )
+        .unwrap();
         assert_eq!(output, b"[{}]\n");
     }
 
