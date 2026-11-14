@@ -64,7 +64,7 @@ pub enum JournalOperationKind { CreateInterface, AddRoute, AddRule }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum JournalOperationState { Intent, Applied, Removed }
+pub enum JournalOperationState { Intent, Applied, Removed, Absent }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JournalOperation {
@@ -97,7 +97,7 @@ pub fn recovery_action(operation: &JournalOperation) -> JournalRecoveryAction {
     match operation.state {
         JournalOperationState::Intent => JournalRecoveryAction::InspectAmbiguousIntent,
         JournalOperationState::Applied => JournalRecoveryAction::CompareAndDelete,
-        JournalOperationState::Removed => JournalRecoveryAction::SkipAlreadyRemoved,
+        JournalOperationState::Removed | JournalOperationState::Absent => JournalRecoveryAction::SkipAlreadyRemoved,
     }
 }
 
@@ -119,6 +119,7 @@ impl TransactionJournal {
                     operation.fingerprint.as_ref().is_some_and(|value| !value.is_empty() && value.len() <= 16 * 1024 && !value.chars().any(char::is_control)),
                     "applied journal operation requires a valid fingerprint"
                 ),
+                JournalOperationState::Absent => ensure!(operation.fingerprint.is_none(), "absent journal operation cannot contain a fingerprint"),
             }
         }
         Ok(())
@@ -348,10 +349,19 @@ impl ManifestStore {
         Ok(Some(journal))
     }
 
+    /// Resolve an intent as absent only after exact kernel inspection proves no resource exists.
+    pub fn mark_intent_absent(&self, activation_id: &str, generation: u64, resource_key: &str) -> Result<()> {
+        self.update_journal_operation(activation_id, generation, resource_key, |operation| {
+            ensure!(operation.state == JournalOperationState::Intent, "only an unresolved intent can be confirmed absent");
+            operation.state = JournalOperationState::Absent;
+            Ok(())
+        })
+    }
+
     pub fn remove_completed_transaction_journal(&self, activation_id: &str, generation: u64) -> Result<()> {
         let Some(journal) = self.load_transaction_journal()? else { return Ok(()); };
         ensure!(journal.activation_id == activation_id && journal.generation == generation, "refusing to remove another transaction journal");
-        ensure!(journal.operations.iter().all(|operation| operation.state == JournalOperationState::Removed), "refusing to remove an incomplete transaction journal");
+        ensure!(journal.operations.iter().all(|operation| matches!(operation.state, JournalOperationState::Removed | JournalOperationState::Absent)), "refusing to remove an incomplete transaction journal");
         match fs::remove_file(self.journal_path()) {
             Ok(()) => sync_directory(&self.directory),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
