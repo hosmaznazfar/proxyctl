@@ -522,3 +522,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - Journal recovery now distinguishes unresolved intent, applied, removed, and explicitly confirmed-absent operations. An intent cannot authorize deletion; exact inspection must establish absence or ownership first. Applied resources require fingerprint compare-and-delete before cleanup progress is committed.
+
+
+- **Journal recovery planning:** added a pure reverse-order planner for durable transaction journals and fresh exact inventory observations. It distinguishes proven absence, exact fingerprint compare-and-delete, already-absent applied resources, and conflicts; unresolved intents never authorize deletion. This is planning only, not a live recovery backend.
