@@ -83,6 +83,24 @@ pub struct TransactionJournal {
     pub operations: Vec<JournalOperation>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JournalRecoveryAction {
+    /// Kernel state must be inspected; no deletion is authorized by an intent alone.
+    InspectAmbiguousIntent,
+    /// Compare the live resource's full fingerprint before attempting deletion.
+    CompareAndDelete,
+    /// Cleanup was durably recorded; do not repeat the mutation.
+    SkipAlreadyRemoved,
+}
+
+pub fn recovery_action(operation: &JournalOperation) -> JournalRecoveryAction {
+    match operation.state {
+        JournalOperationState::Intent => JournalRecoveryAction::InspectAmbiguousIntent,
+        JournalOperationState::Applied => JournalRecoveryAction::CompareAndDelete,
+        JournalOperationState::Removed => JournalRecoveryAction::SkipAlreadyRemoved,
+    }
+}
+
 impl TransactionJournal {
     pub fn validate(&self) -> Result<()> {
         ensure!(self.schema_version == 1, "unsupported TUN transaction journal version");
@@ -690,6 +708,24 @@ mod tests {
         let applied = store.load_transaction_journal().unwrap().unwrap();
         assert_eq!(applied.operations[0].state, JournalOperationState::Applied);
         assert_eq!(applied.operations[0].fingerprint.as_deref(), Some("sha256:interface"));
+    }
+
+    #[test]
+    fn journal_recovery_never_authorizes_delete_from_an_unresolved_intent() {
+        let intent = JournalOperation {
+            sequence: 0,
+            kind: JournalOperationKind::CreateInterface,
+            resource_key: "interface:tun-proxyctl:pending".into(),
+            state: JournalOperationState::Intent,
+            fingerprint: None,
+        };
+        assert_eq!(recovery_action(&intent), JournalRecoveryAction::InspectAmbiguousIntent);
+        let mut applied = intent.clone();
+        applied.state = JournalOperationState::Applied;
+        applied.fingerprint = Some("sha256:exact-resource".into());
+        assert_eq!(recovery_action(&applied), JournalRecoveryAction::CompareAndDelete);
+        applied.state = JournalOperationState::Removed;
+        assert_eq!(recovery_action(&applied), JournalRecoveryAction::SkipAlreadyRemoved);
     }
 
     #[cfg(unix)]
