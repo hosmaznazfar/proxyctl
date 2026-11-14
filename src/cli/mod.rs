@@ -782,6 +782,9 @@ fn print_node_results(
             }
             for run in &node.runs {
                 for target in &run.targets {
+                    if target.target == "direct" && !fields.contains(&F::TcpPing) {
+                        continue;
+                    }
                     found = true;
                     let latency = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::Latency);
                     let tcp_ping = target.metrics.iter().find(|m| m.metric == crate::domain::BenchmarkMetric::TcpPing);
@@ -1247,6 +1250,20 @@ mod tests {
             display_core_version("Xray 26.11.9 (go1.26.0)", true),
             "Xray 26.11.9 (go1.26.0)"
         );
+    }
+
+    #[test]
+    fn show_uses_result_table_by_default_and_details_are_explicit() {
+        assert!(Cli::try_parse_from(["proxyctl", "show", "1"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "show", "1", "--details"]).is_ok());
+    }
+
+    #[test]
+    fn display_profiles_can_be_selected_and_customized() {
+        assert!(Cli::try_parse_from(["proxyctl", "config", "display"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "config", "display", "profile", "compact"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "config", "display", "add-field", "full", "tcp-ping"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "config", "display", "remove-field", "normal", "protocol"]).is_ok());
     }
 
     #[test]
