@@ -111,6 +111,53 @@ pub fn recovery_action(operation: &JournalOperation) -> JournalRecoveryAction {
     }
 }
 
+/// A fail-closed recovery decision derived from one journal operation and a fresh exact
+/// kernel fingerprint lookup. This planner never performs a mutation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JournalRecoveryDecision {
+    MarkAbsent,
+    CompareAndDelete { expected_fingerprint: String },
+    MarkRemoved,
+    PreserveAndReportConflict,
+    Skip,
+}
+
+/// Plan recovery in reverse creation order. The observed map must come from a fresh exact
+/// kernel inventory; None means the exact resource identity is absent.
+pub fn plan_journal_recovery(
+    journal: &TransactionJournal,
+    observed: &std::collections::BTreeMap<String, Option<String>>,
+) -> Result<Vec<(String, JournalRecoveryDecision)>> {
+    journal.validate()?;
+    let mut decisions = Vec::with_capacity(journal.operations.len());
+    for operation in journal.operations.iter().rev() {
+        let current = observed.get(&operation.resource_key).cloned().flatten();
+        let decision = match operation.state {
+            JournalOperationState::Intent => {
+                if observed.contains_key(&operation.resource_key) && current.is_none() {
+                    JournalRecoveryDecision::MarkAbsent
+                } else {
+                    JournalRecoveryDecision::PreserveAndReportConflict
+                }
+            }
+            JournalOperationState::Applied => match (operation.fingerprint.as_ref(), current) {
+                (Some(_), None) => JournalRecoveryDecision::MarkRemoved,
+                (Some(expected), Some(actual)) if *expected == actual => {
+                    JournalRecoveryDecision::CompareAndDelete {
+                        expected_fingerprint: expected.clone(),
+                    }
+                }
+                _ => JournalRecoveryDecision::PreserveAndReportConflict,
+            },
+            JournalOperationState::Removed | JournalOperationState::Absent => {
+                JournalRecoveryDecision::Skip
+            }
+        };
+        decisions.push((operation.resource_key.clone(), decision));
+    }
+    Ok(decisions)
+}
+
 impl TransactionJournal {
     pub fn validate(&self) -> Result<()> {
         ensure!(
@@ -874,6 +921,62 @@ mod tests {
     }
 
     #[cfg(unix)]
+
+    #[test]
+    fn recovery_planner_reverses_order_and_never_deletes_unresolved_intents() {
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 7,
+            operations: vec![
+                JournalOperation { sequence: 0, kind: JournalOperationKind::CreateInterface, resource_key: "interface:tun-proxyctl".into(), state: JournalOperationState::Intent, fingerprint: None },
+                JournalOperation { sequence: 1, kind: JournalOperationKind::AddRoute, resource_key: "route:v4:42420:default".into(), state: JournalOperationState::Applied, fingerprint: Some("route-fp".into()) },
+                JournalOperation { sequence: 2, kind: JournalOperationKind::AddRule, resource_key: "rule:v4:42420".into(), state: JournalOperationState::Applied, fingerprint: Some("rule-fp".into()) },
+            ],
+        };
+        let observed = std::collections::BTreeMap::from([
+            ("interface:tun-proxyctl".into(), None),
+            ("route:v4:42420:default".into(), Some("route-fp".into())),
+            ("rule:v4:42420".into(), None),
+        ]);
+        let plan = plan_journal_recovery(&journal, &observed).unwrap();
+        assert_eq!(plan[0].0, "rule:v4:42420");
+        assert_eq!(plan[0].1, JournalRecoveryDecision::MarkRemoved);
+        assert_eq!(plan[1].1, JournalRecoveryDecision::CompareAndDelete { expected_fingerprint: "route-fp".into() });
+        assert_eq!(plan[2].1, JournalRecoveryDecision::MarkAbsent);
+    }
+
+    #[test]
+    fn recovery_planner_preserves_unobserved_or_changed_resources() {
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 7,
+            operations: vec![
+                JournalOperation { sequence: 0, kind: JournalOperationKind::AddRoute, resource_key: "route:a".into(), state: JournalOperationState::Intent, fingerprint: None },
+                JournalOperation { sequence: 1, kind: JournalOperationKind::AddRule, resource_key: "rule:b".into(), state: JournalOperationState::Applied, fingerprint: Some("expected".into()) },
+            ],
+        };
+        let observed = std::collections::BTreeMap::from([
+            ("route:a".into(), Some("possibly-foreign".into())),
+            ("rule:b".into(), Some("changed".into())),
+        ]);
+        let plan = plan_journal_recovery(&journal, &observed).unwrap();
+        assert!(plan.iter().all(|(_, decision)| *decision == JournalRecoveryDecision::PreserveAndReportConflict));
+    }
+
+    #[test]
+    fn recovery_planner_requires_explicit_inventory_entry_for_intent_absence() {
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 7,
+            operations: vec![JournalOperation { sequence: 0, kind: JournalOperationKind::CreateInterface, resource_key: "interface:tun-proxyctl".into(), state: JournalOperationState::Intent, fingerprint: None }],
+        };
+        let plan = plan_journal_recovery(&journal, &std::collections::BTreeMap::new()).unwrap();
+        assert_eq!(plan[0].1, JournalRecoveryDecision::PreserveAndReportConflict);
+    }
+
     #[test]
     fn write_ahead_journal_persists_intent_before_applied_fingerprint() {
         let directory = tempfile::tempdir().unwrap();
