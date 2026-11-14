@@ -264,25 +264,35 @@ fn execute_run(
     settings: &BenchmarkSettings,
     metric_selection: BenchmarkMetricSelection,
 ) -> anyhow::Result<()> {
+    const LATENCY_CONCURRENCY: usize = 3;
     let active_nodes = NodeDatabase::open(database_path)?.list_nodes(false)?;
-    for record in nodes {
-        let display_number = active_nodes
-            .iter()
-            .position(|active| active.id == record.id)
-            .map(|index| index + 1)
-            .unwrap_or(record.id as usize);
+    let display_numbers = nodes
+        .iter()
+        .map(|record| {
+            let number = active_nodes
+                .iter()
+                .position(|active| active.id == record.id)
+                .map(|index| index + 1)
+                .unwrap_or(record.id as usize);
+            (record.id, number)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    // Direct TCP is independent of a core and uses the same bounded worker limit.
+    if metric_selection.includes_direct_tcp() {
+        execute_tcp_ping_batch(database_path, run_id, nodes, &display_numbers, LATENCY_CONCURRENCY)?;
+    }
+
+    // Core-first scheduling means one managed process per selected core, never multiple cores
+    // at once. Unsupported/invalid nodes are persisted and excluded before batch generation.
+    for core in cores {
         if CANCELLED.load(Ordering::Relaxed) {
             return Ok(());
         }
-        if metric_selection.includes_direct_tcp() {
-            execute_tcp_ping(database_path, run_id, record, display_number)?;
-        }
-
-        for core in cores {
-            if CANCELLED.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-            let executable = core_binary_path(*core)?;
+        let executable = core_binary_path(*core)?;
+        let mut eligible = Vec::new();
+        for record in nodes {
+            let display_number = display_numbers[&record.id];
             let context = SampleContext {
                 run_id,
                 node_id: record.id,
@@ -300,13 +310,7 @@ fn execute_run(
                 )?;
                 continue;
             }
-
-            println!(
-                "run #{run_id} node #{}: validating {core} configuration...",
-                display_number
-            );
-            let adapter = adapters::adapter(*core);
-            let compatibility = adapter.compatibility(&record.node);
+            let compatibility = adapters::adapter(*core).compatibility(&record.node);
             if !compatibility.is_supported() {
                 let (status, category, reason) = match compatibility.status {
                     crate::cores::adapters::CompatibilityStatus::Unsupported => (
@@ -321,72 +325,116 @@ fn execute_run(
                     ),
                     crate::cores::adapters::CompatibilityStatus::Supported => unreachable!(),
                 };
-                record_preflight(
-                    database_path,
-                    &context,
-                    metric_selection.metrics(),
-                    status,
-                    category,
-                    reason,
-                )?;
-                println!("run #{run_id} node #{} {core}: {category}", display_number);
+                record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
+                println!("run #{run_id} node #{display_number} {core}: {category}");
                 continue;
             }
+            eligible.push((record, display_number, context));
+        }
+        if eligible.is_empty() {
+            continue;
+        }
 
-            println!("run #{run_id} node #{}: starting {core}...", display_number);
-            let process = match ManagedCoreProcess::start(
-                *core,
-                &record.node,
-                &executable,
-                Duration::from_millis(settings.startup_timeout_ms),
-            ) {
-                Ok(process) => process,
-                Err(error) => {
-                    let (status, category, reason) = classify_core_start_failure(&error);
-                    record_preflight(
-                        database_path,
-                        &context,
-                        metric_selection.metrics(),
-                        status,
-                        category,
-                        reason,
-                    )?;
-                    println!("run #{run_id} node #{} {core}: {reason}", display_number);
-                    continue;
+        println!(
+            "run #{run_id}: preparing one {core} process for {} compatible node(s)...",
+            eligible.len()
+        );
+        let mut targets = Vec::with_capacity(eligible.len());
+        let mut ports = Vec::with_capacity(eligible.len());
+        for (record, _, _) in &eligible {
+            let port = crate::benchmark::process::reserve_loopback_port()?;
+            ports.push(port);
+            targets.push(adapters::BenchmarkTarget {
+                node_id: record.id,
+                node: &record.node,
+                listen_port: port,
+            });
+        }
+
+        let process = match ManagedCoreProcess::start_batch(
+            *core,
+            &targets,
+            &executable,
+            Duration::from_millis(settings.startup_timeout_ms),
+        ) {
+            Ok(process) => process,
+            Err(error) => {
+                let (status, category, reason) = classify_core_start_failure(&error);
+                for (_, display_number, context) in &eligible {
+                    record_preflight(database_path, context, metric_selection.metrics(), status, category, reason)?;
+                    println!("run #{run_id} node #{display_number} {core}: {reason}");
                 }
-            };
+                continue;
+            }
+        };
 
-            let client = match BenchmarkHttpClient::new(process.port(), settings) {
+        struct Entry {
+            display_number: usize,
+            context: SampleContext,
+            port: u16,
+        }
+        let entries = eligible
+            .into_iter()
+            .zip(ports)
+            .map(|((_, display_number, context), port)| Entry {
+                display_number,
+                context,
+                port,
+            })
+            .collect::<Vec<_>>();
+        let mut process = Some(process);
+        let mut completed_samples = Vec::new();
+        let latency_succeeded = if metric_selection.metrics().contains(&BenchmarkMetric::Latency) {
+            execute_latency_batch(
+                *core,
+                run_id,
+                &entries,
+                settings,
+                LATENCY_CONCURRENCY,
+                &mut process,
+                &mut completed_samples,
+            )?
+        } else {
+            vec![false; entries.len()]
+        };
+
+        // Throughput transfers stay sequential. A full run's per-node gate is based on any
+        // successful real-latency sample; metric-only modes intentionally bypass that gate.
+        for (index, entry) in entries.iter().enumerate() {
+            if CANCELLED.load(Ordering::Relaxed) {
+                break;
+            }
+            let client = match BenchmarkHttpClient::new(entry.port, settings) {
                 Ok(client) => client,
                 Err(_) => {
-                    process.stop()?;
-                    record_preflight(
-                        database_path,
-                        &context,
-                        metric_selection.metrics(),
-                        BenchmarkSampleStatus::Invalid,
-                        "measurement_settings",
-                        "the configured measurement endpoint settings are invalid",
-                    )?;
+                    for &metric in metric_selection.metrics() {
+                        if matches!(metric, BenchmarkMetric::Download | BenchmarkMetric::Upload) {
+                            completed_samples.push(failed_sample(
+                                &entry.context,
+                                metric,
+                                0,
+                                BenchmarkSampleStatus::Invalid,
+                                "measurement_settings",
+                                "the configured measurement endpoint settings are invalid",
+                            ));
+                        }
+                    }
                     continue;
                 }
             };
-
-            let mut process = Some(process);
-            let mut completed_samples = Vec::with_capacity(
-                usize::from(SAMPLES_PER_METRIC) * metric_selection.metrics().len(),
-            );
-            let mut latency_succeeded = false;
-            for &metric in metric_selection.metrics() {
-                if !throughput_allowed(metric, metric_selection, latency_succeeded) {
+            for &metric in [BenchmarkMetric::Download, BenchmarkMetric::Upload].iter() {
+                if !metric_selection.metrics().contains(&metric) {
+                    continue;
+                }
+                if !throughput_allowed(metric, metric_selection, latency_succeeded[index]) {
                     let reason = "throughput test skipped because all real-latency samples failed";
                     println!(
                         "run #{run_id} node #{} {core} {}: skipped — {reason}",
-                        display_number,
+                        entry.display_number,
                         metric.label()
                     );
                     completed_samples.push(failed_sample(
-                        &context,
+                        &entry.context,
                         metric,
                         0,
                         BenchmarkSampleStatus::Unavailable,
@@ -395,16 +443,20 @@ fn execute_run(
                     ));
                     continue;
                 }
-
                 for sample_index in 1..=SAMPLES_PER_METRIC {
                     let label = format!(
                         "run #{run_id} node #{} {core} {} sample {sample_index}/{SAMPLES_PER_METRIC}",
-                        display_number,
+                        entry.display_number,
                         metric.label()
                     );
                     println!("{label}: starting...");
-                    let outcome =
-                        measure_interruptibly(&client, metric, settings, &mut process, &label);
+                    let outcome = measure_interruptibly(
+                        &client,
+                        metric,
+                        settings,
+                        &mut process,
+                        &label,
+                    );
                     if metric == BenchmarkMetric::Download {
                         println!();
                     }
@@ -416,15 +468,12 @@ fn execute_run(
                                 metric.unit(),
                                 measurement.duration.as_secs_f64()
                             );
-                            if metric == BenchmarkMetric::Latency {
-                                latency_succeeded = true;
-                            }
-                            successful_sample(&context, metric, sample_index, measurement)
+                            successful_sample(&entry.context, metric, sample_index, measurement)
                         }
                         Ok(_) | Err(MeasurementFailure::Cancelled) => {
                             println!("{label}: cancelled");
                             failed_sample(
-                                &context,
+                                &entry.context,
                                 metric,
                                 sample_index,
                                 BenchmarkSampleStatus::Cancelled,
@@ -436,7 +485,7 @@ fn execute_run(
                             let reason = error.reason();
                             println!("{label}: {reason}");
                             failed_sample(
-                                &context,
+                                &entry.context,
                                 metric,
                                 sample_index,
                                 status_for_failure(error),
@@ -446,31 +495,190 @@ fn execute_run(
                         }
                     };
                     completed_samples.push(sample);
+                    if CANCELLED.load(Ordering::Relaxed) {
+                        break;
+                    }
                 }
             }
+        }
 
-            // Core stderr is private and retained only for this process lifetime. If HTTP
-            // requests failed, surface only a recognized, credential-free diagnostic category.
-            if let Some(process) = process.as_ref()
-                && let Some(diagnostic) = process.runtime_diagnostic()
-            {
-                println!(
-                    "run #{run_id} node #{} {core}: runtime diagnostic: {diagnostic}",
-                    display_number
-                );
-            }
+        if let Some(process) = process.as_ref()
+            && let Some(diagnostic) = process.runtime_diagnostic()
+        {
+            println!("run #{run_id} {core}: runtime diagnostic: {diagnostic}");
+        }
+        let stop_result = if let Some(process) = process {
+            process.stop()
+        } else {
+            Ok(())
+        };
+        // redb remains closed for the entire core process and all its network work.
+        for sample in completed_samples {
+            persist_sample(database_path, sample)?;
+        }
+        stop_result?;
+    }
+    Ok(())
+}
 
-            // Keep redb closed for the entire child-process lifetime. Flush this node/core
-            // batch only after the child has exited, including when cancellation was requested.
-            let stop_result = if let Some(process) = process {
-                process.stop()
-            } else {
-                Ok(())
-            };
-            for sample in completed_samples {
-                persist_sample(database_path, sample)?;
+fn execute_latency_batch(
+    core: CoreId,
+    run_id: u64,
+    entries: &[impl LatencyBatchEntry],
+    settings: &BenchmarkSettings,
+    concurrency: usize,
+    process: &mut Option<ManagedCoreProcess>,
+    samples: &mut Vec<BenchmarkSample>,
+) -> anyhow::Result<Vec<bool>> {
+    let mut succeeded = vec![false; entries.len()];
+    let timeout = Duration::from_secs(5);
+    for sample_index in 1..=SAMPLES_PER_METRIC {
+        if CANCELLED.load(Ordering::Relaxed) {
+            break;
+        }
+        for (base, chunk) in entries.chunks(concurrency.max(1)).enumerate() {
+            let offset = base * concurrency.max(1);
+            let (sender, receiver) = mpsc::channel();
+            thread::scope(|scope| {
+                for (local_index, entry) in chunk.iter().enumerate() {
+                    let sender = sender.clone();
+                    scope.spawn(move || {
+                        let result = BenchmarkHttpClient::new_with_timeout(
+                            entry.listener_port(),
+                            settings,
+                            timeout,
+                        )
+                        .map_err(|_| MeasurementFailure::Unavailable)
+                        .and_then(|client| client.latency());
+                        let _ = sender.send((offset + local_index, result));
+                    });
+                }
+                drop(sender);
+                let mut received = 0;
+                let mut stopped = false;
+                while received < chunk.len() {
+                    if CANCELLED.load(Ordering::Relaxed) && !stopped {
+                        if let Some(process) = process.take() {
+                            let _ = process.stop();
+                        }
+                        stopped = true;
+                    }
+                    match receiver.recv_timeout(Duration::from_millis(50)) {
+                        Ok((index, result)) => {
+                            received += 1;
+                            let entry = &entries[index];
+                            let label = format!(
+                                "run #{run_id} node #{} {core} real latency sample {sample_index}/{SAMPLES_PER_METRIC}",
+                                entry.display_number()
+                            );
+                            let sample = match result {
+                                Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
+                                    println!("{label}: {:.2} ms", measurement.value);
+                                    succeeded[index] = true;
+                                    successful_sample(entry.sample_context(), BenchmarkMetric::Latency, sample_index, measurement)
+                                }
+                                Ok(_) | Err(MeasurementFailure::Cancelled) => failed_sample(
+                                    entry.sample_context(),
+                                    BenchmarkMetric::Latency,
+                                    sample_index,
+                                    BenchmarkSampleStatus::Cancelled,
+                                    "cancelled",
+                                    "measurement cancelled by user",
+                                ),
+                                Err(error) => {
+                                    let reason = error.reason();
+                                    println!("{label}: {reason}");
+                                    failed_sample(
+                                        entry.sample_context(),
+                                        BenchmarkMetric::Latency,
+                                        sample_index,
+                                        status_for_failure(error),
+                                        error.category(),
+                                        &reason,
+                                    )
+                                }
+                            };
+                            samples.push(sample);
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
+                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    }
+                }
+            });
+            if CANCELLED.load(Ordering::Relaxed) {
+                break;
             }
-            stop_result?;
+        }
+    }
+    Ok(succeeded)
+}
+
+trait LatencyBatchEntry: Sync {
+    fn listener_port(&self) -> u16;
+    fn display_number(&self) -> usize;
+    fn sample_context(&self) -> &SampleContext;
+}
+
+fn execute_tcp_ping_batch(
+    database_path: &Path,
+    run_id: u64,
+    nodes: &[NodeRecord],
+    display_numbers: &BTreeMap<u64, usize>,
+    concurrency: usize,
+) -> anyhow::Result<()> {
+    for sample_index in 1..=SAMPLES_PER_METRIC {
+        if CANCELLED.load(Ordering::Relaxed) {
+            break;
+        }
+        for chunk in nodes.chunks(concurrency.max(1)) {
+            let (sender, receiver) = mpsc::channel();
+            thread::scope(|scope| {
+                for record in chunk {
+                    let sender = sender.clone();
+                    scope.spawn(move || {
+                        let result = tcp::ping(
+                            &record.node.server,
+                            record.node.port,
+                            TCP_CONNECT_TIMEOUT,
+                        );
+                        let _ = sender.send((record.id, result));
+                    });
+                }
+                drop(sender);
+                for _ in 0..chunk.len() {
+                    if let Ok((node_id, result)) = receiver.recv() {
+                        let context = SampleContext {
+                            run_id,
+                            node_id,
+                            target: DIRECT_TARGET.to_owned(),
+                            version: None,
+                        };
+                        let display_number = display_numbers[&node_id];
+                        let label = format!(
+                            "run #{run_id} node #{display_number} direct TCP ping sample {sample_index}/{SAMPLES_PER_METRIC}"
+                        );
+                        let sample = match result {
+                            Ok(measurement) => {
+                                println!("{label}: {:.2} ms", measurement.value);
+                                successful_sample(&context, BenchmarkMetric::TcpPing, sample_index, measurement)
+                            }
+                            Err(error) => {
+                                let reason = error.reason();
+                                println!("{label}: {reason}");
+                                failed_sample(
+                                    &context,
+                                    BenchmarkMetric::TcpPing,
+                                    sample_index,
+                                    status_for_failure(error),
+                                    error.category(),
+                                    &reason,
+                                )
+                            }
+                        };
+                        persist_sample(database_path, sample)?;
+                    }
+                }
+            });
         }
     }
     Ok(())
