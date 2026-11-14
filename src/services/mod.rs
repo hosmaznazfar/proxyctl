@@ -1,3 +1,4 @@
+pub mod display_config;
 //! Application services.
 //!
 //! Services contain use-case logic and coordinate domain interfaces. They must not depend on
