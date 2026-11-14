@@ -134,10 +134,7 @@ pub fn apply<B: KernelTransactionBackend>(
         )
         .context("failed to create and journal the owned TUN interface")?;
 
-    if interface.name != policy.interface_name
-        || interface.index != policy.interface_index
-        || !interface.is_tun
-    {
+    if interface.name != policy.interface_name || interface.index == 0 || !interface.is_tun {
         backend.retain_recovery_journal(activation_id).context(
             "kernel returned an unexpected interface and recovery journal could not be retained",
         )?;
@@ -146,10 +143,15 @@ pub fn apply<B: KernelTransactionBackend>(
         );
     }
 
-    let mut resources = Vec::with_capacity(policy.routes.len() + policy.rules.len());
+    // Linux assigns ifindex during interface creation. Bind every planned route to that
+    // exact kernel identity rather than predicting an index during preflight.
+    let bound_policy = policy
+        .bind_interface_index(interface.index)
+        .context("could not bind routing policy to the kernel-assigned TUN ifindex")?;
+    let mut resources = Vec::with_capacity(bound_policy.routes.len() + bound_policy.rules.len());
     let mut invalid_fingerprint = false;
     let apply_result = (|| -> Result<()> {
-        for route in &policy.routes {
+        for route in &bound_policy.routes {
             let fingerprint = backend
                 .add_owned_route(activation_id, route)
                 .context("failed to add and journal an owned TUN route")?;
@@ -162,7 +164,7 @@ pub fn apply<B: KernelTransactionBackend>(
                 fingerprint,
             });
         }
-        for rule in &policy.rules {
+        for rule in &bound_policy.rules {
             let fingerprint = backend
                 .add_owned_rule(activation_id, rule)
                 .context("failed to add and journal an owned policy rule")?;
@@ -209,8 +211,8 @@ pub fn apply<B: KernelTransactionBackend>(
     let manifest = RouteManifest {
         version: super::ownership::MANIFEST_VERSION,
         activation_id: activation_id.clone(),
-        table_id: policy.table_id,
-        rule_priority: policy.proxy_priority,
+        table_id: bound_policy.table_id,
+        rule_priority: bound_policy.proxy_priority,
         interface_name: interface.name,
         interface_index: interface.index,
         resources,
