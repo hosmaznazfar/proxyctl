@@ -252,7 +252,7 @@ After each benchmark run is finalized, Proxyctl retains at most the three newest
 
 ## 15. Benchmark performance optimization roadmap
 
-The current per-node/core process lifecycle is a known performance bottleneck. The approved target is **core-batch scheduling**: one managed core process at a time, with multiple compatible node outbounds and isolated loopback inbounds in its temporary config. Latency probes will use bounded concurrency (initial target 3) and retain three samples per node. Throughput transfers remain sequential by default to protect measurement quality.
+The per-node/core process bottleneck has been replaced in the current implementation by **core-batch scheduling**: one managed core process at a time, with multiple compatible node outbounds and isolated loopback inbounds in its temporary config. Each node is native-validated independently before it is admitted to the batch; startup readiness requires every batch listener. Real HTTP latency and direct TCP probes run in bounded groups of at most three workers, with three samples per node and a five-second HTTP latency deadline. Throughput transfers remain sequential by default to protect measurement quality. Stages 2 and 3 are committed but await local verification.
 
 The user's comparative observations guide optimization priorities: Throne is the latency reference; v2rayN is the download/upload reference. This does not justify copying either project's exact sample policy or assuming their endpoint semantics are interchangeable. Proxyctl retains three samples, medians, explicit outcomes, and the full-mode latency gate.
 
