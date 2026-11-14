@@ -136,11 +136,11 @@ impl Drop for RuntimeLock {
     }
 }
 
-pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result<()> {
+pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool, port_override: Option<u16>) -> anyhow::Result<()> {
     ensure_tun_mode_disabled(tun_enabled)?;
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (node_id, core, tun_enabled);
+        let _ = (node_id, core, tun_enabled, port_override);
         anyhow::bail!("activation currently requires Linux process-identity support");
     }
     #[cfg(target_os = "linux")]
@@ -180,7 +180,9 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool) -> anyhow::Result
                 .unwrap_or("unsupported configuration")
         );
 
-        let port = reserve_port()?;
+        let port = match port_override { Some(port) => port, None => crate::services::listener_config::listen_port()?, };
+        validate_listen_port(port)?;
+        ensure_port_available(port)?;
         let generated = if tun_enabled {
             adapter.generate_tun_activation_config(&node, port)
         } else {
@@ -406,10 +408,33 @@ fn paths() -> anyhow::Result<(PathBuf, PathBuf)> {
     let runtime = data.join("runtime");
     Ok((runtime.clone(), runtime.join("active.json")))
 }
-fn reserve_port() -> anyhow::Result<u16> {
-    let listener = TcpListener::bind(("127.0.0.1", 0))?;
-    Ok(listener.local_addr()?.port())
+/// Validate and preflight the shared loopback HTTP/SOCKS listener port.
+pub fn validate_listen_port(port: u16) -> anyhow::Result<()> {
+    anyhow::ensure!((1024..=u16::MAX).contains(&port), "listen port must be between 1024 and 65535");
+    Ok(())
 }
+
+/// Reject a port held by another process. The exact tracked Proxyctl process may
+/// retain its current port while the replacement configuration is prepared.
+pub fn ensure_port_available(port: u16) -> anyhow::Result<()> {
+    validate_listen_port(port)?;
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok((_, state_path)) = paths()
+            && let Ok(bytes) = fs::read(&state_path)
+            && let Ok(state) = serde_json::from_slice::<ActiveProcess>(&bytes)
+            && state.port == port
+            && matches_process(state.pid, &state.executable, state.start_ticks)
+        {
+            return Ok(());
+        }
+    }
+    let listener = TcpListener::bind(("127.0.0.1", port))
+        .with_context(|| format!("127.0.0.1:{port} is already in use or cannot be bound"))?;
+    drop(listener);
+    Ok(())
+}
+
 fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let parent = path.parent().context("runtime file has no parent")?;
     fs::create_dir_all(parent)?;
