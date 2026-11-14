@@ -34,6 +34,8 @@ const BENCHMARK_HISTORY_LIMIT: usize = 3;
 const METHODOLOGY: &str = "proxyctl-benchmark-v2";
 const DIRECT_TARGET: &str = "direct";
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_PROBE_CONCURRENCY: usize = 3;
+const LATENCY_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug)]
 pub struct BenchmarkOptions {
@@ -264,7 +266,7 @@ fn execute_run(
     settings: &BenchmarkSettings,
     metric_selection: BenchmarkMetricSelection,
 ) -> anyhow::Result<()> {
-    const LATENCY_CONCURRENCY: usize = 3;
+    let latency_concurrency = MAX_PROBE_CONCURRENCY;
     let active_nodes = NodeDatabase::open(database_path)?.list_nodes(false)?;
     let display_numbers = nodes
         .iter()
@@ -280,7 +282,7 @@ fn execute_run(
 
     // Direct TCP is independent of a core and uses the same bounded worker limit.
     if metric_selection.includes_direct_tcp() {
-        execute_tcp_ping_batch(database_path, run_id, nodes, &display_numbers, LATENCY_CONCURRENCY)?;
+        execute_tcp_ping_batch(database_path, run_id, nodes, &display_numbers, latency_concurrency)?;
     }
 
     // Core-first scheduling means one managed process per selected core, never multiple cores
@@ -385,7 +387,7 @@ fn execute_run(
                 run_id,
                 &entries,
                 settings,
-                LATENCY_CONCURRENCY,
+                latency_concurrency,
                 &mut process,
                 &mut completed_samples,
             )?
@@ -526,12 +528,12 @@ fn execute_latency_batch(
     samples: &mut Vec<BenchmarkSample>,
 ) -> anyhow::Result<Vec<bool>> {
     let mut succeeded = vec![false; entries.len()];
-    let timeout = Duration::from_secs(5);
+    let timeout = LATENCY_REQUEST_TIMEOUT;
     for sample_index in 1..=SAMPLES_PER_METRIC {
         if CANCELLED.load(Ordering::Relaxed) {
             break;
         }
-        for (base, chunk) in entries.chunks(concurrency.max(1)).enumerate() {
+        for (base, chunk) in probe_chunks(entries, concurrency).enumerate() {
             let offset = base * concurrency.max(1);
             let (sender, receiver) = mpsc::channel();
             thread::scope(|scope| {
@@ -584,7 +586,7 @@ fn execute_latency_batch(
                                     let reason = error.reason();
                                     println!("{label}: {reason}");
                                     failed_sample(
-                                        entry.sample_context(),
+                                        &entry.context,
                                         BenchmarkMetric::Latency,
                                         sample_index,
                                         status_for_failure(error),
@@ -625,7 +627,7 @@ fn execute_tcp_ping_batch(
         if CANCELLED.load(Ordering::Relaxed) {
             break;
         }
-        for chunk in nodes.chunks(concurrency.max(1)) {
+        for chunk in probe_chunks(nodes, concurrency) {
             let batch_samples = thread::scope(|scope| {
                 let (sender, receiver) = mpsc::channel();
                 for record in chunk {
@@ -682,6 +684,10 @@ fn execute_tcp_ping_batch(
         }
     }
     Ok(())
+}
+
+fn probe_chunks<T>(items: &[T], requested_concurrency: usize) -> std::slice::Chunks<'_, T> {
+    items.chunks(requested_concurrency.clamp(1, MAX_PROBE_CONCURRENCY))
 }
 
 fn throughput_allowed(
@@ -941,6 +947,17 @@ fn install_cancellation_handler() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn probe_workers_are_hard_bounded_to_three() {
+        let values = [0_u8; 8];
+        let sizes = probe_chunks(&values, usize::MAX)
+            .map(<[_]>::len)
+            .collect::<Vec<_>>();
+        assert_eq!(sizes, vec![3, 3, 2]);
+    }
+
     use super::*;
 
     #[test]
