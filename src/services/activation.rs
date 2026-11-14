@@ -1331,7 +1331,17 @@ mod tests {
             "a rejected identity must leave the verified child running"
         );
 
-        signal_verified(pid, &exe, ticks, libc::SIGTERM).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match signal_verified(pid, &exe, ticks, libc::SIGTERM) {
+                Ok(()) => break,
+                Err(error) if matches_process(pid, &exe, ticks) && Instant::now() < deadline => {
+                    let _ = error;
+                    thread::sleep(POLL);
+                }
+                Err(error) => panic!("could not signal the still-verified fake child: {error:#}"),
+            }
+        }
         child.wait().unwrap();
         assert!(!matches_process(pid, &exe, ticks));
     }
