@@ -1188,7 +1188,6 @@ fn print_node_details(record: &NodeRecord, display_number: usize) {
             "-"
         }
     );
-    println!("Fingerprint: {}", node.fingerprint());
     if !node.options.is_empty() {
         let keys = node
             .options
