@@ -498,8 +498,12 @@ mod tests {
             let _ = read_fake_request(&mut reader);
             let body = vec![0x33; 32 * 1024];
             let stream = reader.get_mut();
+            // A truncated chunked stream lets ureq expose bytes already read before
+            // reporting the missing terminal chunk to the body reader.
             stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 65536\r\nConnection: close\r\n\r\n")
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n8000\r\n",
+                )
                 .unwrap();
             stream.write_all(&body).unwrap();
             stream.flush().unwrap();
