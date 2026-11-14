@@ -1,6 +1,6 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: approved plan; Stage 1 adapter batch-config foundation added, awaiting local verification
+> Status: approved plan; Stage 1 adapter batch-config foundation added, compile/test verification pending
 > Last updated: 2026-11-14
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
@@ -120,7 +120,7 @@ Each stage is a separate small implementation batch. Update this plan, `docs/BEN
 Acceptance: planning docs agree; no claim that selected multi-node CLI calls share one run unless code actually does.
 
 ### Stage 1 — batch configuration foundation (code added; awaiting local verification)
-- Added an object-safe adapter batch-config contract and core-specific multi-node generators for sing-box, Xray, and Mihomo. Each target has a unique outbound and loopback inbound; sing-box/Xray routing rules and Mihomo listener-to-proxy mappings keep traffic isolated.
+- Added an object-safe adapter batch-config contract and core-specific multi-node generators for sing-box, Xray, and Mihomo. Each target has a unique outbound and loopback inbound; sing-box/Xray routing rules and Mihomo listener-to-proxy mappings keep traffic isolated. Follow-up fixes corrected the inline test-module registration, adapter test imports, unused mutability, and rustfmt layout.
 - Added offline structural tests for all three core formats, distinct routing, duplicate IDs/ports, and unsupported-node rejection.
 - The benchmark service does not use this generator yet; process batching is a later stage.
 - Model each node's compatibility and local inbound/outbound mapping independently.
