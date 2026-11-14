@@ -305,7 +305,9 @@ mod tests {
         add_count: usize,
         fail_remove: bool,
         journal_retained: bool,
+        fail_retain: bool,
         finalized: bool,
+        fail_finalize: bool,
         committed: Option<RouteManifest>,
         fail_commit: bool,
         empty_fingerprint_at: Option<usize>,
@@ -405,6 +407,9 @@ mod tests {
         }
 
         fn retain_recovery_journal(&mut self, _id: &str) -> Result<()> {
+            if self.fail_retain {
+                anyhow::bail!("injected journal retention failure");
+            }
             self.journal_retained = true;
             Ok(())
         }
@@ -417,6 +422,9 @@ mod tests {
         }
 
         fn finish_transaction(&mut self, _id: &str) -> Result<()> {
+            if self.fail_finalize {
+                anyhow::bail!("injected journal finalization failure");
+            }
             self.finalized = true;
             Ok(())
         }
@@ -510,6 +518,35 @@ mod tests {
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
         assert!(backend.interface.is_some());
+    }
+
+    #[test]
+    fn rollback_retention_failure_is_reported_without_claiming_success() {
+        let mut backend = FakeBackend {
+            fail_add_at: Some(3),
+            fail_remove: true,
+            fail_retain: true,
+            ..Default::default()
+        };
+        let error = apply(&transaction(), &mut backend).unwrap_err();
+        assert!(format!("{error:#}").contains("retention also failed"));
+        assert!(!backend.journal_retained);
+        assert!(backend.interface.is_some());
+    }
+
+    #[test]
+    fn finalization_failure_requires_confirmed_journal_retention() {
+        let mut backend = FakeBackend {
+            fail_add_at: Some(3),
+            fail_finalize: true,
+            ..Default::default()
+        };
+        let error = apply(&transaction(), &mut backend).unwrap_err();
+        assert!(format!("{error:#}").contains("journal could not be finalized"));
+        assert!(backend.journal_retained);
+        assert!(!backend.finalized);
+        assert!(backend.interface.is_none());
+        assert!(backend.resources.is_empty());
     }
 
     #[test]
