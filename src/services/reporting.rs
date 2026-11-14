@@ -131,7 +131,6 @@ pub fn build_report(path: &Path, options: ReportOptions) -> anyhow::Result<Bench
             let runs = node_runs
                 .into_iter()
                 .map(|run| build_run_report(run, node.id, &samples))
-                .filter(|report| !report.targets.is_empty())
                 .collect();
             NodeReport { node, runs }
         })
