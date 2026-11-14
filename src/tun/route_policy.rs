@@ -146,7 +146,10 @@ impl RoutingPolicyPlan {
     /// The constructor's interface index is only a non-zero planning placeholder. Linux assigns
     /// the real ifindex dynamically; every route must use this value before it is installed.
     pub fn bind_interface_index(&self, interface_index: u32) -> Result<Self> {
-        ensure!(interface_index > 0, "kernel-assigned TUN ifindex must be non-zero");
+        ensure!(
+            interface_index > 0,
+            "kernel-assigned TUN ifindex must be non-zero"
+        );
         let mut bound = self.clone();
         bound.interface_index = interface_index;
         for route in &mut bound.routes {
