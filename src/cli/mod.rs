@@ -1160,6 +1160,19 @@ mod tests {
     }
 
     #[test]
+    fn test_command_accepts_each_metric_only_selector_and_rejects_combinations() {
+        for selector in ["--latency-only", "--download-only", "--upload-only"] {
+            assert!(Cli::try_parse_from(["proxyctl", "test", "--all-cores", selector]).is_ok());
+        }
+        assert!(Cli::try_parse_from([
+            "proxyctl", "test", "--all-cores", "--latency-only", "--download-only"
+        ]).is_err());
+        assert!(Cli::try_parse_from([
+            "proxyctl", "test", "--all-cores", "--download-only", "--upload-only"
+        ]).is_err());
+    }
+
+    #[test]
     fn test_command_requires_a_valid_scope_and_rejects_conflicting_core() {
         assert!(Cli::try_parse_from(["proxyctl", "test", "--node", "7"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "test", "--core", "xray"]).is_err());
