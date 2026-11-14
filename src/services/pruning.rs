@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use crate::{
-    cores::{CoreId, adapters, adapters::CompatibilityStatus, core_binary_path},
+    cores::{CoreId, adapters, adapters::CompatibilityStatus},
     database::{NodeDatabase, NodeRecord},
     domain::{
         BenchmarkMetric, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, BenchmarkSampleStatus,
@@ -405,19 +405,39 @@ mod tests {
     }
 
     #[test]
-    fn adapter_unsupported_is_not_a_connection_failure() {
+    fn adapter_unsupported_counts_as_a_core_that_cannot_use_the_node() {
         let node = node();
         let result = evaluate_node(&node, &[CoreId::Xray], &[], &[]);
-        assert_eq!(result.0, PruneDecision::NoCompatibleCore);
+        assert_eq!(result.0, PruneDecision::Candidate);
         assert!(result.1.contains("unsupported"));
     }
 
     #[test]
-    fn invalid_current_compatibility_prevents_pruning() {
+    fn invalid_current_compatibility_counts_as_unusable() {
         let mut node = node();
         node.node = parse_proxy_url("vless://uuid@example.test:443?type=ws&type=grpc").unwrap();
         let result = evaluate_node(&node, &[CoreId::SingBox], &[], &[]);
-        assert_eq!(result.0, PruneDecision::InsufficientEvidence);
+        assert_eq!(result.0, PruneDecision::Candidate);
+        assert!(result.1.contains("invalid"));
+    }
+
+    #[test]
+    fn invalid_cores_plus_one_unreachable_core_make_node_a_candidate() {
+        let mut node = node();
+        node.node = parse_proxy_url("vless://uuid@example.test:443?type=ws&type=grpc").unwrap();
+        let runs = [run(1, BenchmarkRunStatus::Completed, 20)];
+        let samples = evidence(1, [BenchmarkSampleStatus::Timeout; 3]);
+        let result = evaluate_node(&node, &[CoreId::SingBox, CoreId::Xray, CoreId::Mihomo], &runs, &samples);
+        assert_eq!(result.0, PruneDecision::Candidate);
+    }
+
+    #[test]
+    fn any_successful_core_keeps_node_even_when_other_cores_are_unusable() {
+        let node = node();
+        let runs = [run(1, BenchmarkRunStatus::Completed, 20)];
+        let samples = evidence(1, [BenchmarkSampleStatus::Success; 3]);
+        let result = evaluate_node(&node, &[CoreId::SingBox, CoreId::Xray], &runs, &samples);
+        assert_eq!(result.0, PruneDecision::Reachable);
     }
 
     #[test]
