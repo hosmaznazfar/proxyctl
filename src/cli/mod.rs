@@ -1005,6 +1005,9 @@ fn print_benchmark_report(
 
     if report.mode == ReportMode::Compare {
         for comparison in &report.comparisons {
+            if comparison.target == "direct" && !fields.contains(&F::TcpPing) {
+                continue;
+            }
             found = true;
             builder.push_record(report_row(
                 &fields,
@@ -1028,6 +1031,9 @@ fn print_benchmark_report(
             }
             for run in &node.runs {
                 for target in &run.targets {
+                    if target.target == "direct" && !fields.contains(&F::TcpPing) {
+                        continue;
+                    }
                     found = true;
                     builder.push_record(report_row(
                         &fields,
