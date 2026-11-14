@@ -549,6 +549,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 )?;
                 print_benchmark_report(&report, &display_config, verbose, &display_numbers);
             } else {
+                let mut combined = reporting::BenchmarkReport {
+                    mode,
+                    nodes: Vec::new(),
+                    comparisons: Vec::new(),
+                };
                 for id in selected_ids(&database_path, &node)? {
                     let report = reporting::build_report(
                         &database_path,
@@ -558,8 +563,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                             core,
                         },
                     )?;
-                    print_benchmark_report(&report, &display_config, verbose, &display_numbers);
+                    combined.nodes.extend(report.nodes);
+                    combined.comparisons.extend(report.comparisons);
                 }
+                print_benchmark_report(&combined, &display_config, verbose, &display_numbers);
             }
         }
         Command::Prune {
@@ -1129,52 +1136,6 @@ fn display_core_version(version: &str, verbose: bool) -> String {
         version.to_owned()
     } else {
         short_version
-    }
-}
-
-fn print_metric_summary(summary: &reporting::MetricSummary) {
-    let label = summary.metric.label();
-    let missing = 3_usize.saturating_sub(summary.attempted);
-    let failures = summary
-        .failures
-        .iter()
-        .map(|failure| format!("{}={}", sample_status_label(failure.status), failure.count))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let suffix = if failures.is_empty() {
-        String::new()
-    } else {
-        format!("; {failures}")
-    };
-    let missing_suffix = if missing > 0 {
-        format!("; {missing} not run")
-    } else {
-        String::new()
-    };
-
-    match (summary.median, summary.successful, summary.preflight) {
-        (Some(value), 3, _) => println!(
-            "      {label}: {:.2} {} (3/3 successful)",
-            value,
-            summary.metric.unit()
-        ),
-        (Some(value), successful, _) => println!(
-            "      {label}: {:.2} {} (partial: {successful}/3 successful{suffix}{missing_suffix})",
-            value,
-            summary.metric.unit()
-        ),
-        (None, _, Some(preflight)) => {
-            println!(
-                "      {label}: {} (preflight)",
-                sample_status_label(preflight)
-            )
-        }
-        (None, 0, None) if summary.attempted == 0 => {
-            println!("      {label}: not run (0/3)")
-        }
-        (None, _, None) => {
-            println!("      {label}: no successful samples (0/3{suffix}{missing_suffix})")
-        }
     }
 }
 
