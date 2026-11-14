@@ -13,6 +13,8 @@ use crate::domain::{BenchmarkSettings, throughput_bps};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 const DOWNLOAD_CHUNK_BYTES: usize = 64 * 1024;
+/// Ignore tiny fragments that do not provide a useful throughput measurement.
+const MIN_PARTIAL_DOWNLOAD_BYTES: u64 = 16 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
 
 /// A successful, timed HTTP measurement.
@@ -166,8 +168,9 @@ impl BenchmarkHttpClient {
 
     /// Measure exactly `max_bytes` from a download response, reporting throttled progress.
     ///
-    /// Larger remote objects are intentionally cut short. An early EOF before the target size
-    /// is an incomplete sample, never a successful smaller-than-requested throughput result.
+    /// Larger remote objects are intentionally cut short. A complete target is a normal sample;
+    /// a truncated body can still provide a useful partial measurement after the minimum byte
+    /// threshold, matching v2rayN's behavior of retaining observed speed after a transfer error.
     pub fn download<F>(
         &self,
         max_bytes: u64,
@@ -194,7 +197,17 @@ impl BenchmarkHttpClient {
         let mut last_progress = Instant::now();
 
         loop {
-            let count = reader.read(&mut buffer).map_err(classify_body_io_error)?;
+            let count = match reader.read(&mut buffer) {
+                Ok(count) => count,
+                Err(error) => {
+                    let duration = started.elapsed();
+                    progress(TransferProgress::new(received, max_bytes, duration));
+                    if received >= MIN_PARTIAL_DOWNLOAD_BYTES {
+                        return partial_download_measurement(received, duration);
+                    }
+                    return Err(classify_body_io_error(error));
+                }
+            };
             if count == 0 {
                 break;
             }
@@ -212,6 +225,9 @@ impl BenchmarkHttpClient {
         let duration = started.elapsed();
         progress(TransferProgress::new(received, max_bytes, duration));
         if received < max_bytes {
+            if received >= MIN_PARTIAL_DOWNLOAD_BYTES {
+                return partial_download_measurement(received, duration);
+            }
             return Err(MeasurementFailure::IncompleteResponse);
         }
         Ok(Measurement {
@@ -249,6 +265,18 @@ impl BenchmarkHttpClient {
             transferred_bytes: Some(bytes),
         })
     }
+}
+
+
+fn partial_download_measurement(
+    received: u64,
+    duration: Duration,
+) -> Result<Measurement, MeasurementFailure> {
+    Ok(Measurement {
+        value: throughput_bps(received, duration).ok_or(MeasurementFailure::InvalidResponse)?,
+        duration,
+        transferred_bytes: Some(received),
+    })
 }
 
 pub fn validate_settings(settings: &BenchmarkSettings) -> anyhow::Result<()> {
