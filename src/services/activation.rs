@@ -136,7 +136,12 @@ impl Drop for RuntimeLock {
     }
 }
 
-pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool, port_override: Option<u16>) -> anyhow::Result<()> {
+pub fn activate(
+    node_id: u64,
+    core: CoreId,
+    tun_enabled: bool,
+    port_override: Option<u16>,
+) -> anyhow::Result<()> {
     ensure_tun_mode_disabled(tun_enabled)?;
     #[cfg(not(target_os = "linux"))]
     {
@@ -180,7 +185,10 @@ pub fn activate(node_id: u64, core: CoreId, tun_enabled: bool, port_override: Op
                 .unwrap_or("unsupported configuration")
         );
 
-        let port = match port_override { Some(port) => port, None => crate::services::listener_config::listen_port()?, };
+        let port = match port_override {
+            Some(port) => port,
+            None => crate::services::listener_config::listen_port()?,
+        };
         validate_listen_port(port)?;
         ensure_port_available(port)?;
         let generated = if tun_enabled {
