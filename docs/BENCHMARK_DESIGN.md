@@ -226,3 +226,16 @@ Each metric summary reports:
 - A preflight outcome such as unsupported, invalid, or unavailable when the core was not tested.
 
 A median based on one or two successful samples is explicitly labelled partial. Three successes are labelled complete. No failed or missing sample is represented as zero. The report does not infer a failure for a sample that was never attempted.
+
+
+## 13. Configurable CLI result tables
+
+`proxyctl show NODE...` renders the latest persisted benchmark results as a table. Its active profile defaults to compact. Compact shows node, core, real HTTP latency, download, and upload. Normal adds server, protocol, and outcome status. Full adds node metadata, core version, direct TCP ping, sample/failure counts, run ID, and test timestamp. The profiles are independently customizable through `proxyctl config display add-field` and `remove-field`; the active profile is selected with `proxyctl config display profile`. Profile configuration is private, persisted separately from the database, and does not contain node credentials.
+
+Metric outcomes must remain semantically distinct:
+- `not-run`: no sample was attempted and there is no preflight outcome.
+- `unavailable`: a preflight or runtime availability check explicitly says the selected core/target could not be used.
+- `unsupported` and `invalid`: adapter compatibility outcomes, not network failures.
+- `timeout`, `unreachable`, and `cancelled`: attempted measurements with their own outcomes.
+
+Use the Rust `tabled` crate for terminal table layout rather than hand-calculated column widths. The table renderer is presentation-only; report aggregation and persisted benchmark records remain in the service/domain layers. Sensitive source URLs, credentials, fingerprints, and internal database IDs are not default display fields.
