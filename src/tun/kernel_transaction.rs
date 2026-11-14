@@ -145,9 +145,17 @@ pub fn apply<B: KernelTransactionBackend>(
 
     // Linux assigns ifindex during interface creation. Bind every planned route to that
     // exact kernel identity rather than predicting an index during preflight.
-    let bound_policy = policy
-        .bind_interface_index(interface.index)
-        .context("could not bind routing policy to the kernel-assigned TUN ifindex")?;
+    let bound_policy = match policy.bind_interface_index(interface.index) {
+        Ok(bound) => bound,
+        Err(error) => {
+            backend
+                .retain_recovery_journal(activation_id)
+                .context("policy binding failed and recovery journal could not be retained")?;
+            return Err(error).context(
+                "could not bind routing policy to the kernel-assigned TUN ifindex; recovery journal retained",
+            );
+        }
+    };
     let mut resources = Vec::with_capacity(bound_policy.routes.len() + bound_policy.rules.len());
     let mut invalid_fingerprint = false;
     let apply_result = (|| -> Result<()> {
@@ -217,7 +225,12 @@ pub fn apply<B: KernelTransactionBackend>(
         interface_index: interface.index,
         resources,
     };
-    manifest.validate()?;
+    if let Err(error) = manifest.validate() {
+        backend
+            .retain_recovery_journal(activation_id)
+            .context("manifest validation failed and recovery journal could not be retained")?;
+        return Err(error).context("generated ownership manifest is invalid; recovery journal retained");
+    }
     if let Err(error) = backend.commit_manifest(&manifest) {
         backend
             .retain_recovery_journal(activation_id)
