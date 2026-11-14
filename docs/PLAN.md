@@ -537,3 +537,8 @@ Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listene
 
 
 - **Metric-specific benchmark execution:** `test` now supports mutually exclusive `--latency-only`, `--download-only`, and `--upload-only` selectors. The default remains all HTTP metrics plus direct TCP ping. Each metric-only mode runs only its named HTTP metric and skips direct TCP ping. Preflight failures are persisted only for the selected metric, so a single-metric run does not create misleading outcomes for skipped metrics. Each selected HTTP metric retains three samples per supported node/core pair.
+
+
+## Configurable result presentation
+
+**Approved and implemented on main:** `proxyctl show` uses a persistent table profile, with compact as the default. Compact contains node, core, latency, download, and upload. Normal and Full expose progressively more context. Each profile can be customized independently using `proxyctl config display add-field` and `remove-field`; users can switch the active profile with `proxyctl config display profile`. The table renderer uses the Rust `tabled` crate. Ordinary output never includes fingerprints or credentials. `not-run`, `unavailable`, `unsupported`, and `invalid` remain distinct.
