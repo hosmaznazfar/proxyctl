@@ -68,7 +68,7 @@ Download and upload are accuracy-sensitive and must not compete with one another
 - Only nodes that passed the full-mode latency gate are eligible.
 - Run one throughput transfer at a time by default, even while the batch core remains running.
 - Use explicit endpoint configuration and preserve user overrides.
-- Download: stream and count actual bytes; cap bytes; validate response status; distinguish completion, early EOF, timeout, and read failure; calculate rate from transferred bytes and monotonic elapsed time.
+- Download: stream and count actual bytes; cap bytes; validate response status; score complete transfers normally and retain truncated/read-failed transfers as partial measurements only after at least 16 KiB; smaller fragments remain failures. Calculate rate from actual transferred bytes and monotonic elapsed time.
 - Upload: use a bounded synthetic in-memory payload; measure the completed request/response exchange; require a successful server response; never send user files or credentials; bound response-body consumption.
 - Keep upload and download sizes independently configurable.
 - Emit throttled progress for active transfers without flooding the terminal.
@@ -150,7 +150,7 @@ Acceptance: fake-child/fake-listener integration tests cover startup, partial re
 Acceptance: the hard worker cap has an offline unit test; deterministic fake-proxy tests must still verify all three samples, failure isolation, prompt timeout/cancellation, and the latency gate. Stages 2–3 have been user-verified.
 
 ### Stage 4 — throughput accuracy and progress (implementation committed; awaiting local verification)
-- Downloads count exactly the configured byte target, stop at the cap, and classify early EOF as incomplete; progress snapshots include transferred/target bytes, elapsed time, and current rate.
+- Downloads stop at the configured cap; truncated/read-failed bodies retain a partial measurement only after 16 KiB, while smaller fragments remain failures. Progress snapshots include transferred/target bytes, elapsed time, and current rate.
 - Upload timing begins before request transmission and ends after a successful HTTP response and bounded response-body consumption.
 - Keep throughput transfers sequential by default; preserve the configured throughput timeout and endpoint defaults.
 - Add separate persisted latency timeout and bounded concurrency settings; expose the latency timeout and 1–3 concurrency setting in the CLI.
@@ -171,7 +171,7 @@ Acceptance: offline service tests cover multi-node scope resolution and cancella
 ### Stage 6 — offline performance and fault-injection tests (implementation added; verification pending)
 - Added synthetic batch-scaling coverage at 1, 10, and 50 nodes for all three adapter formats. It checks one loopback listener and outbound per node, plus one explicit route per node for sing-box and Xray.
 - Strengthened failed-startup coverage: the fake managed child writes its PID, and the test verifies the child has been reaped after readiness timeout.
-- Added local fake-proxy HTTP 503/500 cases to verify download and upload reject unsuccessful server responses, while truncated downloads remain classified as incomplete.
+- Added local fake-proxy HTTP 503/500 cases to verify download and upload reject unsuccessful server responses, while truncated downloads below the 16 KiB useful-byte threshold remain failures and sufficiently large partial transfers are scored.
 - Existing offline tests cover per-listener readiness, startup timeout, adapter isolation, latency worker caps, throughput gating, truncated downloads, cancellation remainder persistence, and benchmark history.
 - This is synthetic structural/fault coverage, not a real performance benchmark; it does not claim an elapsed-time or RSS improvement measurement.
 
