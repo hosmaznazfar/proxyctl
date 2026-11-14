@@ -20,8 +20,8 @@ pub struct BenchmarkTarget<'a> {
     pub listen_port: u16,
 }
 
-pub(super) fn generate(
-    adapter: &dyn CoreAdapter,
+pub(super) fn generate<A: CoreAdapter + ?Sized>(
+    adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
     ensure!(!targets.is_empty(), "benchmark batch must contain at least one node");
