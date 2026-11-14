@@ -352,15 +352,20 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn bounds_inspection_process_runtime_and_reaps_timeout() {
-        let directory = tempfile::tempdir().unwrap();
-        let executable = directory.path().join("busy");
-        fs::write(&executable, "#!/bin/sh\nwhile :; do :; done\n").unwrap();
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
-
+        // Run a single long-lived process directly. Avoid a shell busy-loop so this
+        // test measures the timeout/reap path rather than shell startup or scheduling.
         let started = Instant::now();
-        let result = run_ip_command(executable.to_str().unwrap(), &[], Duration::from_millis(40));
-        assert!(result.unwrap_err().to_string().contains("timed out"));
-        assert!(started.elapsed() < Duration::from_secs(2));
+        let error = run_ip_command("sleep", &["5"], Duration::from_millis(250))
+            .expect_err("the long-running inspection command must time out");
+        assert!(
+            error.to_string().contains("timed out"),
+            "unexpected timeout result: {error:#}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "timeout took too long: {:?}",
+            started.elapsed()
+        );
     }
 
     #[cfg(target_os = "linux")]
