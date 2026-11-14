@@ -191,7 +191,17 @@ impl BenchmarkHttpClient {
             // Download responses can fail protocol parsing after the server has
             // begun sending a response (for example, a truncated Content-Length).
             .map_err(classify_response_error)?;
-        let mut reader = response.body_mut().as_reader().take(max_bytes);
+        // Set the ureq body limit to the requested sample size before creating
+        // the reader. This prevents its default small-body buffering from trying
+        // to consume a truncated Content-Length response before we can count bytes.
+        let body_limit =
+            usize::try_from(max_bytes).map_err(|_| MeasurementFailure::InvalidResponse)?;
+        let mut reader = response
+            .body_mut()
+            .with_config()
+            .limit(body_limit)
+            .reader()
+            .take(max_bytes);
         let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
         let mut received = 0_u64;
         let mut last_progress = Instant::now();
@@ -498,11 +508,9 @@ mod tests {
             let _ = read_fake_request(&mut reader);
             let body = vec![0x33; 32 * 1024];
             let stream = reader.get_mut();
-            // A truncated chunked stream lets ureq expose bytes already read before
-            // reporting the missing terminal chunk to the body reader.
             stream
                 .write_all(
-                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n8000\r\n",
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 65536\r\nConnection: close\r\n\r\n",
                 )
                 .unwrap();
             stream.write_all(&body).unwrap();
