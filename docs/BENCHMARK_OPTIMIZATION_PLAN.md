@@ -52,9 +52,9 @@ Core-first batching is intended to remove repeated process startup. It is not pe
 
 ### 3.2 Latency: Throne-inspired bounded concurrency
 
-- Probe independent node inbounds concurrently with a configurable, conservative limit. Initial default target: 3 concurrent nodes; expose a CLI setting only after memory and socket behavior are measured.
+- Probe independent node inbounds concurrently with a configurable, conservative limit. The CLI now accepts 1–3 workers (default 3), with a hard cap of 3; offline tests verify the cap. Real-world memory/socket behavior remains part of separately approved comparison.
 - Keep three real HTTP latency samples per node.
-- Reuse an HTTP client/connection only where doing so does not hide cold-connect behavior or mix traffic between nodes. Define and test connection reuse explicitly.
+- Current implementation creates an isolated client per node/probe and does not intentionally share clients across nodes; connection reuse/cold-connect methodology remains an offline review item. Define and test connection reuse explicitly.
 - Use a small response endpoint, disable redirects for consistent semantics, bound response-body draining, and measure until response headers (or a clearly documented response-completion point) are received.
 - Wait for each node's tunnel/inbound readiness before its first probe; do not use arbitrary long fixed sleeps as readiness checks.
 - Give latency its own shorter configurable timeout. Proposed initial default: 5 seconds, subject to local offline tests and later user-approved real-world evaluation.
@@ -147,7 +147,7 @@ Acceptance: fake-child/fake-listener integration tests cover startup, partial re
 - On cancellation, stop the batch core to interrupt in-flight proxy requests and join workers before continuing cleanup.
 - Make direct TCP probes bounded-concurrent and separate.
 
-Acceptance: the hard worker cap has an offline unit test; deterministic fake-proxy tests must still verify all three samples, failure isolation, prompt timeout/cancellation, and the latency gate. Local test verification remains pending.
+Acceptance: the hard worker cap has an offline unit test; deterministic fake-proxy tests must still verify all three samples, failure isolation, prompt timeout/cancellation, and the latency gate. Stages 2–3 have been user-verified.
 
 ### Stage 4 — throughput accuracy and progress (implementation committed; awaiting local verification)
 - Downloads count exactly the configured byte target, stop at the cap, and classify early EOF as incomplete; progress snapshots include transferred/target bytes, elapsed time, and current rate.
