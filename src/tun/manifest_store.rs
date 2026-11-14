@@ -1120,7 +1120,7 @@ mod tests {
                 id,
                 17,
                 JournalOperationKind::CreateInterface,
-                "interface:tun-proxyctl:pending",
+                "interface:tun-proxyctl",
             )
             .unwrap();
         let intent = store.load_transaction_journal().unwrap().unwrap();
@@ -1128,7 +1128,7 @@ mod tests {
         assert_eq!(intent.operations[0].fingerprint, None);
 
         store
-            .mark_operation_applied(id, 17, "interface:tun-proxyctl:pending", "sha256:interface")
+            .mark_operation_applied(id, 17, "interface:tun-proxyctl", "sha256:interface")
             .unwrap();
         let applied = store.load_transaction_journal().unwrap().unwrap();
         assert_eq!(applied.operations[0].state, JournalOperationState::Applied);
