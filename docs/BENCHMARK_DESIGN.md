@@ -42,6 +42,14 @@ proxyctl test --node 12 --all-cores
 # Test one node through one selected core
 proxyctl test --node 12 --core sing-box
 
+# Run exactly one HTTP metric across every installed core
+proxyctl test --all-cores --latency-only
+proxyctl test --all-cores --download-only
+proxyctl test --all-cores --upload-only
+
+# Run one metric for selected nodes across every installed core
+proxyctl test --node 1 2 3 --all-cores --latency-only
+
 # Override the HTTP measurement endpoints
 proxyctl test --node 12 --core sing-box \
   --latency-url https://www.google.com/generate_204 \
@@ -49,7 +57,7 @@ proxyctl test --node 12 --core sing-box \
   --upload-url https://speed.cloudflare.com/__up
 ```
 
-The all-cores scope can cover every active node or be restricted to one node with `--node`. A specific node/core pair uses `--node` with `--core`; `--core` and `--all-cores` are mutually exclusive. The direct TCP test runs once for each selected node. The HTTP tests run once for each supported node/core pair.
+The all-cores scope can cover every active node or be restricted to selected nodes with `--node`. A specific node/core pair uses `--node` with `--core`; `--core` and `--all-cores` are mutually exclusive. By default, all three HTTP metrics run. The mutually exclusive `--latency-only`, `--download-only`, and `--upload-only` selectors run only the named metric; omitting them preserves the full benchmark. Direct TCP ping is included only in the default and latency-only modes, once per selected node. HTTP samples run once per supported node/core pair, with three samples for each selected metric.
 
 The run stores effective endpoint URLs, payload limits, timeout values, and methodology version. The default download sample is 2 MiB even though the static CacheFly object is 10 MB; Proxyctl stops reading once the sample target is reached and closes the response rather than downloading the full object. The upload body is a bounded 256 KiB synthetic payload per sample. This smaller default keeps a single POST practical on asymmetric or slow upstream links; users can raise it with `--upload-bytes`. Upload requests still have a finite configurable timeout, and Proxyctl does not retry a failed sample automatically. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
 
