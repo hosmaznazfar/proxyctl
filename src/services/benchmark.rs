@@ -953,12 +953,10 @@ mod tests {
     fn probe_workers_are_hard_bounded_to_three() {
         let values = [0_u8; 8];
         let sizes = probe_chunks(&values, usize::MAX)
-            .map(<[_]>::len)
+            .map(|chunk| chunk.len())
             .collect::<Vec<_>>();
         assert_eq!(sizes, vec![3, 3, 2]);
     }
-
-    use super::*;
 
     #[test]
     fn metric_selection_runs_only_the_requested_metric() {
