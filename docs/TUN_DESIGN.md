@@ -308,3 +308,8 @@ The TUN ifindex is allocated by Linux when the device is created and must never 
 ### Transaction failure paths must preserve truthful journal state
 
 The offline transaction executor now explicitly retains its recovery journal when post-interface policy binding or final manifest validation fails. Rollback failures are no longer reported as journal-retained unless the backend confirms retention; a retention failure is surfaced as a separate error. If rollback succeeds but journal finalization fails, the executor again requires confirmed retention before returning. This tightens the backend contract and error reporting only; it does not supply a concrete durable journal or kernel mutator.
+
+
+### Durable write-ahead transaction journal foundation
+
+The private TUN runtime store now has a separate bounded transaction journal (256 KiB, at most 256 operations). It records generation-scoped operation intents before a future backend attempts interface/route/rule mutation, then records the observed fingerprint and cleanup completion as separate atomic, fsynced updates. Journal files use the same private directory, owner, no-symlink, no-hard-link, and 0600 protections as the active manifest. Cleanup cannot remove a journal until every recorded operation is marked removed. Invalid transitions, duplicate resource keys, wrong generations, malformed fingerprints, and oversized records fail closed. This is durable filesystem groundwork, not yet wired to a concrete rtnetlink backend. An Intent without an observed fingerprint is deliberately ambiguous after a crash; recovery must inspect and establish exact ownership or preserve the journal, never delete by a guessed name.
