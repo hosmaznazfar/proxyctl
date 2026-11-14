@@ -104,7 +104,10 @@ enum Command {
         tun: bool,
     },
     /// Show or change persistent listener settings.
-    Config { #[command(subcommand)] action: Option<ConfigAction> },
+    Config {
+        #[command(subcommand)]
+        action: Option<ConfigAction>,
+    },
     /// Stop only the exact process tracked by Proxyctl.
     Stop,
     /// Install all supported cores, or one selected core.
@@ -249,7 +252,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Config { action } => {
             use crate::services::listener_config as settings;
             match action {
-                None => println!("Shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::listen_port()?),
+                None => println!(
+                    "Shared HTTP/SOCKS5 listen port: 127.0.0.1:{}",
+                    settings::listen_port()?
+                ),
                 Some(ConfigAction::Set { key, value }) => {
                     anyhow::ensure!(key == "listen-port", "unknown config key '{key}'; expected 'listen-port'");
                     settings::set_listen_port(value)?;
@@ -258,7 +264,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 Some(ConfigAction::Reset { key }) => {
                     anyhow::ensure!(key == "listen-port", "unknown config key '{key}'; expected 'listen-port'");
                     settings::reset_listen_port()?;
-                    println!("Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::DEFAULT_LISTEN_PORT);
+                    println!(
+                        "Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}",
+                        settings::DEFAULT_LISTEN_PORT
+                    );
                 }
             }
             return Ok(());
