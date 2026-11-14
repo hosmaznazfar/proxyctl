@@ -1024,22 +1024,22 @@ mod tests {
                 JournalOperation {
                     sequence: 0,
                     kind: JournalOperationKind::AddRoute,
-                    resource_key: "route:a".into(),
+                    resource_key: "route:v4:42420:default".into(),
                     state: JournalOperationState::Intent,
                     fingerprint: None,
                 },
                 JournalOperation {
                     sequence: 1,
                     kind: JournalOperationKind::AddRule,
-                    resource_key: "rule:b".into(),
+                    resource_key: "rule:v4:42421".into(),
                     state: JournalOperationState::Applied,
                     fingerprint: Some("expected".into()),
                 },
             ],
         };
         let observed = std::collections::BTreeMap::from([
-            ("route:a".into(), Some("possibly-foreign".into())),
-            ("rule:b".into(), Some("changed".into())),
+            ("route:v4:42420:default".into(), Some("possibly-foreign".into())),
+            ("rule:v4:42421".into(), Some("changed".into())),
         ]);
         let plan = plan_journal_recovery(&journal, &observed).unwrap();
         assert!(
@@ -1125,7 +1125,7 @@ mod tests {
         let intent = JournalOperation {
             sequence: 0,
             kind: JournalOperationKind::CreateInterface,
-            resource_key: "interface:tun-proxyctl:pending".into(),
+            resource_key: "interface:tun-proxyctl".into(),
             state: JournalOperationState::Intent,
             fingerprint: None,
         };
