@@ -10,6 +10,12 @@ A live sing-box TUN run was associated with loss of internet connectivity. Revie
 
 TUN activation remains rejected before process start, privilege escalation, or network mutation. `proxyctl tun status` remains read-only. Ordinary loopback activation, setup, updates, and benchmarks must not change interfaces, routes, policy rules, DNS, resolver configuration, or firewall state.
 
+## Legacy activation-state recovery
+
+Older development and TUN experiments could leave the ordinary activation state file pointing at a transient systemd unit after the core had never published a PID. That record is not an exact ownership manifest. Normal loopback activation must not be blocked forever by unrelated host changes such as Docker bridge removal, but it must not guess which route or interface to delete.
+
+When stopping a legacy TUN record, Proxyctl may retire only the private runtime state/config (without changing kernel networking) if all of these checks pass: the recorded unit is in Proxyctl's validated unit namespace and systemd reports `not-found`; the saved process identity is exactly the never-started sentinel (PID and start ticks both zero); the saved baseline and current snapshot contain no TUN/TAP interface; and every currently observed IPv4/IPv6 route and policy rule already existed in the saved baseline. Unrelated interface, DNS, and removed-baseline-resource differences are not treated as Proxyctl ownership evidence. Any newly observed route/rule, TUN interface, active/unknown service, or non-zero process identity keeps the state/config and fails closed. This compatibility path is intentionally limited to the old PID-zero state format; it never removes a route, rule, interface, DNS setting, or firewall resource.
+
 ## Cross-distribution compatibility contract
 
 Proxyctl targets Linux kernel networking interfaces, not a particular distribution or package layout. Do not branch on distribution names (Arch, Debian, Fedora, Alpine, NixOS, etc.) when equivalent kernel capabilities are available. Detect capabilities and the active init/service manager at runtime.
