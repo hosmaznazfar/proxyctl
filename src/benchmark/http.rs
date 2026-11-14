@@ -483,6 +483,47 @@ mod tests {
     }
 
     #[test]
+    fn download_keeps_a_useful_partial_transfer_after_body_truncation() {
+        use std::{
+            io::{BufReader, Write},
+            net::TcpListener,
+            thread,
+        };
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let _ = read_fake_request(&mut reader);
+            let body = vec![0x33; 32 * 1024];
+            let stream = reader.get_mut();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 65536\r\nConnection: close\r\n\r\n")
+                .unwrap();
+            stream.write_all(&body).unwrap();
+            stream.flush().unwrap();
+        });
+        let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
+        let agent: Agent = Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_secs(2)))
+            .build()
+            .into();
+        let client = BenchmarkHttpClient {
+            agent,
+            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
+        };
+
+        let measurement = client.download(64 * 1024, |_| {}).unwrap();
+        assert_eq!(measurement.transferred_bytes, Some(32 * 1024));
+        assert!(measurement.value > 0.0);
+        server.join().unwrap();
+    }
+
+    #[test]
     fn download_rejects_early_eof_instead_of_scoring_a_short_sample() {
         use std::{io::{BufReader, Write}, net::TcpListener, thread};
 
