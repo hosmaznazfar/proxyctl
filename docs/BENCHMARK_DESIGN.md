@@ -92,7 +92,7 @@ A failure in one metric must not erase successful samples from another metric.
 
 ## 5. Offline optimization verification
 
-Stages 1–5 have been locally verified by the user. Stage 6 adds synthetic batch-size coverage (1/10/50 nodes across all three adapter formats), a failed-startup child-reaping assertion, and a local fake-proxy HTTP-status failure test. These tests do not launch real proxy cores or contact public endpoints. Stage 6 remains pending local verification; real-world comparisons remain a separate, explicitly approved stage.
+Stages 1–5 have been locally verified by the user. Stage 6 adds synthetic batch-size coverage (1/10/50 nodes across all three adapter formats), a failed-startup child-reaping assertion, and local fake-proxy HTTP-status failure tests for both download and upload. These tests do not launch real proxy cores or contact public endpoints. Stage 6 remains pending local verification; real-world comparisons remain a separate, explicitly approved stage.
 
 ## 5. Progress and cancellation
 
