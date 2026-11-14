@@ -171,7 +171,7 @@ Acceptance: offline service tests cover multi-node scope resolution and cancella
 ### Stage 6 — offline performance and fault-injection tests (implementation added; verification pending)
 - Added synthetic batch-scaling coverage at 1, 10, and 50 nodes for all three adapter formats. It checks one loopback listener and outbound per node, plus one explicit route per node for sing-box and Xray.
 - Strengthened failed-startup coverage: the fake managed child writes its PID, and the test verifies the child has been reaped after readiness timeout.
-- Added a local fake-proxy HTTP 503 case to ensure download response status failures remain distinct from truncated-body failures.
+- Added local fake-proxy HTTP 503/500 cases to verify download and upload reject unsuccessful server responses, while truncated downloads remain classified as incomplete.
 - Existing offline tests cover per-listener readiness, startup timeout, adapter isolation, latency worker caps, throughput gating, truncated downloads, cancellation remainder persistence, and benchmark history.
 - This is synthetic structural/fault coverage, not a real performance benchmark; it does not claim an elapsed-time or RSS improvement measurement.
 
