@@ -676,6 +676,74 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn write_ahead_journal_persists_intent_before_applied_fingerprint() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let id = "12345678-1234-4234-8234-123456789abc";
+        store.create_transaction_journal(id, 17).unwrap();
+        store.record_operation_intent(id, 17, JournalOperationKind::CreateInterface, "interface:tun-proxyctl:pending").unwrap();
+        let intent = store.load_transaction_journal().unwrap().unwrap();
+        assert_eq!(intent.operations[0].state, JournalOperationState::Intent);
+        assert_eq!(intent.operations[0].fingerprint, None);
+
+        store.mark_operation_applied(id, 17, "interface:tun-proxyctl:pending", "sha256:interface").unwrap();
+        let applied = store.load_transaction_journal().unwrap().unwrap();
+        assert_eq!(applied.operations[0].state, JournalOperationState::Applied);
+        assert_eq!(applied.operations[0].fingerprint.as_deref(), Some("sha256:interface"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn journal_cleanup_requires_every_operation_to_be_removed() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let id = "12345678-1234-4234-8234-123456789abc";
+        store.create_transaction_journal(id, 18).unwrap();
+        store.record_operation_intent(id, 18, JournalOperationKind::AddRoute, "route:v4:42420:default").unwrap();
+        store.mark_operation_applied(id, 18, "route:v4:42420:default", "sha256:route").unwrap();
+        assert!(store.remove_completed_transaction_journal(id, 18).is_err());
+        store.mark_operation_removed(id, 18, "route:v4:42420:default").unwrap();
+        store.remove_completed_transaction_journal(id, 18).unwrap();
+        assert!(store.load_transaction_journal().unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn journal_rejects_wrong_generation_duplicate_keys_and_invalid_transitions() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let id = "12345678-1234-4234-8234-123456789abc";
+        store.create_transaction_journal(id, 19).unwrap();
+        store.record_operation_intent(id, 19, JournalOperationKind::AddRule, "rule:v4:42410").unwrap();
+        assert!(store.mark_operation_applied(id, 20, "rule:v4:42410", "sha256:rule").is_err());
+        assert!(store.mark_operation_removed(id, 19, "rule:v4:42410").is_err());
+        assert!(store.record_operation_intent(id, 19, JournalOperationKind::AddRule, "rule:v4:42410").is_err());
+        store.mark_operation_applied(id, 19, "rule:v4:42410", "sha256:rule").unwrap();
+        assert!(store.mark_operation_applied(id, 19, "rule:v4:42410", "sha256:again").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn journal_refuses_symlink_and_external_hard_link() {
+        use std::os::unix::fs::symlink;
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let id = "12345678-1234-4234-8234-123456789abc";
+        store.create_transaction_journal(id, 20).unwrap();
+        let outside = directory.path().join("outside");
+        fs::write(&outside, "{}").unwrap();
+        fs::remove_file(store.journal_path()).unwrap();
+        symlink(&outside, store.journal_path()).unwrap();
+        assert!(store.load_transaction_journal().is_err());
+
+        fs::remove_file(store.journal_path()).unwrap();
+        store.create_transaction_journal(id, 20).unwrap();
+        fs::hard_link(store.journal_path(), directory.path().join("journal-link")).unwrap();
+        assert!(store.load_transaction_journal().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn refuses_symlink_runtime_directory() {
         use std::os::unix::fs::symlink;
         let directory = tempfile::tempdir().unwrap();
