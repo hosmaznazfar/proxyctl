@@ -447,8 +447,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     anyhow::bail!(
                         "--core cannot be used with --sort tcp-ping because TCP ping is measured directly"
                     );
-                }                let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;
-                print_sorted_node_list(&ranked, metric, &display_numbers, &deleted_display_numbers);
+                }                let ranked = sorting::sort_nodes(&database_path, records, metric, core)?;                print_sorted_node_list(&ranked, metric, &display_numbers, &deleted_display_numbers);
             } else {
                 print_node_list(&records, &display_numbers, &deleted_display_numbers);
             }
@@ -465,13 +464,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 let display_numbers = active_display_numbers(&database_path)?;
                 let records = ids
                     .into_iter()
-                    .filter_map(|id| match nodes::get_node(&database_path, id) {
-                        Ok(record) => record,
-                        Err(error) => {
-                            eprintln!("Node #{id}: {error:#}");
-                            None
-                        }
-                    })
+                    .map(|id| nodes::get_node(&database_path, id))
+                    .collect::<anyhow::Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
                     .collect::<Vec<_>>();
                 print_node_details(&records, &display_numbers);
             } else {
@@ -897,8 +893,7 @@ fn print_node_results(
                                     if target.target == "direct" {
                                         "-".into()
                                     } else {
-                                        metric_cell(download)
-                                    }                                }
+                                        metric_cell(download)                                    }                                }
                                 F::Upload => {
                                     if target.target == "direct" {
                                         "-".into()
@@ -1347,8 +1342,7 @@ fn print_sorted_node_list(
             } else {
                 "-".into()
             },
-            if record.node.is_deleted() {                format!(
-                    "D{}",
+            if record.node.is_deleted() {                format!(                    "D{}",
                     deleted_display_numbers
                         .get(&record.node.id)
                         .copied()
