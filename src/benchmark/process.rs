@@ -46,6 +46,48 @@ impl ManagedCoreProcess {
         Self::start_batch(core, &[target], executable, startup_timeout)
     }
 
+    /// Validate one node's ordinary benchmark configuration before admitting it to a batch.
+    /// This isolates per-node native incompatibilities without starting a core process.
+    pub fn validate_node_config(
+        core: CoreId,
+        node: &ProxyNode,
+        executable: &Path,
+    ) -> anyhow::Result<()> {
+        ensure!(
+            executable.is_file(),
+            "managed {core} executable is not installed"
+        );
+        let port = reserve_loopback_port()?;
+        let adapter = adapters::adapter(core);
+        let generated = adapter
+            .generate_benchmark_config(node, port)
+            .with_context(|| format!("could not generate benchmark config for {core}"))?;
+        let mut config = tempfile::Builder::new()
+            .prefix("proxyctl-benchmark-preflight-")
+            .suffix(".json")
+            .tempfile()
+            .context("could not create private benchmark configuration")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            config
+                .as_file()
+                .set_permissions(fs::Permissions::from_mode(0o600))
+                .context("could not restrict benchmark config permissions")?;
+        }
+        config
+            .write_all(&generated.content)
+            .context("could not write benchmark configuration")?;
+        config
+            .as_file()
+            .sync_all()
+            .context("could not flush benchmark configuration")?;
+        adapter
+            .validate_config(executable, config.path())
+            .with_context(|| format!("{core} rejected the node benchmark configuration"))?;
+        Ok(())
+    }
+
     /// Start one managed core with independently routed loopback listeners for a node batch.
     pub fn start_batch(
         core: CoreId,
