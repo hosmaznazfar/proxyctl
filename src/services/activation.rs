@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
-    net::TcpStream,
+    net::{TcpListener, TcpStream},
     os::fd::AsRawFd,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -1153,7 +1153,6 @@ fn private_fd(_fd: i32) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::TcpListener;
     #[cfg(target_os = "linux")]
     #[test]
     fn tun_preflight_refuses_foreign_tun_interfaces_but_allows_its_own_for_switching() {
