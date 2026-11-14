@@ -1355,5 +1355,7 @@ mod tests {
         assert_eq!(settings.download_bytes, 2 * 1024 * 1024);
         assert_eq!(settings.upload_bytes, 262_144);
         assert_eq!(settings.request_timeout_ms, 15_000);
+        assert_eq!(settings.latency_timeout_ms, 5_000);
+        assert_eq!(settings.probe_concurrency, 3);
     }
 }
