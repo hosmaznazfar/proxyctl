@@ -516,3 +516,6 @@ Resolve these choices with evidence and document them before the affected featur
 
 
 - **Transaction journal failure-path hardening:** the offline kernel transaction now retains the recovery journal on policy-binding and generated-manifest validation failures. It no longer claims rollback evidence was retained when the backend's retention call failed, and it handles journal-finalization failure after rollback explicitly. Fake-backend tests and the concrete write-ahead journal remain required before live mutation.
+
+
+- **Durable TUN write-ahead journal foundation:** the private manifest store now persists bounded, generation-scoped interface/route/rule operation intents, observed fingerprints, and cleanup progress as atomic fsynced records. It rejects unsafe file identities, invalid state transitions, duplicate keys, stale generations, and incomplete journal removal. This is not yet connected to a concrete rtnetlink mutator. A crash after an intent but before its fingerprint remains ambiguous and must fail closed pending exact kernel inspection.
