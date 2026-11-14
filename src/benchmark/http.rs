@@ -263,7 +263,15 @@ pub fn validate_settings(settings: &BenchmarkSettings) -> anyhow::Result<()> {
     );
     ensure!(
         settings.request_timeout_ms > 0,
-        "request timeout must be positive"
+        "throughput request timeout must be positive"
+    );
+    ensure!(
+        settings.latency_timeout_ms > 0,
+        "latency request timeout must be positive"
+    );
+    ensure!(
+        (1..=3).contains(&settings.probe_concurrency),
+        "probe concurrency must be between 1 and 3"
     );
     ensure!(
         settings.startup_timeout_ms > 0,
