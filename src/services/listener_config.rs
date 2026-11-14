@@ -7,7 +7,9 @@ pub const DEFAULT_LISTEN_PORT: u16 = 10909;
 const CONFIG_FILE: &str = "config.json";
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-struct Config { listen_port: u16 }
+struct Config {
+    listen_port: u16,
+}
 
 fn config_path() -> anyhow::Result<PathBuf> {
     let database = crate::database::default_database_path()?;
@@ -17,7 +19,9 @@ fn config_path() -> anyhow::Result<PathBuf> {
 
 pub fn listen_port() -> anyhow::Result<u16> {
     let path = config_path()?;
-    if !path.exists() { return Ok(DEFAULT_LISTEN_PORT); }
+    if !path.exists() {
+        return Ok(DEFAULT_LISTEN_PORT);
+    }
     let config: Config = serde_json::from_slice(&fs::read(&path)?)
         .context("Proxyctl config is invalid; refusing to guess a listener port")?;
     validate_port(config.listen_port)?;
@@ -28,14 +32,18 @@ pub fn set_listen_port(port: u16) -> anyhow::Result<()> {
     validate_port(port)?;
     if let Err(error) = crate::services::activation::ensure_port_available(port) {
         reset_listen_port()?;
-        anyhow::bail!("127.0.0.1:{port} is occupied; the requested setting was not saved and Proxyctl has fallen back to default port {DEFAULT_LISTEN_PORT}: {error:#}");
+        anyhow::bail!(
+            "127.0.0.1:{port} is occupied; the requested setting was not saved and Proxyctl has fallen back to default port {DEFAULT_LISTEN_PORT}: {error:#}"
+        );
     }
     let path = config_path()?;
     let parent = path.parent().context("config path has no parent")?;
     fs::create_dir_all(parent)?;
     set_private_dir(parent)?;
     let bytes = serde_json::to_vec_pretty(&Config { listen_port: port })?;
-    let mut file = tempfile::Builder::new().prefix(".proxyctl-config-").tempfile_in(parent)?;
+    let mut file = tempfile::Builder::new()
+        .prefix(".proxyctl-config-")
+        .tempfile_in(parent)?;
     set_private_file(file.as_file())?;
     file.write_all(&bytes)?;
     file.as_file().sync_all()?;
@@ -52,7 +60,10 @@ pub fn reset_listen_port() -> anyhow::Result<()> {
 }
 
 fn validate_port(port: u16) -> anyhow::Result<()> {
-    ensure!((1024..=u16::MAX).contains(&port), "listen port must be between 1024 and 65535");
+    ensure!(
+        (1024..=u16::MAX).contains(&port),
+        "listen port must be between 1024 and 65535"
+    );
     Ok(())
 }
 
@@ -63,7 +74,9 @@ fn set_private_dir(path: &std::path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 #[cfg(not(unix))]
-fn set_private_dir(_path: &std::path::Path) -> anyhow::Result<()> { Ok(()) }
+fn set_private_dir(_path: &std::path::Path) -> anyhow::Result<()> {
+    Ok(())
+}
 
 #[cfg(unix)]
 fn set_private_file(file: &std::fs::File) -> anyhow::Result<()> {
@@ -72,7 +85,9 @@ fn set_private_file(file: &std::fs::File) -> anyhow::Result<()> {
     Ok(())
 }
 #[cfg(not(unix))]
-fn set_private_file(_file: &std::fs::File) -> anyhow::Result<()> { Ok(()) }
+fn set_private_file(_file: &std::fs::File) -> anyhow::Result<()> {
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -80,7 +95,9 @@ mod tests {
     use std::net::TcpListener;
 
     #[test]
-    fn default_port_is_proxyctl_specific_10909() { assert_eq!(DEFAULT_LISTEN_PORT, 10909); }
+    fn default_port_is_proxyctl_specific_10909() {
+        assert_eq!(DEFAULT_LISTEN_PORT, 10909);
+    }
 
     #[test]
     fn rejects_privileged_ports() {
