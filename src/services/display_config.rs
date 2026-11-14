@@ -63,7 +63,7 @@ impl Default for DisplayConfig {
     fn default() -> Self {
         let mut profiles = BTreeMap::new();
         profiles.insert(DisplayProfile::Compact, vec![
-            DisplayField::Node, DisplayField::Core, DisplayField::Latency, DisplayField::TcpPing,
+            DisplayField::Node, DisplayField::Core, DisplayField::Latency,
             DisplayField::Download, DisplayField::Upload,
         ]);
         profiles.insert(DisplayProfile::Normal, vec![
