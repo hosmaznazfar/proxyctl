@@ -731,6 +731,33 @@ mod tests {
     }
 
     #[test]
+    fn benchmark_history_retains_only_three_latest_runs_per_target() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("proxyctl.redb");
+        let database = NodeDatabase::open(&path).unwrap();
+        database.add_node(&sample_node()).unwrap();
+
+        for started_at in 1..=5 {
+            let mut run = sample_run();
+            run.started_at = started_at;
+            let run_id = database.start_benchmark_run(run).unwrap();
+            database
+                .record_benchmark_sample(sample_value(run_id))
+                .unwrap();
+            database
+                .finish_benchmark_run(run_id, BenchmarkRunStatus::Completed, started_at + 1, None)
+                .unwrap();
+        }
+
+        assert_eq!(database.prune_benchmark_history(3).unwrap(), 2);
+        let runs = database.list_benchmark_runs().unwrap();
+        assert_eq!(runs.iter().map(|run| run.id).collect::<Vec<_>>(), vec![3, 4, 5]);
+        let samples = database.list_all_benchmark_samples().unwrap();
+        assert_eq!(samples.len(), 3);
+        assert!(samples.iter().all(|sample| (3..=5).contains(&sample.run_id)));
+    }
+
+    #[test]
     fn schema_v1_database_migrates_benchmark_id_counters() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("proxyctl.redb");
