@@ -53,7 +53,7 @@ pub(super) fn generate<A: CoreAdapter + ?Sized>(
     }
 }
 
-fn node_config(adapter: &dyn CoreAdapter, node: &ProxyNode) -> anyhow::Result<Value> {
+fn node_config<A: CoreAdapter + ?Sized>(adapter: &A, node: &ProxyNode) -> anyhow::Result<Value> {
     let generated = adapter
         .generate_config(node)
         .context("could not generate a node's native outbound configuration")?;
@@ -61,8 +61,8 @@ fn node_config(adapter: &dyn CoreAdapter, node: &ProxyNode) -> anyhow::Result<Va
         .context("adapter generated an invalid JSON configuration")
 }
 
-fn generate_sing_box(
-    adapter: &dyn CoreAdapter,
+fn generate_sing_box<A: CoreAdapter + ?Sized>(
+    adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
     let mut outbounds = Vec::with_capacity(targets.len());
@@ -107,8 +107,8 @@ fn generate_sing_box(
     }))
 }
 
-fn generate_xray(
-    adapter: &dyn CoreAdapter,
+fn generate_xray<A: CoreAdapter + ?Sized>(
+    adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
     let mut outbounds = Vec::with_capacity(targets.len());
@@ -154,8 +154,8 @@ fn generate_xray(
     }))
 }
 
-fn generate_mihomo(
-    adapter: &dyn CoreAdapter,
+fn generate_mihomo<A: CoreAdapter + ?Sized>(
+    adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
     let mut proxies = Vec::with_capacity(targets.len());
