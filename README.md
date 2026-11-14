@@ -221,14 +221,14 @@ Reports retain the distinction between direct TCP ping and measurements through 
 
 ## Compatibility-aware pruning
 
-Preview candidates across all installed cores that currently support each node:
+Preview whether a node has any usable real-ping path through sing-box, Xray, or Mihomo:
 
 ~~~sh
 proxyctl prune --unavailable-all
 proxyctl prune --unavailable-all --dry-run
 ~~~
 
-Or evaluate one installed managed core:
+Or evaluate one managed core:
 
 ~~~sh
 proxyctl prune --core xray --unavailable
