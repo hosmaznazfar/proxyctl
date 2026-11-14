@@ -21,7 +21,7 @@ The command remains sequential by default: one node/core process at a time. The 
 Use the same practical separation as v2rayN:
 
 - Real-ping default: `https://www.google.com/generate_204`.
-- Download default: `https://cachefly.cachefly.net/10mb.test`, sampling only the first 2 MiB per measurement.
+- Download default: `https://cachefly.cachefly.net/10mb.test`, sampling at most 1 MiB per measurement.
 - Upload default: `https://speed.cloudflare.com/__up` because v2rayN's current speed-test workflow does not provide an equivalent upload measurement.
 
 These are defaults, not hard dependencies. Provide CLI overrides for all three HTTP endpoints. Keep TCP ping independent of HTTP endpoint selection.
@@ -59,7 +59,7 @@ proxyctl test --node 12 --core sing-box \
 
 The all-cores scope can cover every active node or be restricted to selected nodes with `--node`. A specific node/core pair uses `--node` with `--core`; `--core` and `--all-cores` are mutually exclusive. By default, all three HTTP metrics run. The mutually exclusive `--latency-only`, `--download-only`, and `--upload-only` selectors run only the named metric; omitting them preserves the full benchmark. Direct TCP ping is included only in the default all-metrics mode, once per selected node. Metric-only modes skip direct TCP ping. HTTP samples run once per supported node/core pair, with three samples for each selected metric.
 
-The run stores effective endpoint URLs, payload limits, separate latency/throughput timeouts, bounded probe concurrency, and methodology version. The default download sample is 2 MiB even though the static CacheFly object is 10 MB; Proxyctl stops reading once the sample target is reached and closes the response rather than downloading the full object. The upload body is a bounded 256 KiB synthetic payload per sample. This smaller default keeps a single POST practical on asymmetric or slow upstream links; users can raise it with `--upload-bytes`. Upload requests still have a finite configurable timeout, and Proxyctl does not retry a failed sample automatically. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
+The run stores effective endpoint URLs, payload limits, separate latency/throughput timeouts, bounded probe concurrency, and methodology version. Download and upload default to 1 MiB each, and neither payload may exceed the 1 MiB safety cap. Proxyctl stops reading once the download target is reached and closes the response rather than downloading the full object. Each download and upload request has its own 3-second default deadline, configurable with `--request-timeout-secs`; users can lower payload sizes for slower links. Upload requests still have a finite configurable timeout, and Proxyctl does not retry a failed sample automatically. Keep the request timeout finite and configurable. No automatic retries are hidden inside a sample.
 
 ## 4. Measurement semantics
 
@@ -133,7 +133,7 @@ TCP ping is independent of core compatibility. An unsupported or invalid node/co
 
 Keep distinct outcomes for success, unreachable, unsupported, invalid, timeout, unavailable, and cancelled. Never store a numeric value for a failed sample. Store the direct TCP metric under a reserved `direct` target rather than pretending it belongs to a proxy core; the run scope must explicitly include that target.
 
-For the full benchmark selection, latency is the gate for throughput: run three real-ping samples first. If at least one succeeds, continue with download and upload. If all three fail, record download and upload as unavailable with the `latency_gate` reason and send no transfer requests. Metric-only modes remain independent and run only the selected metric. Unsupported/invalid compatibility and core preflight failures skip all metrics for that node/core pair.
+For the full benchmark selection, latency is the gate for throughput: run three real-ping samples first. If at least one succeeds, continue with download and upload. If all three fail, record download and upload as skipped with the `latency_gate` reason and send no transfer requests. Metric-only modes remain independent and run only the selected metric. Unsupported/invalid compatibility and core preflight failures skip all metrics for that node/core pair.
 
 **Current implementation:** scheduling is node-first and starts one temporary core process per supported node/core pair. **Target implementation:** process one core at a time but batch multiple compatible nodes into one core process, then run bounded-concurrent latency probes and conservative sequential throughput transfers. The staged design, Throne latency reference, v2rayN throughput reference, acceptance criteria, and offline-only test policy are specified in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`. The service now uses multi-node adapter configs and one managed process per core batch, with bounded concurrent latency/TCP probes. Stages 4–5 add exact throughput accounting, per-run timeout/concurrency metadata, shared run IDs for selected node sets, and explicit cancellation outcomes; local verification is pending.
 
@@ -243,6 +243,7 @@ A median based on one or two successful samples is explicitly labelled partial. 
 Metric outcomes must remain semantically distinct:
 - `not-run`: no sample was attempted and there is no preflight outcome.
 - `unavailable`: a preflight or runtime availability check explicitly says the selected core/target could not be used.
+- `skipped`: a metric was intentionally not attempted, such as throughput blocked by the latency gate.
 - `unsupported` and `invalid`: adapter compatibility outcomes, not network failures.
 - `timeout`, `unreachable`, and `cancelled`: attempted measurements with their own outcomes.
 
