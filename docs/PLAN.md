@@ -234,7 +234,7 @@ Latest mode displays the newest run containing each node, regardless of lifecycl
 
 Every metric reports the successful count out of three, the median of successful samples, failure counts, and samples not run. One or two successful samples produce an explicitly partial median; three successful samples are complete. Preflight outcomes (unsupported, invalid, unavailable) remain distinct from attempted network failures. Missing or failed measurements are never rendered as zero.
 
-Reports do not start proxy cores, contact measurement endpoints, or modify system networking.
+Reports do not start proxy cores, contact measurement endpoints, or modify system networking. `show` and all report modes share the configurable compact/normal/full table profiles. Latest output has one row per node/core, history has one row per node/core/run, and compare has one row per node/core from the latest completed run. The `--verbose` flag expands core version metadata without changing table columns.
 
 ### 3.7 Pruning and recovery
 
