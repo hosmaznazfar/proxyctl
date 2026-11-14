@@ -156,24 +156,24 @@ enum Command {
         /// HTTPS URL used for real HTTP ping through the selected core.
         #[arg(long, default_value = "https://www.google.com/generate_204")]
         latency_url: String,
-        /// HTTPS URL of a download test object (only the first 2 MiB are measured by default).
+        /// HTTPS URL of a download test object (only the first 1 MiB are measured by default).
         #[arg(long, default_value = "https://cachefly.cachefly.net/10mb.test")]
         download_url: String,
         /// HTTPS endpoint accepting a POST body for uploads.
         #[arg(long, default_value = "https://speed.cloudflare.com/__up")]
         upload_url: String,
-        /// Number of bytes to sample per download (default 2 MiB; larger responses are cut short).
+        /// Number of bytes to sample per download (default and maximum 1 MiB).
         #[arg(
             long = "download-max-bytes",
             alias = "download-bytes",
-            default_value_t = 2_097_152
+            default_value_t = 1_048_576
         )]
         download_bytes: u64,
-        /// Upload payload size for each sample (default 256 KiB).
-        #[arg(long, default_value_t = 262_144)]
+        /// Upload payload size for each sample (default and maximum 1 MiB).
+        #[arg(long, default_value_t = 1_048_576)]
         upload_bytes: u64,
-        /// Maximum duration of each download/upload HTTP request, in seconds.
-        #[arg(long, alias = "throughput-timeout-secs", default_value_t = 15)]
+        /// Maximum duration of each download/upload HTTP request, in seconds (default 3).
+        #[arg(long, alias = "throughput-timeout-secs", default_value_t = 3)]
         request_timeout_secs: u64,
         /// Maximum duration of each real-latency HTTP request, in seconds.
         #[arg(long, default_value_t = 5)]
@@ -933,6 +933,7 @@ fn aggregate_target_status(
 ) -> String {
     use crate::domain::BenchmarkSampleStatus as S;
     for (status, label) in [
+        (S::Skipped, "skipped"),
         (S::Unavailable, "unavailable"),
         (S::Unsupported, "unsupported"),
         (S::Invalid, "invalid"),
@@ -1236,6 +1237,7 @@ fn sample_status_label(status: crate::domain::BenchmarkSampleStatus) -> &'static
         crate::domain::BenchmarkSampleStatus::Invalid => "invalid",
         crate::domain::BenchmarkSampleStatus::Timeout => "timeout",
         crate::domain::BenchmarkSampleStatus::Unavailable => "unavailable",
+        crate::domain::BenchmarkSampleStatus::Skipped => "skipped",
         crate::domain::BenchmarkSampleStatus::Cancelled => "cancelled",
     }
 }
@@ -1711,7 +1713,7 @@ mod tests {
             "--core",
             "sing-box",
             "--download-bytes",
-            "2097152",
+            "1048576",
             "--upload-bytes",
             "1048576",
         ])
@@ -1722,7 +1724,7 @@ mod tests {
                 all_cores: false,
                 ref node,
                 core: Some(ref core),
-                download_bytes: 2_097_152,
+                download_bytes: 1_048_576,
                 upload_bytes: 1_048_576,
                 ..
             }) if node == &vec!["7".to_owned()] && core == "sing-box"
