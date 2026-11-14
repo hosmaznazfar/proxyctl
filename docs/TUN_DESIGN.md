@@ -303,3 +303,8 @@ This is an offline execution contract with fake-backend tests, not a live Linux 
 ## Kernel-assigned interface identity
 
 The TUN ifindex is allocated by Linux when the device is created and must never be predicted during preflight. The policy constructor's non-zero index is only a planning placeholder. After the backend creates the exact named TUN device, it must return the kernel-assigned non-zero ifindex; the transaction binds that value into the policy and every IPv4/IPv6 route before adding routes or committing the manifest. Preflight checks interface-name availability and routing table/rule collisions, not a guessed ifindex. Post-creation verification requires one exact interface name, a unique non-zero ifindex, and TUN-kind evidence. Cleanup continues to use the committed actual name+ifindex identity. The backend contract and fake tests cover this sequencing; no real interface is created.
+
+
+### Transaction failure paths must preserve truthful journal state
+
+The offline transaction executor now explicitly retains its recovery journal when post-interface policy binding or final manifest validation fails. Rollback failures are no longer reported as journal-retained unless the backend confirms retention; a retention failure is surfaced as a separate error. If rollback succeeds but journal finalization fails, the executor again requires confirmed retention before returning. This tightens the backend contract and error reporting only; it does not supply a concrete durable journal or kernel mutator.
