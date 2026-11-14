@@ -941,13 +941,45 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
         tun.unit.starts_with("proxyctl-tun-") && tun.unit.ends_with(".service"),
         "recorded TUN service name is outside Proxyctl's namespace; refusing systemd operation"
     );
-    let sudo = find_program("sudo")?;
     let systemctl = find_program("systemctl")?;
-    let authorization = Command::new(&sudo).arg("-v").status()?;
+    let load_output = Command::new(&systemctl)
+        .arg("show")
+        .arg("--property=LoadState")
+        .arg("--value")
+        .arg(&tun.unit)
+        .output()
+        .context("could not inspect the recorded Proxyctl TUN service")?;
     ensure!(
-        authorization.success(),
-        "sudo authorization was not granted; TUN service was not stopped"
+        load_output.status.success(),
+        "could not inspect the recorded Proxyctl TUN service; refusing cleanup"
     );
+    let load_state = String::from_utf8_lossy(&load_output.stdout).trim().to_owned();
+
+    // Older TUN activation state stored only a whole-machine baseline, not exact
+    // resource fingerprints. Retire it only when the service is absent, no
+    // process was ever recorded, and the live snapshot proves no TUN interface
+    // or route/rule additions exist. This path never mutates kernel networking.
+    if load_state == "not-found" && state.pid == 0 && state.start_ticks == 0 {
+        let current = TunBaseline::capture()?;
+        ensure!(
+            legacy_tun_snapshot_is_safe_to_retire(&tun.baseline, &current),
+            "stale TUN state is not safe to retire: a TUN interface or route/rule resource may remain; state/config retained"
+        );
+        ensure!(
+            state.config.parent() == Some(runtime),
+            "TUN config path is outside the private runtime directory; refusing cleanup"
+        );
+        fs::remove_file(&state.config)
+            .or_else(|error| if error.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(error) })?;
+        fs::remove_file(state_path)?;
+        println!(
+            "Retired stale Proxyctl TUN runtime state for node #{}; no network resources were changed.",
+            state.node_id
+        );
+        return Ok(());
+    }
+
+    let sudo = find_program("sudo")?;
     let context = TunLaunchContext {
         sudo,
         systemd_run: PathBuf::new(),
@@ -957,7 +989,6 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
         gid: unsafe { libc::getgid() },
         baseline: tun.baseline.clone(),
     };
-    let load_state = systemd_property(&context, "LoadState")?;
     if load_state == "loaded" {
         let pid = systemd_property(&context, "MainPID")?
             .parse::<u32>()
@@ -1032,6 +1063,24 @@ fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> 
         state.node_id
     );
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn legacy_tun_snapshot_is_safe_to_retire(
+    baseline: &TunBaseline,
+    current: &TunBaseline,
+) -> bool {
+    // Legacy state has no per-resource ownership fingerprints. It is safe to
+    // discard only when the baseline itself had no TUN interface, none exists
+    // now, and every current route/rule was already present in the baseline.
+    // Removed baseline entries and unrelated interface/DNS changes are ignored;
+    // any newly observed route/rule keeps recovery fail-closed.
+    baseline.tun_interfaces.is_empty()
+        && current.tun_interfaces.is_empty()
+        && current.ipv4_routes.iter().all(|entry| baseline.ipv4_routes.contains(entry))
+        && current.ipv6_routes.iter().all(|entry| baseline.ipv6_routes.contains(entry))
+        && current.ipv4_rules.iter().all(|entry| baseline.ipv4_rules.contains(entry))
+        && current.ipv6_rules.iter().all(|entry| baseline.ipv6_rules.contains(entry))
 }
 
 #[cfg(target_os = "linux")]
@@ -1190,6 +1239,54 @@ mod tests {
             baseline.differences(&current),
             vec!["DNS nameservers", "IPv4 routing tables"]
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_tun_recovery_ignores_unrelated_interface_and_dns_changes() {
+        let baseline = TunBaseline {
+            interfaces: vec!["lo".into(), "docker0".into()],
+            tun_interfaces: vec![],
+            default_routes: vec!["IPv4 default via wlan0".into()],
+            dns_servers: vec!["127.0.0.53".into()],
+            resolv_conf_target: None,
+            ipv4_routes: vec!["main-route".into(), "docker-route".into()],
+            ipv6_routes: vec!["main-v6-route".into()],
+            ipv4_rules: vec!["main-rule".into()],
+            ipv6_rules: vec!["main-v6-rule".into()],
+        };
+        let mut current = baseline.clone();
+        current.interfaces = vec!["lo".into(), "wlan0".into()];
+        current.dns_servers = vec!["1.1.1.1".into()];
+        current.ipv4_routes.retain(|route| route != "docker-route");
+        assert!(legacy_tun_snapshot_is_safe_to_retire(&baseline, &current));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_tun_recovery_refuses_tun_interfaces_and_new_routes_or_rules() {
+        let baseline = TunBaseline {
+            interfaces: vec!["lo".into()],
+            tun_interfaces: vec![],
+            default_routes: vec![],
+            dns_servers: vec![],
+            resolv_conf_target: None,
+            ipv4_routes: vec!["main-route".into()],
+            ipv6_routes: vec![],
+            ipv4_rules: vec!["main-rule".into()],
+            ipv6_rules: vec![],
+        };
+        let mut current = baseline.clone();
+        current.tun_interfaces.push("tun-proxyctl".into());
+        assert!(!legacy_tun_snapshot_is_safe_to_retire(&baseline, &current));
+
+        current = baseline.clone();
+        current.ipv4_routes.push("new-route".into());
+        assert!(!legacy_tun_snapshot_is_safe_to_retire(&baseline, &current));
+
+        current = baseline.clone();
+        current.ipv6_rules.push("new-rule".into());
+        assert!(!legacy_tun_snapshot_is_safe_to_retire(&baseline, &current));
     }
 
     #[cfg(target_os = "linux")]
