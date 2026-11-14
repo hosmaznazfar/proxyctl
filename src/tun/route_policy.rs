@@ -141,6 +141,21 @@ impl RoutingPolicyPlan {
         }
     }
 
+    /// Bind the policy to the actual ifindex returned by the kernel after TUN creation.
+    ///
+    /// The constructor's interface index is only a non-zero planning placeholder. Linux assigns
+    /// the real ifindex dynamically; every route must use this value before it is installed.
+    pub fn bind_interface_index(&self, interface_index: u32) -> Result<Self> {
+        ensure!(interface_index > 0, "kernel-assigned TUN ifindex must be non-zero");
+        let mut bound = self.clone();
+        bound.interface_index = interface_index;
+        for route in &mut bound.routes {
+            route.interface_index = interface_index;
+        }
+        bound.validate()?;
+        Ok(bound)
+    }
+
     pub fn validate(&self) -> Result<()> {
         ensure!(
             self.table_id >= RT_TABLE_MIN_PROXYCTL
