@@ -1,4 +1,4 @@
-//! Sequential benchmark orchestration. Database handles are never held during network work.
+//! Core-batched benchmark orchestration. Database handles are never held during network work.
 
 use std::{
     collections::BTreeMap,
@@ -535,12 +535,13 @@ fn execute_latency_batch(
 ) -> anyhow::Result<Vec<bool>> {
     let mut succeeded = vec![false; entries.len()];
     let timeout = LATENCY_REQUEST_TIMEOUT;
+    let batch_width = concurrency.clamp(1, MAX_PROBE_CONCURRENCY);
     for sample_index in 1..=SAMPLES_PER_METRIC {
         if CANCELLED.load(Ordering::Relaxed) {
             break;
         }
-        for (base, chunk) in probe_chunks(entries, concurrency).enumerate() {
-            let offset = base * concurrency.max(1);
+        for (base, chunk) in entries.chunks(batch_width).enumerate() {
+            let offset = base * batch_width;
             let (sender, receiver) = mpsc::channel();
             thread::scope(|scope| {
                 for (local_index, entry) in chunk.iter().enumerate() {
