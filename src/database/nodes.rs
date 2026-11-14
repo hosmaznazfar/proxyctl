@@ -1,4 +1,5 @@
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -436,6 +437,114 @@ impl NodeDatabase {
         drop(runs);
         write_txn.commit()?;
         Ok(stale.len())
+    }
+
+    /// Retain the newest `limit` finalized runs independently for each node/target pair.
+    /// Samples for expired pairs are removed even when a multi-node run remains for another pair.
+    /// Running runs are never modified.
+    pub fn prune_benchmark_history(&self, limit: usize) -> anyhow::Result<usize> {
+        ensure!(limit > 0, "benchmark history retention limit must be at least one");
+
+        let write_txn = self.inner.begin_write()?;
+        let run_records = {
+            let runs = write_txn.open_table(BENCHMARK_RUNS)?;
+            runs.iter()?
+                .map(|entry| {
+                    let (key, value) = entry?;
+                    let run: BenchmarkRun = serde_json::from_slice(value.value())?;
+                    debug_assert_eq!(run.id, key.value());
+                    Ok(run)
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?
+        };
+        let sample_records = {
+            let samples = write_txn.open_table(BENCHMARK_SAMPLES)?;
+            samples
+                .iter()?
+                .map(|entry| {
+                    let (key, value) = entry?;
+                    let sample: BenchmarkSample = serde_json::from_slice(value.value())?;
+                    debug_assert_eq!(sample.id, key.value());
+                    Ok(sample)
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?
+        };
+
+        let run_by_id = run_records
+            .iter()
+            .map(|run| (run.id, run))
+            .collect::<BTreeMap<_, _>>();
+        let mut histories: BTreeMap<(u64, String), Vec<(u64, u64)>> = BTreeMap::new();
+        for run in &run_records {
+            if run.status == BenchmarkRunStatus::Running {
+                continue;
+            }
+            for node_id in &run.node_ids {
+                for target in &run.cores {
+                    histories
+                        .entry((*node_id, target.clone()))
+                        .or_default()
+                        .push((run.id, run.started_at));
+                }
+            }
+        }
+
+        let mut retained_pairs = BTreeSet::new();
+        for ((node_id, target), history) in &mut histories {
+            history.sort_by_key(|(run_id, started_at)| (*started_at, *run_id));
+            for (run_id, _) in history.iter().rev().take(limit) {
+                retained_pairs.insert((*run_id, *node_id, target.clone()));
+            }
+        }
+
+        let expired_sample_ids = sample_records
+            .iter()
+            .filter(|sample| {
+                run_by_id
+                    .get(&sample.run_id)
+                    .is_some_and(|run| run.status != BenchmarkRunStatus::Running)
+                    && !retained_pairs.contains(&(
+                        sample.run_id,
+                        sample.node_id,
+                        sample.core.clone(),
+                    ))
+            })
+            .map(|sample| sample.id)
+            .collect::<Vec<_>>();
+
+        let expired_set = expired_sample_ids.iter().copied().collect::<BTreeSet<_>>();
+        let remaining_run_ids = sample_records
+            .iter()
+            .filter(|sample| !expired_set.contains(&sample.id))
+            .map(|sample| sample.run_id)
+            .collect::<BTreeSet<_>>();
+        let expired_run_ids = run_records
+            .iter()
+            .filter(|run| {
+                run.status != BenchmarkRunStatus::Running
+                    && !remaining_run_ids.contains(&run.id)
+            })
+            .map(|run| run.id)
+            .collect::<Vec<_>>();
+
+        if expired_sample_ids.is_empty() && expired_run_ids.is_empty() {
+            return Ok(0);
+        }
+
+        {
+            let mut samples = write_txn.open_table(BENCHMARK_SAMPLES)?;
+            for id in expired_sample_ids {
+                drop(samples.remove(id)?);
+            }
+        }
+        {
+            let mut runs = write_txn.open_table(BENCHMARK_RUNS)?;
+            for id in &expired_run_ids {
+                drop(runs.remove(*id)?);
+            }
+        }
+        write_txn.commit()?;
+        Ok(expired_run_ids.len())
     }
 
     pub fn soft_delete(&self, id: u64) -> anyhow::Result<bool> {
