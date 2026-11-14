@@ -123,7 +123,7 @@ fn generate_xray<A: CoreAdapter + ?Sized>(
 
     for target in targets {
         let mut document = node_config(adapter, target.node)?;
-        let mut node_outbounds = document
+        let node_outbounds = document
             .get_mut("outbounds")
             .and_then(Value::as_array_mut)
             .context("Xray node config must contain an outbound array")?;
