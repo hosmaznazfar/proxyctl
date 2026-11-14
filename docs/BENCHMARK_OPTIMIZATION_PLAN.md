@@ -26,7 +26,7 @@ The user's comparative observations are explicit product requirements:
 5. Compatibility outcomes remain per node/core. Unsupported or Invalid means skip that node/core entirely; it must not poison a valid peer in a batch.
 6. In full mode, run three real-latency samples first. Run download/upload only if at least one latency sample succeeds. If all three fail, persist throughput as `skipped` with `latency_gate`; do not send transfer requests.
 7. Metric-only modes remain independent and continue to run only the explicitly selected metric.
-8. Keep three samples per metric and use successful-sample medians. Never represent failures as zero.
+8. Keep three samples per metric and use successful-sample medians. Throughput defaults are 1 MiB per download/upload and 3 seconds per transfer request; the payload hard cap is 1 MiB. Never represent failures as zero.
 9. Keep redb closed during process execution and network I/O. Persist completed batch results after the managed child has stopped.
 10. Cancellation must stop and reap the exact managed child, preserve completed samples, and record unfinished work as cancelled/interrupted.
 11. Do not expose credentials, raw URLs containing secrets, response bodies, generated configs, raw core logs, or raw transport diagnostics.
