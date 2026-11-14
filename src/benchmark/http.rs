@@ -185,7 +185,9 @@ impl BenchmarkHttpClient {
             .get(self.download_url.as_str())
             .header("Accept-Encoding", "identity")
             .call()
-            .map_err(classify_error)?;
+            // Download responses can fail protocol parsing after the server has
+            // begun sending a response (for example, a truncated Content-Length).
+            .map_err(classify_response_error)?;
         let mut reader = response.body_mut().as_reader().take(max_bytes);
         let mut buffer = [0_u8; DOWNLOAD_CHUNK_BYTES];
         let mut received = 0_u64;
