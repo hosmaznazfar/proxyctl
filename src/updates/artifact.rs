@@ -53,7 +53,10 @@ pub fn verify_sha256(bytes: &[u8], expected: &str) -> anyhow::Result<()> {
         expected.len() == 64 && expected.bytes().all(|byte| byte.is_ascii_hexdigit()),
         "expected SHA-256 digest is malformed"
     );
-    let actual = format!("{:x}", Sha256::digest(bytes));
+    let actual = Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     ensure!(
         actual.eq_ignore_ascii_case(expected),
         "SHA-256 verification failed"
