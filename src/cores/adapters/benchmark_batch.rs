@@ -24,13 +24,19 @@ pub(super) fn generate<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
-    ensure!(!targets.is_empty(), "benchmark batch must contain at least one node");
+    ensure!(
+        !targets.is_empty(),
+        "benchmark batch must contain at least one node"
+    );
 
     let mut node_ids = HashSet::with_capacity(targets.len());
     let mut ports = HashSet::with_capacity(targets.len());
     for target in targets {
         ensure!(target.node_id > 0, "benchmark node ID must be non-zero");
-        ensure!(target.listen_port > 0, "benchmark listener port must be non-zero");
+        ensure!(
+            target.listen_port > 0,
+            "benchmark listener port must be non-zero"
+        );
         ensure!(
             node_ids.insert(target.node_id),
             "benchmark batch contains a duplicate node ID"
@@ -195,26 +201,27 @@ mod tests {
     use super::*;
     use crate::{cores::adapters::adapter, parser::parse_proxy_url};
 
-    fn targets<'a>(
-        first: &'a ProxyNode,
-        second: &'a ProxyNode,
-    ) -> [BenchmarkTarget<'a>; 2] {
+    fn targets<'a>(first: &'a ProxyNode, second: &'a ProxyNode) -> [BenchmarkTarget<'a>; 2] {
         [
-            BenchmarkTarget { node_id: 11, node: first, listen_port: 43131 },
-            BenchmarkTarget { node_id: 22, node: second, listen_port: 43132 },
+            BenchmarkTarget {
+                node_id: 11,
+                node: first,
+                listen_port: 43131,
+            },
+            BenchmarkTarget {
+                node_id: 22,
+                node: second,
+                listen_port: 43132,
+            },
         ]
     }
 
     #[test]
     fn every_adapter_routes_each_loopback_listener_to_its_own_outbound() {
-        let first = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@first.example:443",
-        )
-        .unwrap();
-        let second = parse_proxy_url(
-            "trojan://second-secret@second.example:8443",
-        )
-        .unwrap();
+        let first =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@first.example:443")
+                .unwrap();
+        let second = parse_proxy_url("trojan://second-secret@second.example:8443").unwrap();
 
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             let generated = generate(adapter(core), &targets(&first, &second)).unwrap();
@@ -285,14 +292,30 @@ mod tests {
         .unwrap();
 
         let duplicate_id = [
-            BenchmarkTarget { node_id: 11, node: &first, listen_port: 43131 },
-            BenchmarkTarget { node_id: 11, node: &second, listen_port: 43132 },
+            BenchmarkTarget {
+                node_id: 11,
+                node: &first,
+                listen_port: 43131,
+            },
+            BenchmarkTarget {
+                node_id: 11,
+                node: &second,
+                listen_port: 43132,
+            },
         ];
         assert!(generate(adapter(CoreId::SingBox), &duplicate_id).is_err());
 
         let duplicate_port = [
-            BenchmarkTarget { node_id: 11, node: &first, listen_port: 43131 },
-            BenchmarkTarget { node_id: 22, node: &second, listen_port: 43131 },
+            BenchmarkTarget {
+                node_id: 11,
+                node: &first,
+                listen_port: 43131,
+            },
+            BenchmarkTarget {
+                node_id: 22,
+                node: &second,
+                listen_port: 43131,
+            },
         ];
         assert!(generate(adapter(CoreId::Xray), &duplicate_port).is_err());
     }
@@ -305,8 +328,16 @@ mod tests {
         .unwrap();
         let unsupported = parse_proxy_url("hysteria2://secret@second.example:443").unwrap();
         let targets = [
-            BenchmarkTarget { node_id: 11, node: &first, listen_port: 43131 },
-            BenchmarkTarget { node_id: 22, node: &unsupported, listen_port: 43132 },
+            BenchmarkTarget {
+                node_id: 11,
+                node: &first,
+                listen_port: 43131,
+            },
+            BenchmarkTarget {
+                node_id: 22,
+                node: &unsupported,
+                listen_port: 43132,
+            },
         ];
         assert!(generate(adapter(CoreId::Xray), &targets).is_err());
     }
