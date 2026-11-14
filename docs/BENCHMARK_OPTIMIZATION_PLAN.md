@@ -1,6 +1,6 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: approved plan; Stage 1 adapter batch-config foundation added, compile/test verification pending
+> Status: Stages 1–3 implementation committed to main; local verification pending
 > Last updated: 2026-11-14
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
@@ -119,7 +119,7 @@ Each stage is a separate small implementation batch. Update this plan, `docs/BEN
 
 Acceptance: planning docs agree; no claim that selected multi-node CLI calls share one run unless code actually does.
 
-### Stage 1 — batch configuration foundation (code added; awaiting local verification)
+### Stage 1 — batch configuration foundation (implemented; user reported all checks passing)
 - Added an object-safe adapter batch-config contract and core-specific multi-node generators for sing-box, Xray, and Mihomo. Each target has a unique outbound and loopback inbound; sing-box/Xray routing rules and Mihomo listener-to-proxy mappings keep traffic isolated. Follow-up fixes corrected the inline test-module registration, adapter test imports, unused mutability, and rustfmt layout.
 - Added offline structural tests for all three core formats, distinct routing, duplicate IDs/ports, and unsupported-node rejection.
 - The benchmark service does not use this generator yet; process batching is a later stage.
@@ -130,23 +130,24 @@ Acceptance: planning docs agree; no claim that selected multi-node CLI calls sha
 
 Acceptance: unit and native config tests prove unique loopback ports, correct node-to-outbound routing, no cross-node leakage, and safe failure isolation. No live core startup is required for ordinary tests.
 
-### Stage 2 — core-batch process lifecycle
+### Stage 2 — core-batch process lifecycle (implementation committed; awaiting local verification)
 - Start one selected core for a batch, not one process per node/core pair.
-- Readiness must confirm every expected local listener, not just one.
-- On partial readiness failure, identify failed listeners; do not send traffic to unready nodes.
+- Validate every node's single-node native config independently before admitting it to the batch.
+- Readiness confirms every expected local listener; timeout diagnostics identify missing ports and no measurements start until all are ready.
 - Preserve private config/log permissions, exact managed executable checks, bounded startup, and guaranteed stop/reap.
 - Process one core batch completely before starting the next core.
+- Keep one-node `ManagedCoreProcess::start` as a wrapper over the batch lifecycle.
 
-Acceptance: fake-child/fake-listener integration tests cover startup, partial readiness, cancellation, crash, cleanup, and sequential core batches. Peak active managed-core count is always one.
+Acceptance: fake-child/fake-listener integration tests cover startup, partial readiness, cancellation, crash, cleanup, and sequential core batches. Peak active managed-core count is always one. The multi-listener readiness unit test is added; broader batch process lifecycle tests remain to be verified.
 
-### Stage 3 — concurrent latency and direct TCP
-- Add bounded concurrency with a conservative default of 3.
+### Stage 3 — concurrent latency and direct TCP (implementation committed; awaiting local verification)
+- Add bounded concurrency with a hard maximum of 3 workers.
 - Preserve three samples and median semantics.
-- Add independent latency timeout (initial proposal 5 seconds).
-- Add prompt per-request cancellation and per-node failure isolation.
+- Use an independent five-second latency request deadline; throughput retains the configured request timeout.
+- On cancellation, stop the batch core to interrupt in-flight proxy requests and join workers before continuing cleanup.
 - Make direct TCP probes bounded-concurrent and separate.
 
-Acceptance: deterministic local fake-proxy tests verify concurrency never exceeds the configured limit, all three samples are recorded, failures do not block other nodes, timeout/cancellation are prompt, and the latency gate remains correct.
+Acceptance: the hard worker cap has an offline unit test; deterministic fake-proxy tests must still verify all three samples, failure isolation, prompt timeout/cancellation, and the latency gate. Local test verification remains pending.
 
 ### Stage 4 — throughput accuracy and progress
 - Rework download/upload execution around accurate byte accounting, monotonic timing, response validation, and bounded response bodies.
