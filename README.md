@@ -226,6 +226,7 @@ Preview whether a node has any usable real-ping path through sing-box, Xray, or 
 ~~~sh
 proxyctl prune --unavailable-all
 proxyctl prune --unavailable-all --dry-run
+proxyctl prune --unavailable-all --apply
 ~~~
 
 Or evaluate one managed core:
