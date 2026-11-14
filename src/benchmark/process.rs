@@ -26,23 +26,41 @@ pub struct ManagedCoreProcess {
     child: Child,
     _config: NamedTempFile,
     log: NamedTempFile,
-    port: u16,
+    ports: Vec<u16>,
 }
 
 impl ManagedCoreProcess {
-    /// Generate, validate, and start a core with a loopback-only HTTP inbound.
+    /// Generate, validate, and start a core with one loopback-only HTTP inbound.
     pub fn start(
         core: CoreId,
         node: &ProxyNode,
         executable: &Path,
         startup_timeout: Duration,
     ) -> anyhow::Result<Self> {
+        let port = reserve_loopback_port()?;
+        let target = adapters::BenchmarkTarget {
+            node_id: 1,
+            node,
+            listen_port: port,
+        };
+        Self::start_batch(core, &[target], executable, startup_timeout)
+    }
+
+    /// Start one managed core with independently routed loopback listeners for a node batch.
+    pub fn start_batch(
+        core: CoreId,
+        targets: &[adapters::BenchmarkTarget<'_>],
+        executable: &Path,
+        startup_timeout: Duration,
+    ) -> anyhow::Result<Self> {
+        ensure!(!targets.is_empty(), "benchmark batch must not be empty");
         ensure!(
             executable.is_file(),
             "managed {core} executable is not installed"
         );
+        let ports = targets.iter().map(|target| target.listen_port).collect::<Vec<_>>();
         let adapter = adapters::adapter(core);
-        let mut last_failure = "the core did not open its local HTTP listener".to_owned();
+        let mut last_failure = "the core did not open every local HTTP listener".to_owned();
         let overall_started = Instant::now();
 
         for attempt in 0..STARTUP_ATTEMPTS {
@@ -52,10 +70,9 @@ impl ManagedCoreProcess {
             }
             let attempts_left = u32::try_from(STARTUP_ATTEMPTS - attempt).unwrap_or(1);
             let attempt_timeout = remaining / attempts_left;
-            let port = reserve_loopback_port()?;
             let generated = adapter
-                .generate_benchmark_config(node, port)
-                .with_context(|| format!("could not generate benchmark config for {core}"))?;
+                .generate_benchmark_batch_config(targets)
+                .with_context(|| format!("could not generate benchmark batch config for {core}"))?;
             let mut config = tempfile::Builder::new()
                 .prefix("proxyctl-benchmark-")
                 .suffix(".json")
@@ -90,13 +107,13 @@ impl ManagedCoreProcess {
                     .context("could not restrict core startup log permissions")?;
             }
             let mut child = spawn_core(core, executable, config.path(), &log)?;
-            match wait_for_listener(&mut child, port, attempt_timeout) {
+            match wait_for_listeners(&mut child, &ports, attempt_timeout) {
                 Ok(()) => {
                     return Ok(Self {
                         child,
                         _config: config,
                         log,
-                        port,
+                        ports,
                     });
                 }
                 Err(reason) => {
@@ -110,8 +127,13 @@ impl ManagedCoreProcess {
     }
 
     /// Port of the loopback HTTP proxy listener.
-    pub const fn port(&self) -> u16 {
-        self.port
+    pub fn port(&self) -> u16 {
+        self.ports[0]
+    }
+
+    /// Loopback listener ports in the same order as the batch targets.
+    pub fn ports(&self) -> &[u16] {
+        &self.ports
     }
 
     /// Return a safe summary of recognized runtime failures from the private core log.
@@ -142,7 +164,7 @@ impl Drop for ManagedCoreProcess {
     }
 }
 
-fn reserve_loopback_port() -> anyhow::Result<u16> {
+pub(crate) fn reserve_loopback_port() -> anyhow::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .context("could not reserve a loopback benchmark port")?;
     let port = listener
@@ -264,9 +286,9 @@ fn classify_runtime_diagnostic(contents: &str) -> Option<&'static str> {
     }
 }
 
-fn wait_for_listener(child: &mut Child, port: u16, timeout: Duration) -> Result<(), String> {
+fn wait_for_listeners(child: &mut Child, ports: &[u16], timeout: Duration) -> Result<(), String> {
     let started = Instant::now();
-    let address = ("127.0.0.1", port);
+    let mut ready = vec![false; ports.len()];
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -279,11 +301,17 @@ fn wait_for_listener(child: &mut Child, port: u16, timeout: Duration) -> Result<
             Ok(None) => {}
         }
 
-        if TcpStream::connect(address).is_ok() {
+        for (index, port) in ports.iter().enumerate() {
+            if !ready[index] && TcpStream::connect(("127.0.0.1", *port)).is_ok() {
+                ready[index] = true;
+            }
+        }
+        if ready.iter().all(|is_ready| *is_ready) {
             return Ok(());
         }
         if started.elapsed() >= timeout {
-            return Err("local HTTP listener readiness timed out".into());
+            let missing = ready.iter().zip(ports).filter_map(|(is_ready, port)| (!is_ready).then_some(port.to_string())).collect::<Vec<_>>().join(", ");
+            return Err(format!("local HTTP listener readiness timed out for port(s): {missing}"));
         }
         thread::sleep(READINESS_POLL_INTERVAL);
     }
