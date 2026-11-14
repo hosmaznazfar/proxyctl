@@ -388,11 +388,12 @@ mod tests {
 
         let directory = tempdir().unwrap();
         let executable = directory.path().join("fake-sing-box");
-        fs::write(
-            &executable,
-            "#!/bin/sh\nif [ \"$1\" = \"check\" ]; then exit 0; fi\nexec sleep 30\n",
-        )
-        .unwrap();
+        let pid_file = directory.path().join("child.pid");
+        let script = format!(
+            "#!/bin/sh\nif [ \"$1\" = \"check\" ]; then exit 0; fi\necho $ > '{}'\nexec sleep 30\n",
+            pid_file.display()
+        );
+        fs::write(&executable, script).unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
         let node = crate::parser::parse_proxy_url(
             "vless://11111111-1111-4111-8111-111111111111@proxy.local:443",
@@ -408,6 +409,11 @@ mod tests {
         );
         assert!(result.is_err());
         assert!(started.elapsed() < Duration::from_secs(2));
+        let child_pid: u32 = fs::read_to_string(pid_file).unwrap().trim().parse().unwrap();
+        assert!(
+            !Path::new(&format!("/proc/{child_pid}")).exists(),
+            "failed startup must stop and reap the exact fake child"
+        );
     }
 
     #[cfg(unix)]
