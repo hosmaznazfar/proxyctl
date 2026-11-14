@@ -740,6 +740,22 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn unresolved_intent_can_be_closed_only_by_explicit_absence_evidence() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let id = "12345678-1234-4234-8234-123456789abc";
+        store.create_transaction_journal(id, 21).unwrap();
+        store.record_operation_intent(id, 21, JournalOperationKind::AddRule, "rule:v6:42420").unwrap();
+        assert!(store.remove_completed_transaction_journal(id, 21).is_err());
+        store.mark_intent_absent(id, 21, "rule:v6:42420").unwrap();
+        let journal = store.load_transaction_journal().unwrap().unwrap();
+        assert_eq!(journal.operations[0].state, JournalOperationState::Absent);
+        assert_eq!(recovery_action(&journal.operations[0]), JournalRecoveryAction::SkipAlreadyRemoved);
+        store.remove_completed_transaction_journal(id, 21).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn journal_cleanup_requires_every_operation_to_be_removed() {
         let directory = tempfile::tempdir().unwrap();
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
