@@ -35,7 +35,7 @@ Proxyctl's current defaults are:
 - Download: `https://cachefly.cachefly.net/10mb.test`
 - Upload: `https://speed.cloudflare.com/__up`
 
-These defaults contact third-party services and disclose ordinary connection metadata such as source IP and request timing. Use endpoints whose terms and telemetry you accept. A custom upload URL must accept the documented HTTP POST body and return a successful HTTP status. Do not put credentials or secret tokens in command-line URLs; URLs are persisted in benchmark run settings and may be visible in local reports/database backups.
+The default transfer payloads are 1 MiB each (hard maximum 1 MiB), with a 3-second deadline per download/upload request. These defaults contact third-party services and disclose ordinary connection metadata such as source IP and request timing. Use endpoints whose terms and telemetry you accept. A custom upload URL must accept the documented HTTP POST body and return a successful HTTP status. Do not put credentials or secret tokens in command-line URLs; URLs are persisted in benchmark run settings and may be visible in local reports/database backups.
 
 Use the same endpoint URLs, payload sizes, and timeout values for every client in a comparison. Do not assume unrelated speed-test services produce directly comparable results.
 
@@ -58,8 +58,8 @@ proxyctl test --node NODE_ID --core sing-box \
   --latency-url https://www.google.com/generate_204 \
   --download-url https://cachefly.cachefly.net/10mb.test \
   --upload-url https://speed.cloudflare.com/__up \
-  --download-max-bytes 2097152 --upload-bytes 262144 \
-  --latency-timeout-secs 5 --request-timeout-secs 30 --concurrency 1
+  --download-max-bytes 1048576 --upload-bytes 1048576 \
+  --latency-timeout-secs 5 --request-timeout-secs 3 --concurrency 1
 ```
 
 Use the same settings when repeating with other cores. In full mode, download and upload are skipped when all three real-latency samples fail. Metric-only download/upload modes intentionally bypass that gate.
@@ -73,8 +73,8 @@ proxyctl test --node NODE_ID_1 NODE_ID_2 --all-cores \
   --latency-url https://www.google.com/generate_204 \
   --download-url https://cachefly.cachefly.net/10mb.test \
   --upload-url https://speed.cloudflare.com/__up \
-  --download-max-bytes 2097152 --upload-bytes 262144 \
-  --latency-timeout-secs 5 --request-timeout-secs 30 --concurrency 3
+  --download-max-bytes 1048576 --upload-bytes 1048576 \
+  --latency-timeout-secs 5 --request-timeout-secs 3 --concurrency 3
 ```
 
 For a fair comparison with Throne or v2rayN:
