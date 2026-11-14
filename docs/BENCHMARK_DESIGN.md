@@ -239,3 +239,8 @@ Metric outcomes must remain semantically distinct:
 - `timeout`, `unreachable`, and `cancelled`: attempted measurements with their own outcomes.
 
 Use the Rust `tabled` crate for terminal table layout rather than hand-calculated column widths. The table renderer is presentation-only; report aggregation and persisted benchmark records remain in the service/domain layers. Sensitive source URLs, credentials, fingerprints, and internal database IDs are not display fields. `show --details` remains the explicit connection-metadata view and is separate from benchmark tables.
+
+
+## 14. Automatic history retention
+
+After each benchmark run is finalized, Proxyctl retains at most the three newest runs independently for every node/target pair (including the separate direct target). This includes completed, interrupted, and cancelled runs; a running run is never pruned. For older multi-node or multi-core runs, samples are removed only for the expired node/target pair. Shared run metadata remains while another target still has retained samples, and reports omit target rows whose samples have expired. This keeps per-target history bounded without deleting another node's or core's recent results.
