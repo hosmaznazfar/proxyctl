@@ -2,7 +2,7 @@
 name = "proxyctl"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.100"
 description = "A lightweight CLI for managing and benchmarking proxy nodes"
 readme = "README.md"
 
