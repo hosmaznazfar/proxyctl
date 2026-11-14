@@ -204,15 +204,21 @@ pub fn apply<B: KernelTransactionBackend>(
             interface.index,
             backend,
         );
-        if rollback.is_err() {
-            let _ = backend.retain_recovery_journal(activation_id);
-            return Err(error).context(
-                "kernel transaction failed and rollback is incomplete; recovery journal retained",
-            );
+        if let Err(rollback_error) = rollback {
+            backend
+                .retain_recovery_journal(activation_id)
+                .context("rollback failed and recovery journal retention also failed")?;
+            return Err(error).context(format!(
+                "kernel transaction rollback is incomplete ({rollback_error:#}); recovery journal retained"
+            ));
         }
-        backend
-            .finish_transaction(activation_id)
-            .context("kernel transaction rollback completed but journal finalization failed")?;
+        if let Err(finalize_error) = backend.finish_transaction(activation_id) {
+            backend
+                .retain_recovery_journal(activation_id)
+                .context("rollback completed but journal finalization and retention both failed")?;
+            return Err(finalize_error)
+                .context("rollback completed but transaction journal could not be finalized; journal retained");
+        }
         return Err(error);
     }
 
