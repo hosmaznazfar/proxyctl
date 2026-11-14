@@ -316,3 +316,6 @@ The private TUN runtime store now has a separate bounded transaction journal (25
 
 
 The journal recovery classifier now distinguishes unresolved intent, applied resource, removed resource, and an intent explicitly confirmed absent by exact kernel inspection. An unresolved intent never authorizes deletion. It can be closed only through the explicit absent-evidence transition; an applied resource requires fingerprint-based compare-and-delete before it can be marked removed. Journal deletion accepts only removed or confirmed-absent operations.
+
+
+- **Offline journal recovery planner:** recovery now evaluates a fresh exact kernel-inventory map against the durable write-ahead journal in reverse creation order. An unresolved intent is marked absent only when the inventory explicitly contains that exact key as absent; an unobserved key or any present resource without a recorded fingerprint remains a conflict. Applied resources already absent can be marked removed; matching resources produce only a compare-and-delete decision carrying the recorded fingerprint; changed resources are preserved. The planner performs no mutation and is not yet wired to a concrete rtnetlink backend.
