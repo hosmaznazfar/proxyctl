@@ -692,6 +692,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "redb",
+ "rustls",
  "semver",
  "serde",
  "serde_json",
