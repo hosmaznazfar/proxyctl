@@ -130,7 +130,7 @@ fn ensure_zsh_fpath() -> anyhow::Result<()> {
 }
 
 fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\\'', "'\\''"))
+    format!("'{}'", value.replace(char::from(39), "'\\''"))
 }
 
 /// Returns true only until the first interactive setup prompt has been recorded for this shell.
