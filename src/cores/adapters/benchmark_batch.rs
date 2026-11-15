@@ -284,6 +284,34 @@ mod tests {
     }
 
     #[test]
+    fn batch_generation_selects_socks5_or_http_inbounds() {
+        let node = parse_proxy_url("trojan://secret@example.com:443").unwrap();
+        for proxy_type in [BenchmarkProxyType::Socks5, BenchmarkProxyType::Http] {
+            let targets = [BenchmarkTarget {
+                node_id: 7,
+                node: &node,
+                listen_port: 43137,
+                proxy_type,
+            }];
+            for core in [CoreId::SingBox, CoreId::Xray] {
+                let generated = generate(adapter(core), &targets).unwrap();
+                let document: Value = serde_json::from_slice(&generated.content).unwrap();
+                match core {
+                    CoreId::SingBox => assert_eq!(
+                        document["inbounds"][0]["type"],
+                        if proxy_type == BenchmarkProxyType::Socks5 { "socks" } else { "http" }
+                    ),
+                    CoreId::Xray => assert_eq!(
+                        document["inbounds"][0]["protocol"],
+                        if proxy_type == BenchmarkProxyType::Socks5 { "socks" } else { "http" }
+                    ),
+                    CoreId::Mihomo => unreachable!(),
+                }
+            }
+        }
+    }
+
+    #[test]
     fn batch_generation_rejects_duplicate_ids_and_ports() {
         let first =
             parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@first.example:443")
