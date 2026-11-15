@@ -294,7 +294,7 @@ mod tests {
                 DisplayField::Status
             ]
         );
-        add_field(&mut config, DisplayProfile::Compact, DisplayField::Server).unwrap();
+        add_field(&mut config, DisplayProfile::Compact, DisplayField::Name).unwrap();
         assert!(!config.profiles[&DisplayProfile::Normal].is_empty());
         assert!(config.profiles[&DisplayProfile::Full].contains(&DisplayField::Server));
         assert!(!config.profiles[&DisplayProfile::Normal].contains(&DisplayField::Failures));
@@ -310,7 +310,8 @@ mod tests {
     #[test]
     fn profile_must_keep_at_least_one_field() {
         let mut config = DisplayConfig::default();
-        for field in config.fields().into_iter().skip(1) {
+        let compact_fields = config.profiles[&DisplayProfile::Compact].clone();
+        for field in compact_fields.into_iter().skip(1) {
             remove_field(&mut config, DisplayProfile::Compact, field).unwrap();
         }
         assert_eq!(config.fields(), vec![DisplayField::Node]);
