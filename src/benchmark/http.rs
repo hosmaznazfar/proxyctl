@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, ensure};
-use curl::easy::{Easy, ProxyType};
+use curl::easy::{Easy, HttpVersion, ProxyType};
 use ureq::{Agent, Proxy};
 use url::Url;
 
@@ -256,6 +256,7 @@ impl BenchmarkHttpClient {
             .and_then(|_| easy.accept_encoding("identity"))
             .and_then(|_| easy.follow_location(true))
             .and_then(|_| easy.max_redirections(10))
+            .and_then(|_| easy.http_version(HttpVersion::V1_1))
             .and_then(|_| easy.get(true))
             .map_err(|_| MeasurementFailure::Unavailable)?;
 
