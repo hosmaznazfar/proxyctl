@@ -11,7 +11,8 @@ use crate::{
     },
     updates::release::ReleaseChannel,
 };
-use clap::{ArgGroup, Parser, Subcommand};
+use clap::{ArgGroup, CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
 use std::{collections::HashMap, path::PathBuf};
 use tabled::{builder::Builder, settings::Style};
 
@@ -22,6 +23,9 @@ use tabled::{builder::Builder, settings::Style};
     about = "A lightweight CLI for managing and benchmarking proxy nodes"
 )]
 pub struct Cli {
+    /// Generate shell completion scripts (for fish, install the output in ~/.config/fish/completions/).
+    #[arg(long, hide = true)]
+    _completion_placeholder: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
