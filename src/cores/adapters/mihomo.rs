@@ -332,6 +332,9 @@ mod config_contract_tests {
 
     #[test]
     fn mihomo_activation_benchmark_and_tun_options_stay_core_native() {
+        assert!(CAPABILITIES.hysteria2 && CAPABILITIES.xhttp);
+        assert!(CAPABILITIES.grpc_service_name_required);
+        assert!(!CAPABILITIES.xhttp_auto_mode);
         let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
         let activation: serde_json::Value = serde_json::from_slice(&MihomoAdapter.generate_activation_config(&node, 43128).unwrap().content).unwrap();
         assert_eq!(activation["mixed-port"], 43128);
