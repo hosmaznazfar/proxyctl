@@ -1862,6 +1862,15 @@ mod tests {
     }
 
     #[test]
+    fn test_command_defaults_to_socks5_and_accepts_http_override() {
+        let default = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
+        assert!(matches!(default.command, Some(Command::Test { ref proxy_type, .. }) if proxy_type == "socks5"));
+        let http = Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--proxy-type", "http"]).unwrap();
+        assert!(matches!(http.command, Some(Command::Test { ref proxy_type, .. }) if proxy_type == "http"));
+        assert!(Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--proxy-type", "invalid"]).is_err());
+    }
+
+    #[test]
     fn test_command_exposes_bounded_concurrency_and_separate_timeouts() {
         assert!(
             Cli::try_parse_from([
