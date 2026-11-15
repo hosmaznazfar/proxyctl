@@ -54,9 +54,20 @@ pub enum BenchmarkSampleStatus {
     Cancelled,
 }
 
+/// Local inbound protocol used by benchmark HTTP measurements.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BenchmarkProxyType {
+    #[default]
+    Socks5,
+    Http,
+}
+
 /// Effective, non-secret settings captured with every run.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct BenchmarkSettings {
+    #[serde(default)]
+    pub proxy_type: BenchmarkProxyType,
     pub methodology: String,
     pub latency_url: String,
     pub download_url: String,
