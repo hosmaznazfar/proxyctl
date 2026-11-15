@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use anyhow::{Context, ensure};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::domain::{BenchmarkProxyType, ProxyNode};
 
@@ -22,7 +22,7 @@ pub struct BenchmarkTarget<'a> {
     pub proxy_type: BenchmarkProxyType,
 }
 
-fn validate_targets<A: CoreAdapter + ?Sized>(
+pub(super) fn validate_targets<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<()> {
@@ -43,150 +43,12 @@ fn validate_targets<A: CoreAdapter + ?Sized>(
     Ok(())
 }
 
-fn node_config<A: CoreAdapter + ?Sized>(adapter: &A, node: &ProxyNode) -> anyhow::Result<Value> {
+pub(super) fn node_config<A: CoreAdapter + ?Sized>(adapter: &A, node: &ProxyNode) -> anyhow::Result<Value> {
     let generated = adapter
         .generate_config(node)
         .context("could not generate a node's native outbound configuration")?;
     serde_json::from_slice(&generated.content)
         .context("adapter generated an invalid JSON configuration")
-}
-
-pub(super) fn generate_sing_box<A: CoreAdapter + ?Sized>(
-    adapter: &A,
-    targets: &[BenchmarkTarget<'_>],
-) -> anyhow::Result<GeneratedConfig> {
-    validate_targets(adapter, targets)?;
-    let mut outbounds = Vec::with_capacity(targets.len());
-    let mut inbounds = Vec::with_capacity(targets.len());
-    let mut rules = Vec::with_capacity(targets.len());
-
-    for target in targets {
-        let mut document = node_config(adapter, target.node)?;
-        let node_outbounds = document
-            .get_mut("outbounds")
-            .and_then(Value::as_array_mut)
-            .context("sing-box node config must contain an outbound array")?;
-        ensure!(
-            node_outbounds.len() == 1,
-            "sing-box node config must contain exactly one proxy outbound"
-        );
-        let mut outbound = node_outbounds.remove(0);
-        let outbound_tag = format!("proxyctl-benchmark-out-{}", target.node_id);
-        let inbound_tag = format!("proxyctl-benchmark-in-{}", target.node_id);
-        outbound["tag"] = json!(outbound_tag);
-        outbounds.push(outbound);
-        inbounds.push(json!({
-            "type": match target.proxy_type {
-                BenchmarkProxyType::Socks5 => "socks",
-                BenchmarkProxyType::Http => "http",
-            },
-            "tag": inbound_tag,
-            "listen": "127.0.0.1",
-            "listen_port": target.listen_port
-        }));
-        rules.push(json!({
-            "inbound": [inbound_tag],
-            "outbound": outbound_tag
-        }));
-    }
-
-    let final_outbound = format!("proxyctl-benchmark-out-{}", targets[0].node_id);
-    json_config(json!({
-        "inbounds": inbounds,
-        "outbounds": outbounds,
-        "route": {
-            "rules": rules,
-            "final": final_outbound
-        }
-    }))
-}
-
-pub(super) fn generate_xray<A: CoreAdapter + ?Sized>(
-    adapter: &A,
-    targets: &[BenchmarkTarget<'_>],
-) -> anyhow::Result<GeneratedConfig> {
-    validate_targets(adapter, targets)?;
-    let mut outbounds = Vec::with_capacity(targets.len());
-    let mut inbounds = Vec::with_capacity(targets.len());
-    let mut rules = Vec::with_capacity(targets.len());
-
-    for target in targets {
-        let mut document = node_config(adapter, target.node)?;
-        let node_outbounds = document
-            .get_mut("outbounds")
-            .and_then(Value::as_array_mut)
-            .context("Xray node config must contain an outbound array")?;
-        ensure!(
-            node_outbounds.len() == 1,
-            "Xray node config must contain exactly one proxy outbound"
-        );
-        let mut outbound = node_outbounds.remove(0);
-        let outbound_tag = format!("proxyctl-benchmark-out-{}", target.node_id);
-        let inbound_tag = format!("proxyctl-benchmark-in-{}", target.node_id);
-        outbound["tag"] = json!(outbound_tag);
-        outbounds.push(outbound);
-        inbounds.push(json!({
-            "listen": "127.0.0.1",
-            "port": target.listen_port,
-            "protocol": match target.proxy_type {
-                BenchmarkProxyType::Socks5 => "socks",
-                BenchmarkProxyType::Http => "http",
-            },
-            "settings": {},
-            "tag": inbound_tag
-        }));
-        rules.push(json!({
-            "type": "field",
-            "inboundTag": [inbound_tag],
-            "outboundTag": outbound_tag
-        }));
-    }
-
-    json_config(json!({
-        "inbounds": inbounds,
-        "outbounds": outbounds,
-        "routing": {
-            "domainStrategy": "AsIs",
-            "rules": rules
-        }
-    }))
-}
-
-pub(super) fn generate_mihomo<A: CoreAdapter + ?Sized>(
-    adapter: &A,
-    targets: &[BenchmarkTarget<'_>],
-) -> anyhow::Result<GeneratedConfig> {
-    validate_targets(adapter, targets)?;
-    let mut proxies = Vec::with_capacity(targets.len());
-    let mut listeners = Vec::with_capacity(targets.len());
-
-    for target in targets {
-        let document = node_config(adapter, target.node)?;
-        let proxy = document
-            .get("proxies")
-            .and_then(Value::as_array)
-            .and_then(|entries| entries.first())
-            .context("Mihomo node config must contain a proxy entry")?;
-        let mut proxy = proxy.clone();
-        let proxy_name = format!("proxyctl-benchmark-out-{}", target.node_id);
-        let listener_name = format!("proxyctl-benchmark-in-{}", target.node_id);
-        proxy["name"] = json!(proxy_name);
-        proxies.push(proxy);
-        listeners.push(json!({
-            "name": listener_name,
-            "type": "mixed",
-            "port": target.listen_port,
-            "listen": "127.0.0.1",
-            "proxy": proxy_name
-        }));
-    }
-
-    json_config(json!({
-        "allow-lan": false,
-        "mode": "rule",
-        "proxies": proxies,
-        "listeners": listeners
-    }))
 }
 
 #[cfg(test)]
