@@ -177,7 +177,7 @@ Acceptance: offline service tests cover multi-node scope resolution and cancella
 
 ### Stage 6 — remaining offline acceptance work
 - **Passed (user-reported, 2026-11-15):** `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo build --release`.
-- **Remaining audit:** review test coverage against every boundary: config generation, native validation, startup, listener readiness, latency, download, upload, persistence, and cancellation. Add a deterministic local fault fixture for any uncovered boundary before calling this stage complete.
+- **Coverage audit:** reviewed the offline fixtures across config generation/routing, native validation, process startup/readiness, HTTP latency/download/upload, persistence/recovery/retention, and cancellation. Added `validation_uses_each_cores_native_check_command`, which drives all three adapters through fake executables and verifies their exact native validation argument sequences, private config permissions, and temporary-file cleanup. The new test is committed but awaits the user's local verification before Stage 6 can be closed.
 - The current 1/10/50-node adapter scaling test proves structural batch growth and routing isolation; it does not measure elapsed-time or peak-RSS improvement. Treat those as optional profiling measurements, not claims established by unit tests.
 - No real remote proxy nodes or public speed-test endpoints are used by this stage.
 
