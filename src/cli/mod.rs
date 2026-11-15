@@ -1570,18 +1570,41 @@ mod tests {
     use super::{Cli, Command, TunCommand, display_core_version};
 
     #[test]
-    fn every_supported_shell_gets_a_proxyctl_completion_script() {
+    fn every_supported_shell_completes_subcommand_options() {
         for shell in [
             clap_complete::Shell::Bash,
             clap_complete::Shell::Fish,
             clap_complete::Shell::Zsh,
         ] {
             let script = super::completion_script(shell);
-            assert!(!script.is_empty());
-            assert!(script.contains("proxyctl"));
-            assert!(script.contains("completions"));
-            assert!(script.contains("--all-cores"));
+            assert!(!script.is_empty(), "empty script for {shell:?}");
+            for expected in [
+                "proxyctl",
+                "completions",
+                "test",
+                "--all-cores",
+                "--latency-only",
+                "--download-only",
+                "--upload-only",
+                "--concurrency",
+                "--startup-timeout-secs",
+                "--request-timeout-secs",
+            ] {
+                assert!(
+                    script.contains(expected),
+                    "{shell:?} completion script is missing {expected}"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn fish_completion_scopes_test_options_to_the_test_subcommand() {
+        let script = super::completion_script(clap_complete::Shell::Fish);
+        assert!(script.contains("__fish_seen_subcommand_from test"));
+        assert!(script.contains("--latency-only"));
+        assert!(script.contains("--download-only"));
+        assert!(script.contains("--upload-only"));
     }
 
     #[test]
