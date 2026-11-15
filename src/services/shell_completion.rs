@@ -146,7 +146,7 @@ pub fn mark_first_setup_prompted(shell: Shell) -> anyhow::Result<()> {
         fs::set_permissions(directory, fs::Permissions::from_mode(0o700))?;
     }
     if !marker.exists() {
-        fs::write(&marker, b"prompted\\n")?;
+        fs::write(&marker, b"prompted\n")?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
