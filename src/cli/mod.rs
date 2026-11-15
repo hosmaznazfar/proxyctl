@@ -1679,12 +1679,10 @@ mod tests {
             ("prune", "--unavailable-all"),
             ("update", "--prerelease"),
         ] {
-            let expected = format!(
-                "complete -c proxyctl -a "
-            );
+            let expected = "complete -c proxyctl -a ";
             assert!(
                 script.lines().any(|line| {
-                    line.starts_with(&expected)
+                    line.starts_with(expected)
                         && line.contains(option)
                         && line.contains(&format!("__fish_seen_subcommand_from {command}"))
                 }),
