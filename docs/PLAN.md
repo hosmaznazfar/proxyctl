@@ -566,3 +566,6 @@ Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listene
 The full plan defines adapter batch configuration, per-listener readiness, failure isolation, independent latency/throughput timeouts, cancellation, progress, run metadata, offline tests, and separately approved real-world comparison. See [Benchmark Optimization Plan](BENCHMARK_OPTIMIZATION_PLAN.md).
 
 Until implementation stages pass local verification, the existing scheduler remains authoritative. No stage may start multiple managed cores concurrently, alter system networking, enable TUN, or contact public test endpoints during automated tests.
+
+
+- **Xray WebSocket Host schema correction:** Xray Trojan/VLESS/VMess WebSocket outbounds now serialize the imported WebSocket Host to the native `wsSettings.host` field, matching v2rayN's Xray configuration model. SNI remains independently mapped to `tlsSettings.serverName`, and certificate verification remains enabled by default. Regression coverage includes a Trojan + WS + TLS fixture with distinct Host and SNI values. Local Rust checks are pending user verification.
