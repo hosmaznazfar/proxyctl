@@ -512,7 +512,7 @@ mod tests {
             let mut tls = rustls::StreamOwned::new(connection, stream);
             let mut request = [0_u8; 1024];
             let _ = tls.read(&mut request);
-            let _ = tls.write_all(b"HTTP/1.1 204 No Content\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n");
+            let _ = tls.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         });
 
         let config = Agent::config_builder()
