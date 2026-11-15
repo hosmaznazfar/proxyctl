@@ -7,7 +7,7 @@ use crate::{
     cores::CoreId,
     database::NodeRecord,
     services::{
-        reporting::{self, ReportMode},
+        reporting,
         sorting::{self, SortMetric},
     },
 };
