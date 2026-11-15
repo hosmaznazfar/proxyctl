@@ -1183,17 +1183,16 @@ fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
         } else {
             format!("{value:.2} ms")
         };
-        let sample_count = if summary.successful < 3 {
-            format!(" ({}/3)", summary.successful)
+        let mut qualifiers = Vec::new();
+        if summary.successful < 3 {
+            qualifiers.push(format!("{}/3", summary.successful));
         } else {
-            String::new()
-        };
-        let partial_count = if summary.partial_successful > 0 {
-            format!(", {} partial", summary.partial_successful)
-        } else {
-            String::new()
-        };
-        format!("{formatted}{sample_count}{partial_count}")
+            qualifiers.push("3/3 complete".to_owned());
+        }
+        if summary.partial_successful > 0 {
+            qualifiers.push(format!("{} partial transfer(s)", summary.partial_successful));
+        }
+        format!("{formatted} ({})", qualifiers.join(", "))
     } else if let Some(status) = summary.preflight {
         sample_status_label(status).to_owned()
     } else if summary.attempted == 0 {
