@@ -1,6 +1,6 @@
 # Proxyctl — Plan and Architecture Decisions
 
-> Status: approved baseline; benchmark optimization Stages 1–5 are user-verified; Stage 6 full offline verification batch passed; real-world runbook is in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`  
+> Status: approved baseline; benchmark optimization Stages 1–6 are user-verified; architecture refactor Phase 1 is user-verified and Phase 2 implementation is committed pending local verification; real-world runbook is in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`  
 > Repository: https://github.com/hosmaznazfar/proxyctl  
 > Last updated: 2026-11-14
 
@@ -456,7 +456,7 @@ Avoid introducing an async runtime, ORM, or large application framework unless i
 12. **Implemented:** shared node selector parser, multi-node show/check/test/report command syntax, bulk soft-delete/restore, remove-all confirmation, and synchronized command documentation.
 13. Hardening: integration tests, documentation, packaging, security review, and performance checks.
 
-Each stage should leave the default branch buildable and tested. Apply related CLI, service, tests, and documentation together when they share a command contract. Update this plan when a material design decision changes.
+Each stage should leave the default branch buildable and tested. Apply related CLI, service, tests, and documentation together when they share a command contract. The SOLID/extensibility refactor status and its verification commands are tracked in [ARCHITECTURE_REFACTOR.md](ARCHITECTURE_REFACTOR.md). Update this plan when a material design decision changes.
 
 ## Benchmark optimization implementation status
 
