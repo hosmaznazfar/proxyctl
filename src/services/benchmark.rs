@@ -458,6 +458,7 @@ fn execute_run(
                 node_id: record.id,
                 node: &record.node,
                 listen_port: port,
+                proxy_type: settings.proxy_type,
             });
         }
 
