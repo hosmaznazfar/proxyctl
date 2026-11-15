@@ -433,6 +433,9 @@ fn classify_response_error(error: ureq::Error) -> MeasurementFailure {
 fn classify_request_io_error(error: std::io::Error) -> MeasurementFailure {
     match error.kind() {
         std::io::ErrorKind::TimedOut => MeasurementFailure::Timeout,
+        // rustls reports certificate and handshake validation failures as InvalidData
+        // when ureq wraps the TLS source in an I/O error.
+        std::io::ErrorKind::InvalidData => MeasurementFailure::TlsFailed,
         std::io::ErrorKind::ConnectionRefused
         | std::io::ErrorKind::NotConnected
         | std::io::ErrorKind::AddrNotAvailable => MeasurementFailure::Unreachable,
