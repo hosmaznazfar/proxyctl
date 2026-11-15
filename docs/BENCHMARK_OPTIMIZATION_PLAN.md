@@ -1,7 +1,7 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: Stages 1–5 user-verified; Stage 6 focused offline tests user-verified, full offline verification pending; Stage 7 real-world runbook prepared for user execution
-> Last updated: 2026-11-14
+> Status: Stages 1–6 full offline verification user-reported passing; Stage 6 coverage audit remains; Stage 7 real-world validation is user-run
+> Last updated: 2026-11-15
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
 
@@ -168,7 +168,7 @@ Acceptance: offline tests cover exact byte counts, early EOF, upload body size, 
 
 Acceptance: offline service tests cover multi-node scope resolution and cancellation remainder semantics; local full-suite verification must confirm existing retention, reporting, sorting, and pruning behavior.
 
-### Stage 6 — offline performance and fault-injection tests (implementation added; verification pending)
+### Stage 6 — offline performance and fault-injection tests (full verification batch passed)
 - Added synthetic batch-scaling coverage at 1, 10, and 50 nodes for all three adapter formats. It checks one loopback listener and outbound per node, plus one explicit route per node for sing-box and Xray.
 - Strengthened failed-startup coverage: the fake managed child writes its PID, and the test verifies the child has been reaped after readiness timeout.
 - Added local fake-proxy HTTP 503/500 cases to verify download and upload reject unsuccessful server responses, while truncated downloads below the 16 KiB useful-byte threshold remain failures and sufficiently large partial transfers are scored.
@@ -176,8 +176,8 @@ Acceptance: offline service tests cover multi-node scope resolution and cancella
 - This is synthetic structural/fault coverage, not a real performance benchmark; it does not claim an elapsed-time or RSS improvement measurement.
 
 ### Stage 6 — remaining offline acceptance work
-- Run the complete local verification batch after the focused Stage 6 tests: formatting, all tests, Clippy with warnings denied, and release build.
-- Review test coverage against every boundary: config generation, native validation, startup, listener readiness, latency, download, upload, persistence, and cancellation. Add a deterministic local fault fixture for any uncovered boundary before calling this stage complete.
+- **Passed (user-reported, 2026-11-15):** `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo build --release`.
+- **Remaining audit:** review test coverage against every boundary: config generation, native validation, startup, listener readiness, latency, download, upload, persistence, and cancellation. Add a deterministic local fault fixture for any uncovered boundary before calling this stage complete.
 - The current 1/10/50-node adapter scaling test proves structural batch growth and routing isolation; it does not measure elapsed-time or peak-RSS improvement. Treat those as optional profiling measurements, not claims established by unit tests.
 - No real remote proxy nodes or public speed-test endpoints are used by this stage.
 
