@@ -569,3 +569,12 @@ Until implementation stages pass local verification, the existing scheduler rema
 
 
 - **Xray WebSocket Host schema correction:** Xray Trojan/VLESS/VMess WebSocket outbounds now serialize the imported WebSocket Host to the native `wsSettings.host` field, matching v2rayN's Xray configuration model. SNI remains independently mapped to `tlsSettings.serverName`, and certificate verification remains enabled by default. Regression coverage includes a Trojan + WS + TLS fixture with distinct Host and SNI values. Local Rust checks are pending user verification.
+
+
+### Benchmark local proxy protocol
+
+- [x] Make SOCKS5 the default local inbound for benchmark HTTP measurements.
+- [x] Add `proxyctl test --proxy-type socks5|http` and persist the selected protocol in run settings.
+- [x] Route latency, download, and upload through the selected local protocol.
+- [x] Generate protocol-matched sing-box and Xray benchmark inbounds; retain Mihomo mixed listener.
+- [ ] Verify SOCKS5 and HTTP modes with local fake-proxy tests and user-run native-core benchmarks.
