@@ -3,6 +3,7 @@
 use std::{
     collections::BTreeMap,
     path::Path,
+    io::Write,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc,
@@ -20,7 +21,7 @@ use probes::probe_chunks;
 use probes::{LatencyBatchEntry, execute_latency_batch, execute_tcp_ping_batch};
 use samples::{
     failed_sample, install_cancellation_handler, persist_sample, record_preflight,
-    status_for_failure, successful_sample,
+    status_for_failure, successful_sample, unix_timestamp,
 };
 
 use crate::{
@@ -31,7 +32,7 @@ use crate::{
     cores::{CoreId, adapters, core_binary_path, installer::current_version},
     database::{NodeDatabase, NodeRecord},
     domain::{
-        BenchmarkMetric, BenchmarkProxyType, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample,
+        BenchmarkMetric, BenchmarkProxyType, BenchmarkRun, BenchmarkRunStatus,
         BenchmarkSampleStatus, BenchmarkSettings,
     },
 };
