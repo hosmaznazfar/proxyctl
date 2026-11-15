@@ -94,21 +94,23 @@ The initial installer supports Linux x86_64. It selects stable assets from each 
 
 ## Shell completion
 
-During the first successful `proxyctl setup` in an interactive Fish session, Proxyctl offers to install Fish tab completion automatically. Accepting installs the completion file in the user's XDG Fish completion directory. Declining does not affect core installation.
+During the first successful `proxyctl setup` in an interactive Bash, Fish, or Zsh session, Proxyctl offers to install completion for the detected shell. The offer is remembered independently per shell; declining does not affect core installation.
 
-Install or refresh Fish completion later:
+Install or refresh completion later (the shell is detected automatically):
 
 ~~~sh
 proxyctl completions install
 ~~~
 
-The command detects the current shell. To explicitly select Fish:
+Or explicitly select a shell:
 
 ~~~sh
 proxyctl completions install --shell fish
+proxyctl completions install --shell bash
+proxyctl completions install --shell zsh
 ~~~
 
-Fish loads installed completion files automatically in new sessions. No manual `source` command is normally needed.
+Fish loads its completion file automatically. Bash installs into the standard per-user `bash-completion` directory and requires the `bash-completion` package to be installed and enabled. Zsh installs a `_proxyctl` function and adds its per-user completion directory plus `compinit` to `~/.zshrc`; restart Zsh (or source that file) afterward. No root privileges are used.
 
 Inspect command help:
 
