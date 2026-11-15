@@ -894,7 +894,7 @@ mod tests {
             MeasurementFailure::HttpStatus(502)
         );
         assert_eq!(
-            classify_download_request_error(ureq::Error::Protocol("truncated response".into())),
+            classify_download_request_error(ureq::Error::Protocol(httparse::Error::InvalidHeader)),
             MeasurementFailure::IncompleteResponse
         );
     }
