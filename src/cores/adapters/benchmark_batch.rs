@@ -18,7 +18,6 @@ pub struct BenchmarkTarget<'a> {
     pub node_id: u64,
     pub node: &'a ProxyNode,
     pub listen_port: u16,
-                proxy_type: BenchmarkProxyType::Socks5,
     pub proxy_type: BenchmarkProxyType,
 }
 
