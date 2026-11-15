@@ -48,8 +48,11 @@ enum ConfigAction {
 
 #[derive(Debug, Subcommand)]
 enum DisplayAction {
+    /// Select the active table profile: compact, normal, or full.
     Profile { name: String },
+    /// Add a supported column to a profile.
     AddField { profile: String, field: String },
+    /// Remove a column from a profile (at least one must remain).
     RemoveField { profile: String, field: String },
 }
 
@@ -62,14 +65,17 @@ enum Command {
     },
     /// Add one proxy URL to the local database.
     Add {
+        /// Proxy URL to parse and store (credentials are masked in normal output).
         url: String,
     },
     /// Import proxy URLs from a newline-delimited text file.
     Import {
+        /// Text file containing one proxy URL per line.
         file: PathBuf,
     },
     /// List stored nodes, with optional filters and benchmark sorting.
     List {
+        /// Include soft-deleted nodes in the listing.
         #[arg(long)]
         include_deleted: bool,
         /// Filter by protocol: vless, vmess, trojan, shadowsocks, or hysteria2.
@@ -99,20 +105,25 @@ enum Command {
     },
     /// Soft-delete selected nodes without removing their benchmark history.
     Remove {
+        /// Node numbers, ranges (for example 2..5), or all.
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
+        /// Skip the confirmation prompt when removing all nodes.
         #[arg(long, short = 'y')]
         yes: bool,
     },
     /// Restore previously soft-deleted nodes.
     Restore {
+        /// Deleted node numbers, ranges, or all.
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
     },
     /// Validate one or more stored nodes' generated configs without starting a proxy core.
     Check {
+        /// Node numbers, ranges, or all.
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
+        /// Validate only with this managed core; otherwise check all supported cores.
         #[arg(long, value_name = "CORE")]
         core: Option<String>,
     },
@@ -246,12 +257,16 @@ enum Command {
     /// Check for and install proxyctl and managed-core updates.
     #[command(group(ArgGroup::new("update_target").args(["app", "cores", "core"]).multiple(false)))]
     Update {
+        /// Report available versions without downloading or installing files.
         #[arg(long)]
         check: bool,
+        /// Update Proxyctl only.
         #[arg(long)]
         app: bool,
+        /// Update all installed managed cores.
         #[arg(long)]
         cores: bool,
+        /// Update one selected managed core.
         #[arg(long, value_name = "CORE")]
         core: Option<String>,
         /// Include prereleases instead of selecting stable releases only.
@@ -710,7 +725,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 },
             )?;
         }
-        Command::Cores
+        Command::Completions { .. }
+        | Command::Cores
         | Command::Setup { .. }
         | Command::Update { .. }
         | Command::Use { .. }
