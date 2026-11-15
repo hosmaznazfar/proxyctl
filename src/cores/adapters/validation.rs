@@ -1,7 +1,66 @@
 //! Secure, validation-only execution of generated core configurations.
-use std::{io::Write, path::Path};
+use std::{
+    io::{Read, Seek, SeekFrom, Write},
+    path::Path,
+    process::{Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 use anyhow::Context;
+
+const VALIDATOR_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_VALIDATOR_OUTPUT: u64 = 64 * 1024;
+
+/// Run a native config validator with a hard deadline and bounded captured output.
+/// Output is spooled to temporary files so a noisy child cannot block on a full pipe.
+pub(crate) fn run_validator(
+    mut command: Command,
+    description: &str,
+) -> anyhow::Result<Output> {
+    let mut stdout = tempfile::tempfile().context("could not create validator stdout spool")?;
+    let mut stderr = tempfile::tempfile().context("could not create validator stderr spool")?;
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout.try_clone()?))
+        .stderr(Stdio::from(stderr.try_clone()?));
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("{description}: could not start validator"))?;
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < VALIDATOR_TIMEOUT => {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                anyhow::bail!("{description}: validator exceeded the 10-second deadline and was terminated");
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).with_context(|| format!("{description}: could not inspect validator"));
+            }
+        }
+    };
+    let stdout = read_validator_output(&mut stdout)?;
+    let stderr = read_validator_output(&mut stderr)?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn read_validator_output(file: &mut std::fs::File) -> anyhow::Result<Vec<u8>> {
+    file.seek(SeekFrom::Start(0))?;
+    let mut output = Vec::new();
+    file.take(MAX_VALIDATOR_OUTPUT).read_to_end(&mut output)?;
+    Ok(output)
+}
 
 use crate::{
     cores::{CoreId, adapters},
