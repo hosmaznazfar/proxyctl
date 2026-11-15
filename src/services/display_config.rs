@@ -309,8 +309,10 @@ mod tests {
     }
     #[test]
     fn profile_must_keep_at_least_one_field() {
-        let mut config = DisplayConfig::default();
-        config.active_profile = DisplayProfile::Compact;
+        let mut config = DisplayConfig {
+            active_profile: DisplayProfile::Compact,
+            ..DisplayConfig::default()
+        };
         let compact_fields = config.profiles[&DisplayProfile::Compact].clone();
         for field in compact_fields.into_iter().skip(1) {
             remove_field(&mut config, DisplayProfile::Compact, field).unwrap();
