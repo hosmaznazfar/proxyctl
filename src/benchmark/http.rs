@@ -708,14 +708,16 @@ mod tests {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let server = thread::spawn(move || {
-            let (stream, _) = listener.accept().unwrap();
-            let mut reader = BufReader::new(stream);
-            let _ = read_fake_request(&mut reader);
-            let stream = reader.get_mut();
-            stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndata")
-                .unwrap();
-            stream.flush().unwrap();
+            for _ in 0..DOWNLOAD_ATTEMPTS {
+                let (stream, _) = listener.accept().unwrap();
+                let mut reader = BufReader::new(stream);
+                let _ = read_fake_request(&mut reader);
+                let stream = reader.get_mut();
+                stream
+                    .write_all(b"HTTP/1.1 200 OK\\r\\nContent-Length: 4\\r\\nConnection: close\\r\\n\\r\\ndata")
+                    .unwrap();
+                stream.flush().unwrap();
+            }
         });
         let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
         let agent: Agent = Agent::config_builder()
