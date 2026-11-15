@@ -1,7 +1,7 @@
 # Benchmark design
 
-> Status: Stages 1–5 user-verified; Stage 6 focused offline tests user-verified, full offline verification pending; real-world runbook prepared for user execution
-> Last updated: 2026-11-14
+> Status: Stages 1–6 implementation and offline verification complete (user-reported); Stage 7 real-world validation runbook ready for user execution
+> Last updated: 2026-11-15
 
 ## 1. Goals and scope
 
