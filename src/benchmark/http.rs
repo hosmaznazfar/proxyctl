@@ -480,6 +480,7 @@ mod tests {
         };
 
         use base64::Engine as _;
+        use crate::benchmark::http_test_cert::{CERTIFICATE_DER_BASE64, PRIVATE_KEY_DER_BASE64};
         use rustls::{
             ServerConfig, ServerConnection,
             pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
@@ -487,13 +488,11 @@ mod tests {
 
         // A test-only self-signed localhost identity. The client intentionally does not
         // trust it: this verifies the real TLS handshake and safe TLS failure mapping.
-        const CERTIFICATE: &str = "MIIDHzCCAgegAwIBAgIUV7lBAT3/bcam3vsEq18GIeKrE/UwDQYJKoZIhvcNAQELBQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI2MTExNTE2MzE0OFoXDTM2MTExMjE2MzE0OFowFDESMBAGA1UEAwwJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq6HdPw+VJn+TMnhrVJLwky2VXcbtiUrd3lJXBEFMXJ5/Aflvd4di/HrsLoJDndkcLQFDaMCDuOMTxKQBTijGwFAvGIs77UDlE2vjCfFklVMKAKCnvsbvjCLBMAdbvyn+bTuEwVyayW/AlvNk9Jp/2u5g5luWg/g/8/7Yi9MHEFFzex+rejJXk6WVTgypJ16azcbdBK+xcgthjDVcWUZMrVi30dNKuyUJOZ9Q5PkDm7h3CeRaXWcGjB/PPs6WksjljAsJ1cCCp08d7k7nJBLDYLFEYvov5SXxH5q3mbBeF3Yk9QPZhQpVZ0JmFcBnPC5ZD89wfWKN9+bTOoBFw1j3IQIDAQABo2kwZzAdBgNVHQ4EFgQUwUthclM8FqglK4syFH8cCzvAa74wHwYDVR0jBBgwFoAUwUthclM8FqglK4syFH8cCzvAa74wDwYDVR0TAQH/BAUwAwEB/zAUBgNVHREEDTALgglsb2NhbGhvc3QwDQYJKoZIhvcNAQELBQADggEBAE2S9ZviKmIFKDVokUCU6H5vp/dSsXkgnICphCxdXIbikmz5Zw7O4fpWzp0cMfJfXuZdSNSBfdv0hCrKjDhK03zlR7eTGUK6Npbu+JGCfLZBclUxgO48wK5bQ3OVT9WuppeMLFDs9beyth+/TClrZdpveNu+MRQrMEpBCv/Fz6bp0n/gwHVVZPHTBpHdfy/MMfxjAoUY2clTkdA+KBdkXkc4+oxTHJjFYO1yvgosGAaahs0eUjAotPOAuiMW0GHLW2NYIH2ac1wTt45sgXiEuI/KkMZ21To9HjMuBwJrMYkB6POuZNa+QSVEKW6oHNjHkkbJcuHkE7ogOIjiuURoK/Y=";
-        const PRIVATE_KEY: &str = "MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCrod0/D5Umf5MyeGtUkvCTLZVdxu2JSt3eUlcEQUxcnn8B+W93h2L8euwugkOd2RwtAUNowIO44xPEpAFOKMbAUC8YizvtQOUTa+MJ8WSVUwoAoKe+xu+MIsEwB1u/Kf5tO4TBXJrJb8CW82T0mn/a7mDmW5aD+D/z/tiL0wcQUXN7H6t6MleTpZVODKknXprNxt0Er7FyC2GMNVxZRkytWLfR00q7JQk5n1Dk+QObuHcJ5FpdZwaMH88+zpaSyOWMCwnVwIKnTx3uTuckEsNgsURi+i/lJfEfmreZsF4XdiT1A9mFClVnQmYVwGc8LlkPz3B9Yo335tM6gEXDWPchAgMBAAECggEACOp5MFfyYxQYhPQtezDA75xcGImHeGzbtrtnStDLkzomlecry7VMRppqH4Zj1dTb+liI9G2fyiB9u+bbLIDAxmfD8o31GH+ZBtfBbRhNpdYw/FRcMnRqKEj76S9QrE8VqP4BCPxzDAjSo+TT90L5Zlmgzgau/H8Ob3HrNORLByVmGScqFp8jNj3noWMzNqhd/pWPyXEoQlqCj/oc1EXGTcWR52q9Srjf1l+ZqlCbhCX//pjW/hf9uuKi1Ktt+gmOer0uPgNIQ7uOpb/RrL12jTqqGTCPHHaUqJbp8ojtf2xg9SR71p8uWpqc5zdbEsJ6Z1vw4Lnuhs6w+uPh4xELYQKBgQDue94LM6uTGyyaFApJUtOENoNhziCpGqmkGS82SFSD0huNSamsE9PNTtsLaOpKRqmQ08SvP1NIH6DM7Vhdq4TA2Uf9Qeu7qGqoIM6ZwtfC9wkn/PQxWBhL0TKJ0qz7DQuJ8u6NVoPH3jSB+0FiuIPkjQKtrDhq2kqhvK9gfjtH6QKBgQC4PQJLSLpJzLgniCYybGSKIYrQJSfGeFWaOLwr+kP3b5t8CzdKGaNhMefMRvy6QMEjJjuFczLZna73itpyF2NirIvbktoOxI4Icl4rbMzR0LHS8cK/bGeIHjOnEfQ7kyEmOrWJ6JfZdeHTktNdPDojw6EXvJz6V5s7VfkkNjHqeQKBgAutYwT3ZbpRRVDSFGLcvGCn7qz2U+ET3iSb2xT0W7cMra6wYa98VQ2jg9Q+MeKrLRhbVjEij6hjbBM8t+v2PwzWVtEOzkUlDPvoh1U+FiSExh0AJNDZuG7V8nyPJUsxq1P44jdnehJqTfXjYKM91690PCJW4XhR8f+TZp7571spAoGASvMezMugZUdwHzzm9RpdaEgu9XA4Fyh7AotUGbvtDGsN4M+bRXzalz67IsI6K/cN2yPBkQ+FPzxDopaNOV7EYq75EnFSXjGd6lfEcXwIcs6omL0bUc5i6+AFeVD3f4jiMnAtzBWgOKoZHX4cmFBZApWiIkrrvXgIQYI/IXkeo1kCgYB66izOSAfHd/Gfr0d86SMK8Ogz6e/HBowtCmWmmgoN9Iy/z6Haauh5BHLtoMvOddSb7jBF2VO52/5G7bU5Kvgcy2w0TUzRJyIRJIsc3xUZ1C1u0nlEQsPs6+uRUUEn4zuC8XLSWw3aNUp8sHKucc+yurtPEV4lEvP2DemYIWydUA==";
         let certificate = CertificateDer::from(
-            base64::engine::general_purpose::STANDARD.decode(CERTIFICATE).unwrap(),
+            base64::engine::general_purpose::STANDARD.decode(CERTIFICATE_DER_BASE64).unwrap(),
         );
         let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            base64::engine::general_purpose::STANDARD.decode(PRIVATE_KEY).unwrap(),
+            base64::engine::general_purpose::STANDARD.decode(PRIVATE_KEY_DER_BASE64).unwrap(),
         ));
         let server_config = ServerConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
