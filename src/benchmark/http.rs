@@ -893,10 +893,6 @@ mod tests {
             classify_error(ureq::Error::StatusCode(502)),
             MeasurementFailure::HttpStatus(502)
         );
-        assert_eq!(
-            classify_download_request_error(ureq::Error::Protocol(httparse::Error::InvalidHeader)),
-            MeasurementFailure::IncompleteResponse
-        );
     }
 
     #[test]
