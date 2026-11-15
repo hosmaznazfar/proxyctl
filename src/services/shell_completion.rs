@@ -37,6 +37,16 @@ pub fn detect_current() -> Option<Shell> {
     if std::env::var_os("BASH_VERSION").is_some() {
         return Some(Shell::Bash);
     }
+    #[cfg(target_os = "linux")]
+    {
+        // Prefer the actual parent shell over $SHELL, which may name the login shell.
+        let parent = unsafe { libc::getppid() };
+        if let Ok(name) = fs::read_to_string(format!("/proc/{parent}/comm")) {
+            if let Ok(shell) = Shell::parse(name.trim()) {
+                return Some(shell);
+            }
+        }
+    }
     std::env::var_os("SHELL")
         .and_then(|value| PathBuf::from(value).file_name().map(|name| name.to_owned()))
         .and_then(|name| name.to_str().map(str::to_owned))
@@ -92,8 +102,18 @@ pub fn mark_first_setup_prompted() -> anyhow::Result<()> {
     let marker = prompt_marker_path()?;
     let directory = marker.parent().context("prompt marker has no parent")?;
     fs::create_dir_all(directory)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(directory, fs::Permissions::from_mode(0o700))?;
+    }
     if !marker.exists() {
         fs::write(&marker, b"prompted\n")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&marker, fs::Permissions::from_mode(0o600))?;
+        }
     }
     Ok(())
 }
@@ -111,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn fish_completion_path_uses_xdg_config_home_when_set() {
+    fn fish_completion_path_uses_the_expected_autoload_suffix() {
         // Path selection is exercised by the integration path in install_fish; this test
         // verifies the stable destination suffix without mutating process environment.
         let path = fish_completion_path();
