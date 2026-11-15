@@ -190,7 +190,14 @@ mod tests {
         marker: &Path,
     ) {
         let script = format!(
-            "#!/bin/sh\\nprintf '%s\\n' \"$@\" > '{}'\\nfor arg in \"$@\"; do config=\"$arg\"; done\\n[ -s \"$config\" ] || exit 20\\n[ \"$(stat -c '%a' \"$config\")\" = 600 ] || exit 21\\nprintf '%s' \"$config\" > '{}'\\nexit 0\\n",
+            r#"#!/bin/sh
+printf '%s\\n' "$@" > '{}'
+for arg in "$@"; do config="$arg"; done
+[ -s "$config" ] || exit 20
+[ "$(stat -c '%a' "$config")" = 600 ] || exit 21
+printf '%s' "$config" > '{}'
+exit 0
+"#,
             arguments.display(),
             marker.display()
         );
