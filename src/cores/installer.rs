@@ -54,10 +54,13 @@ pub fn install_or_update(
 }
 
 pub fn current_version(core: CoreId, path: &std::path::Path) -> anyhow::Result<String> {
-    let output = std::process::Command::new(path)
-        .arg(core.version_argument())
-        .output()
-        .with_context(|| format!("could not query installed {core} version"))?;
+    let mut command = std::process::Command::new(path);
+    command.arg(core.version_argument());
+    let output = crate::process::run_bounded_command(
+        command,
+        &format!("could not query installed {core} version"),
+        std::time::Duration::from_secs(10),
+    )?;
     ensure!(
         output.status.success(),
         "installed {core} version command failed"
