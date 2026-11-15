@@ -728,6 +728,7 @@ mod tests {
 
         let measurement = client.download(64 * 1024, |_| {}).unwrap();
         assert_eq!(measurement.transferred_bytes, Some(32 * 1024));
+        assert!(measurement.partial);
         assert!(measurement.value > 0.0);
         server.join().unwrap();
     }
