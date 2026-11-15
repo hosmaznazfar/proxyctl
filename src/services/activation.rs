@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     os::fd::AsRawFd,
     path::{Path, PathBuf},
     process::{Command, Stdio},
