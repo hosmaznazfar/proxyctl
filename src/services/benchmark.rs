@@ -2,8 +2,8 @@
 
 use std::{
     collections::BTreeMap,
-    path::Path,
     io::Write,
+    path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc,
