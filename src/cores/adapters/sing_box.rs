@@ -182,12 +182,9 @@ impl CoreAdapter for SingBoxAdapter {
     }
 
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
-        let output = Command::new(executable)
-            .arg("check")
-            .arg("-c")
-            .arg(config)
-            .output()
-            .context("could not run sing-box config validation")?;
+        let mut command = Command::new(executable);
+        command.arg("check").arg("-c").arg(config);
+        let output = super::validation::run_validator(command, "could not run sing-box config validation")?;
         ensure!(
             output.status.success(),
             "sing-box rejected the generated configuration (exit status {:?}; {})",
