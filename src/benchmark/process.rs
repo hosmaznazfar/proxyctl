@@ -116,9 +116,8 @@ impl ManagedCoreProcess {
             }
             let attempts_left = u32::try_from(STARTUP_ATTEMPTS - attempt).unwrap_or(1);
             let attempt_timeout = remaining / attempts_left;
-            let generated = adapter
-                .generate_benchmark_batch_config(targets)
-                .with_context(|| format!("could not generate benchmark batch config for {core}"))?;
+            let generated = generate_benchmark_runtime_config(core, targets)
+                .with_context(|| format!("could not generate benchmark config for {core}"))?;
             let mut config = tempfile::Builder::new()
                 .prefix("proxyctl-benchmark-")
                 .suffix(".json")
@@ -219,6 +218,26 @@ pub(crate) fn reserve_loopback_port() -> anyhow::Result<u16> {
         .port();
     drop(listener);
     Ok(port)
+}
+
+/// Preserve each adapter's established single-node HTTP benchmark configuration.
+///
+/// A one-node run still uses the batch generator by default in SOCKS5 mode, but the
+/// legacy single-node HTTP configuration is retained as a control path. This lets us
+/// distinguish adapter batch-routing regressions from failures in the shared HTTP client.
+fn generate_benchmark_runtime_config(
+    core: CoreId,
+    targets: &[adapters::BenchmarkTarget<'_>],
+) -> anyhow::Result<adapters::GeneratedConfig> {
+    let adapter = adapters::adapter(core);
+    if targets.len() == 1
+        && targets[0].proxy_type == BenchmarkProxyType::Http
+    {
+        let target = &targets[0];
+        adapter.generate_benchmark_config(target.node, target.listen_port)
+    } else {
+        adapter.generate_benchmark_batch_config(targets)
+    }
 }
 
 fn append_core_arguments(core: CoreId, command: &mut Command, config: &Path) {
@@ -581,6 +600,68 @@ exec sleep 30
         let contents = fs::read_to_string(log.path()).unwrap();
         assert!(contents.contains("stdout diagnostic"));
         assert!(contents.contains("stderr diagnostic"));
+    }
+
+    #[test]
+    fn one_node_http_run_uses_the_adapter_single_node_config() {
+        let node = crate::parser::parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443",
+        )
+        .unwrap();
+        let target = adapters::BenchmarkTarget {
+            node_id: 7,
+            node: &node,
+            listen_port: 43137,
+            proxy_type: BenchmarkProxyType::Http,
+        };
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = generate_benchmark_runtime_config(core, &[target]).unwrap();
+            let document: serde_json::Value =
+                serde_json::from_slice(&generated.content).unwrap();
+            match core {
+                CoreId::SingBox => {
+                    assert_eq!(document["inbounds"][0]["type"], "http");
+                    assert_eq!(document["inbounds"][0]["listen_port"], 43137);
+                    assert!(document.get("route").is_some());
+                }
+                CoreId::Xray => {
+                    assert_eq!(document["inbounds"][0]["protocol"], "http");
+                    assert_eq!(document["inbounds"][0]["port"], 43137);
+                    assert!(document.get("routing").is_none());
+                }
+                CoreId::Mihomo => {
+                    assert_eq!(document["port"], 43137);
+                    assert_eq!(document["bind-address"], "127.0.0.1");
+                    assert!(document.get("listeners").is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn one_node_socks5_run_keeps_the_batch_configuration() {
+        let node = crate::parser::parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443",
+        )
+        .unwrap();
+        let target = adapters::BenchmarkTarget {
+            node_id: 7,
+            node: &node,
+            listen_port: 43137,
+            proxy_type: BenchmarkProxyType::Socks5,
+        };
+
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = generate_benchmark_runtime_config(core, &[target]).unwrap();
+            let document: serde_json::Value =
+                serde_json::from_slice(&generated.content).unwrap();
+            match core {
+                CoreId::SingBox => assert_eq!(document["inbounds"][0]["type"], "socks"),
+                CoreId::Xray => assert_eq!(document["inbounds"][0]["protocol"], "socks"),
+                CoreId::Mihomo => assert!(document.get("listeners").is_some()),
+            }
+        }
     }
 
     #[test]
