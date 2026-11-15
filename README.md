@@ -40,7 +40,7 @@ Imported source files are read-only. Credentials are masked in normal output.
 
 ### Configurable benchmark result tables
 
-`proxyctl show` and `proxyctl report` use the same persistent table profile and column selection. `show` displays the latest results; `report` supports latest, history, and comparison views in the same table layout. The default profile is **compact** and shows one row per node/core with node number, core, latency, download, and upload. `show --details` switches to a separate connection-metadata table with protocol, server, port, name, active/deleted status, whether identity/secret values exist (masked), and option keys (values hidden).
+`proxyctl show` and `proxyctl report` use the same persistent table profile and column selection. `show` displays the latest results; `report` supports latest, history, and comparison views in the same table layout. The default profile is **normal** and shows node, server, protocol, core, latency, download, upload, and status. Compact shows node, core, latency, download, and upload. `show --details` switches to a separate connection-metadata table with protocol, server, port, name, active/deleted status, whether identity/secret values exist (masked), and option keys (values hidden).
 
 ~~~sh
 proxyctl show 1..10
@@ -66,8 +66,8 @@ proxyctl config display remove-field full failures
 ~~~
 
 Built-in profiles:
-- **compact** (default): node, core, latency, download, upload.
-- **normal**: node, server, protocol, core, latency, download, upload, status.
+- **compact**: node, core, latency, download, upload.
+- **normal** (default): node, server, protocol, core, latency, download, upload, status.
 - **full**: expanded connection, core-version, direct TCP ping, sample, failure, run, and test-time context.
 
 Available fields: `node`, `name`, `server`, `port`, `protocol`, `core`, `version`, `latency`, `tcp-ping`, `download`, `upload`, `status`, `samples`, `failures`, `run`, and `tested`. The configuration is stored privately and persists across sessions. It applies consistently to `show`, `report`, `report --history`, and `report --compare`. In history mode each row represents one node/core/run; in comparison mode each row represents the latest completed node/core result. `--verbose` expands core version metadata without changing the selected columns. `not-run` means a metric was not attempted; `unavailable` means a preflight or runtime availability check explicitly failed; `skipped` means a metric was deliberately not attempted (for example, throughput blocked by the latency gate). These states are never merged.
