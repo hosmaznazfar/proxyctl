@@ -205,10 +205,7 @@ impl BenchmarkHttpClient {
                 Ok(measurement) => return Ok(measurement),
                 Err(failure) => {
                     last_failure = failure;
-                    if !matches!(
-                        failure,
-                        MeasurementFailure::IncompleteResponse | MeasurementFailure::ReadFailed
-                    ) {
+                    if !is_retryable_download_failure(failure) {
                         return best_partial.ok_or(failure);
                     }
                 }
@@ -320,6 +317,15 @@ impl BenchmarkHttpClient {
             transferred_bytes: Some(bytes),
         })
     }
+}
+
+fn is_retryable_download_failure(failure: MeasurementFailure) -> bool {
+    matches!(
+        failure,
+        MeasurementFailure::Timeout
+            | MeasurementFailure::IncompleteResponse
+            | MeasurementFailure::ReadFailed
+    )
 }
 
 fn partial_download_measurement(
@@ -893,6 +899,16 @@ mod tests {
             classify_error(ureq::Error::StatusCode(502)),
             MeasurementFailure::HttpStatus(502)
         );
+    }
+
+    #[test]
+    fn retries_only_transient_download_failures() {
+        assert!(is_retryable_download_failure(MeasurementFailure::Timeout));
+        assert!(is_retryable_download_failure(MeasurementFailure::IncompleteResponse));
+        assert!(is_retryable_download_failure(MeasurementFailure::ReadFailed));
+        assert!(!is_retryable_download_failure(MeasurementFailure::HttpStatus(503)));
+        assert!(!is_retryable_download_failure(MeasurementFailure::TlsFailed));
+        assert!(!is_retryable_download_failure(MeasurementFailure::ProxyTunnelFailed));
     }
 
     #[test]
