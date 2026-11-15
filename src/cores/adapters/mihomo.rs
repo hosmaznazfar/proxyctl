@@ -251,6 +251,41 @@ impl CoreAdapter for MihomoAdapter {
         }))
     }
 
+    fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
+        super::benchmark_batch::generate_mihomo(self, targets)
+    }
+
+    fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_config(node)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["mixed-port"] = json!(listen_port);
+        document["bind-address"] = json!("127.0.0.1");
+        document["allow-lan"] = json!(false);
+        json_config(document)
+    }
+
+    fn generate_tun_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_activation_config(node, listen_port)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["ipv6"] = json!(true);
+        document["tun"] = json!({
+            "enable": true, "device": "tun-proxyctl", "stack": "system", "mtu": 1500,
+            "inet4-address": ["198.18.0.1/30"], "inet6-address": ["fdfe:dcba:9876::1/126"],
+            "auto-route": false, "auto-detect-interface": true, "auto-redirect": false,
+            "strict-route": false, "dns-mode": "disabled", "dns-hijack": []
+        });
+        json_config(document)
+    }
+
+    fn generate_benchmark_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_config(node)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["port"] = json!(listen_port);
+        document["bind-address"] = json!("127.0.0.1");
+        document["allow-lan"] = json!(false);
+        json_config(document)
+    }
+
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let mut command = Command::new(executable);
         command.arg("-t").arg("-f").arg(config);
