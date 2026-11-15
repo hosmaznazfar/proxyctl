@@ -93,7 +93,10 @@ fn generate_sing_box<A: CoreAdapter + ?Sized>(
         outbound["tag"] = json!(outbound_tag);
         outbounds.push(outbound);
         inbounds.push(json!({
-            "type": match target.proxy_type { BenchmarkProxyType::Socks5 => "socks", BenchmarkProxyType::Http => "http" },
+            "type": match target.proxy_type {
+                BenchmarkProxyType::Socks5 => "socks",
+                BenchmarkProxyType::Http => "http",
+            },
             "tag": inbound_tag,
             "listen": "127.0.0.1",
             "listen_port": target.listen_port
@@ -141,7 +144,10 @@ fn generate_xray<A: CoreAdapter + ?Sized>(
         inbounds.push(json!({
             "listen": "127.0.0.1",
             "port": target.listen_port,
-            "protocol": match target.proxy_type { BenchmarkProxyType::Socks5 => "socks", BenchmarkProxyType::Http => "http" },
+            "protocol": match target.proxy_type {
+                BenchmarkProxyType::Socks5 => "socks",
+                BenchmarkProxyType::Http => "http",
+            },
             "settings": {},
             "tag": inbound_tag
         }));
@@ -300,11 +306,19 @@ mod tests {
                 match core {
                     CoreId::SingBox => assert_eq!(
                         document["inbounds"][0]["type"],
-                        if proxy_type == BenchmarkProxyType::Socks5 { "socks" } else { "http" }
+                        if proxy_type == BenchmarkProxyType::Socks5 {
+                            "socks"
+                        } else {
+                            "http"
+                        }
                     ),
                     CoreId::Xray => assert_eq!(
                         document["inbounds"][0]["protocol"],
-                        if proxy_type == BenchmarkProxyType::Socks5 { "socks" } else { "http" }
+                        if proxy_type == BenchmarkProxyType::Socks5 {
+                            "socks"
+                        } else {
+                            "http"
+                        }
                     ),
                     CoreId::Mihomo => unreachable!(),
                 }
