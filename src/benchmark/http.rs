@@ -821,7 +821,7 @@ mod tests {
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
             stream.write_all(
-                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\nX",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\nX",
             ).unwrap();
             stream.flush().unwrap();
             // Keep the first response open beyond the client's global timeout.
@@ -834,7 +834,7 @@ mod tests {
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
             stream.write_all(
-                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\n",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n",
             ).unwrap();
             stream.write_all(&vec![0x44; 32 * 1024]).unwrap();
             stream.flush().unwrap();
