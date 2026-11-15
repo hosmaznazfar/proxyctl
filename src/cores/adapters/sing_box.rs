@@ -12,7 +12,7 @@ use super::{
     CoreAdapter, json_config,
     shared::{
         Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
-        shadowsocks_plugin, tls_options, validate_for_core,
+        shadowsocks_plugin, tls_options, validate_for_core, SING_BOX,
     },
     summarize_validation_failure,
 };
@@ -25,7 +25,7 @@ impl CoreAdapter for SingBoxAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_for_core(CoreId::SingBox, node) {
+        match validate_for_core(&SING_BOX, node) {
             Ok(()) => Compatibility::supported(),
             Err(compatibility) => compatibility,
         }
