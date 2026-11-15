@@ -158,7 +158,7 @@ Acceptance: the hard worker cap has an offline unit test; deterministic fake-pro
 
 Acceptance: offline tests cover exact byte counts, early EOF, upload body size, progress-rate calculation, legacy settings deserialization, and CLI bounds. Additional controlled tests for status errors, timeout, progress throttling, and cancellation remain part of verification. No external endpoint is contacted.
 
-### Stage 5 — orchestration, persistence, and reporting integration (implementation committed; awaiting local verification)
+### Stage 5 — orchestration, persistence, and reporting integration (implemented and locally verified)
 - Run the new core-batch scheduler through the existing benchmark service.
 - Selected multi-node ID/range selections now use one consistent run ID; target identity remains per node/core.
 - Preserve run/sample retention, latest/history/compare reports, sorting, and pruning semantics.
@@ -166,7 +166,7 @@ Acceptance: offline tests cover exact byte counts, early EOF, upload body size, 
 - On handled cancellation, persist explicit cancelled samples for scheduled work not reached, without replacing preflight or latency-gate outcomes; persist a run summary with success/failure counts.
 - Preserve metric-only modes and the full-mode latency gate.
 
-Acceptance: offline service tests cover multi-node scope resolution and cancellation remainder semantics; local full-suite verification must confirm existing retention, reporting, sorting, and pruning behavior.
+Acceptance: offline service tests cover multi-node scope resolution and cancellation remainder semantics; the user confirmed the focused tests and complete local verification batch pass, including retention, reporting, sorting, and pruning coverage.
 
 ### Stage 6 — offline performance and fault-injection tests (full verification batch passed)
 - Added synthetic batch-scaling coverage at 1, 10, and 50 nodes for all three adapter formats. It checks one loopback listener and outbound per node, plus one explicit route per node for sing-box and Xray.
