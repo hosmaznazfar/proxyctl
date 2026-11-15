@@ -508,6 +508,7 @@ mod tests {
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
             proxy_port,
+            proxy_type: BenchmarkProxyType::Http,
             timeout: Duration::from_secs(2),
         };
 
@@ -562,6 +563,7 @@ mod tests {
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
             proxy_port: port,
+            proxy_type: BenchmarkProxyType::Http,
             timeout: Duration::from_secs(2),
         };
 
@@ -597,6 +599,7 @@ mod tests {
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
             proxy_port: port,
+            proxy_type: BenchmarkProxyType::Http,
             timeout: Duration::from_secs(2),
         };
         assert_eq!(
@@ -635,6 +638,7 @@ mod tests {
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
             proxy_port: port,
+            proxy_type: BenchmarkProxyType::Http,
             timeout: Duration::from_secs(2),
         };
 
@@ -682,6 +686,7 @@ mod tests {
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
             proxy_port: port,
+            proxy_type: BenchmarkProxyType::Http,
             timeout: Duration::from_secs(2),
         };
 
