@@ -11,8 +11,8 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string, reality_options,
-        shadowsocks_plugin, tls_options, validate_for_core,
+        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string,
+        reality_options, shadowsocks_plugin, tls_options, validate_for_core,
     },
     summarize_validation_failure,
 };
@@ -206,7 +206,10 @@ impl CoreAdapter for SingBoxAdapter {
         json_config(json!({ "outbounds": [outbound] }))
     }
 
-    fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
+    fn generate_benchmark_batch_config(
+        &self,
+        targets: &[super::BenchmarkTarget<'_>],
+    ) -> anyhow::Result<GeneratedConfig> {
         use serde_json::Value;
         super::benchmark_batch::validate_targets(self, targets)?;
         let mut outbounds = Vec::with_capacity(targets.len());
@@ -214,9 +217,16 @@ impl CoreAdapter for SingBoxAdapter {
         let mut rules = Vec::with_capacity(targets.len());
         for target in targets {
             let mut document = super::benchmark_batch::node_config(self, target.node)?;
-            let node_outbounds = document.get_mut("outbounds").and_then(Value::as_array_mut)
-                .ok_or_else(|| anyhow::anyhow!("sing-box node config must contain an outbound array"))?;
-            ensure!(node_outbounds.len() == 1, "sing-box node config must contain exactly one proxy outbound");
+            let node_outbounds = document
+                .get_mut("outbounds")
+                .and_then(Value::as_array_mut)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("sing-box node config must contain an outbound array")
+                })?;
+            ensure!(
+                node_outbounds.len() == 1,
+                "sing-box node config must contain exactly one proxy outbound"
+            );
             let mut outbound = node_outbounds.remove(0);
             let outbound_tag = format!("proxyctl-benchmark-out-{}", target.node_id);
             let inbound_tag = format!("proxyctl-benchmark-in-{}", target.node_id);
@@ -232,12 +242,18 @@ impl CoreAdapter for SingBoxAdapter {
             rules.push(json!({"inbound": [inbound_tag], "outbound": outbound_tag}));
         }
         let final_outbound = format!("proxyctl-benchmark-out-{}", targets[0].node_id);
-        json_config(json!({"inbounds": inbounds, "outbounds": outbounds, "route": {
-            "rules": rules, "final": final_outbound
-        }}))
+        json_config(
+            json!({"inbounds": inbounds, "outbounds": outbounds, "route": {
+                "rules": rules, "final": final_outbound
+            }}),
+        )
     }
 
-    fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_activation_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_config(node)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         document["inbounds"] = json!([{
@@ -247,19 +263,30 @@ impl CoreAdapter for SingBoxAdapter {
         json_config(document)
     }
 
-    fn generate_tun_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_tun_activation_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
-        document["inbounds"].as_array_mut().ok_or_else(|| anyhow::anyhow!("sing-box activation inbounds must be an array"))?.push(json!({
-            "type": "tun", "tag": "tun-in", "interface_name": "tun-proxyctl",
-            "address": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"], "mtu": 1500,
-            "auto_route": false, "strict_route": false, "dns_mode": "disabled"
-        }));
+        document["inbounds"]
+            .as_array_mut()
+            .ok_or_else(|| anyhow::anyhow!("sing-box activation inbounds must be an array"))?
+            .push(json!({
+                "type": "tun", "tag": "tun-in", "interface_name": "tun-proxyctl",
+                "address": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"], "mtu": 1500,
+                "auto_route": false, "strict_route": false, "dns_mode": "disabled"
+            }));
         document["route"] = json!({"final": "proxy", "auto_detect_interface": true});
         json_config(document)
     }
 
-    fn generate_benchmark_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_benchmark_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_config(node)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         document["inbounds"] = json!([{
@@ -272,7 +299,8 @@ impl CoreAdapter for SingBoxAdapter {
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let mut command = Command::new(executable);
         command.arg("check").arg("-c").arg(config);
-        let output = super::validation::run_validator(command, "could not run sing-box config validation")?;
+        let output =
+            super::validation::run_validator(command, "could not run sing-box config validation")?;
         ensure!(
             output.status.success(),
             "sing-box rejected the generated configuration (exit status {:?}; {})",
@@ -283,7 +311,6 @@ impl CoreAdapter for SingBoxAdapter {
     }
 }
 
-
 #[cfg(test)]
 mod config_contract_tests {
     use super::*;
@@ -292,20 +319,42 @@ mod config_contract_tests {
     #[test]
     fn sing_box_activation_benchmark_and_tun_options_stay_core_native() {
         assert!(CAPABILITIES.hysteria2 && CAPABILITIES.reality_vless);
-        assert!(!CAPABILITIES.reality_requires_tcp_grpc_xhttp && CAPABILITIES.reality_disallows_legacy_transport);
+        assert!(
+            !CAPABILITIES.reality_requires_tcp_grpc_xhttp
+                && CAPABILITIES.reality_disallows_legacy_transport
+        );
         assert!(!CAPABILITIES.reality_vmess && !CAPABILITIES.xhttp);
         assert!(!CAPABILITIES.certificate_sha256_pin);
-        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
-        let activation: serde_json::Value = serde_json::from_slice(&SingBoxAdapter.generate_activation_config(&node, 43128).unwrap().content).unwrap();
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+            .unwrap();
+        let activation: serde_json::Value = serde_json::from_slice(
+            &SingBoxAdapter
+                .generate_activation_config(&node, 43128)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(activation["inbounds"][0]["type"], "mixed");
         assert_eq!(activation["inbounds"][0]["listen"], "127.0.0.1");
         assert_eq!(activation["inbounds"][0]["listen_port"], 43128);
 
-        let benchmark: serde_json::Value = serde_json::from_slice(&SingBoxAdapter.generate_benchmark_config(&node, 43129).unwrap().content).unwrap();
+        let benchmark: serde_json::Value = serde_json::from_slice(
+            &SingBoxAdapter
+                .generate_benchmark_config(&node, 43129)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(benchmark["inbounds"][0]["type"], "http");
         assert_eq!(benchmark["inbounds"][0]["listen_port"], 43129);
 
-        let tun: serde_json::Value = serde_json::from_slice(&SingBoxAdapter.generate_tun_activation_config(&node, 43128).unwrap().content).unwrap();
+        let tun: serde_json::Value = serde_json::from_slice(
+            &SingBoxAdapter
+                .generate_tun_activation_config(&node, 43128)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(tun["inbounds"][1]["type"], "tun");
         assert_eq!(tun["inbounds"][1]["auto_route"], false);
         assert_eq!(tun["inbounds"][1]["dns_mode"], "disabled");

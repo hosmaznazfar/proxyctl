@@ -1190,7 +1190,10 @@ fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
             qualifiers.push("3/3 complete".to_owned());
         }
         if summary.partial_successful > 0 {
-            qualifiers.push(format!("{} partial transfer(s)", summary.partial_successful));
+            qualifiers.push(format!(
+                "{} partial transfer(s)",
+                summary.partial_successful
+            ));
         }
         format!("{formatted} ({})", qualifiers.join(", "))
     } else if let Some(status) = summary.preflight {

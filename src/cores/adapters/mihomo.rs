@@ -11,8 +11,8 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string, reality_options,
-        shadowsocks_plugin, tls_options, validate_for_core,
+        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string,
+        reality_options, shadowsocks_plugin, tls_options, validate_for_core,
     },
     summarize_validation_failure,
 };
@@ -276,13 +276,18 @@ impl CoreAdapter for MihomoAdapter {
         }))
     }
 
-    fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
+    fn generate_benchmark_batch_config(
+        &self,
+        targets: &[super::BenchmarkTarget<'_>],
+    ) -> anyhow::Result<GeneratedConfig> {
         super::benchmark_batch::validate_targets(self, targets)?;
         let mut proxies = Vec::with_capacity(targets.len());
         let mut listeners = Vec::with_capacity(targets.len());
         for target in targets {
             let document = super::benchmark_batch::node_config(self, target.node)?;
-            let proxy = document.get("proxies").and_then(serde_json::Value::as_array)
+            let proxy = document
+                .get("proxies")
+                .and_then(serde_json::Value::as_array)
                 .and_then(|entries| entries.first())
                 .ok_or_else(|| anyhow::anyhow!("Mihomo node config must contain a proxy entry"))?;
             let mut proxy = proxy.clone();
@@ -300,7 +305,11 @@ impl CoreAdapter for MihomoAdapter {
         }))
     }
 
-    fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_activation_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_config(node)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         document["mixed-port"] = json!(listen_port);
@@ -309,7 +318,11 @@ impl CoreAdapter for MihomoAdapter {
         json_config(document)
     }
 
-    fn generate_tun_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_tun_activation_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         document["ipv6"] = json!(true);
@@ -322,7 +335,11 @@ impl CoreAdapter for MihomoAdapter {
         json_config(document)
     }
 
-    fn generate_benchmark_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_benchmark_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_config(node)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         document["port"] = json!(listen_port);
@@ -334,7 +351,8 @@ impl CoreAdapter for MihomoAdapter {
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let mut command = Command::new(executable);
         command.arg("-t").arg("-f").arg(config);
-        let output = super::validation::run_validator(command, "could not run Mihomo config validation")?;
+        let output =
+            super::validation::run_validator(command, "could not run Mihomo config validation")?;
         ensure!(
             output.status.success(),
             "Mihomo rejected the generated configuration (exit status {:?}; {})",
@@ -345,7 +363,6 @@ impl CoreAdapter for MihomoAdapter {
     }
 }
 
-
 #[cfg(test)]
 mod config_contract_tests {
     use super::*;
@@ -354,21 +371,43 @@ mod config_contract_tests {
     #[test]
     fn mihomo_activation_benchmark_and_tun_options_stay_core_native() {
         assert!(CAPABILITIES.hysteria2 && CAPABILITIES.xhttp);
-        assert!(!CAPABILITIES.reality_requires_tcp_grpc_xhttp && CAPABILITIES.reality_disallows_legacy_transport);
+        assert!(
+            !CAPABILITIES.reality_requires_tcp_grpc_xhttp
+                && CAPABILITIES.reality_disallows_legacy_transport
+        );
         assert!(CAPABILITIES.grpc_service_name_required);
         assert!(!CAPABILITIES.xhttp_auto_mode);
-        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
-        let activation: serde_json::Value = serde_json::from_slice(&MihomoAdapter.generate_activation_config(&node, 43128).unwrap().content).unwrap();
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+            .unwrap();
+        let activation: serde_json::Value = serde_json::from_slice(
+            &MihomoAdapter
+                .generate_activation_config(&node, 43128)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(activation["mixed-port"], 43128);
         assert_eq!(activation["bind-address"], "127.0.0.1");
         assert_eq!(activation["allow-lan"], false);
 
-        let benchmark: serde_json::Value = serde_json::from_slice(&MihomoAdapter.generate_benchmark_config(&node, 43129).unwrap().content).unwrap();
+        let benchmark: serde_json::Value = serde_json::from_slice(
+            &MihomoAdapter
+                .generate_benchmark_config(&node, 43129)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(benchmark["port"], 43129);
         assert_eq!(benchmark["bind-address"], "127.0.0.1");
         assert_eq!(benchmark["allow-lan"], false);
 
-        let tun: serde_json::Value = serde_json::from_slice(&MihomoAdapter.generate_tun_activation_config(&node, 43128).unwrap().content).unwrap();
+        let tun: serde_json::Value = serde_json::from_slice(
+            &MihomoAdapter
+                .generate_tun_activation_config(&node, 43128)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(tun["tun"]["enable"], true);
         assert_eq!(tun["tun"]["auto-route"], false);
         assert_eq!(tun["tun"]["auto-redirect"], false);

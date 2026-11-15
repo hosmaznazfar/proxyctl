@@ -7,8 +7,8 @@ mod xray;
 
 pub mod validation;
 
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
 use crate::{cores::CoreId, domain::ProxyNode};
 

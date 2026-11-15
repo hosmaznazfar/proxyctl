@@ -472,7 +472,6 @@ mod tests {
         assert!(validate_endpoint("https://speed.example/test?token=secret").is_err());
     }
 
-
     #[test]
     fn local_https_endpoint_exercises_certificate_validation() {
         use std::{
@@ -482,8 +481,8 @@ mod tests {
             thread,
         };
 
-        use base64::Engine as _;
         use crate::benchmark::http_test_cert::{CERTIFICATE_DER_BASE64, PRIVATE_KEY_DER_BASE64};
+        use base64::Engine as _;
         use rustls::{
             ServerConfig, ServerConnection,
             pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
@@ -492,19 +491,22 @@ mod tests {
         // A test-only self-signed localhost identity. The client intentionally does not
         // trust it: this verifies the real TLS handshake and safe TLS failure mapping.
         let certificate = CertificateDer::from(
-            base64::engine::general_purpose::STANDARD.decode(CERTIFICATE_DER_BASE64).unwrap(),
+            base64::engine::general_purpose::STANDARD
+                .decode(CERTIFICATE_DER_BASE64)
+                .unwrap(),
         );
         let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            base64::engine::general_purpose::STANDARD.decode(PRIVATE_KEY_DER_BASE64).unwrap(),
+            base64::engine::general_purpose::STANDARD
+                .decode(PRIVATE_KEY_DER_BASE64)
+                .unwrap(),
         ));
-        let server_config = ServerConfig::builder_with_provider(Arc::new(
-            rustls::crypto::ring::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .unwrap()
-        .with_no_client_auth()
-        .with_single_cert(vec![certificate], private_key)
-        .unwrap();
+        let server_config =
+            ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_no_client_auth()
+                .with_single_cert(vec![certificate], private_key)
+                .unwrap();
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let address = listener.local_addr().unwrap();
@@ -518,7 +520,9 @@ mod tests {
             let mut tls = rustls::StreamOwned::new(connection, stream);
             let mut request = [0_u8; 1024];
             let _ = tls.read(&mut request);
-            let _ = tls.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            let _ = tls.write_all(
+                b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
         });
 
         let config = Agent::config_builder()
@@ -913,9 +917,7 @@ mod tests {
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
             stream
-                .write_all(
-                    b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n",
-                )
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n")
                 .unwrap();
             stream.write_all(&vec![0x44; 32 * 1024]).unwrap();
             stream.flush().unwrap();
@@ -1033,11 +1035,21 @@ mod tests {
     #[test]
     fn retries_only_transient_download_failures() {
         assert!(is_retryable_download_failure(MeasurementFailure::Timeout));
-        assert!(is_retryable_download_failure(MeasurementFailure::IncompleteResponse));
-        assert!(is_retryable_download_failure(MeasurementFailure::ReadFailed));
-        assert!(!is_retryable_download_failure(MeasurementFailure::HttpStatus(503)));
-        assert!(!is_retryable_download_failure(MeasurementFailure::TlsFailed));
-        assert!(!is_retryable_download_failure(MeasurementFailure::ProxyTunnelFailed));
+        assert!(is_retryable_download_failure(
+            MeasurementFailure::IncompleteResponse
+        ));
+        assert!(is_retryable_download_failure(
+            MeasurementFailure::ReadFailed
+        ));
+        assert!(!is_retryable_download_failure(
+            MeasurementFailure::HttpStatus(503)
+        ));
+        assert!(!is_retryable_download_failure(
+            MeasurementFailure::TlsFailed
+        ));
+        assert!(!is_retryable_download_failure(
+            MeasurementFailure::ProxyTunnelFailed
+        ));
     }
 
     #[test]

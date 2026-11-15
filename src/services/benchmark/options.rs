@@ -73,5 +73,3 @@ pub fn default_settings() -> BenchmarkSettings {
         startup_timeout_ms: 10_000,
     }
 }
-
-

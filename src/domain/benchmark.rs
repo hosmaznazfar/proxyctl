@@ -150,8 +150,10 @@ impl BenchmarkSample {
             (_, None) => {}
             (_, Some(_)) => return Err("failed samples must not contain a numeric value"),
         }
-        let is_transfer_metric =
-            matches!(self.metric, BenchmarkMetric::Download | BenchmarkMetric::Upload);
+        let is_transfer_metric = matches!(
+            self.metric,
+            BenchmarkMetric::Download | BenchmarkMetric::Upload
+        );
         if self.transferred_bytes.is_some() && !is_transfer_metric {
             return Err("transfer byte metadata is only valid for download/upload samples");
         }
@@ -263,7 +265,8 @@ mod tests {
 
     #[test]
     fn legacy_samples_default_transfer_metadata() {
-        let mut value = serde_json::to_value(sample(BenchmarkSampleStatus::Success, Some(12.0))).unwrap();
+        let mut value =
+            serde_json::to_value(sample(BenchmarkSampleStatus::Success, Some(12.0))).unwrap();
         value.as_object_mut().unwrap().remove("transferred_bytes");
         value.as_object_mut().unwrap().remove("partial");
         let restored: BenchmarkSample = serde_json::from_value(value).unwrap();
@@ -282,7 +285,10 @@ mod tests {
         value.metric = BenchmarkMetric::Latency;
         value.unit = BenchmarkMetric::Latency.unit().into();
         value.transferred_bytes = None;
-        assert_eq!(value.validate(), Err("only successful download samples can be partial"));
+        assert_eq!(
+            value.validate(),
+            Err("only successful download samples can be partial")
+        );
     }
 
     #[test]

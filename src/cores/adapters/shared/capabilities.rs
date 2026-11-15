@@ -101,7 +101,10 @@ fn compatibility_failure(reason: String) -> Compatibility {
 }
 
 /// Validate the shared semantic node against one core's explicit capability set.
-pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &ProxyNode) -> Result<(), Compatibility> {
+pub(crate) fn validate_for_core(
+    capabilities: &'static CoreCapabilities,
+    node: &ProxyNode,
+) -> Result<(), Compatibility> {
     let core = capabilities.name;
 
     validate_common(node).map_err(compatibility_failure)?;
@@ -119,9 +122,9 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
         .is_some()
         && !capabilities.shadowsocks_plugins
     {
-        return Err(compatibility_failure(
-            format!("{core} does not implement Shadowsocks SIP003 plugins"),
-        ));
+        return Err(compatibility_failure(format!(
+            "{core} does not implement Shadowsocks SIP003 plugins"
+        )));
     }
     let reality = reality_options(node).map_err(compatibility_failure)?;
     if let Some(reality) = reality.as_ref() {
@@ -149,9 +152,9 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
                 TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp
             )
         {
-            return Err(compatibility_failure(
-                format!("{core} REALITY supports only TCP/RAW, gRPC, and XHTTP transports"),
-            ));
+            return Err(compatibility_failure(format!(
+                "{core} REALITY supports only TCP/RAW, gRPC, and XHTTP transports"
+            )));
         }
         if capabilities.reality_disallows_legacy_transport
             && matches!(
@@ -194,9 +197,9 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
         && !capabilities.xhttp_auto_mode
         && transport.mode.as_deref() == Some("auto")
     {
-        return Err(compatibility_failure(
-            format!("{core} XHTTP does not support the explicit auto mode"),
-        ));
+        return Err(compatibility_failure(format!(
+            "{core} XHTTP does not support the explicit auto mode"
+        )));
     }
 
     if !capabilities.supports_transport(&transport.kind) {
@@ -207,11 +210,14 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
 
     if let Some(required_header) = capabilities.websocket_early_data_header
         && matches!(&transport.kind, TransportKind::WebSocket)
-        && transport.early_data_header_name.as_deref().is_some_and(|name| name != required_header)
+        && transport
+            .early_data_header_name
+            .as_deref()
+            .is_some_and(|name| name != required_header)
     {
-        return Err(compatibility_failure(
-            format!("{core} WebSocket early data requires the Sec-WebSocket-Protocol header"),
-        ));
+        return Err(compatibility_failure(format!(
+            "{core} WebSocket early data requires the Sec-WebSocket-Protocol header"
+        )));
     }
 
     if matches!(&transport.kind, TransportKind::Grpc)
@@ -243,4 +249,3 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
 
     Ok(())
 }
-

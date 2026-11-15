@@ -11,8 +11,8 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string, reality_options,
-        tls_options, validate_for_core,
+        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string,
+        reality_options, tls_options, validate_for_core,
     },
 };
 
@@ -212,7 +212,10 @@ impl CoreAdapter for XrayAdapter {
         json_config(json!({"outbounds":[outbound]}))
     }
 
-    fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
+    fn generate_benchmark_batch_config(
+        &self,
+        targets: &[super::BenchmarkTarget<'_>],
+    ) -> anyhow::Result<GeneratedConfig> {
         use serde_json::Value;
         super::benchmark_batch::validate_targets(self, targets)?;
         let mut outbounds = Vec::with_capacity(targets.len());
@@ -220,9 +223,16 @@ impl CoreAdapter for XrayAdapter {
         let mut rules = Vec::with_capacity(targets.len());
         for target in targets {
             let mut document = super::benchmark_batch::node_config(self, target.node)?;
-            let node_outbounds = document.get_mut("outbounds").and_then(Value::as_array_mut)
-                .ok_or_else(|| anyhow::anyhow!("Xray node config must contain an outbound array"))?;
-            ensure!(node_outbounds.len() == 1, "Xray node config must contain exactly one proxy outbound");
+            let node_outbounds = document
+                .get_mut("outbounds")
+                .and_then(Value::as_array_mut)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Xray node config must contain an outbound array")
+                })?;
+            ensure!(
+                node_outbounds.len() == 1,
+                "Xray node config must contain exactly one proxy outbound"
+            );
             let mut outbound = node_outbounds.remove(0);
             let outbound_tag = format!("proxyctl-benchmark-out-{}", target.node_id);
             let inbound_tag = format!("proxyctl-benchmark-in-{}", target.node_id);
@@ -236,14 +246,22 @@ impl CoreAdapter for XrayAdapter {
                 },
                 "settings": {}, "tag": inbound_tag
             }));
-            rules.push(json!({"type": "field", "inboundTag": [inbound_tag], "outboundTag": outbound_tag}));
+            rules.push(
+                json!({"type": "field", "inboundTag": [inbound_tag], "outboundTag": outbound_tag}),
+            );
         }
-        json_config(json!({"inbounds": inbounds, "outbounds": outbounds, "routing": {
-            "domainStrategy": "AsIs", "rules": rules
-        }}))
+        json_config(
+            json!({"inbounds": inbounds, "outbounds": outbounds, "routing": {
+                "domainStrategy": "AsIs", "rules": rules
+            }}),
+        )
     }
 
-    fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_activation_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_config(node)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         document["inbounds"] = json!([{
@@ -253,22 +271,33 @@ impl CoreAdapter for XrayAdapter {
         json_config(document)
     }
 
-    fn generate_tun_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_tun_activation_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
-        document["inbounds"].as_array_mut().ok_or_else(|| anyhow::anyhow!("Xray activation inbounds must be an array"))?.push(json!({
-            "tag": "tun-in", "protocol": "tun",
-            "settings": {
-                "name": "tun-proxyctl", "mtu": 1500,
-                "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
-                "autoSystemRoutingTable": [], "autoOutboundsInterface": "auto",
-                "autoSystemDnsToGateway": false
-            }
-        }));
+        document["inbounds"]
+            .as_array_mut()
+            .ok_or_else(|| anyhow::anyhow!("Xray activation inbounds must be an array"))?
+            .push(json!({
+                "tag": "tun-in", "protocol": "tun",
+                "settings": {
+                    "name": "tun-proxyctl", "mtu": 1500,
+                    "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
+                    "autoSystemRoutingTable": [], "autoOutboundsInterface": "auto",
+                    "autoSystemDnsToGateway": false
+                }
+            }));
         json_config(document)
     }
 
-    fn generate_benchmark_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+    fn generate_benchmark_config(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_config(node)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         document["inbounds"] = json!([{
@@ -281,7 +310,8 @@ impl CoreAdapter for XrayAdapter {
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let mut command = Command::new(executable);
         command.arg("run").arg("-test").arg("-c").arg(config);
-        let output = super::validation::run_validator(command, "could not run Xray config validation")?;
+        let output =
+            super::validation::run_validator(command, "could not run Xray config validation")?;
         ensure!(
             output.status.success(),
             "Xray rejected the generated configuration (exit status {:?}; {})",
@@ -337,7 +367,10 @@ mod validation_diagnostic_tests {
             b"failed to build inbound config: secret=do-not-print and private-host",
         );
         assert!(summary.contains("loopback HTTP inbound"));
-        assert!(CAPABILITIES.reality_requires_tcp_grpc_xhttp && !CAPABILITIES.reality_disallows_legacy_transport);
+        assert!(
+            CAPABILITIES.reality_requires_tcp_grpc_xhttp
+                && !CAPABILITIES.reality_disallows_legacy_transport
+        );
         assert!(!summary.contains("do-not-print"));
         assert!(!summary.contains("private-host"));
     }
@@ -349,7 +382,6 @@ mod validation_diagnostic_tests {
     }
 }
 
-
 #[cfg(test)]
 mod config_contract_tests {
     use super::*;
@@ -360,20 +392,48 @@ mod config_contract_tests {
         assert!(!CAPABILITIES.hysteria2 && CAPABILITIES.reality_vmess);
         assert!(CAPABILITIES.reality_optional_fields && CAPABILITIES.xhttp);
         assert!(CAPABILITIES.certificate_sha256_pin && CAPABILITIES.grpc_authority);
-        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
-        let activation: serde_json::Value = serde_json::from_slice(&XrayAdapter.generate_activation_config(&node, 43128).unwrap().content).unwrap();
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+            .unwrap();
+        let activation: serde_json::Value = serde_json::from_slice(
+            &XrayAdapter
+                .generate_activation_config(&node, 43128)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(activation["inbounds"][0]["protocol"], "mixed");
         assert_eq!(activation["inbounds"][0]["listen"], "127.0.0.1");
         assert_eq!(activation["inbounds"][0]["port"], 43128);
         assert_eq!(activation["inbounds"][0]["settings"]["udp"], true);
 
-        let benchmark: serde_json::Value = serde_json::from_slice(&XrayAdapter.generate_benchmark_config(&node, 43129).unwrap().content).unwrap();
+        let benchmark: serde_json::Value = serde_json::from_slice(
+            &XrayAdapter
+                .generate_benchmark_config(&node, 43129)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(benchmark["inbounds"][0]["protocol"], "http");
         assert_eq!(benchmark["inbounds"][0]["port"], 43129);
 
-        let tun: serde_json::Value = serde_json::from_slice(&XrayAdapter.generate_tun_activation_config(&node, 43128).unwrap().content).unwrap();
+        let tun: serde_json::Value = serde_json::from_slice(
+            &XrayAdapter
+                .generate_tun_activation_config(&node, 43128)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(tun["inbounds"][1]["protocol"], "tun");
-        assert_eq!(tun["inbounds"][1]["settings"]["autoSystemRoutingTable"].as_array().unwrap().len(), 0);
-        assert_eq!(tun["inbounds"][1]["settings"]["autoSystemDnsToGateway"], false);
+        assert_eq!(
+            tun["inbounds"][1]["settings"]["autoSystemRoutingTable"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(
+            tun["inbounds"][1]["settings"]["autoSystemDnsToGateway"],
+            false
+        );
     }
 }

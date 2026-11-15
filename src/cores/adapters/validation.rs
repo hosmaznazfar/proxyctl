@@ -14,10 +14,7 @@ const MAX_VALIDATOR_OUTPUT: u64 = 64 * 1024;
 
 /// Run a native config validator with a hard deadline and bounded captured output.
 /// Output is spooled to temporary files so a noisy child cannot block on a full pipe.
-pub(crate) fn run_validator(
-    mut command: Command,
-    description: &str,
-) -> anyhow::Result<Output> {
+pub(crate) fn run_validator(mut command: Command, description: &str) -> anyhow::Result<Output> {
     let mut stdout = tempfile::tempfile().context("could not create validator stdout spool")?;
     let mut stderr = tempfile::tempfile().context("could not create validator stderr spool")?;
     command
@@ -37,12 +34,15 @@ pub(crate) fn run_validator(
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                anyhow::bail!("{description}: validator exceeded the 10-second deadline and was terminated");
+                anyhow::bail!(
+                    "{description}: validator exceeded the 10-second deadline and was terminated"
+                );
             }
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(error).with_context(|| format!("{description}: could not inspect validator"));
+                return Err(error)
+                    .with_context(|| format!("{description}: could not inspect validator"));
             }
         }
     };
