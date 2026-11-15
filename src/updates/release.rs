@@ -58,7 +58,7 @@ pub fn latest_release_optional(
         endpoint.scheme() == "https"
             && endpoint.host_str() == Some("api.github.com")
             && endpoint.path().starts_with("/repos/")
-            && endpoint.query() == Some("per_page=100")
+            && endpoint.query() == Some("per_page=10")
             && endpoint.fragment().is_none(),
         "release metadata endpoint must use the official GitHub Releases API"
     );
