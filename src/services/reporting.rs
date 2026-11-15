@@ -60,6 +60,8 @@ pub struct TargetReport {
 pub struct MetricSummary {
     pub metric: BenchmarkMetric,
     pub successful: usize,
+    /// Successful download samples retained from a truncated response.
+    pub partial_successful: usize,
     pub attempted: usize,
     pub median: Option<f64>,
     pub failures: Vec<FailureCount>,
@@ -307,6 +309,10 @@ fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> Me
         .iter()
         .filter(|sample| sample.status == BenchmarkSampleStatus::Success)
         .count();
+    let partial_successful = attempted_samples
+        .iter()
+        .filter(|sample| sample.status == BenchmarkSampleStatus::Success && sample.partial)
+        .count();
     let mut failures = Vec::<FailureCount>::new();
     for sample in &attempted_samples {
         if sample.status == BenchmarkSampleStatus::Success {
@@ -333,6 +339,7 @@ fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> Me
     MetricSummary {
         metric,
         successful,
+        partial_successful,
         attempted: attempted_samples.len(),
         median: median_successful_samples(&values),
         failures,
@@ -402,6 +409,8 @@ mod tests {
                 .then(|| "test failure".into()),
             timestamp: run_id * 10,
             duration_ms: Some(10),
+            transferred_bytes: None,
+            partial: false,
         }
     }
 
@@ -423,9 +432,13 @@ mod tests {
                 None,
             ),
         ];
+        let mut samples = samples;
+        samples[0].partial = true;
+        samples[0].transferred_bytes = Some(32 * 1024);
         let refs = samples.iter().collect::<Vec<_>>();
         let summary = summarize_metric(BenchmarkMetric::Download, &refs);
         assert_eq!(summary.successful, 1);
+        assert_eq!(summary.partial_successful, 1);
         assert_eq!(summary.attempted, 2);
         assert_eq!(summary.median, Some(8_000_000.0));
         assert_eq!(summary.failures.len(), 1);
