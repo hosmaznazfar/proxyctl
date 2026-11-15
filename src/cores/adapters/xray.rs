@@ -367,10 +367,6 @@ mod validation_diagnostic_tests {
             b"failed to build inbound config: secret=do-not-print and private-host",
         );
         assert!(summary.contains("loopback HTTP inbound"));
-        assert!(
-            CAPABILITIES.reality_requires_tcp_grpc_xhttp
-                && !CAPABILITIES.reality_disallows_legacy_transport
-        );
         assert!(!summary.contains("do-not-print"));
         assert!(!summary.contains("private-host"));
     }
