@@ -322,8 +322,16 @@ fn completion_script(shell: Shell) -> String {
             .map(|option| format!("complete -c proxyctl -l {option} -n '__fish_seen_subcommand_from test'"))
             .collect::<Vec<_>>()
             .join("\n");
+        // Fish only proposes long-option definitions after the user types '-'.
+        // Also register their complete spellings as argument candidates so a
+        // plain Tab after "proxyctl test " displays the available switches.
+        let test_option_candidates = test_options
+            .iter()
+            .map(|option| format!("--{option}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         script = format!(
-            "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_seen_subcommand_from import'\n{explicit_test_completions}\n{script}"
+            "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_seen_subcommand_from import'\ncomplete -c proxyctl -a '{test_option_candidates}' -n '__fish_seen_subcommand_from test'\n{explicit_test_completions}\n{script}"
         );
     }
 
