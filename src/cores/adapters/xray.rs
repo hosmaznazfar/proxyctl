@@ -11,9 +11,33 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
-        tls_options, validate_for_core, XRAY,
+        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string, reality_options,
+        tls_options, validate_for_core,
     },
+};
+
+const CAPABILITIES: CoreCapabilities = CoreCapabilities {
+    name: "Xray",
+    shadowsocks_plugins: false,
+    reality_transport_limited: true,
+    vmess_xhttp: true,
+    xhttp_auto_mode: true,
+    websocket_early_data_header: Some("Sec-WebSocket-Protocol"),
+    hysteria2: false,
+    reality_vless: true,
+    reality_vmess: true,
+    reality_optional_fields: true,
+    tcp: true,
+    websocket: true,
+    grpc: true,
+    http2: false,
+    http_upgrade: true,
+    xhttp: true,
+    grpc_service_name_required: false,
+    grpc_authority: true,
+    grpc_multi_mode: true,
+    certificate_sha256_pin: true,
+    verify_peer_cert_by_name: true,
 };
 
 pub struct XrayAdapter;
@@ -24,7 +48,7 @@ impl CoreAdapter for XrayAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_for_core(&XRAY, node) {
+        match validate_for_core(&CAPABILITIES, node) {
             Ok(()) => Compatibility::supported(),
             Err(compatibility) => compatibility,
         }
