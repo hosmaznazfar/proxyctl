@@ -28,6 +28,21 @@ pub struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
+enum CompletionAction {
+    /// Install completion for the detected shell, or specify --shell fish.
+    Install {
+        /// Shell to install completion for (currently Fish).
+        #[arg(long, value_parser = ["fish"])]
+        shell: Option<String>,
+    },
+    /// Print a completion script to standard output.
+    Generate {
+        /// Target shell for the generated completion script.
+        shell: Shell,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum TunCommand {
     /// Show interfaces, default routes, DNS, and firewall state (read-only).
     Status,
@@ -58,10 +73,10 @@ enum DisplayAction {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Generate a completion script for bash, fish, or zsh.
+    /// Install shell completion or generate a script manually.
     Completions {
-        /// Target shell for the generated completion script.
-        shell: Shell,
+        #[command(subcommand)]
+        action: CompletionAction,
     },
     /// Add one proxy URL to the local database.
     Add {
@@ -275,15 +290,73 @@ enum Command {
     },
 }
 
+fn completion_script(shell: Shell) -> String {
+    let mut command = Cli::command();
+    let mut output = Vec::new();
+    clap_complete::generate(shell, &mut command, "proxyctl", &mut output);
+    String::from_utf8(output).expect("clap completion scripts are valid UTF-8")
+}
+
+fn install_shell_completion(shell: crate::services::shell_completion::Shell) -> anyhow::Result<()> {
+    match shell {
+        crate::services::shell_completion::Shell::Fish => {
+            let path = crate::services::shell_completion::install_fish(&completion_script(Shell::Fish))?;
+            println!("Fish completion installed: {}", path.display());
+            println!("Open a new Fish session or run: source {}", path.display());
+            Ok(())
+        }
+        crate::services::shell_completion::Shell::Bash
+        | crate::services::shell_completion::Shell::Zsh => {
+            anyhow::bail!("automatic installation is currently supported for Fish; use 'proxyctl completions generate bash' or 'zsh' for other shells")
+        }
+    }
+}
+
+fn offer_first_setup_completion() -> anyhow::Result<()> {
+    use std::io::{self, IsTerminal, Write};
+
+    if crate::services::shell_completion::detect_current()
+        != Some(crate::services::shell_completion::Shell::Fish)
+        || !io::stdin().is_terminal()
+        || !crate::services::shell_completion::should_offer_first_setup_prompt()?
+    {
+        return Ok(());
+    }
+
+    print!("Install Fish tab completion for proxyctl now? [y/N] ");
+    io::stdout().flush()?;
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    crate::services::shell_completion::mark_first_setup_prompted()?;
+    if matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+        install_shell_completion(crate::services::shell_completion::Shell::Fish)?;
+    } else {
+        println!("Skipped. You can install it later with: proxyctl completions install");
+    }
+    Ok(())
+}
+
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let Some(command) = cli.command else {
         println!("Proxyctl is ready. Use --help to see available commands.");
         return Ok(());
     };
     let command = match command {
-        Command::Completions { shell } => {
-            let mut command = Cli::command();
-            clap_complete::generate(shell, &mut command, "proxyctl", &mut std::io::stdout());
+        Command::Completions { action } => {
+            match action {
+                CompletionAction::Generate { shell } => {
+                    let script = completion_script(shell);
+                    print!("{script}");
+                }
+                CompletionAction::Install { shell } => {
+                    let selected = match shell {
+                        Some(value) => crate::services::shell_completion::Shell::parse(&value)?,
+                        None => crate::services::shell_completion::detect_current()
+                            .ok_or_else(|| anyhow::anyhow!("could not detect the current shell; use 'proxyctl completions install --shell fish'"))?,
+                    };
+                    install_shell_completion(selected)?;
+                }
+            }
             return Ok(());
         }
         Command::Tun {
@@ -385,6 +458,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Setup { core } => {
             crate::services::cores::setup(parse_core(core.as_deref())?)?;
+            offer_first_setup_completion()?;
             return Ok(());
         }
         Command::Update {
@@ -725,8 +799,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 },
             )?;
         }
-        Command::Completions { .. }
-        | Command::Cores
+        Command::Cores
         | Command::Setup { .. }
         | Command::Update { .. }
         | Command::Use { .. }
@@ -1496,11 +1569,14 @@ mod tests {
     use super::{Cli, Command, TunCommand, display_core_version};
 
     #[test]
-    fn completions_command_accepts_supported_shells() {
+    fn completions_command_supports_generation_and_fish_installation() {
         for shell in ["bash", "fish", "zsh"] {
-            assert!(Cli::try_parse_from(["proxyctl", "completions", shell]).is_ok());
+            assert!(Cli::try_parse_from(["proxyctl", "completions", "generate", shell]).is_ok());
         }
-        assert!(Cli::try_parse_from(["proxyctl", "completions", "unknown"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "completions", "install"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", "fish"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "completions", "generate", "unknown"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", "bash"]).is_err());
     }
 
     #[test]
