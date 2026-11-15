@@ -315,7 +315,7 @@ fn install_shell_completion(shell: crate::services::shell_completion::Shell) -> 
 
 fn offer_first_setup_completion() -> anyhow::Result<()> {
     use std::io::{self, IsTerminal, Write};
-    use crate::services::shell_completion::{self, Shell as DetectedShell};
+    use crate::services::shell_completion;
 
     let Some(shell) = shell_completion::detect_current() else { return Ok(()); };
     if !io::stdin().is_terminal() || !shell_completion::should_offer_first_setup_prompt(shell)? {
@@ -332,7 +332,6 @@ fn offer_first_setup_completion() -> anyhow::Result<()> {
     } else {
         println!("Skipped. You can install it later with: proxyctl completions install");
     }
-    let _ = DetectedShell::Fish;
     Ok(())
 }
 
