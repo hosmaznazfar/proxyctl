@@ -4,6 +4,7 @@
 //! The caller must serialize lifecycle operations; this store prevents stale activations from
 //! overwriting or deleting a different activation's recovery record.
 
+pub(super) use super::journal::MAX_JOURNAL_OPERATIONS;
 pub use super::journal::{
     JournalOperation, JournalOperationKind, JournalOperationState, JournalRecoveryAction,
     JournalRecoveryDecision, TransactionJournal, plan_journal_recovery, recovery_action,
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 const STORE_FILE: &str = "tun-manifest.json";
