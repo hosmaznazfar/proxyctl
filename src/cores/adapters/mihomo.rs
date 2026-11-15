@@ -20,7 +20,8 @@ use super::{
 const CAPABILITIES: CoreCapabilities = CoreCapabilities {
     name: "Mihomo",
     shadowsocks_plugins: true,
-    reality_transport_limited: true,
+    reality_requires_tcp_grpc_xhttp: false,
+    reality_disallows_legacy_transport: true,
     vmess_xhttp: false,
     xhttp_auto_mode: false,
     websocket_early_data_header: None,
