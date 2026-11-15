@@ -142,6 +142,62 @@ mod tests {
         assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 2);
     }
 
+    #[test]
+    fn validation_uses_each_cores_native_check_command() {
+        let directory = tempdir().unwrap();
+        let executable = directory.path().join("fake-core");
+        let arguments = directory.path().join("arguments");
+        let marker = directory.path().join("config-path");
+        write_fake_core_with_arguments(&executable, &arguments, &marker);
+
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443",
+        )
+        .unwrap();
+        let cases = [
+            (CoreId::SingBox, vec!["check", "-c"]),
+            (CoreId::Xray, vec!["run", "-test", "-c"]),
+            (CoreId::Mihomo, vec!["-t", "-f"]),
+        ];
+
+        for (core, expected_prefix) in cases {
+            validate_node_config_in(core, &node, &executable, directory.path()).unwrap();
+
+            let actual = fs::read_to_string(&arguments)
+                .unwrap()
+                .lines()
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            assert_eq!(&actual[..actual.len() - 1], expected_prefix);
+            let config_path = actual.last().expect("validator receives a config path");
+            assert_eq!(fs::read_to_string(&marker).unwrap(), *config_path);
+            assert!(
+                !Path::new(config_path).exists(),
+                "{core} validation must remove its temporary config"
+            );
+        }
+
+        assert_eq!(
+            fs::read_dir(directory.path()).unwrap().count(),
+            3,
+            "only the fake executable, arguments, and marker should remain"
+        );
+    }
+
+    fn write_fake_core_with_arguments(
+        executable: &Path,
+        arguments: &Path,
+        marker: &Path,
+    ) {
+        let script = format!(
+            "#!/bin/sh\\nprintf '%s\\n' \"$@\" > '{}'\\nfor arg in \"$@\"; do config=\"$arg\"; done\\n[ -s \"$config\" ] || exit 20\\n[ \"$(stat -c '%a' \"$config\")\" = 600 ] || exit 21\\nprintf '%s' \"$config\" > '{}'\\nexit 0\\n",
+            arguments.display(),
+            marker.display()
+        );
+        fs::write(executable, script).unwrap();
+        fs::set_permissions(executable, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
     fn write_fake_core(executable: &Path, marker: &Path, exit_code: i32) {
         let script = format!(
             "#!/bin/sh\nfor arg in \"$@\"; do config=\"$arg\"; done\n[ -s \"$config\" ] || exit 20\n[ \"$(stat -c '%a' \"$config\")\" = 600 ] || exit 21\nprintf '%s' \"$config\" > '{}'\nexit {}\n",
