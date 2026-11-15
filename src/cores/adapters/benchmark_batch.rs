@@ -181,14 +181,12 @@ mod tests {
                             "http"
                         }
                     ),
-                    CoreId::Xray => assert_eq!(
-                        document["inbounds"][0]["protocol"],
-                        if proxy_type == BenchmarkProxyType::Socks5 {
-                            "socks"
-                        } else {
-                            "http"
-                        }
-                    ),
+                    CoreId::Xray => {
+                        assert_eq!(document["inbounds"][0]["protocol"], "mixed");
+                        assert_eq!(document["inbounds"][0]["settings"]["auth"], "noauth");
+                        assert_eq!(document["inbounds"][0]["settings"]["udp"], true);
+                        assert_eq!(document["inbounds"][0]["settings"]["ip"], "127.0.0.1");
+                    },
                     CoreId::Mihomo => unreachable!(),
                 }
             }
