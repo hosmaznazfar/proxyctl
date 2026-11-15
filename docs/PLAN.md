@@ -234,7 +234,7 @@ Latest mode displays the newest run containing each node, regardless of lifecycl
 
 Every metric reports the successful count out of three, the median of successful samples, failure counts, and samples not run. One or two successful samples produce an explicitly partial median; three successful samples are complete. Preflight outcomes (unsupported, invalid, unavailable) remain distinct from attempted network failures. Missing or failed measurements are never rendered as zero.
 
-Reports do not start proxy cores, contact measurement endpoints, or modify system networking. `show` and all report modes share the configurable compact/normal/full table profiles. Latest output has one row per node/core, history has one row per node/core/run, and compare has one row per node/core from the latest completed run. The `--verbose` flag expands core version metadata without changing table columns.
+Reports do not start proxy cores, contact measurement endpoints, or modify system networking. `show` and all report modes share the configurable compact/normal/full table profiles. Normal is the default; compact and full can be selected persistently with `proxyctl config display profile`. `show --details` displays connection/configuration fields with secrets masked. `report --details` selects the full benchmark table profile for that invocation, while `--verbose` expands core version metadata without changing table columns. Latest output has one row per node/core, history has one row per node/core/run, and compare has one row per node/core from the latest completed run.
 
 ### 3.7 Pruning and recovery
 
@@ -545,7 +545,7 @@ Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listene
 
 ## Configurable result presentation
 
-**Approved and implemented on main:** `proxyctl show` uses a persistent table profile, with compact as the default. Compact contains node, core, latency, download, and upload. Normal and Full expose progressively more context. Each profile can be customized independently using `proxyctl config display add-field` and `remove-field`; users can switch the active profile with `proxyctl config display profile`. The table renderer uses the Rust `tabled` crate. Ordinary output never includes fingerprints or credentials. `not-run`, `unavailable`, `unsupported`, and `invalid` remain distinct.
+**Approved and implemented on main:** `proxyctl show` and `proxyctl report` use persistent compact/normal/full table profiles, with normal as the default. Compact contains node, core, latency, download, and upload. Full exposes additional diagnostic columns. `show --details` displays connection/configuration details; `report --details` selects the full benchmark table for one invocation. Each profile can be customized independently using `proxyctl config display add-field` and `remove-field`; users can switch the active profile with `proxyctl config display profile`. The table renderer uses the Rust `tabled` crate. Ordinary output never includes fingerprints or credentials. `not-run`, `unavailable`, `unsupported`, and `invalid` remain distinct.
 
 
 ## Benchmark performance optimization
