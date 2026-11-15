@@ -1,5 +1,5 @@
 //! Benchmark sample construction, persistence, and cancellation plumbing.
-use std::{path::Path, time::Duration};
+use std::{path::Path, sync::atomic::Ordering, time::Duration};
 
 use crate::{
     benchmark::http::{Measurement, MeasurementFailure},
