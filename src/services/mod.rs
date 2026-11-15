@@ -16,3 +16,5 @@ pub mod reporting;
 pub mod sorting;
 pub mod updates;
 pub mod validation;
+
+pub mod shell_completion;
