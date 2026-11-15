@@ -1,17 +1,14 @@
 //! Bounded concurrent direct TCP and HTTP latency probes.
-use std::{
-    collections::BTreeMap,
-    path::Path,
-    sync::mpsc,
-    thread,
-    time::{Duration},
-};
+use std::{collections::BTreeMap, path::Path, sync::mpsc, thread, time::Duration};
 
 use crate::{
-    benchmark::{http::{BenchmarkHttpClient, MeasurementFailure}, tcp},
-    database::NodeRecord,
-    cores::CoreId,
     benchmark::process::ManagedCoreProcess,
+    benchmark::{
+        http::{BenchmarkHttpClient, MeasurementFailure},
+        tcp,
+    },
+    cores::CoreId,
+    database::NodeRecord,
     domain::{BenchmarkMetric, BenchmarkSample, BenchmarkSampleStatus, BenchmarkSettings},
 };
 
@@ -194,7 +191,9 @@ pub(super) fn execute_tcp_ping_batch(
     Ok(())
 }
 
-pub(super) fn probe_chunks<T>(items: &[T], requested_concurrency: usize) -> std::slice::Chunks<'_, T> {
+pub(super) fn probe_chunks<T>(
+    items: &[T],
+    requested_concurrency: usize,
+) -> std::slice::Chunks<'_, T> {
     items.chunks(requested_concurrency.clamp(1, MAX_PROBE_CONCURRENCY))
 }
-

@@ -503,7 +503,9 @@ pub(super) fn sample_status_label(status: crate::domain::BenchmarkSampleStatus) 
     }
 }
 
-pub(super) fn active_display_numbers(path: &std::path::Path) -> anyhow::Result<HashMap<u64, usize>> {
+pub(super) fn active_display_numbers(
+    path: &std::path::Path,
+) -> anyhow::Result<HashMap<u64, usize>> {
     Ok(nodes::list_nodes(path, false)?
         .into_iter()
         .enumerate()
@@ -511,7 +513,9 @@ pub(super) fn active_display_numbers(path: &std::path::Path) -> anyhow::Result<H
         .collect())
 }
 
-pub(super) fn deleted_display_numbers(path: &std::path::Path) -> anyhow::Result<HashMap<u64, usize>> {
+pub(super) fn deleted_display_numbers(
+    path: &std::path::Path,
+) -> anyhow::Result<HashMap<u64, usize>> {
     Ok(nodes::list_nodes(path, true)?
         .into_iter()
         .filter(|record| record.is_deleted())
@@ -709,4 +713,3 @@ pub(super) fn safe_field(value: &str, max_chars: usize) -> String {
         .take(max_chars)
         .collect()
 }
-

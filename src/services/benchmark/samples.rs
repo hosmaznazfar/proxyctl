@@ -131,4 +131,3 @@ pub(super) fn install_cancellation_handler() {
         }
     }
 }
-

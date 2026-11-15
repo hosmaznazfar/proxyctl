@@ -4,6 +4,11 @@
 //! The caller must serialize lifecycle operations; this store prevents stale activations from
 //! overwriting or deleting a different activation's recovery record.
 
+pub use super::journal::{
+    JournalOperation, JournalOperationKind, JournalOperationState, JournalRecoveryAction,
+    JournalRecoveryDecision, TransactionJournal, plan_journal_recovery, recovery_action,
+};
+use super::manifest_fs::*;
 #[cfg(target_os = "linux")]
 use super::process::ProcessIdentity;
 use super::{
@@ -11,11 +16,6 @@ use super::{
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase, transition},
 };
 use anyhow::{Context, Result, ensure};
-use super::manifest_fs::*;
-pub use super::journal::{
-    JournalOperation, JournalOperationKind, JournalOperationState, JournalRecoveryAction,
-    JournalRecoveryDecision, TransactionJournal, plan_journal_recovery, recovery_action,
-};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -459,7 +459,6 @@ impl ManifestStore {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

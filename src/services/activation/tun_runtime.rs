@@ -123,7 +123,10 @@ pub(super) fn tun_interfaces_are_safe(interfaces: &[String], active_proxyctl_tun
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::Result<TunLaunchContext> {
+pub(super) fn prepare_tun_launch(
+    runtime: &Path,
+    state_path: &Path,
+) -> anyhow::Result<TunLaunchContext> {
     ensure!(
         Path::new("/run/systemd/system").is_dir(),
         "TUN activation requires a running systemd system manager; ordinary activation remains available"
@@ -188,7 +191,10 @@ pub(super) fn prepare_tun_launch(runtime: &Path, state_path: &Path) -> anyhow::R
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn build_tun_preflight_command(context: &TunLaunchContext, true_executable: &Path) -> Command {
+pub(super) fn build_tun_preflight_command(
+    context: &TunLaunchContext,
+    true_executable: &Path,
+) -> Command {
     let unit = format!(
         "{}-preflight.service",
         context.unit.trim_end_matches(".service")
@@ -213,7 +219,10 @@ pub(super) fn build_tun_preflight_command(context: &TunLaunchContext, true_execu
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn preflight_tun_service(context: &TunLaunchContext, true_executable: &Path) -> anyhow::Result<()> {
+pub(super) fn preflight_tun_service(
+    context: &TunLaunchContext,
+    true_executable: &Path,
+) -> anyhow::Result<()> {
     let output = build_tun_preflight_command(context, true_executable)
         .output()
         .context("could not preflight the isolated TUN systemd service")?;
@@ -297,7 +306,10 @@ pub(super) fn start_tun_service(
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn systemd_property(context: &TunLaunchContext, property: &str) -> anyhow::Result<String> {
+pub(super) fn systemd_property(
+    context: &TunLaunchContext,
+    property: &str,
+) -> anyhow::Result<String> {
     let output = Command::new(&context.sudo)
         .args(["-n", "--"])
         .arg(&context.systemctl)
@@ -331,7 +343,10 @@ pub(super) fn systemd_main_pid(context: &TunLaunchContext) -> anyhow::Result<Opt
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn await_systemd_main_pid(context: &TunLaunchContext, timeout: Duration) -> anyhow::Result<u32> {
+pub(super) fn await_systemd_main_pid(
+    context: &TunLaunchContext,
+    timeout: Duration,
+) -> anyhow::Result<u32> {
     let start = Instant::now();
     loop {
         if let Some(pid) = systemd_main_pid(context)? {
@@ -411,7 +426,11 @@ pub(super) fn stop_systemd_unit(context: &TunLaunchContext) -> anyhow::Result<()
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveProcess) -> anyhow::Result<()> {
+pub(super) fn stop_tun_locked(
+    runtime: &Path,
+    state_path: &Path,
+    state: &ActiveProcess,
+) -> anyhow::Result<()> {
     let tun = state
         .tun
         .as_ref()
@@ -552,7 +571,10 @@ pub(super) fn stop_tun_locked(runtime: &Path, state_path: &Path, state: &ActiveP
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn legacy_tun_snapshot_is_safe_to_retire(baseline: &TunBaseline, current: &TunBaseline) -> bool {
+pub(super) fn legacy_tun_snapshot_is_safe_to_retire(
+    baseline: &TunBaseline,
+    current: &TunBaseline,
+) -> bool {
     // Legacy state has no per-resource ownership fingerprints. It is safe to
     // discard only when the baseline itself had no TUN interface, none exists
     // now, and every current route/rule was already present in the baseline.
@@ -577,5 +599,3 @@ pub(super) fn legacy_tun_snapshot_is_safe_to_retire(baseline: &TunBaseline, curr
             .iter()
             .all(|entry| baseline.ipv6_rules.contains(entry))
 }
-
-

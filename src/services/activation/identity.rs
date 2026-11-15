@@ -45,7 +45,12 @@ pub(super) fn await_identity(pid: u32, expected: &Path, timeout: Duration) -> an
     }
 }
 #[cfg(target_os = "linux")]
-pub(super) fn await_listener(pid: u32, ticks: u64, port: u16, timeout: Duration) -> anyhow::Result<()> {
+pub(super) fn await_listener(
+    pid: u32,
+    ticks: u64,
+    port: u16,
+    timeout: Duration,
+) -> anyhow::Result<()> {
     let start = Instant::now();
     loop {
         ensure!(
@@ -70,7 +75,12 @@ pub(super) fn wait_exit(pid: u32, ticks: u64, timeout: Duration) {
     }
 }
 #[cfg(target_os = "linux")]
-pub(super) fn signal_verified(pid: u32, expected: &Path, ticks: u64, signal: i32) -> anyhow::Result<()> {
+pub(super) fn signal_verified(
+    pid: u32,
+    expected: &Path,
+    ticks: u64,
+    signal: i32,
+) -> anyhow::Result<()> {
     ensure!(
         matches_process(pid, expected, ticks),
         "process identity changed; refusing signal"
@@ -106,4 +116,3 @@ pub(super) fn signal_verified(pid: u32, expected: &Path, ticks: u64, signal: i32
     ensure!(result == 0, "could not signal tracked process");
     Ok(())
 }
-

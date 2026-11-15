@@ -10,8 +10,6 @@ mod identity;
 #[cfg(target_os = "linux")]
 mod tun_runtime;
 #[cfg(target_os = "linux")]
-use tun_runtime::*;
-#[cfg(target_os = "linux")]
 use identity::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -26,6 +24,8 @@ use std::{
 };
 #[cfg(target_os = "linux")]
 use std::{io::Read, os::unix::process::CommandExt};
+#[cfg(target_os = "linux")]
+use tun_runtime::*;
 
 const WAIT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(100);

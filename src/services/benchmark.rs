@@ -13,12 +13,15 @@ use std::{
 
 use anyhow::{Context, ensure};
 
-mod samples;
 mod probes;
-use probes::{execute_latency_batch, execute_tcp_ping_batch, LatencyBatchEntry};
+mod samples;
 #[cfg(test)]
 use probes::probe_chunks;
-use samples::{failed_sample, install_cancellation_handler, persist_sample, record_preflight, status_for_failure, successful_sample};
+use probes::{LatencyBatchEntry, execute_latency_batch, execute_tcp_ping_batch};
+use samples::{
+    failed_sample, install_cancellation_handler, persist_sample, record_preflight,
+    status_for_failure, successful_sample,
+};
 
 use crate::{
     benchmark::{
@@ -613,7 +616,6 @@ fn execute_run(
     Ok(())
 }
 
-
 fn throughput_allowed(
     metric: BenchmarkMetric,
     selection: BenchmarkMetricSelection,
@@ -753,7 +755,6 @@ fn classify_core_start_failure(
         )
     }
 }
-
 
 #[cfg(test)]
 mod tests {

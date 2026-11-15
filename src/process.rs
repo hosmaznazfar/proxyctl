@@ -34,18 +34,26 @@ pub(crate) fn run_bounded_command(
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                anyhow::bail!("{description}: process exceeded its {}-second deadline and was terminated", timeout.as_secs());
+                anyhow::bail!(
+                    "{description}: process exceeded its {}-second deadline and was terminated",
+                    timeout.as_secs()
+                );
             }
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(error).with_context(|| format!("{description}: could not inspect process"));
+                return Err(error)
+                    .with_context(|| format!("{description}: could not inspect process"));
             }
         }
     };
     let stdout = read_bounded(&mut stdout)?;
     let stderr = read_bounded(&mut stderr)?;
-    Ok(Output { status, stdout, stderr })
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 fn read_bounded(file: &mut std::fs::File) -> anyhow::Result<Vec<u8>> {

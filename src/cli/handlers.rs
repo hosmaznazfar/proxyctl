@@ -486,4 +486,3 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     }
     Ok(())
 }
-

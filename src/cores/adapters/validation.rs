@@ -1,5 +1,9 @@
 //! Secure, validation-only execution of generated core configurations.
-use std::{path::Path, process::{Command, Output}, time::Duration};
+use std::{
+    path::Path,
+    process::{Command, Output},
+    time::Duration,
+};
 
 use anyhow::Context;
 

@@ -233,5 +233,3 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
         }
     }
 }
-
-

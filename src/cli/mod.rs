@@ -13,8 +13,8 @@ use crate::{
 use clap::{ArgGroup, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 
-mod presentation;
 mod handlers;
+mod presentation;
 pub use handlers::dispatch;
 use presentation::*;
 use std::path::PathBuf;
@@ -429,7 +429,6 @@ fn offer_first_setup_completion() -> anyhow::Result<()> {
     }
     Ok(())
 }
-
 
 fn confirm_remove_all() -> anyhow::Result<bool> {
     use std::io::{self, IsTerminal, Write};

@@ -101,4 +101,3 @@ pub(super) fn sync_directory(path: &Path) -> Result<()> {
     File::open(path)?.sync_all()?;
     Ok(())
 }
-

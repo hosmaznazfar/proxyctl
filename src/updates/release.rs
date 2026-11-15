@@ -3,9 +3,9 @@ use super::artifact::validate_github_download_url;
 use std::{io::Read, time::Duration};
 
 use anyhow::{Context, ensure};
-use ureq::Agent;
 use semver::Version;
 use serde::Deserialize;
+use ureq::Agent;
 
 const USER_AGENT: &str = concat!("proxyctl/", env!("CARGO_PKG_VERSION"));
 const METADATA_TIMEOUT: Duration = Duration::from_secs(20);
@@ -91,8 +91,8 @@ pub fn latest_release_optional(
         body.len() as u64 <= MAX_METADATA_BYTES,
         "GitHub release metadata exceeds the 10 MiB safety limit"
     );
-    let releases: Vec<Release> = serde_json::from_slice(&body)
-        .context("could not parse GitHub release metadata")?;
+    let releases: Vec<Release> =
+        serde_json::from_slice(&body).context("could not parse GitHub release metadata")?;
     let Some(release) = select_release(releases, channel) else {
         return Ok(None);
     };
