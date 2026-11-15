@@ -11,10 +11,34 @@ use crate::{
 use super::{
     CoreAdapter, json_config,
     shared::{
-        Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
-        shadowsocks_plugin, tls_options, validate_for_core, SING_BOX,
+        Compatibility, CoreCapabilities, GeneratedConfig, normalize_transport, option_string, reality_options,
+        shadowsocks_plugin, tls_options, validate_for_core,
     },
     summarize_validation_failure,
+};
+
+const CAPABILITIES: CoreCapabilities = CoreCapabilities {
+    name: "sing-box",
+    shadowsocks_plugins: true,
+    reality_transport_limited: true,
+    vmess_xhttp: false,
+    xhttp_auto_mode: true,
+    websocket_early_data_header: None,
+    hysteria2: true,
+    reality_vless: true,
+    reality_vmess: false,
+    reality_optional_fields: false,
+    tcp: true,
+    websocket: true,
+    grpc: true,
+    http2: true,
+    http_upgrade: true,
+    xhttp: false,
+    grpc_service_name_required: false,
+    grpc_authority: false,
+    grpc_multi_mode: false,
+    certificate_sha256_pin: false,
+    verify_peer_cert_by_name: false,
 };
 
 pub struct SingBoxAdapter;
@@ -25,7 +49,7 @@ impl CoreAdapter for SingBoxAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_for_core(&SING_BOX, node) {
+        match validate_for_core(&CAPABILITIES, node) {
             Ok(()) => Compatibility::supported(),
             Err(compatibility) => compatibility,
         }
