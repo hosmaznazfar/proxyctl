@@ -41,10 +41,10 @@ pub fn detect_current() -> Option<Shell> {
     {
         // Prefer the actual parent shell over $SHELL, which may name the login shell.
         let parent = unsafe { libc::getppid() };
-        if let Ok(name) = fs::read_to_string(format!("/proc/{parent}/comm")) {
-            if let Ok(shell) = Shell::parse(name.trim()) {
-                return Some(shell);
-            }
+        if let Ok(name) = fs::read_to_string(format!("/proc/{parent}/comm"))
+            && let Ok(shell) = Shell::parse(name.trim())
+        {
+            return Some(shell);
         }
     }
     std::env::var_os("SHELL")
