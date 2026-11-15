@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use anyhow::{Context, ensure};
 use serde_json::{Value, json};
 
-use crate::{cores::CoreId, domain::ProxyNode};
+use crate::{cores::CoreId, domain::{BenchmarkProxyType, ProxyNode}};
 
 use super::{CoreAdapter, GeneratedConfig, json_config};
 
@@ -18,6 +18,7 @@ pub struct BenchmarkTarget<'a> {
     pub node_id: u64,
     pub node: &'a ProxyNode,
     pub listen_port: u16,
+    pub proxy_type: BenchmarkProxyType,
 }
 
 pub(super) fn generate<A: CoreAdapter + ?Sized>(
@@ -91,7 +92,7 @@ fn generate_sing_box<A: CoreAdapter + ?Sized>(
         outbound["tag"] = json!(outbound_tag);
         outbounds.push(outbound);
         inbounds.push(json!({
-            "type": "http",
+            "type": match target.proxy_type { BenchmarkProxyType::Socks5 => "socks", BenchmarkProxyType::Http => "http" },
             "tag": inbound_tag,
             "listen": "127.0.0.1",
             "listen_port": target.listen_port
@@ -139,7 +140,7 @@ fn generate_xray<A: CoreAdapter + ?Sized>(
         inbounds.push(json!({
             "listen": "127.0.0.1",
             "port": target.listen_port,
-            "protocol": "http",
+            "protocol": match target.proxy_type { BenchmarkProxyType::Socks5 => "socks", BenchmarkProxyType::Http => "http" },
             "settings": {},
             "tag": inbound_tag
         }));
@@ -207,11 +208,13 @@ mod tests {
                 node_id: 11,
                 node: first,
                 listen_port: 43131,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
             BenchmarkTarget {
                 node_id: 22,
                 node: second,
                 listen_port: 43132,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
         ]
     }
