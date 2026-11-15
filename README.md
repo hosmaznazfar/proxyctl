@@ -130,6 +130,33 @@ proxyctl completions generate bash
 proxyctl completions generate zsh
 ~~~
 
+The generated scripts include current command options and declared finite-value arguments. For example, `config set` completes `listen-port`, and display-profile commands complete the supported profiles and fields. Values such as node IDs, arbitrary search text, URLs, and port numbers remain user-entered.
+
+To inspect and test the generated completions in each shell:
+
+~~~sh
+proxyctl completions generate bash
+proxyctl completions generate fish
+proxyctl completions generate zsh
+~~~
+
+After installing, start a fresh shell. In Zsh, verify that the completion directory is in `$fpath` and that `_proxyctl` is registered:
+
+~~~zsh
+source ~/.zshrc
+print -rl -- $fpath
+whence -v _proxyctl
+compdef | grep -E '(^|[ =])proxyctl([ =]|$)'
+~~~
+
+Then try completion interactively by typing `proxyctl test `, `proxyctl config set `, and `proxyctl config display profile ` followed by Tab. For a non-interactive Zsh registration check:
+
+~~~sh
+zsh -ic 'autoload -Uz compinit; compinit; source ~/.zshrc; whence -v _proxyctl; print -r -- ${+functions[_proxyctl]}'
+~~~
+
+In Bash, check registration with `complete -p proxyctl` and try the same commands followed by Tab.
+
 ## Single-core activation
 
 Activate one stored node with one explicitly selected Proxyctl-managed core:
