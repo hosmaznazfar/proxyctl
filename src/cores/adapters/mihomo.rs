@@ -252,12 +252,9 @@ impl CoreAdapter for MihomoAdapter {
     }
 
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
-        let output = Command::new(executable)
-            .arg("-t")
-            .arg("-f")
-            .arg(config)
-            .output()
-            .context("could not run Mihomo config validation")?;
+        let mut command = Command::new(executable);
+        command.arg("-t").arg("-f").arg(config);
+        let output = super::validation::run_validator(command, "could not run Mihomo config validation")?;
         ensure!(
             output.status.success(),
             "Mihomo rejected the generated configuration (exit status {:?}; {})",
