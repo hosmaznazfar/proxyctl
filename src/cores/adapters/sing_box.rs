@@ -318,13 +318,13 @@ mod config_contract_tests {
 
     #[test]
     fn sing_box_activation_benchmark_and_tun_options_stay_core_native() {
-        assert!(CAPABILITIES.hysteria2 && CAPABILITIES.reality_vless);
+        assert!(capabilities.hysteria2 && capabilities.reality_vless);
         assert!(
-            !CAPABILITIES.reality_requires_tcp_grpc_xhttp
-                && CAPABILITIES.reality_disallows_legacy_transport
+            !capabilities.reality_requires_tcp_grpc_xhttp
+                && capabilities.reality_disallows_legacy_transport
         );
-        assert!(!CAPABILITIES.reality_vmess && !CAPABILITIES.xhttp);
-        assert!(!CAPABILITIES.certificate_sha256_pin);
+        assert!(!capabilities.reality_vmess && !capabilities.xhttp);
+        assert!(!capabilities.certificate_sha256_pin);
         let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
             .unwrap();
         let activation: serde_json::Value = serde_json::from_slice(
