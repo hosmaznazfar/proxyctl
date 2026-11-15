@@ -202,6 +202,22 @@ mod tests {
     }
 
     #[test]
+    fn native_validator_is_terminated_after_its_deadline() {
+        let directory = tempdir().unwrap();
+        let executable = directory.path().join("hanging-core");
+        fs::write(&executable, "#!/bin/sh\\nexec sleep 30\\n").unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let started = std::time::Instant::now();
+        let mut command = std::process::Command::new(&executable);
+        command.arg("check");
+        let error = run_validator(command, "test validator").unwrap_err();
+
+        assert!(error.to_string().contains("10-second deadline"));
+        assert!(started.elapsed() < std::time::Duration::from_secs(12));
+    }
+
+    #[test]
     fn validation_uses_each_cores_native_check_command() {
         let directory = tempdir().unwrap();
         let executable = directory.path().join("fake-core");
