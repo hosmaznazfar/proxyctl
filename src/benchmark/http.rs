@@ -504,7 +504,7 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-            proxy_port: proxy_port,
+            proxy_port,
             timeout: Duration::from_secs(2),
         };
 
