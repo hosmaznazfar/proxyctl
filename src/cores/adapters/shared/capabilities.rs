@@ -9,27 +9,27 @@ use super::{
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CoreCapabilities {
-    name: &'static str,
-    shadowsocks_plugins: bool,
-    reality_transport_limited: bool,
-    vmess_xhttp: bool,
-    xhttp_auto_mode: bool,
-    websocket_early_data_header: Option<&'static str>,
-    hysteria2: bool,
-    reality_vless: bool,
-    reality_vmess: bool,
-    reality_optional_fields: bool,
-    tcp: bool,
-    websocket: bool,
-    grpc: bool,
-    http2: bool,
-    http_upgrade: bool,
-    xhttp: bool,
-    grpc_service_name_required: bool,
-    grpc_authority: bool,
-    grpc_multi_mode: bool,
-    certificate_sha256_pin: bool,
-    verify_peer_cert_by_name: bool,
+    pub(crate) name: &'static str,
+    pub(crate) shadowsocks_plugins: bool,
+    pub(crate) reality_transport_limited: bool,
+    pub(crate) vmess_xhttp: bool,
+    pub(crate) xhttp_auto_mode: bool,
+    pub(crate) websocket_early_data_header: Option<&'static str>,
+    pub(crate) hysteria2: bool,
+    pub(crate) reality_vless: bool,
+    pub(crate) reality_vmess: bool,
+    pub(crate) reality_optional_fields: bool,
+    pub(crate) tcp: bool,
+    pub(crate) websocket: bool,
+    pub(crate) grpc: bool,
+    pub(crate) http2: bool,
+    pub(crate) http_upgrade: bool,
+    pub(crate) xhttp: bool,
+    pub(crate) grpc_service_name_required: bool,
+    pub(crate) grpc_authority: bool,
+    pub(crate) grpc_multi_mode: bool,
+    pub(crate) certificate_sha256_pin: bool,
+    pub(crate) verify_peer_cert_by_name: bool,
 }
 
 impl CoreCapabilities {
@@ -45,79 +45,6 @@ impl CoreCapabilities {
         }
     }
 }
-
-pub(crate) const SING_BOX: CoreCapabilities = CoreCapabilities {
-    name: "sing-box",
-    shadowsocks_plugins: true,
-    reality_transport_limited: true,
-    vmess_xhttp: false,
-    xhttp_auto_mode: true,
-    websocket_early_data_header: None,
-    hysteria2: true,
-    reality_vless: true,
-    reality_vmess: false,
-    reality_optional_fields: false,
-    tcp: true,
-    websocket: true,
-    grpc: true,
-    http2: true,
-    http_upgrade: true,
-    xhttp: false,
-    grpc_service_name_required: false,
-    grpc_authority: false,
-    grpc_multi_mode: false,
-    certificate_sha256_pin: false,
-    verify_peer_cert_by_name: false,
-};
-
-pub(crate) const XRAY: CoreCapabilities = CoreCapabilities {
-    name: "Xray",
-    shadowsocks_plugins: false,
-    reality_transport_limited: true,
-    vmess_xhttp: true,
-    xhttp_auto_mode: true,
-    websocket_early_data_header: Some("Sec-WebSocket-Protocol"),
-    hysteria2: false,
-    reality_vless: true,
-    reality_vmess: true,
-    reality_optional_fields: true,
-    tcp: true,
-    websocket: true,
-    grpc: true,
-    // The legacy HTTP/2 transport was removed from current Xray transport schemas.
-    http2: false,
-    http_upgrade: true,
-    xhttp: true,
-    grpc_service_name_required: false,
-    grpc_authority: true,
-    grpc_multi_mode: true,
-    certificate_sha256_pin: true,
-    verify_peer_cert_by_name: true,
-};
-
-pub(crate) const MIHOMO: CoreCapabilities = CoreCapabilities {
-    name: "Mihomo",
-    shadowsocks_plugins: true,
-    reality_transport_limited: true,
-    vmess_xhttp: false,
-    xhttp_auto_mode: false,
-    websocket_early_data_header: None,
-    hysteria2: true,
-    reality_vless: true,
-    reality_vmess: false,
-    reality_optional_fields: false,
-    tcp: true,
-    websocket: true,
-    grpc: true,
-    http2: true,
-    http_upgrade: true,
-    xhttp: true,
-    grpc_service_name_required: true,
-    grpc_authority: false,
-    grpc_multi_mode: false,
-    certificate_sha256_pin: true,
-    verify_peer_cert_by_name: true,
-};
 
 fn compatibility_failure(reason: String) -> Compatibility {
     let normalized = reason.to_ascii_lowercase();
@@ -316,30 +243,3 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn capability_profiles_keep_core_differences_explicit() {
-        assert!(SING_BOX.reality_vless);
-        assert!(!SING_BOX.reality_vmess);
-        assert!(XRAY.reality_vmess);
-        assert!(XRAY.reality_optional_fields);
-        assert!(!MIHOMO.reality_optional_fields);
-        assert!(!SING_BOX.xhttp);
-        assert!(XRAY.xhttp);
-        assert!(!XRAY.http2);
-        assert!(XRAY.certificate_sha256_pin);
-        assert!(!SING_BOX.certificate_sha256_pin);
-        assert!(MIHOMO.certificate_sha256_pin);
-        assert!(XRAY.verify_peer_cert_by_name);
-        assert!(!SING_BOX.verify_peer_cert_by_name);
-        assert!(MIHOMO.http2);
-        assert!(MIHOMO.grpc_service_name_required);
-        assert!(XRAY.grpc_authority);
-        assert!(XRAY.grpc_multi_mode);
-        assert!(!MIHOMO.grpc_authority);
-        assert_eq!(XRAY.websocket_early_data_header, Some("Sec-WebSocket-Protocol"));
-    }
-}
