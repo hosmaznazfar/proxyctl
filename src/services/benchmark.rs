@@ -31,7 +31,7 @@ use crate::{
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 const SAMPLES_PER_METRIC: u8 = 3;
 const BENCHMARK_HISTORY_LIMIT: usize = 3;
-const METHODOLOGY: &str = "proxyctl-benchmark-v13";
+const METHODOLOGY: &str = "proxyctl-benchmark-v14";
 const DIRECT_TARGET: &str = "direct";
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROBE_CONCURRENCY: usize = 3;
@@ -1027,6 +1027,8 @@ fn successful_sample(
         failure_reason: None,
         timestamp: unix_timestamp(),
         duration_ms: Some(duration_millis(measurement.duration)),
+        transferred_bytes: measurement.transferred_bytes,
+        partial: measurement.partial,
     }
 }
 
@@ -1053,6 +1055,8 @@ fn failed_sample(
         failure_reason: Some(reason.into()),
         timestamp: unix_timestamp(),
         duration_ms: None,
+        transferred_bytes: None,
+        partial: false,
     }
 }
 
