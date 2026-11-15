@@ -24,6 +24,8 @@ pub struct Measurement {
     pub value: f64,
     pub duration: Duration,
     pub transferred_bytes: Option<u64>,
+    /// True when a download reached the useful partial threshold but not its byte cap.
+    pub partial: bool,
 }
 
 /// Safe failure classification; deliberately excludes raw URLs and library diagnostics.
@@ -165,6 +167,7 @@ impl BenchmarkHttpClient {
             value: duration.as_secs_f64() * 1_000.0,
             duration,
             transferred_bytes: None,
+            partial: false,
         })
     }
 
@@ -272,6 +275,7 @@ impl BenchmarkHttpClient {
                     .ok_or(MeasurementFailure::InvalidResponse)?,
                 duration,
                 transferred_bytes: Some(max_bytes),
+                partial: false,
             });
         }
         if received >= MIN_PARTIAL_DOWNLOAD_BYTES {
@@ -310,6 +314,7 @@ impl BenchmarkHttpClient {
             value: throughput_bps(bytes, duration).ok_or(MeasurementFailure::InvalidResponse)?,
             duration,
             transferred_bytes: Some(bytes),
+            partial: false,
         })
     }
 }
@@ -331,6 +336,7 @@ fn partial_download_measurement(
         value: throughput_bps(received, duration).ok_or(MeasurementFailure::InvalidResponse)?,
         duration,
         transferred_bytes: Some(received),
+        partial: true,
     })
 }
 
