@@ -73,7 +73,7 @@ pub(crate) const SING_BOX: CoreCapabilities = CoreCapabilities {
 pub(crate) const XRAY: CoreCapabilities = CoreCapabilities {
     name: "Xray",
     shadowsocks_plugins: false,
-    reality_transport_limited: false,
+    reality_transport_limited: true,
     vmess_xhttp: true,
     xhttp_auto_mode: true,
     websocket_early_data_header: Some("Sec-WebSocket-Protocol"),
@@ -192,7 +192,7 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
         && !capabilities.shadowsocks_plugins
     {
         return Err(compatibility_failure(
-            "Xray does not implement Shadowsocks SIP003 plugins".into(),
+            format!("{core} does not implement Shadowsocks SIP003 plugins"),
         ));
     }
     let reality = reality_options(node).map_err(compatibility_failure)?;
@@ -267,7 +267,7 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
         && transport.mode.as_deref() == Some("auto")
     {
         return Err(compatibility_failure(
-            "Mihomo XHTTP does not support the explicit auto mode".into(),
+            format!("{core} XHTTP does not support the explicit auto mode"),
         ));
     }
 
@@ -282,7 +282,7 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
         && transport.early_data_header_name.as_deref().is_some_and(|name| name != required_header)
     {
         return Err(compatibility_failure(
-            "Xray WebSocket early data requires the Sec-WebSocket-Protocol header".into(),
+            format!("{core} WebSocket early data requires the Sec-WebSocket-Protocol header"),
         ));
     }
 
