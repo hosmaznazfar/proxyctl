@@ -188,13 +188,9 @@ impl CoreAdapter for XrayAdapter {
     }
 
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
-        let output = Command::new(executable)
-            .arg("run")
-            .arg("-test")
-            .arg("-c")
-            .arg(config)
-            .output()
-            .context("could not run Xray config validation")?;
+        let mut command = Command::new(executable);
+        command.arg("run").arg("-test").arg("-c").arg(config);
+        let output = super::validation::run_validator(command, "could not run Xray config validation")?;
         ensure!(
             output.status.success(),
             "Xray rejected the generated configuration (exit status {:?}; {})",
