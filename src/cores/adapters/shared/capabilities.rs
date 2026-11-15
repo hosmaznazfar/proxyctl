@@ -1,9 +1,6 @@
 //! Declarative per-core feature capabilities and compatibility evaluation.
 
-use crate::{
-    cores::CoreId,
-    domain::{Protocol, ProxyNode, TransportKind},
-};
+use crate::domain::{Protocol, ProxyNode, TransportKind};
 
 use super::{
     Compatibility, normalize_transport, option_string, reality_options, shadowsocks_plugin,
@@ -11,7 +8,13 @@ use super::{
 };
 
 #[derive(Clone, Copy, Debug)]
-struct CoreCapabilities {
+pub(super) struct CoreCapabilities {
+    name: &'static str,
+    shadowsocks_plugins: bool,
+    reality_transport_limited: bool,
+    vmess_xhttp: bool,
+    xhttp_auto_mode: bool,
+    websocket_early_data_header: Option<&'static str>,
     hysteria2: bool,
     reality_vless: bool,
     reality_vmess: bool,
@@ -43,7 +46,13 @@ impl CoreCapabilities {
     }
 }
 
-const SING_BOX: CoreCapabilities = CoreCapabilities {
+pub(super) const SING_BOX: CoreCapabilities = CoreCapabilities {
+    name: "sing-box",
+    shadowsocks_plugins: true,
+    reality_transport_limited: true,
+    vmess_xhttp: false,
+    xhttp_auto_mode: true,
+    websocket_early_data_header: None,
     hysteria2: true,
     reality_vless: true,
     reality_vmess: false,
@@ -61,7 +70,13 @@ const SING_BOX: CoreCapabilities = CoreCapabilities {
     verify_peer_cert_by_name: false,
 };
 
-const XRAY: CoreCapabilities = CoreCapabilities {
+pub(super) const XRAY: CoreCapabilities = CoreCapabilities {
+    name: "Xray",
+    shadowsocks_plugins: false,
+    reality_transport_limited: false,
+    vmess_xhttp: true,
+    xhttp_auto_mode: true,
+    websocket_early_data_header: Some("Sec-WebSocket-Protocol"),
     hysteria2: false,
     reality_vless: true,
     reality_vmess: true,
@@ -80,7 +95,13 @@ const XRAY: CoreCapabilities = CoreCapabilities {
     verify_peer_cert_by_name: true,
 };
 
-const MIHOMO: CoreCapabilities = CoreCapabilities {
+pub(super) const MIHOMO: CoreCapabilities = CoreCapabilities {
+    name: "Mihomo",
+    shadowsocks_plugins: true,
+    reality_transport_limited: true,
+    vmess_xhttp: false,
+    xhttp_auto_mode: false,
+    websocket_early_data_header: None,
     hysteria2: true,
     reality_vless: true,
     reality_vmess: false,
@@ -97,14 +118,6 @@ const MIHOMO: CoreCapabilities = CoreCapabilities {
     certificate_sha256_pin: true,
     verify_peer_cert_by_name: true,
 };
-
-fn capabilities(core: CoreId) -> &'static CoreCapabilities {
-    match core {
-        CoreId::SingBox => &SING_BOX,
-        CoreId::Xray => &XRAY,
-        CoreId::Mihomo => &MIHOMO,
-    }
-}
 
 fn compatibility_failure(reason: String) -> Compatibility {
     let normalized = reason.to_ascii_lowercase();
@@ -160,8 +173,8 @@ fn compatibility_failure(reason: String) -> Compatibility {
 }
 
 /// Validate the shared semantic node against one core's explicit capability set.
-pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Compatibility> {
-    let capabilities = capabilities(core);
+pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &ProxyNode) -> Result<(), Compatibility> {
+    let core = capabilities.name;
 
     validate_common(node).map_err(compatibility_failure)?;
     tls_options(node).map_err(compatibility_failure)?;
@@ -176,7 +189,7 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
     if shadowsocks_plugin(node)
         .map_err(compatibility_failure)?
         .is_some()
-        && core == CoreId::Xray
+        && !capabilities.shadowsocks_plugins
     {
         return Err(compatibility_failure(
             "Xray does not implement Shadowsocks SIP003 plugins".into(),
@@ -202,7 +215,7 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
             )));
         }
         let transport = normalize_transport(node).map_err(compatibility_failure)?;
-        if core == CoreId::Xray
+        if capabilities.reality_transport_limited
             && !matches!(
                 &transport.kind,
                 TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp
@@ -212,7 +225,7 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
                 "Xray REALITY supports only TCP/RAW, gRPC, and XHTTP transports".into(),
             ));
         }
-        if core != CoreId::Xray
+        if capabilities.reality_transport_limited
             && matches!(
                 &transport.kind,
                 TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket
@@ -243,14 +256,14 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
     let transport = normalize_transport(node).map_err(compatibility_failure)?;
     if matches!(&transport.kind, TransportKind::XHttp)
         && node.protocol == Protocol::Vmess
-        && core != CoreId::Xray
+        && !capabilities.vmess_xhttp
     {
         return Err(compatibility_failure(format!(
             "{core} does not support VMess XHTTP"
         )));
     }
     if matches!(&transport.kind, TransportKind::XHttp)
-        && core == CoreId::Mihomo
+        && !capabilities.xhttp_auto_mode
         && transport.mode.as_deref() == Some("auto")
     {
         return Err(compatibility_failure(
@@ -264,12 +277,9 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
         )));
     }
 
-    if core == CoreId::Xray
+    if let Some(required_header) = capabilities.websocket_early_data_header
         && matches!(&transport.kind, TransportKind::WebSocket)
-        && transport
-            .early_data_header_name
-            .as_deref()
-            .is_some_and(|name| name != "Sec-WebSocket-Protocol")
+        && transport.early_data_header_name.as_deref().is_some_and(|name| name != required_header)
     {
         return Err(compatibility_failure(
             "Xray WebSocket early data requires the Sec-WebSocket-Protocol header".into(),
@@ -309,14 +319,15 @@ pub(crate) fn validate_for_core(core: CoreId, node: &ProxyNode) -> Result<(), Co
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cores::CoreId;
 
     #[test]
     fn capability_registry_keeps_core_differences_explicit() {
-        assert!(capabilities(CoreId::SingBox).reality_vless);
+        assert!(&SING_BOX.reality_vless);
         assert!(!capabilities(CoreId::SingBox).reality_vmess);
-        assert!(capabilities(CoreId::Xray).reality_vmess);
+        assert!(&XRAY.reality_vmess);
         assert!(capabilities(CoreId::Xray).reality_optional_fields);
-        assert!(!capabilities(CoreId::Mihomo).reality_optional_fields);
+        assert!(!&MIHOMO.reality_optional_fields);
         assert!(!capabilities(CoreId::SingBox).xhttp);
         assert!(capabilities(CoreId::Xray).xhttp);
         assert!(!capabilities(CoreId::Xray).http2);
