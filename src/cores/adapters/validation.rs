@@ -205,7 +205,7 @@ mod tests {
     fn native_validator_is_terminated_after_its_deadline() {
         let directory = tempdir().unwrap();
         let executable = directory.path().join("hanging-core");
-        fs::write(&executable, "#!/bin/sh\\nexec sleep 30\\n").unwrap();
+        fs::write(&executable, "#!/bin/sh\nexec sleep 30\n").unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
 
         let started = std::time::Instant::now();
