@@ -2,7 +2,7 @@
 
 A lightweight Rust CLI for managing proxy URLs, testing them through multiple proxy cores, comparing performance, and optionally activating a selected proxy.
 
-> Project status: node management, managed-core inventory and updates, adapters, core-batched benchmarking with bounded probes (Stages 1–5 user-verified; Stage 6 full offline verification batch passed, with final coverage audit remaining), metric-specific sorting, benchmark reports/history, compatibility-aware pruning, Linux single-core loopback activation, and Bash/Fish/Zsh shell completion are implemented. TUN inspection is read-only; TUN activation is temporarily disabled pending safe route ownership and crash recovery.
+> Project status: node management, managed-core inventory and updates, adapters, core-batched benchmarking with bounded probes (Stages 1–5 user-verified; Stage 6 full offline verification batch passed and coverage audit completed), metric-specific sorting, benchmark reports/history, compatibility-aware pruning, Linux single-core loopback activation, and Bash/Fish/Zsh shell completion are implemented. TUN inspection is read-only; TUN activation is temporarily disabled pending safe route ownership and crash recovery.
 
 ## Goals
 
