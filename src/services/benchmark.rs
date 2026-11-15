@@ -31,7 +31,7 @@ use crate::{
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 const SAMPLES_PER_METRIC: u8 = 3;
 const BENCHMARK_HISTORY_LIMIT: usize = 3;
-const METHODOLOGY: &str = "proxyctl-benchmark-v8";
+const METHODOLOGY: &str = "proxyctl-benchmark-v9";
 const DIRECT_TARGET: &str = "direct";
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROBE_CONCURRENCY: usize = 3;
@@ -96,7 +96,7 @@ pub fn default_settings() -> BenchmarkSettings {
         upload_url: "https://speed.cloudflare.com/__up".into(),
         download_bytes: 1_048_576,
         upload_bytes: 1_048_576,
-        request_timeout_ms: 3_000,
+        request_timeout_ms: 60_000,
         latency_timeout_ms: 5_000,
         probe_concurrency: 3,
         startup_timeout_ms: 10_000,
@@ -1420,7 +1420,7 @@ mod tests {
         assert_eq!(settings.upload_url, "https://speed.cloudflare.com/__up");
         assert_eq!(settings.download_bytes, 1_048_576);
         assert_eq!(settings.upload_bytes, 1_048_576);
-        assert_eq!(settings.request_timeout_ms, 3_000);
+        assert_eq!(settings.request_timeout_ms, 60_000);
         assert_eq!(settings.latency_timeout_ms, 5_000);
         assert_eq!(settings.probe_concurrency, 3);
     }

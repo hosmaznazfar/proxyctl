@@ -233,8 +233,8 @@ enum Command {
         /// Upload payload size for each sample (default and maximum 1 MiB).
         #[arg(long, default_value_t = 1_048_576)]
         upload_bytes: u64,
-        /// Maximum duration of each download/upload HTTP request, in seconds (default 3).
-        #[arg(long, alias = "throughput-timeout-secs", default_value_t = 3)]
+        /// Maximum duration of each download/upload HTTP request, in seconds (default 60).
+        #[arg(long, alias = "throughput-timeout-secs", default_value_t = 60)]
         request_timeout_secs: u64,
         /// Maximum duration of each real-latency HTTP request, in seconds.
         #[arg(long, default_value_t = 5)]
