@@ -1569,6 +1569,14 @@ mod tests {
     use super::{Cli, Command, TunCommand, display_core_version};
 
     #[test]
+    fn fish_completion_script_contains_proxyctl_command_definitions() {
+        let script = super::completion_script(clap_complete::Shell::Fish);
+        assert!(script.contains("complete -c proxyctl"));
+        assert!(script.contains("completions"));
+        assert!(script.contains("--all-cores"));
+    }
+
+    #[test]
     fn completions_command_supports_generation_and_fish_installation() {
         for shell in ["bash", "fish", "zsh"] {
             assert!(Cli::try_parse_from(["proxyctl", "completions", "generate", shell]).is_ok());
