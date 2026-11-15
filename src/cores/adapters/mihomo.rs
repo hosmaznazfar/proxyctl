@@ -1,6 +1,6 @@
 use std::{path::Path, process::Command};
 
-use anyhow::{Context, ensure};
+use anyhow::ensure;
 use serde_json::json;
 
 use crate::{
