@@ -278,17 +278,20 @@ fn set_private_file(_: &fs::File) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     #[test]
-    fn compact_is_the_default_and_profiles_are_independent() {
+    fn normal_is_the_default_and_profiles_are_independent() {
         let mut config = DisplayConfig::default();
         assert_eq!(config.active_profile, DisplayProfile::Normal);
         assert_eq!(
             config.fields(),
             vec![
                 DisplayField::Node,
+                DisplayField::Server,
+                DisplayField::Protocol,
                 DisplayField::Core,
                 DisplayField::Latency,
                 DisplayField::Download,
-                DisplayField::Upload
+                DisplayField::Upload,
+                DisplayField::Status
             ]
         );
         add_field(&mut config, DisplayProfile::Compact, DisplayField::Server).unwrap();
