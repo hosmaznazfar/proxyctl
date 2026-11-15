@@ -14,6 +14,9 @@ use std::{
 
 use anyhow::{Context, ensure};
 
+mod samples;
+use samples::{failed_sample, install_cancellation_handler, persist_sample, record_preflight, status_for_failure, successful_sample};
+
 use crate::{
     benchmark::{
         http::{BenchmarkHttpClient, Measurement, MeasurementFailure, validate_settings},
@@ -28,7 +31,7 @@ use crate::{
     },
 };
 
-static CANCELLED: AtomicBool = AtomicBool::new(false);
+pub(super) static CANCELLED: AtomicBool = AtomicBool::new(false);
 const SAMPLES_PER_METRIC: u8 = 3;
 const BENCHMARK_HISTORY_LIMIT: usize = 3;
 const DIRECT_TARGET: &str = "direct";
@@ -306,7 +309,7 @@ fn installed_core_versions(cores: &[CoreId]) -> BTreeMap<String, String> {
 }
 
 #[derive(Clone)]
-struct SampleContext {
+pub(super) struct SampleContext {
     run_id: u64,
     node_id: u64,
     target: String,
@@ -925,128 +928,6 @@ fn classify_core_start_failure(
     }
 }
 
-fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSampleStatus {
-    match failure {
-        MeasurementFailure::Timeout => BenchmarkSampleStatus::Timeout,
-        MeasurementFailure::Unreachable => BenchmarkSampleStatus::Unreachable,
-        MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
-        MeasurementFailure::Unavailable
-        | MeasurementFailure::ProxyTunnelFailed
-        | MeasurementFailure::TlsFailed
-        | MeasurementFailure::HttpStatus(_)
-        | MeasurementFailure::ProtocolFailed
-        | MeasurementFailure::IncompleteResponse
-        | MeasurementFailure::ReadFailed => BenchmarkSampleStatus::Unavailable,
-        MeasurementFailure::Cancelled => BenchmarkSampleStatus::Cancelled,
-    }
-}
-
-fn successful_sample(
-    context: &SampleContext,
-    metric: BenchmarkMetric,
-    sample_index: u8,
-    measurement: Measurement,
-) -> BenchmarkSample {
-    BenchmarkSample {
-        id: 0,
-        run_id: context.run_id,
-        node_id: context.node_id,
-        core: context.target.clone(),
-        core_version: context.version.clone(),
-        metric,
-        sample_index,
-        status: BenchmarkSampleStatus::Success,
-        value: Some(measurement.value),
-        unit: metric.unit().into(),
-        failure_category: None,
-        failure_reason: None,
-        timestamp: unix_timestamp(),
-        duration_ms: Some(duration_millis(measurement.duration)),
-        transferred_bytes: measurement.transferred_bytes,
-        partial: measurement.partial,
-    }
-}
-
-fn failed_sample(
-    context: &SampleContext,
-    metric: BenchmarkMetric,
-    sample_index: u8,
-    status: BenchmarkSampleStatus,
-    category: &str,
-    reason: &str,
-) -> BenchmarkSample {
-    BenchmarkSample {
-        id: 0,
-        run_id: context.run_id,
-        node_id: context.node_id,
-        core: context.target.clone(),
-        core_version: context.version.clone(),
-        metric,
-        sample_index,
-        status,
-        value: None,
-        unit: metric.unit().into(),
-        failure_category: Some(category.into()),
-        failure_reason: Some(reason.into()),
-        timestamp: unix_timestamp(),
-        duration_ms: None,
-        transferred_bytes: None,
-        partial: false,
-    }
-}
-
-fn record_preflight(
-    database_path: &Path,
-    context: &SampleContext,
-    metrics: &[BenchmarkMetric],
-    status: BenchmarkSampleStatus,
-    category: &str,
-    reason: &str,
-) -> anyhow::Result<()> {
-    for &metric in metrics {
-        persist_sample(
-            database_path,
-            failed_sample(context, metric, 0, status, category, reason),
-        )?;
-    }
-    Ok(())
-}
-
-fn persist_sample(database_path: &Path, sample: BenchmarkSample) -> anyhow::Result<()> {
-    NodeDatabase::open(database_path)?.record_benchmark_sample(sample)?;
-    Ok(())
-}
-
-fn duration_millis(duration: Duration) -> u64 {
-    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
-}
-
-fn unix_timestamp() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
-
-fn install_cancellation_handler() {
-    #[cfg(unix)]
-    {
-        extern "C" fn handle_signal(_: libc::c_int) {
-            CANCELLED.store(true, Ordering::Relaxed);
-        }
-        // The handler only performs an atomic store, which is signal-safe.
-        unsafe {
-            libc::signal(
-                libc::SIGINT,
-                handle_signal as *const () as libc::sighandler_t,
-            );
-            libc::signal(
-                libc::SIGTERM,
-                handle_signal as *const () as libc::sighandler_t,
-            );
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
