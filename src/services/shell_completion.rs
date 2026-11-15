@@ -24,9 +24,17 @@ impl Shell {
             _ => bail!("unsupported shell '{value}'; supported shells: bash, fish, zsh"),
         }
     }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Bash => "bash",
+            Self::Fish => "fish",
+            Self::Zsh => "zsh",
+        }
+    }
 }
 
-/// Detect the active shell from shell-specific environment variables, then $SHELL.
+/// Detect the active shell from shell-specific environment variables, then its parent process and $SHELL.
 pub fn detect_current() -> Option<Shell> {
     if std::env::var_os("FISH_VERSION").is_some() {
         return Some(Shell::Fish);
@@ -39,7 +47,6 @@ pub fn detect_current() -> Option<Shell> {
     }
     #[cfg(target_os = "linux")]
     {
-        // Prefer the actual parent shell over $SHELL, which may name the login shell.
         let parent = unsafe { libc::getppid() };
         if let Ok(name) = fs::read_to_string(format!("/proc/{parent}/comm"))
             && let Ok(shell) = Shell::parse(name.trim())
@@ -53,53 +60,86 @@ pub fn detect_current() -> Option<Shell> {
         .and_then(|name| Shell::parse(&name).ok())
 }
 
-pub fn fish_completion_path() -> anyhow::Result<PathBuf> {
-    let config_home = match std::env::var_os("XDG_CONFIG_HOME") {
-        Some(path) => PathBuf::from(path),
-        None => PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?)
-            .join(".config"),
-    };
-    Ok(config_home.join("fish").join("completions").join("proxyctl.fish"))
+fn config_home() -> anyhow::Result<PathBuf> {
+    match std::env::var_os("XDG_CONFIG_HOME") {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => Ok(PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?).join(".config")),
+    }
 }
 
-pub fn install_fish(script: &str) -> anyhow::Result<PathBuf> {
-    let destination = fish_completion_path()?;
-    let directory = destination
-        .parent()
-        .context("Fish completion path has no parent directory")?;
+fn data_home() -> anyhow::Result<PathBuf> {
+    match std::env::var_os("XDG_DATA_HOME") {
+        Some(path) => Ok(PathBuf::from(path)),
+        None => Ok(PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?).join(".local").join("share")),
+    }
+}
+
+fn install_atomic(destination: &std::path::Path, script: &str) -> anyhow::Result<PathBuf> {
+    let directory = destination.parent().context("completion path has no parent directory")?;
     fs::create_dir_all(directory)
         .with_context(|| format!("could not create {}", directory.display()))?;
-
     let mut temporary = NamedTempFile::new_in(directory)
         .with_context(|| format!("could not create temporary file in {}", directory.display()))?;
     temporary.write_all(script.as_bytes())?;
     temporary.flush()?;
     temporary
-        .persist(&destination)
+        .persist(destination)
         .map_err(|error| error.error)
-        .with_context(|| format!("could not install Fish completion at {}", destination.display()))?;
-    Ok(destination)
+        .with_context(|| format!("could not install completion at {}", destination.display()))?;
+    Ok(destination.to_path_buf())
 }
 
-fn prompt_marker_path() -> anyhow::Result<PathBuf> {
-    let data_home = match std::env::var_os("XDG_DATA_HOME") {
-        Some(path) => PathBuf::from(path),
-        None => PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?)
-            .join(".local")
-            .join("share"),
-    };
-    Ok(data_home
-        .join("proxyctl")
-        .join("fish-completion-prompted"))
+pub fn install(shell: Shell, script: &str) -> anyhow::Result<PathBuf> {
+    match shell {
+        Shell::Fish => install_atomic(
+            &config_home()?.join("fish").join("completions").join("proxyctl.fish"),
+            script,
+        ),
+        Shell::Bash => install_atomic(
+            &data_home()?.join("bash-completion").join("completions").join("proxyctl"),
+            script,
+        ),
+        Shell::Zsh => {
+            let destination = data_home()?.join("zsh").join("site-functions").join("_proxyctl");
+            let installed = install_atomic(&destination, script)?;
+            ensure_zsh_fpath()?;
+            Ok(installed)
+        }
+    }
 }
 
-/// Returns true only until the first interactive setup prompt has been recorded.
-pub fn should_offer_first_setup_prompt() -> anyhow::Result<bool> {
-    Ok(!prompt_marker_path()?.exists())
+fn ensure_zsh_fpath() -> anyhow::Result<()> {
+    use std::io::Write;
+
+    let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);
+    let startup = home.join(".zshrc");
+    let marker = "# proxyctl completion setup";
+    let directory = data_home()?.join("zsh").join("site-functions");
+    let snippet = format!(
+        "\n{marker}\nfpath=({} $fpath)\nautoload -Uz compinit\ncompinit\n",
+        shell_quote(&directory.to_string_lossy())
+    );
+    let existing = fs::read_to_string(&startup).unwrap_or_default();
+    if existing.contains(marker) {
+        return Ok(());
+    }
+    let mut file = fs::OpenOptions::new().create(true).append(true).open(&startup)
+        .with_context(|| format!("could not update {}", startup.display()))?;
+    file.write_all(snippet.as_bytes())?;
+    Ok(())
 }
 
-pub fn mark_first_setup_prompted() -> anyhow::Result<()> {
-    let marker = prompt_marker_path()?;
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\\'', "'\\''"))
+}
+
+/// Returns true only until the first interactive setup prompt has been recorded for this shell.
+pub fn should_offer_first_setup_prompt(shell: Shell) -> anyhow::Result<bool> {
+    Ok(!prompt_marker_path(shell)?.exists())
+}
+
+pub fn mark_first_setup_prompted(shell: Shell) -> anyhow::Result<()> {
+    let marker = prompt_marker_path(shell)?;
     let directory = marker.parent().context("prompt marker has no parent")?;
     fs::create_dir_all(directory)?;
     #[cfg(unix)]
@@ -108,7 +148,7 @@ pub fn mark_first_setup_prompted() -> anyhow::Result<()> {
         fs::set_permissions(directory, fs::Permissions::from_mode(0o700))?;
     }
     if !marker.exists() {
-        fs::write(&marker, b"prompted\n")?;
+        fs::write(&marker, b"prompted\\n")?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -118,9 +158,13 @@ pub fn mark_first_setup_prompted() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn prompt_marker_path(shell: Shell) -> anyhow::Result<PathBuf> {
+    Ok(data_home()?.join("proxyctl").join(format!("{}-completion-prompted", shell.name())))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Shell, fish_completion_path};
+    use super::Shell;
 
     #[test]
     fn shell_parser_accepts_supported_shells_only() {
@@ -131,12 +175,9 @@ mod tests {
     }
 
     #[test]
-    fn fish_completion_path_uses_the_expected_autoload_suffix() {
-        // Path selection is exercised by the integration path in install_fish; this test
-        // verifies the stable destination suffix without mutating process environment.
-        let path = fish_completion_path();
-        if let Ok(path) = path {
-            assert!(path.ends_with("fish/completions/proxyctl.fish"));
-        }
+    fn shell_names_are_stable() {
+        assert_eq!(Shell::Fish.name(), "fish");
+        assert_eq!(Shell::Bash.name(), "bash");
+        assert_eq!(Shell::Zsh.name(), "zsh");
     }
 }
