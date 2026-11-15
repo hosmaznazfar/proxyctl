@@ -1,4 +1,17 @@
 //! CLI output formatting and tabular presentation.
+use std::collections::HashMap;
+
+use tabled::{builder::Builder, settings::Style};
+
+use crate::{
+    cores::CoreId,
+    database::NodeRecord,
+    services::{
+        reporting::{self, ReportMode},
+        sorting::{self, SortMetric},
+    },
+};
+
 use super::*;
 
 pub(super) fn print_display_config(config: &crate::services::display_config::DisplayConfig) {
