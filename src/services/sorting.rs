@@ -280,6 +280,8 @@ mod tests {
             failure_reason: None,
             timestamp: run_id * 10,
             duration_ms: Some(10),
+            transferred_bytes: None,
+            partial: false,
         }
     }
 
