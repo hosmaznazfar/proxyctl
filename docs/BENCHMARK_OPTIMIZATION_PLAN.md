@@ -222,3 +222,12 @@ No test may launch a real proxy core, alter system networking, contact public me
 ## 9. Completion definition
 
 The optimization is complete only when all offline stages pass local verification, docs and CLI behavior agree, and the user has separately approved and completed real-world comparative validation. Passing offline tests does not establish that new latency/throughput defaults outperform Throne or v2rayN in the user's network.
+
+
+## Benchmark proxy protocol selection
+
+The benchmark's loopback inbound defaults to SOCKS5, and latency, download, and upload all use
+the same selected protocol. The choice is stored in the effective benchmark settings for each
+run. HTTP remains selectable with `proxyctl test --proxy-type http`; use
+`--proxy-type socks5` to make the default explicit. The core batch adapters generate SOCKS5
+inbounds for sing-box and Xray, while Mihomo uses its existing loopback mixed listener.
