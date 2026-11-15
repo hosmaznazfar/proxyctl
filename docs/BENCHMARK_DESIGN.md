@@ -92,7 +92,7 @@ A failure in one metric must not erase successful samples from another metric.
 
 ## 5. Offline optimization verification
 
-Stages 1–5 have been locally verified. Stage 6 adds synthetic batch-size coverage (1/10/50 nodes across all three adapter formats), a failed-startup child-reaping assertion, and local fake-proxy HTTP-status failure tests for both download and upload. The focused Stage 6 tests have passed locally; the full formatting/test/Clippy/release verification batch remains pending. Real-world testing is user-run and documented in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`; ordinary automated tests remain offline.
+Stages 1–5 have been locally verified. Stage 6 adds synthetic batch-size coverage (1/10/50 nodes across all three adapter formats), a failed-startup child-reaping assertion, and local fake-proxy HTTP-status failure tests for both download and upload. The user reports that the complete local verification batch passed on 2026-11-15: formatting, all tests, Clippy with warnings denied, and release build. A final coverage audit across config generation, native validation, startup/readiness, latency, download, upload, persistence, and cancellation remains before Stage 6 is formally closed. Real-world testing is user-run and documented in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`; ordinary automated tests remain offline.
 
 ## 5. Progress and cancellation
 
