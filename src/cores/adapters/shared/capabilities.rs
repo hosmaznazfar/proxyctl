@@ -110,7 +110,7 @@ pub(crate) fn validate_for_core(
     validate_common(node).map_err(compatibility_failure)?;
     tls_options(node).map_err(compatibility_failure)?;
 
-    // Report valid Hysteria2 nodes as unsupported by Xray only after validating
+    // Report valid Hysteria2 nodes as unsupported only after validating
     // their shared protocol semantics, so malformed source values remain Invalid.
     if node.protocol == Protocol::Hysteria2 && !capabilities.hysteria2 {
         return Err(Compatibility::unsupported(format!(
@@ -163,7 +163,7 @@ pub(crate) fn validate_for_core(
             )
         {
             return Err(compatibility_failure(
-                "REALITY is not supported with this transport mapping".into(),
+                format!("{core} does not support REALITY with this transport mapping"),
             ));
         }
     }
