@@ -41,7 +41,6 @@ pub fn install_or_update(
         println!("{core}: installation available ({version}).");
     }
     if check_only {
-        println!("{core}: compatible asset and SHA-256 digest available; no files changed.");
         return Ok(());
     }
     let archive = download(&asset.browser_download_url)?;
