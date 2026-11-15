@@ -237,10 +237,19 @@ mod tests {
                 Instant::now() < deadline,
                 "fake child did not remain available long enough to pin its pidfd"
             );
-            if let Ok(identity) = ProcessIdentity::capture(child.id())
-                && let Ok(handle) = ProcessHandle::open(identity.clone())
-            {
-                return (identity, handle);
+            if let Ok(identity) = ProcessIdentity::capture(child.id()) {
+                // Command::spawn can return while the child is still completing exec.
+                // Require the executable and start-time identity to remain stable before
+                // pinning the pidfd, then verify it once more before returning the handle.
+                std::thread::sleep(Duration::from_millis(10));
+                if identity.verify().unwrap_or(false)
+                    && let Ok(handle) = ProcessHandle::open(identity.clone())
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                    if handle.identity().verify().unwrap_or(false) {
+                        return (identity, handle);
+                    }
+                }
             }
             std::thread::sleep(Duration::from_millis(5));
         }
