@@ -92,6 +92,42 @@ proxyctl cores
 
 The initial installer supports Linux x86_64. It selects stable assets from each core's official GitHub Releases API, verifies the GitHub-published SHA-256 asset digest before extraction, extracts only the expected regular executable without writing archive paths to disk, validates its reported version, then installs into the proxyctl data directory under cores/. It does not use PATH, package managers, sudo, or system directories. It does not start a core or change proxy, network, DNS, route, firewall, or TUN settings.
 
+## Shell completion
+
+During the first successful `proxyctl setup` in an interactive Fish session, Proxyctl offers to install Fish tab completion automatically. Accepting installs the completion file in the user's XDG Fish completion directory. Declining does not affect core installation.
+
+Install or refresh Fish completion later:
+
+~~~sh
+proxyctl completions install
+~~~
+
+The command detects the current shell. To explicitly select Fish:
+
+~~~sh
+proxyctl completions install --shell fish
+~~~
+
+Fish loads installed completion files automatically in new sessions. No manual `source` command is normally needed.
+
+Inspect command help:
+
+~~~sh
+proxyctl --help
+proxyctl test --help
+proxyctl config display --help
+proxyctl completions --help
+proxyctl completions install --help
+~~~
+
+Completion scripts can also be printed for manual installation:
+
+~~~sh
+proxyctl completions generate fish
+proxyctl completions generate bash
+proxyctl completions generate zsh
+~~~
+
 ## Single-core activation
 
 Activate one stored node with one explicitly selected Proxyctl-managed core:
