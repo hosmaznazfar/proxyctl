@@ -62,7 +62,7 @@ mod tls;
 mod transport;
 mod xhttp;
 
-pub(crate) use capabilities::{validate_for_core, MIHOMO, SING_BOX, XRAY};
+pub(crate) use capabilities::{CoreCapabilities, validate_for_core};
 pub(crate) use options::{
     option_string, reject_unknown_options, shadowsocks_plugin, validate_string_options,
 };
