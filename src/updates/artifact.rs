@@ -1,19 +1,26 @@
 //! Download and checksum verification primitives shared by all components.
-use std::io::Read;
+use std::{io::Read, time::Duration};
 
 use anyhow::{Context, bail, ensure};
 use sha2::{Digest, Sha256};
+use ureq::Agent;
 
 const USER_AGENT: &str = concat!("proxyctl/", env!("CARGO_PKG_VERSION"));
 const MAX_ARTIFACT_SIZE: u64 = 256 * 1024 * 1024;
+const ARTIFACT_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Download an artifact from GitHub release delivery infrastructure with a hard read limit.
 pub fn download(url: &str) -> anyhow::Result<Vec<u8>> {
     validate_github_download_url(url)?;
-    let response = ureq::get(url)
+    let agent: Agent = Agent::config_builder()
+        .timeout_global(Some(ARTIFACT_TIMEOUT))
+        .build()
+        .into();
+    let response = agent
+        .get(url)
         .header("User-Agent", USER_AGENT)
         .call()
-        .context("could not download GitHub release asset")?;
+        .context("could not download GitHub release asset within the 300-second deadline")?;
     let reader = response.into_body().into_reader();
     let mut bytes = Vec::new();
     reader
