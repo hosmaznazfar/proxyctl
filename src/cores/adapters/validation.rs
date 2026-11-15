@@ -191,7 +191,7 @@ mod tests {
     ) {
         let script = format!(
             r#"#!/bin/sh
-printf '%s\\n' "$@" > '{}'
+printf '%s\n' "$@" > '{}'
 for arg in "$@"; do config="$arg"; done
 [ -s "$config" ] || exit 20
 [ "$(stat -c '%a' "$config")" = 600 ] || exit 21
