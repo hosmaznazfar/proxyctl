@@ -297,45 +297,52 @@ fn completion_script(shell: Shell) -> String {
     let mut script = String::from_utf8(output).expect("clap completion scripts are valid UTF-8");
 
     if shell == Shell::Fish {
-        // Disable unrelated filesystem suggestions, but keep paths for import.
-        // Add the test flags with Fish's native subcommand predicate: this makes
-        // them appear immediately after "proxyctl test " without requiring "-".
-        let test_options = [
-            "all-cores",
-            "latency-only",
-            "download-only",
-            "upload-only",
-            "node",
-            "core",
-            "latency-url",
-            "download-url",
-            "upload-url",
-            "download-bytes",
-            "upload-bytes",
-            "latency-timeout-secs",
-            "request-timeout-secs",
-            "concurrency",
-            "startup-timeout-secs",
-        ];
-        let explicit_test_completions = test_options
-            .iter()
-            .map(|option| format!("complete -c proxyctl -l {option} -n '__fish_seen_subcommand_from test'"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        // Fish only proposes long-option definitions after the user types '-'.
-        // Also register their complete spellings as argument candidates so a
-        // plain Tab after "proxyctl test " displays the available switches.
-        let test_option_candidates = test_options
-            .iter()
-            .map(|option| format!("--{option}"))
-            .collect::<Vec<_>>()
-            .join(" ");
+        // Fish otherwise falls back to filesystem entries for an empty argument.
+        // Keep file suggestions only for the import command's path argument.
+        let mut candidate_rules = Vec::new();
+        append_fish_option_candidates(&Cli::command(), &mut Vec::new(), &mut candidate_rules);
         script = format!(
-            "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_seen_subcommand_from import'\ncomplete -c proxyctl -a '{test_option_candidates}' -n '__fish_seen_subcommand_from test'\n{explicit_test_completions}\n{script}"
+            "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_seen_subcommand_from import'\n{}\n{script}",
+            candidate_rules.join("\n")
         );
     }
 
     script
+}
+
+fn append_fish_option_candidates(
+    command: &clap::Command,
+    ancestors: &mut Vec<String>,
+    rules: &mut Vec<String>,
+) {
+    for subcommand in command.get_subcommands() {
+        let Some(name) = subcommand.get_name().split_whitespace().next() else {
+            continue;
+        };
+        ancestors.push(name.to_owned());
+
+        let options = subcommand
+            .get_arguments()
+            .filter(|argument| !argument.is_hide_set())
+            .filter_map(|argument| argument.get_long().map(|long| format!("--{long}")))
+            .collect::<Vec<_>>();
+
+        if !options.is_empty() {
+            let condition = ancestors
+                .iter()
+                .map(|part| format!("__fish_seen_subcommand_from {part}"))
+                .collect::<Vec<_>>()
+                .join("; and ");
+            rules.push(format!(
+                "complete -c proxyctl -a '{}' -n '{}'",
+                options.join(" "),
+                condition
+            ));
+        }
+
+        append_fish_option_candidates(subcommand, ancestors, rules);
+        ancestors.pop();
+    }
 }
 
 fn install_shell_completion(shell: crate::services::shell_completion::Shell) -> anyhow::Result<()> {
