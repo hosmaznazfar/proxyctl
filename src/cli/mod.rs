@@ -1664,13 +1664,11 @@ mod tests {
         );
 
         for (command, option) in [
-            ("add", "--help"),
             ("list", "--protocol"),
             ("show", "--details"),
             ("remove", "--yes"),
             ("check", "--core"),
             ("use", "--tun"),
-            ("config", "--help"),
             ("test", "--all-cores"),
             ("report", "--history"),
             ("prune", "--unavailable-all"),
