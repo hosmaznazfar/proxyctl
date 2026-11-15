@@ -206,7 +206,34 @@ impl CoreAdapter for SingBoxAdapter {
     }
 
     fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
-        super::benchmark_batch::generate_sing_box(self, targets)
+        use serde_json::Value;
+        super::benchmark_batch::validate_targets(self, targets)?;
+        let mut outbounds = Vec::with_capacity(targets.len());
+        let mut inbounds = Vec::with_capacity(targets.len());
+        let mut rules = Vec::with_capacity(targets.len());
+        for target in targets {
+            let mut document = super::benchmark_batch::node_config(self, target.node)?;
+            let node_outbounds = document.get_mut("outbounds").and_then(Value::as_array_mut)
+                .ok_or_else(|| anyhow::anyhow!("sing-box node config must contain an outbound array"))?;
+            ensure!(node_outbounds.len() == 1, "sing-box node config must contain exactly one proxy outbound");
+            let mut outbound = node_outbounds.remove(0);
+            let outbound_tag = format!("proxyctl-benchmark-out-{}", target.node_id);
+            let inbound_tag = format!("proxyctl-benchmark-in-{}", target.node_id);
+            outbound["tag"] = json!(outbound_tag);
+            outbounds.push(outbound);
+            inbounds.push(json!({
+                "type": match target.proxy_type {
+                    crate::domain::BenchmarkProxyType::Socks5 => "socks",
+                    crate::domain::BenchmarkProxyType::Http => "http",
+                },
+                "tag": inbound_tag, "listen": "127.0.0.1", "listen_port": target.listen_port
+            }));
+            rules.push(json!({"inbound": [inbound_tag], "outbound": outbound_tag}));
+        }
+        let final_outbound = format!("proxyctl-benchmark-out-{}", targets[0].node_id);
+        json_config(json!({"inbounds": inbounds, "outbounds": outbounds, "route": {
+            "rules": rules, "final": final_outbound
+        }}))
     }
 
     fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
