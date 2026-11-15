@@ -77,6 +77,14 @@ Core updates use the same download/verification/staging policy and preserve the 
 
 `proxyctl setup` remains the initial installation/bootstrap command; it installs the selected managed cores and does not update the CLI itself. `proxyctl cores` reports installed core versions and status.
 
+#### Shell completion
+
+- On the first successful `proxyctl setup` in an interactive Fish session, offer to install Fish tab completion. The prompt is asked only once; declining does not affect core setup.
+- `proxyctl completions install` detects the current shell and installs supported completion files into the user's shell-specific configuration directory. Fish is the first automatically managed shell.
+- `proxyctl completions install --shell fish` explicitly selects Fish and can be used later to install or refresh completion.
+- `proxyctl completions generate SHELL` remains available for printing scripts for manual installation in Bash, Fish, or Zsh.
+- Completion installation is per-user, atomic, and must not edit shell startup files or require sudo.
+
 ### 3.2 URL records and source-file handling
 
 The user's text file is an import source, not a live database or output file. Proxyctl reads it without changing it. Imported URL records are stored in redb, including the original URL needed to recreate core configurations.
