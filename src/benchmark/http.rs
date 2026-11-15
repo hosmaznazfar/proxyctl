@@ -127,7 +127,7 @@ impl BenchmarkHttpClient {
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
         let proxy_url = match settings.proxy_type {
-            BenchmarkProxyType::Socks5 => format!("socks5://127.0.0.1:{port}"),
+            BenchmarkProxyType::Socks5 => format!("socks5h://127.0.0.1:{port}"),
             BenchmarkProxyType::Http => format!("http://127.0.0.1:{port}"),
         };
         let proxy =
@@ -579,7 +579,7 @@ mod tests {
             reader.get_mut().flush().unwrap();
         });
 
-        let proxy = Proxy::new(&format!("socks5://127.0.0.1:{port}")).unwrap();
+        let proxy = Proxy::new(&format!("socks5h://127.0.0.1:{port}")).unwrap();
         let agent: Agent = Agent::config_builder()
             .proxy(Some(proxy))
             .timeout_global(Some(Duration::from_secs(2)))
