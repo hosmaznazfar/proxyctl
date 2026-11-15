@@ -407,6 +407,35 @@ fn adapters_map_websocket_transport_and_keep_host_separate_from_sni() {
 }
 
 #[test]
+fn xray_trojan_websocket_tls_matches_v2rayn_native_fields() {
+    let node = parse_proxy_url(
+        "trojan://test-secret@199.232.78.159:443?type=ws&host=copy_az_channel_NUFiLTER_6i.global.ssl.fastly.net&path=%2FTELEGRAM-NUFiLTER&security=tls&sni=cdn.akamai.steamstatic.com",
+    )
+    .unwrap();
+
+    let generated = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let document: Value = serde_json::from_slice(&generated.content).unwrap();
+    let outbound = &document["outbounds"][0];
+    let stream = &outbound["streamSettings"];
+
+    assert_eq!(outbound["protocol"], "trojan");
+    assert_eq!(outbound["settings"]["servers"][0]["address"], "199.232.78.159");
+    assert_eq!(outbound["settings"]["servers"][0]["port"], 443);
+    assert_eq!(stream["network"], "ws");
+    assert_eq!(
+        stream["wsSettings"]["host"],
+        "copy_az_channel_NUFiLTER_6i.global.ssl.fastly.net"
+    );
+    assert_eq!(stream["wsSettings"]["path"], "/TELEGRAM-NUFiLTER");
+    assert_eq!(stream["security"], "tls");
+    assert_eq!(
+        stream["tlsSettings"]["serverName"],
+        "cdn.akamai.steamstatic.com"
+    );
+    assert_eq!(stream["tlsSettings"]["allowInsecure"], false);
+}
+
+#[test]
 fn adapters_support_websocket_for_vless_and_vmess() {
     use base64::{Engine as _, engine::general_purpose};
 
