@@ -30,7 +30,7 @@ pub struct ManagedCoreProcess {
 }
 
 impl ManagedCoreProcess {
-    /// Generate, validate, and start a core with one loopback-only HTTP inbound.
+    /// Generate, validate, and start a core with one loopback-only benchmark inbound.
     pub fn start(
         core: CoreId,
         node: &ProxyNode,
