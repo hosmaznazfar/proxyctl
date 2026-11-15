@@ -351,7 +351,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     let selected = match shell {
                         Some(value) => crate::services::shell_completion::Shell::parse(&value)?,
                         None => crate::services::shell_completion::detect_current()
-                            .ok_or_else(|| anyhow::anyhow!("could not detect the current shell; use 'proxyctl completions install --shell fish'"))?,
+                            .ok_or_else(|| anyhow::anyhow!("could not detect the current shell; specify --shell bash, --shell fish, or --shell zsh"))?,
                     };
                     install_shell_completion(selected)?;
                 }
