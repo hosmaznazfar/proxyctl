@@ -6,7 +6,6 @@ use std::{
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc,
     },
     thread,
     time::Duration,
@@ -25,7 +24,6 @@ use crate::{
     benchmark::{
         http::{BenchmarkHttpClient, Measurement, MeasurementFailure, validate_settings},
         process::ManagedCoreProcess,
-        tcp,
     },
     cores::{CoreId, adapters, core_binary_path, installer::current_version},
     database::{NodeDatabase, NodeRecord},
