@@ -364,7 +364,7 @@ struct ReportRowData<'a> {
     verbose: bool,
 }
 
-pub(super) fn report_row(
+fn report_row(
     fields: &[crate::services::display_config::DisplayField],
     node: &NodeRecord,
     display_numbers: &HashMap<u64, usize>,
