@@ -688,7 +688,6 @@ dependencies = [
  "base64",
  "clap",
  "clap_complete",
- "curl",
  "flate2",
  "libc",
  "percent-encoding",
