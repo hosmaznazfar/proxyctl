@@ -191,6 +191,9 @@ enum Command {
         /// Run only upload throughput measurements.
         #[arg(long, group = "metric_selection")]
         upload_only: bool,
+        /// Local benchmark inbound protocol (default SOCKS5; HTTP remains available).
+        #[arg(long, value_parser = ["socks5", "http"], default_value = "socks5")]
+        proxy_type: String,
         /// HTTPS URL used for real HTTP ping through the selected core.
         #[arg(long, default_value = "https://www.google.com/generate_204")]
         latency_url: String,
@@ -799,6 +802,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             all_cores,
             node,
             core,
+            proxy_type,
             latency_url,
             download_url,
             upload_url,
@@ -822,6 +826,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 .checked_mul(1_000)
                 .ok_or_else(|| anyhow::anyhow!("startup timeout is too large"))?;
             let mut settings = crate::services::benchmark::default_settings();
+            settings.proxy_type = match proxy_type.as_str() {
+                "socks5" => crate::domain::BenchmarkProxyType::Socks5,
+                "http" => crate::domain::BenchmarkProxyType::Http,
+                _ => unreachable!("clap validates benchmark proxy type"),
+            };
             settings.latency_url = latency_url;
             settings.download_url = download_url;
             settings.upload_url = upload_url;
