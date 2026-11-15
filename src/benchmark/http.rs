@@ -803,6 +803,7 @@ mod tests {
     }
 
     #[test]
+    #[test]
     fn download_retries_after_a_real_request_timeout() {
         use std::{
             io::{BufReader, Write},
@@ -813,23 +814,27 @@ mod tests {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let server = thread::spawn(move || {
-            // First request deliberately exceeds the client's global deadline.
+            // Send headers and a byte, then stall the body beyond the request
+            // deadline. This deterministically exercises a body-read timeout.
             let (stream, _) = listener.accept().unwrap();
             let mut reader = BufReader::new(stream);
             let _ = read_fake_proxy_request(&mut reader);
-            thread::sleep(Duration::from_millis(180));
-            let _ = reader.get_mut().write_all(
-                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\n",
-            );
+            let stream = reader.get_mut();
+            stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\nX",
+            ).unwrap();
+            stream.flush().unwrap();
+            thread::sleep(Duration::from_millis(250));
+            drop(reader);
 
-            // The retry must be a new request and must complete successfully.
+            // A second accepted request proves the timeout caused a retry.
             let (stream, _) = listener.accept().unwrap();
             let mut reader = BufReader::new(stream);
             let (method, _, _) = read_fake_proxy_request(&mut reader);
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
             stream.write_all(
-                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\n",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n",
             ).unwrap();
             stream.write_all(&vec![0x44; 32 * 1024]).unwrap();
             stream.flush().unwrap();
@@ -838,7 +843,7 @@ mod tests {
         let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
         let agent: Agent = Agent::config_builder()
             .proxy(Some(proxy))
-            .timeout_global(Some(Duration::from_millis(80)))
+            .timeout_global(Some(Duration::from_millis(100)))
             .build()
             .into();
         let client = BenchmarkHttpClient {
