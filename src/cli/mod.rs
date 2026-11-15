@@ -1496,6 +1496,14 @@ mod tests {
     use super::{Cli, Command, TunCommand, display_core_version};
 
     #[test]
+    fn completions_command_accepts_supported_shells() {
+        for shell in ["bash", "fish", "zsh"] {
+            assert!(Cli::try_parse_from(["proxyctl", "completions", shell]).is_ok());
+        }
+        assert!(Cli::try_parse_from(["proxyctl", "completions", "unknown"]).is_err());
+    }
+
+    #[test]
     fn list_command_accepts_metric_sorting_and_optional_core() {
         assert!(Cli::try_parse_from(["proxyctl", "list", "--sort", "ping"]).is_ok());
         assert!(
