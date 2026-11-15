@@ -56,7 +56,7 @@ fn benchmark_configs_bind_only_to_loopback_for_each_core() {
                 assert_eq!(document["route"]["final"], "proxy");
             }
             CoreId::Xray => {
-                assert_eq!(document["inbounds"][0]["protocol"], "http");
+                assert_eq!(document["inbounds"][0]["protocol"], "mixed");
                 assert_eq!(document["inbounds"][0]["listen"], "127.0.0.1");
                 assert_eq!(document["inbounds"][0]["port"], 43127);
             }
