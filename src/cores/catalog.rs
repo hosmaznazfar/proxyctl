@@ -26,9 +26,9 @@ impl CoreId {
 
     pub const fn release_api(self) -> &'static str {
         match self {
-            Self::SingBox => "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=100",
-            Self::Xray => "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=100",
-            Self::Mihomo => "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=100",
+            Self::SingBox => "https://api.github.com/repos/SagerNet/sing-box/releases?per_page=10",
+            Self::Xray => "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=10",
+            Self::Mihomo => "https://api.github.com/repos/MetaCubeX/mihomo/releases?per_page=10",
         }
     }
 
