@@ -238,7 +238,7 @@ impl BenchmarkHttpClient {
             .get(self.download_url.as_str())
             .header("Accept-Encoding", "identity")
             .call()
-            .map_err(classify_error)?;
+            .map_err(classify_download_request_error)?;
 
         let mut received = 0_u64;
         let mut last_progress = Instant::now();
@@ -401,6 +401,16 @@ fn classify_error(error: ureq::Error) -> MeasurementFailure {
         ureq::Error::Protocol(_) => MeasurementFailure::ProtocolFailed,
         ureq::Error::Io(error) => classify_request_io_error(error),
         _ => MeasurementFailure::Unavailable,
+    }
+}
+
+fn classify_download_request_error(error: ureq::Error) -> MeasurementFailure {
+    match error {
+        // A malformed/truncated response during a download is an incomplete
+        // transfer, not a generic protocol failure. HTTP status and connection
+        // setup errors retain their more specific classifications.
+        ureq::Error::Protocol(_) => MeasurementFailure::IncompleteResponse,
+        other => classify_error(other),
     }
 }
 
@@ -621,7 +631,7 @@ mod tests {
             for _ in 0..DOWNLOAD_ATTEMPTS {
                 let (stream, _) = listener.accept().unwrap();
                 let mut reader = BufReader::new(stream);
-                let _ = read_fake_request(&mut reader);
+                let _ = read_fake_proxy_request(&mut reader);
                 let body = vec![0x33; 32 * 1024];
                 let stream = reader.get_mut();
                 stream
@@ -669,7 +679,7 @@ mod tests {
             for _ in 0..DOWNLOAD_ATTEMPTS {
                 let (stream, _) = listener.accept().unwrap();
                 let mut reader = BufReader::new(stream);
-                let _ = read_fake_request(&mut reader);
+                let _ = read_fake_proxy_request(&mut reader);
                 let stream = reader.get_mut();
                 stream
                     .write_all(
@@ -711,7 +721,7 @@ mod tests {
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
             let mut reader = BufReader::new(stream);
-            let (method, _, _) = read_fake_request(&mut reader);
+            let (method, _, _) = read_fake_proxy_request(&mut reader);
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
             stream
@@ -792,6 +802,23 @@ mod tests {
         assert_eq!(progress.target_bytes, 2_048);
         assert_eq!(progress.elapsed, Duration::from_secs(2));
         assert_eq!(progress.bits_per_second, Some(4_096.0));
+    }
+
+    fn read_fake_proxy_request(
+        reader: &mut std::io::BufReader<std::net::TcpStream>,
+    ) -> (String, String, Vec<u8>) {
+        let request = read_fake_request(reader);
+        if request.0 != "CONNECT" {
+            return request;
+        }
+
+        use std::io::Write;
+        reader
+            .get_mut()
+            .write_all(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
+            .unwrap();
+        reader.get_mut().flush().unwrap();
+        read_fake_request(reader)
     }
 
     fn read_fake_request(
