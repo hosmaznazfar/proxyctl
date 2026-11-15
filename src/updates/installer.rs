@@ -89,7 +89,11 @@ fn validate_staged_executable(
         ) {
             Ok(output) => return Ok(output),
             Err(error)
-                if error.raw_os_error() == Some(libc::ETXTBSY) && attempt + 1 < MAX_ATTEMPTS =>
+                if error.chain().any(|cause| {
+                    cause
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|io| io.raw_os_error() == Some(libc::ETXTBSY))
+                }) && attempt + 1 < MAX_ATTEMPTS =>
             {
                 thread::sleep(Duration::from_millis(25));
             }
