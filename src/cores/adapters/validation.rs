@@ -168,7 +168,14 @@ mod tests {
                 .lines()
                 .map(str::to_owned)
                 .collect::<Vec<_>>();
-            assert_eq!(&actual[..actual.len() - 1], expected_prefix);
+            assert_eq!(actual.len(), expected_prefix.len() + 1);
+            assert_eq!(
+                actual[..expected_prefix.len()]
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                expected_prefix
+            );
             let config_path = actual.last().expect("validator receives a config path");
             assert_eq!(fs::read_to_string(&marker).unwrap(), *config_path);
             assert!(
