@@ -11,7 +11,8 @@ use super::{
 pub(crate) struct CoreCapabilities {
     pub(crate) name: &'static str,
     pub(crate) shadowsocks_plugins: bool,
-    pub(crate) reality_transport_limited: bool,
+    pub(crate) reality_requires_tcp_grpc_xhttp: bool,
+    pub(crate) reality_disallows_legacy_transport: bool,
     pub(crate) vmess_xhttp: bool,
     pub(crate) xhttp_auto_mode: bool,
     pub(crate) websocket_early_data_header: Option<&'static str>,
@@ -142,17 +143,17 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
             )));
         }
         let transport = normalize_transport(node).map_err(compatibility_failure)?;
-        if capabilities.reality_transport_limited
+        if capabilities.reality_requires_tcp_grpc_xhttp
             && !matches!(
                 &transport.kind,
                 TransportKind::Tcp | TransportKind::Grpc | TransportKind::XHttp
             )
         {
             return Err(compatibility_failure(
-                "Xray REALITY supports only TCP/RAW, gRPC, and XHTTP transports".into(),
+                format!("{core} REALITY supports only TCP/RAW, gRPC, and XHTTP transports"),
             ));
         }
-        if capabilities.reality_transport_limited
+        if capabilities.reality_disallows_legacy_transport
             && matches!(
                 &transport.kind,
                 TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket
