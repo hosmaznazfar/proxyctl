@@ -23,9 +23,6 @@ use tabled::{builder::Builder, settings::Style};
     about = "A lightweight CLI for managing and benchmarking proxy nodes"
 )]
 pub struct Cli {
-    /// Generate shell completion scripts (for fish, install the output in ~/.config/fish/completions/).
-    #[arg(long, hide = true)]
-    _completion_placeholder: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -58,12 +55,20 @@ enum DisplayAction {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Generate a completion script for bash, fish, or zsh.
+    Completions {
+        /// Target shell for the generated completion script.
+        shell: Shell,
+    },
+    /// Add one proxy URL to the local database.
     Add {
         url: String,
     },
+    /// Import proxy URLs from a newline-delimited text file.
     Import {
         file: PathBuf,
     },
+    /// List stored nodes, with optional filters and benchmark sorting.
     List {
         #[arg(long)]
         include_deleted: bool,
@@ -84,6 +89,7 @@ enum Command {
         #[arg(long, value_name = "CORE", requires = "sort")]
         core: Option<String>,
     },
+    /// Show benchmark results or connection details for selected nodes.
     Show {
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
@@ -91,12 +97,14 @@ enum Command {
         #[arg(long)]
         details: bool,
     },
+    /// Soft-delete selected nodes without removing their benchmark history.
     Remove {
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
         #[arg(long, short = 'y')]
         yes: bool,
     },
+    /// Restore previously soft-deleted nodes.
     Restore {
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
@@ -258,6 +266,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         return Ok(());
     };
     let command = match command {
+        Command::Completions { shell } => {
+            let mut command = Cli::command();
+            clap_complete::generate(shell, &mut command, "proxyctl", &mut std::io::stdout());
+            return Ok(());
+        }
         Command::Tun {
             command: TunCommand::Status,
         } => {
