@@ -200,6 +200,9 @@ enum Command {
         /// Restrict --compare to one managed core.
         #[arg(long, value_name = "CORE", requires = "compare")]
         core: Option<String>,
+        /// Show the full benchmark detail columns (full display profile).
+        #[arg(long)]
+        details: bool,
         /// Show full core build/version metadata instead of concise versions.
         #[arg(long)]
         verbose: bool,
@@ -531,6 +534,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             history,
             compare,
             core,
+            details,
             verbose,
         } => {
             let mode = if compare {
@@ -541,7 +545,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 ReportMode::Latest
             };
             let core = parse_core(core.as_deref())?;
-            let display_config = crate::services::display_config::load()?;
+            let mut display_config = crate::services::display_config::load()?;
+            if details {
+                display_config.active_profile =
+                    crate::services::display_config::DisplayProfile::Full;
+            }
             let display_numbers = active_display_numbers(&database_path)?;
             if node.is_empty() {
                 let report = reporting::build_report(
@@ -1536,6 +1544,7 @@ mod tests {
         assert!(Cli::try_parse_from(["proxyctl", "report", "--compare"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--compare", "--core", "xray"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--verbose"]).is_ok());
+        assert!(Cli::try_parse_from(["proxyctl", "report", "--details"]).is_ok());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--core", "xray"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "report", "--history", "--compare"]).is_err());
     }
