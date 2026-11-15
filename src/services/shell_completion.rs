@@ -109,8 +109,6 @@ pub fn install(shell: Shell, script: &str) -> anyhow::Result<PathBuf> {
 }
 
 fn ensure_zsh_fpath() -> anyhow::Result<()> {
-    use std::io::Write;
-
     let home = PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?);
     let startup = home.join(".zshrc");
     let marker = "# proxyctl completion setup";
