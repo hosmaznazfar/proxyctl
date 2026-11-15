@@ -261,10 +261,13 @@ mod tests {
     #[test]
     fn only_download_successes_can_be_marked_partial() {
         let mut value = sample(BenchmarkSampleStatus::Success, Some(12.0));
+        value.metric = BenchmarkMetric::Download;
+        value.unit = BenchmarkMetric::Download.unit().into();
         value.partial = true;
         value.transferred_bytes = Some(16 * 1024);
         assert_eq!(value.validate(), Ok(()));
         value.metric = BenchmarkMetric::Latency;
+        value.unit = BenchmarkMetric::Latency.unit().into();
         assert_eq!(value.validate(), Err("only successful download samples can be partial"));
     }
 
