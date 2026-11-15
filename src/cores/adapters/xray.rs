@@ -187,6 +187,45 @@ impl CoreAdapter for XrayAdapter {
         json_config(json!({"outbounds":[outbound]}))
     }
 
+    fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
+        super::benchmark_batch::generate_xray(self, targets)
+    }
+
+    fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_config(node)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["inbounds"] = json!([{
+            "listen": "127.0.0.1", "port": listen_port, "protocol": "mixed",
+            "settings": {"auth": "noauth", "udp": true, "ip": "127.0.0.1"}, "tag": "proxy-in"
+        }]);
+        json_config(document)
+    }
+
+    fn generate_tun_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_activation_config(node, listen_port)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["inbounds"].as_array_mut().ok_or_else(|| anyhow::anyhow!("Xray activation inbounds must be an array"))?.push(json!({
+            "tag": "tun-in", "protocol": "tun",
+            "settings": {
+                "name": "tun-proxyctl", "mtu": 1500,
+                "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
+                "autoSystemRoutingTable": [], "autoOutboundsInterface": "auto",
+                "autoSystemDnsToGateway": false
+            }
+        }));
+        json_config(document)
+    }
+
+    fn generate_benchmark_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_config(node)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["inbounds"] = json!([{
+            "listen": "127.0.0.1", "port": listen_port, "protocol": "http",
+            "settings": {}, "tag": "benchmark-in"
+        }]);
+        json_config(document)
+    }
+
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let mut command = Command::new(executable);
         command.arg("run").arg("-test").arg("-c").arg(config);
