@@ -11,6 +11,7 @@ pub mod kernel_transaction;
 pub mod journal;
 pub mod lifecycle_coordinator;
 pub mod manifest_store;
+pub(crate) mod manifest_fs;
 pub mod ownership;
 pub mod privilege_broker;
 #[cfg(target_os = "linux")]
