@@ -23,8 +23,8 @@ use crate::{
     cores::{CoreId, adapters, core_binary_path, installer::current_version},
     database::{NodeDatabase, NodeRecord},
     domain::{
-        BenchmarkMetric, BenchmarkProxyType, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, BenchmarkSampleStatus,
-        BenchmarkSettings,
+        BenchmarkMetric, BenchmarkProxyType, BenchmarkRun, BenchmarkRunStatus, BenchmarkSample,
+        BenchmarkSampleStatus, BenchmarkSettings,
     },
 };
 
