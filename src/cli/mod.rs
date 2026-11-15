@@ -1644,13 +1644,15 @@ mod tests {
         let script = super::completion_script(clap_complete::Shell::Fish);
         assert!(script.starts_with("complete -c proxyctl -f\n"));
         assert!(
-            script.contains("complete -c proxyctl -F -n '__fish_proxyctl_using_subcommand import'"),
+            script.contains("complete -c proxyctl -F -n '__fish_seen_subcommand_from import'"),
             "Fish completion must retain file suggestions for import"
         );
-        for option in ["latency-only", "download-only", "upload-only"] {
+        for option in ["latency-only", "download-only", "upload-only", "all-cores"] {
             assert!(
-                script.contains(&format!("-l {option}")),
-                "Fish completion script is missing -l {option}"
+                script.contains(&format!(
+                    "complete -c proxyctl -l {option} -n '__fish_seen_subcommand_from test'"
+                )),
+                "Fish completion script is missing immediate test option {option}"
             );
         }
     }
