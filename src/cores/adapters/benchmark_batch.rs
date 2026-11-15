@@ -1,6 +1,7 @@
 //! Multi-node benchmark configuration generation.
 //!
-//! Each target receives a dedicated loopback listener and a uniquely tagged outbound.
+//! Each target receives a dedicated loopback listener and a uniquely tagged outbound. The
+//! listener protocol is selected with the benchmark settings.
 //! The caller must pre-filter unsupported/invalid nodes before invoking this function.
 
 use std::collections::HashSet;
