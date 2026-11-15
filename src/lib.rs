@@ -6,6 +6,7 @@ pub mod cores;
 pub mod database;
 pub mod domain;
 pub mod parser;
+pub(crate) mod process;
 pub mod services;
 pub mod tun;
 pub mod updates;
