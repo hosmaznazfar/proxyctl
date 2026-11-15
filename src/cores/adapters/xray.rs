@@ -19,7 +19,8 @@ use super::{
 const CAPABILITIES: CoreCapabilities = CoreCapabilities {
     name: "Xray",
     shadowsocks_plugins: false,
-    reality_transport_limited: true,
+    reality_requires_tcp_grpc_xhttp: true,
+    reality_disallows_legacy_transport: false,
     vmess_xhttp: true,
     xhttp_auto_mode: true,
     websocket_early_data_header: Some("Sec-WebSocket-Protocol"),
