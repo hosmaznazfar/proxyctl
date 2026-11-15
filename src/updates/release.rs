@@ -1,10 +1,15 @@
 //! GitHub Releases metadata access.
 use super::artifact::validate_github_download_url;
+use std::{io::Read, time::Duration};
+
 use anyhow::{Context, ensure};
+use ureq::{Agent, config::Config};
 use semver::Version;
 use serde::Deserialize;
 
 const USER_AGENT: &str = concat!("proxyctl/", env!("CARGO_PKG_VERSION"));
+const METADATA_TIMEOUT: Duration = Duration::from_secs(20);
+const MAX_METADATA_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ReleaseChannel {
@@ -63,16 +68,31 @@ pub fn latest_release_optional(
         "release metadata endpoint must use the official GitHub Releases API"
     );
 
-    let response = ureq::get(api_url)
+    let agent: Agent = Agent::config_builder()
+        .timeout_global(Some(METADATA_TIMEOUT))
+        .build()
+        .into();
+    let response = agent
+        .get(api_url)
         .header("User-Agent", USER_AGENT)
         .header("Accept", "application/vnd.github+json")
         .call()
         .context("could not query official GitHub release metadata")?;
-    // Deserialize directly from the response stream. ureq's convenience
-    // read_to_string applies a 10 MiB default body limit, which is too small
-    // for repositories with many releases and assets.
-    let releases: Vec<Release> = serde_json::from_reader(response.into_body().into_reader())
-        .context("could not read or parse GitHub release metadata")?;
+    // Bound metadata independently of the request deadline. Read one byte beyond
+    // the limit so oversized responses are rejected rather than truncated.
+    let mut body = Vec::new();
+    response
+        .into_body()
+        .into_reader()
+        .take(MAX_METADATA_BYTES + 1)
+        .read_to_end(&mut body)
+        .context("could not read GitHub release metadata")?;
+    ensure!(
+        body.len() as u64 <= MAX_METADATA_BYTES,
+        "GitHub release metadata exceeds the 10 MiB safety limit"
+    );
+    let releases: Vec<Release> = serde_json::from_slice(&body)
+        .context("could not parse GitHub release metadata")?;
     let Some(release) = select_release(releases, channel) else {
         return Ok(None);
     };
