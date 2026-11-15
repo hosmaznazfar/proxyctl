@@ -281,6 +281,7 @@ mod tests {
         assert_eq!(value.validate(), Ok(()));
         value.metric = BenchmarkMetric::Latency;
         value.unit = BenchmarkMetric::Latency.unit().into();
+        value.transferred_bytes = None;
         assert_eq!(value.validate(), Err("only successful download samples can be partial"));
     }
 
