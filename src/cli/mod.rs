@@ -499,6 +499,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     };
     let database_path = default_database_path()?;
     match command {
+        // Completion commands are handled before database initialization above.
+        Command::Completions { .. } => unreachable!("completion command returned before database access"),
         Command::Add { url } => match nodes::add_url(&database_path, &url)? {
             AddNodeOutcome::Added(id) => {
                 let number = nodes::active_display_number(&database_path, id)?
