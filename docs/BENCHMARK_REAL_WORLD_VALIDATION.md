@@ -108,3 +108,15 @@ Stop testing and retain the report if any of the following occurs:
 - the endpoint rejects the request or its behavior is unclear.
 
 Do not attempt to repair system networking by running more benchmark commands. The benchmark is not intended to mutate system networking.
+
+
+## Compare local proxy inbound protocols
+
+The default benchmark route is SOCKS5. To compare the alternative HTTP inbound without
+changing the endpoints or node/core selection, run the same test once with
+`--proxy-type http`. The selected protocol is recorded in the benchmark run metadata.
+
+```bash
+proxyctl test --node 5 --core xray --proxy-type socks5
+proxyctl test --node 5 --core xray --proxy-type http
+```
