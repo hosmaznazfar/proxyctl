@@ -198,10 +198,11 @@ impl BenchmarkHttpClient {
         for attempt in 0..DOWNLOAD_ATTEMPTS {
             match self.download_once(max_bytes, &mut progress) {
                 Ok(measurement)
-                    if measurement.transferred_bytes.is_some_and(|bytes| bytes < max_bytes) =>
+                    if measurement
+                        .transferred_bytes
+                        .is_some_and(|bytes| bytes < max_bytes) =>
                 {
-                    let replace = best_partial
-                        .is_none_or(|best| measurement.value > best.value);
+                    let replace = best_partial.is_none_or(|best| measurement.value > best.value);
                     if replace {
                         best_partial = Some(measurement);
                     }
@@ -256,7 +257,7 @@ impl BenchmarkHttpClient {
             .and_then(|_| easy.accept_encoding("identity"))
             .and_then(|_| easy.follow_location(true))
             .and_then(|_| easy.max_redirections(10))
-            .and_then(|_| easy.http_version(HttpVersion::V1_1))
+            .and_then(|_| easy.http_version(HttpVersion::V11))
             .and_then(|_| easy.get(true))
             .map_err(|_| MeasurementFailure::Unavailable)?;
 
