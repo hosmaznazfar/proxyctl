@@ -18,7 +18,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 semver = "1.0.28"
-ureq = "3.5.2"
+ureq = { version = "3.5.2", features = ["socks-proxy"] }
 curl = { version = "0.4.51", default-features = false, features = ["ssl", "static-curl", "static-ssl"] }
 thiserror = "2.0.21"
 tempfile = "3.27.0"
