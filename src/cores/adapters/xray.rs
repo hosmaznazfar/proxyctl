@@ -212,7 +212,34 @@ impl CoreAdapter for XrayAdapter {
     }
 
     fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
-        super::benchmark_batch::generate_xray(self, targets)
+        use serde_json::Value;
+        super::benchmark_batch::validate_targets(self, targets)?;
+        let mut outbounds = Vec::with_capacity(targets.len());
+        let mut inbounds = Vec::with_capacity(targets.len());
+        let mut rules = Vec::with_capacity(targets.len());
+        for target in targets {
+            let mut document = super::benchmark_batch::node_config(self, target.node)?;
+            let node_outbounds = document.get_mut("outbounds").and_then(Value::as_array_mut)
+                .ok_or_else(|| anyhow::anyhow!("Xray node config must contain an outbound array"))?;
+            ensure!(node_outbounds.len() == 1, "Xray node config must contain exactly one proxy outbound");
+            let mut outbound = node_outbounds.remove(0);
+            let outbound_tag = format!("proxyctl-benchmark-out-{}", target.node_id);
+            let inbound_tag = format!("proxyctl-benchmark-in-{}", target.node_id);
+            outbound["tag"] = json!(outbound_tag);
+            outbounds.push(outbound);
+            inbounds.push(json!({
+                "listen": "127.0.0.1", "port": target.listen_port,
+                "protocol": match target.proxy_type {
+                    crate::domain::BenchmarkProxyType::Socks5 => "socks",
+                    crate::domain::BenchmarkProxyType::Http => "http",
+                },
+                "settings": {}, "tag": inbound_tag
+            }));
+            rules.push(json!({"type": "field", "inboundTag": [inbound_tag], "outboundTag": outbound_tag}));
+        }
+        json_config(json!({"inbounds": inbounds, "outbounds": outbounds, "routing": {
+            "domainStrategy": "AsIs", "rules": rules
+        }}))
     }
 
     fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
