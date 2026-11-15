@@ -192,22 +192,35 @@ impl BenchmarkHttpClient {
         F: FnMut(TransferProgress),
     {
         let mut last_failure = MeasurementFailure::Unavailable;
+        let mut best_partial: Option<Measurement> = None;
         for attempt in 0..DOWNLOAD_ATTEMPTS {
             match self.download_once(max_bytes, &mut progress) {
+                Ok(measurement)
+                    if measurement.transferred_bytes.is_some_and(|bytes| bytes < max_bytes) =>
+                {
+                    let replace = best_partial
+                        .is_none_or(|best| measurement.value > best.value);
+                    if replace {
+                        best_partial = Some(measurement);
+                    }
+                    last_failure = MeasurementFailure::IncompleteResponse;
+                }
                 Ok(measurement) => return Ok(measurement),
                 Err(failure) => {
                     last_failure = failure;
                     if !matches!(
                         failure,
                         MeasurementFailure::IncompleteResponse | MeasurementFailure::ReadFailed
-                    ) || attempt + 1 == DOWNLOAD_ATTEMPTS
-                    {
-                        return Err(failure);
+                    ) {
+                        return best_partial.ok_or(failure);
                     }
                 }
             }
+            if attempt + 1 == DOWNLOAD_ATTEMPTS {
+                return best_partial.ok_or(last_failure);
+            }
         }
-        Err(last_failure)
+        best_partial.ok_or(last_failure)
     }
 
     fn download_once<F>(
