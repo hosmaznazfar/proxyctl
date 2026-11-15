@@ -9,7 +9,7 @@ use url::Url;
 
 use crate::domain::{BenchmarkProxyType, BenchmarkSettings, throughput_bps};
 
-const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
+const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;\n/// Three total attempts, matching the v2rayN retry budget.\nconst DOWNLOAD_ATTEMPTS: usize = 3;
 /// Minimum body bytes required before a failed download can be retained as a partial sample.
 const MIN_PARTIAL_DOWNLOAD_BYTES: u64 = 16 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
@@ -180,7 +180,37 @@ impl BenchmarkHttpClient {
     /// libcurl delivers each received body chunk to the callback before reporting a later
     /// transport/framing failure. This preserves useful partial transfers without relying
     /// on a body reader that may return only the terminal error.
+    /// Retry interrupted/closed downloads up to three total attempts. Each attempt uses
+    /// a fresh connection; only a complete bounded response or a useful partial sample
+    /// is retained, and failed attempts never contribute bytes to another attempt.
     pub fn download<F>(
+        &self,
+        max_bytes: u64,
+        mut progress: F,
+    ) -> Result<Measurement, MeasurementFailure>
+    where
+        F: FnMut(TransferProgress),
+    {
+        let mut last_failure = MeasurementFailure::Unavailable;
+        for attempt in 0..DOWNLOAD_ATTEMPTS {
+            match self.download_once(max_bytes, &mut progress) {
+                Ok(measurement) => return Ok(measurement),
+                Err(failure) => {
+                    last_failure = failure;
+                    if !matches!(
+                        failure,
+                        MeasurementFailure::IncompleteResponse | MeasurementFailure::ReadFailed
+                    ) || attempt + 1 == DOWNLOAD_ATTEMPTS
+                    {
+                        return Err(failure);
+                    }
+                }
+            }
+        }
+        Err(last_failure)
+    }
+
+    fn download_once<F>(
         &self,
         max_bytes: u64,
         mut progress: F,
