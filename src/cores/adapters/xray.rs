@@ -74,8 +74,17 @@ impl CoreAdapter for XrayAdapter {
             if !ws_path.is_empty() {
                 ws.insert("path".into(), json!(ws_path));
             }
-            if !transport.headers.is_empty() {
-                ws.insert("headers".into(), json!(transport.headers));
+            if let Some(host) = transport.headers.get("Host") {
+                // Xray's native WebSocket schema uses wsSettings.host (not headers.Host).
+                ws.insert("host".into(), json!(host));
+            }
+            let additional_headers = transport
+                .headers
+                .into_iter()
+                .filter(|(name, _)| !name.eq_ignore_ascii_case("host"))
+                .collect::<serde_json::Map<_, _>>();
+            if !additional_headers.is_empty() {
+                ws.insert("headers".into(), json!(additional_headers));
             }
             outbound["streamSettings"]["wsSettings"] = serde_json::Value::Object(ws);
         } else if matches!(&transport.kind, crate::domain::TransportKind::Grpc) {
