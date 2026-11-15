@@ -82,6 +82,7 @@ impl CoreAdapter for XrayAdapter {
                 .headers
                 .into_iter()
                 .filter(|(name, _)| !name.eq_ignore_ascii_case("host"))
+                .map(|(name, value)| (name, json!(value)))
                 .collect::<serde_json::Map<_, _>>();
             if !additional_headers.is_empty() {
                 ws.insert("headers".into(), json!(additional_headers));
