@@ -864,6 +864,7 @@ mod tests {
                 latency_timeout_ms: 5_000,
                 probe_concurrency: 3,
                 startup_timeout_ms: 10_000,
+                proxy_type: Default::default(),
             },
             core_versions: BTreeMap::new(),
             summary: None,
