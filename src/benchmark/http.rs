@@ -1,9 +1,8 @@
 //! Bounded HTTP measurements routed through the benchmark's explicit local proxy.
 
-use std::time::{Duration, Instant};
+use std::{io::Read, time::{Duration, Instant}};
 
 use anyhow::{Context, ensure};
-use curl::easy::{Easy, HttpVersion, ProxyType};
 use ureq::{Agent, Proxy};
 use url::Url;
 
@@ -102,8 +101,6 @@ pub struct BenchmarkHttpClient {
     latency_url: Url,
     download_url: Url,
     upload_url: Url,
-    proxy_port: u16,
-    proxy_type: BenchmarkProxyType,
     timeout: Duration,
 }
 
@@ -147,8 +144,6 @@ impl BenchmarkHttpClient {
             latency_url,
             download_url,
             upload_url,
-            proxy_port: port,
-            proxy_type: settings.proxy_type,
             timeout,
         })
     }
@@ -177,14 +172,12 @@ impl BenchmarkHttpClient {
         })
     }
 
-    /// Measure up to `max_bytes` through libcurl's streaming write callback.
+    /// Measure a bounded download through ureq's streaming response reader.
     ///
-    /// libcurl delivers each received body chunk to the callback before reporting a later
-    /// transport/framing failure. This preserves useful partial transfers without relying
-    /// on a body reader that may return only the terminal error.
+    /// Read each body chunk directly from the response stream so bytes received before a
+    /// later EOF, timeout, or connection reset are retained in the partial sample.
     /// Retry interrupted/closed downloads up to three total attempts. Each attempt uses
-    /// a fresh connection; only a complete bounded response or a useful partial sample
-    /// is retained, and failed attempts never contribute bytes to another attempt.
+    /// a fresh request; failed attempts never contribute bytes to another attempt.
     pub fn download<F>(
         &self,
         max_bytes: u64,
@@ -238,71 +231,44 @@ impl BenchmarkHttpClient {
             return Err(MeasurementFailure::InvalidResponse);
         }
 
-        let proxy_url = match self.proxy_type {
-            BenchmarkProxyType::Socks5 => format!("127.0.0.1:{}", self.proxy_port),
-            BenchmarkProxyType::Http => format!("http://127.0.0.1:{}", self.proxy_port),
-        };
-        let mut easy = Easy::new();
-        easy.url(self.download_url.as_str())
-            .and_then(|_| easy.proxy(&proxy_url))
-            .and_then(|_| {
-                if self.proxy_type == BenchmarkProxyType::Socks5 {
-                    easy.proxy_type(ProxyType::Socks5Hostname)
-                } else {
-                    Ok(())
-                }
-            })
-            .and_then(|_| easy.timeout(self.timeout))
-            .and_then(|_| easy.connect_timeout(self.timeout))
-            .and_then(|_| easy.accept_encoding("identity"))
-            .and_then(|_| easy.follow_location(true))
-            .and_then(|_| easy.max_redirections(10))
-            .and_then(|_| easy.http_version(HttpVersion::V11))
-            .and_then(|_| easy.get(true))
-            .map_err(|_| MeasurementFailure::Unavailable)?;
-
         let started = Instant::now();
+        let mut response = self
+            .agent
+            .get(self.download_url.as_str())
+            .header("Accept-Encoding", "identity")
+            .call()
+            .map_err(classify_error)?;
+
         let mut received = 0_u64;
         let mut last_progress = Instant::now();
-        let transfer_result = {
-            let mut transfer = easy.transfer();
-            transfer
-                .write_function(|data| {
-                    let remaining = max_bytes.saturating_sub(received);
-                    let accepted = data
-                        .len()
-                        .min(usize::try_from(remaining).unwrap_or(usize::MAX));
-                    received = received.saturating_add(accepted as u64);
-                    if last_progress.elapsed() >= PROGRESS_INTERVAL || received == max_bytes {
-                        progress(TransferProgress::new(
-                            received,
-                            max_bytes,
-                            started.elapsed(),
-                        ));
-                        last_progress = Instant::now();
+        let mut buffer = [0_u8; 16 * 1024];
+        let read_result = {
+            let mut reader = response.body_mut().as_reader();
+            loop {
+                let remaining = max_bytes.saturating_sub(received);
+                if remaining == 0 {
+                    break Ok(());
+                }
+                let read_limit = buffer
+                    .len()
+                    .min(usize::try_from(remaining).unwrap_or(usize::MAX));
+                match reader.read(&mut buffer[..read_limit]) {
+                    Ok(0) => break Ok(()),
+                    Ok(count) => {
+                        received = received.saturating_add(count as u64);
+                        if last_progress.elapsed() >= PROGRESS_INTERVAL || received == max_bytes {
+                            progress(TransferProgress::new(
+                                received,
+                                max_bytes,
+                                started.elapsed(),
+                            ));
+                            last_progress = Instant::now();
+                        }
                     }
-                    // A short write deliberately stops at the sample cap. libcurl reports a
-                    // write error for this intentional stop; reaching the exact cap is success.
-                    Ok(accepted)
-                })
-                .map_err(|_| MeasurementFailure::Unavailable)?;
-            transfer.perform()
+                    Err(error) => break Err(classify_body_io_error(error)),
+                }
+            }
         };
-
-        let status = easy
-            .response_code()
-            .map_err(|_| MeasurementFailure::InvalidResponse)?;
-        if status == 0 {
-            return match transfer_result {
-                Err(error) => Err(classify_curl_error(error)),
-                Ok(()) => Err(MeasurementFailure::InvalidResponse),
-            };
-        }
-        if !(200..300).contains(&status) {
-            return Err(MeasurementFailure::HttpStatus(
-                u16::try_from(status).unwrap_or_default(),
-            ));
-        }
 
         let duration = started.elapsed();
         progress(TransferProgress::new(received, max_bytes, duration));
@@ -319,8 +285,8 @@ impl BenchmarkHttpClient {
             return partial_download_measurement(received, duration);
         }
 
-        match transfer_result {
-            Err(error) => Err(classify_curl_error(error)),
+        match read_result {
+            Err(failure) => Err(failure),
             Ok(()) => Err(MeasurementFailure::IncompleteResponse),
         }
     }
@@ -420,23 +386,6 @@ fn validate_endpoint(value: &str) -> anyhow::Result<Url> {
         "benchmark endpoint must not contain query parameters"
     );
     Ok(url)
-}
-
-fn classify_curl_error(error: curl::Error) -> MeasurementFailure {
-    if error.is_operation_timedout() {
-        MeasurementFailure::Timeout
-    } else if error.is_couldnt_resolve_host()
-        || error.is_couldnt_resolve_proxy()
-        || error.is_couldnt_connect()
-    {
-        MeasurementFailure::Unreachable
-    } else if error.is_ssl_connect_error() || error.is_peer_failed_verification() {
-        MeasurementFailure::TlsFailed
-    } else if error.is_partial_file() || error.is_recv_error() || error.is_got_nothing() {
-        MeasurementFailure::IncompleteResponse
-    } else {
-        MeasurementFailure::ReadFailed
-    }
 }
 
 fn classify_error(error: ureq::Error) -> MeasurementFailure {
