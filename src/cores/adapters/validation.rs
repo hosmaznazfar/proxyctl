@@ -1,5 +1,6 @@
 //! Secure, validation-only execution of generated core configurations.
 use std::{
+    io::Write,
     path::Path,
     process::{Command, Output},
     time::Duration,
