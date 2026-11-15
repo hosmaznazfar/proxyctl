@@ -174,6 +174,13 @@ fn adapters_map_http_upgrade_without_conflating_host_and_sni() {
         assert_eq!(host, Some("upgrade.example"), "{core}");
         assert_eq!(path, Some("/upgrade"), "{core}");
         assert_eq!(sni, Some("tls.example"), "{core}");
+        if core == CoreId::Xray {
+            assert_eq!(
+                document["outbounds"][0]["streamSettings"]["tlsSettings"]["allowInsecure"],
+                false
+            );
+            assert!(document["outbounds"][0]["streamSettings"]["wsSettings"]["headers"].is_null());
+        }
     }
 }
 
@@ -382,8 +389,7 @@ fn adapters_map_websocket_transport_and_keep_host_separate_from_sni() {
             CoreId::Xray => (
                 document["outbounds"][0]["streamSettings"]["network"].as_str(),
                 document["outbounds"][0]["streamSettings"]["wsSettings"]["path"].as_str(),
-                document["outbounds"][0]["streamSettings"]["wsSettings"]["headers"]["Host"]
-                    .as_str(),
+                document["outbounds"][0]["streamSettings"]["wsSettings"]["host"].as_str(),
                 document["outbounds"][0]["streamSettings"]["tlsSettings"]["serverName"].as_str(),
             ),
             CoreId::Mihomo => (
