@@ -238,13 +238,14 @@ impl CoreAdapter for XrayAdapter {
             let inbound_tag = format!("proxyctl-benchmark-in-{}", target.node_id);
             outbound["tag"] = json!(outbound_tag);
             outbounds.push(outbound);
+            // Match the already-used activation listener. Xray's mixed inbound
+            // accepts both HTTP CONNECT and SOCKS5, avoiding divergent benchmark-only
+            // listener settings for the same proxy outbound.
             inbounds.push(json!({
                 "listen": "127.0.0.1", "port": target.listen_port,
-                "protocol": match target.proxy_type {
-                    crate::domain::BenchmarkProxyType::Socks5 => "socks",
-                    crate::domain::BenchmarkProxyType::Http => "http",
-                },
-                "settings": {}, "tag": inbound_tag
+                "protocol": "mixed",
+                "settings": {"auth": "noauth", "udp": true, "ip": "127.0.0.1"},
+                "tag": inbound_tag
             }));
             rules.push(
                 json!({"type": "field", "inboundTag": [inbound_tag], "outboundTag": outbound_tag}),
@@ -300,9 +301,12 @@ impl CoreAdapter for XrayAdapter {
     ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_config(node)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        // Keep benchmark traffic on the same proven loopback listener contract
+        // as managed activation. The mixed inbound accepts both HTTP CONNECT and SOCKS5.
         document["inbounds"] = json!([{
-            "listen": "127.0.0.1", "port": listen_port, "protocol": "http",
-            "settings": {}, "tag": "benchmark-in"
+            "listen": "127.0.0.1", "port": listen_port, "protocol": "mixed",
+            "settings": {"auth": "noauth", "udp": true, "ip": "127.0.0.1"},
+            "tag": "benchmark-in"
         }]);
         json_config(document)
     }
@@ -411,7 +415,9 @@ mod config_contract_tests {
                 .content,
         )
         .unwrap();
-        assert_eq!(benchmark["inbounds"][0]["protocol"], "http");
+        assert_eq!(benchmark["inbounds"][0]["protocol"], "mixed");
+        assert_eq!(benchmark["inbounds"][0]["settings"]["auth"], "noauth");
+        assert_eq!(benchmark["inbounds"][0]["settings"]["udp"], true);
         assert_eq!(benchmark["inbounds"][0]["port"], 43129);
 
         let tun: serde_json::Value = serde_json::from_slice(
