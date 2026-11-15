@@ -294,7 +294,17 @@ fn completion_script(shell: Shell) -> String {
     let mut command = Cli::command();
     let mut output = Vec::new();
     clap_complete::generate(shell, &mut command, "proxyctl", &mut output);
-    String::from_utf8(output).expect("clap completion scripts are valid UTF-8")
+    let mut script = String::from_utf8(output).expect("clap completion scripts are valid UTF-8");
+
+    if shell == Shell::Fish {
+        // Fish adds filesystem candidates unless the command explicitly disables them.
+        // Proxyctl only expects a filesystem path for the import subcommand.
+        script = format!(
+            "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_proxyctl_using_subcommand import'\n{script}"
+        );
+    }
+
+    script
 }
 
 fn install_shell_completion(shell: crate::services::shell_completion::Shell) -> anyhow::Result<()> {
@@ -1607,8 +1617,13 @@ mod tests {
     }
 
     #[test]
-    fn fish_completion_scopes_test_options_to_the_test_subcommand() {
+    fn fish_completion_disables_files_except_for_import_paths() {
         let script = super::completion_script(clap_complete::Shell::Fish);
+        assert!(script.starts_with("complete -c proxyctl -f\\n"));
+        assert!(
+            script.contains("complete -c proxyctl -F -n '__fish_proxyctl_using_subcommand import'"),
+            "Fish completion must retain file suggestions for import"
+        );
         for option in ["latency-only", "download-only", "upload-only"] {
             assert!(
                 script.contains(&format!("-l {option}")),
