@@ -9,7 +9,9 @@ use url::Url;
 
 use crate::domain::{BenchmarkProxyType, BenchmarkSettings, throughput_bps};
 
-const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;\n/// Three total attempts, matching the v2rayN retry budget.\nconst DOWNLOAD_ATTEMPTS: usize = 3;
+const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
+/// Three total attempts, matching the v2rayN retry budget.
+const DOWNLOAD_ATTEMPTS: usize = 3;
 /// Minimum body bytes required before a failed download can be retained as a partial sample.
 const MIN_PARTIAL_DOWNLOAD_BYTES: u64 = 16 * 1024;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
