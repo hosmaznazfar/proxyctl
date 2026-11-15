@@ -9,7 +9,7 @@ readme = "README.md"
 [dependencies]
 anyhow = "1.0.104"
 base64 = "0.23.1"
-clap = { version = "4.6.7", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }\nclap_complete = "4.6.7"
 tabled = { version = "0.22", default-features = false, features = ["std"] }
 percent-encoding = "2.3.2"
 redb = "4.6.0"
