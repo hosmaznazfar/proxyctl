@@ -161,7 +161,7 @@ impl Default for DisplayConfig {
             ],
         );
         Self {
-            active_profile: DisplayProfile::Compact,
+            active_profile: DisplayProfile::Normal,
             profiles,
         }
     }
@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn compact_is_the_default_and_profiles_are_independent() {
         let mut config = DisplayConfig::default();
-        assert_eq!(config.active_profile, DisplayProfile::Compact);
+        assert_eq!(config.active_profile, DisplayProfile::Normal);
         assert_eq!(
             config.fields(),
             vec![
