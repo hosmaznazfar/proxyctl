@@ -1,6 +1,5 @@
 //! CLI command handlers. Argument definitions remain in the parent CLI module.
 use super::*;
-use super::presentation::*;
 
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let Some(command) = cli.command else {
