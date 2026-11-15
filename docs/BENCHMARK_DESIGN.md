@@ -3,6 +3,30 @@
 > Status: Stages 1–6 implementation and offline verification complete (user-reported); Stage 7 real-world validation runbook ready for user execution
 > Last updated: 2026-11-15
 
+## Internal module boundaries and extension points
+
+Keep benchmark code layered so new measurement transports, core adapters, and report
+formats can be added without coupling them to persistence or CLI behavior:
+
+- `domain/benchmark.rs` owns stable metric, run, settings, and sample types plus
+  invariants and shared calculations. Persisted fields added later must have serde
+  defaults when older redb records need to remain readable.
+- `benchmark/http.rs` owns HTTP transport behavior and returns typed measurements,
+  byte counts, partial-transfer state, and safe failure categories. It does not open
+  the database, print CLI output, or know about a particular core's config format.
+- `benchmark/process.rs` owns temporary core process/config lifecycle and loopback
+  readiness. Adapter modules own only core-specific config generation and validation.
+- `services/benchmark.rs` coordinates core batches, samples, cancellation, and
+  persistence. It translates transport results into immutable domain samples.
+- `services/reporting.rs` performs read-only aggregation over persisted records.
+  It does not start processes or make network requests.
+- `cli` renders service results and handles user input; it must not duplicate
+  measurement, persistence, or report aggregation rules.
+
+New cores should implement the adapter contract; new measurement types should return
+the same transport-neutral measurement result; new report views should consume the
+existing report model. Avoid adding core-specific branches to the domain or CLI layers.
+
 ## 1. Goals and scope
 
 Proxyctl reports four distinct measurements for each node:
