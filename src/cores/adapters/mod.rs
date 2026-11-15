@@ -7,8 +7,6 @@ mod xray;
 
 pub mod validation;
 
-use anyhow::Context;
-use serde_json::Value;
 use std::path::Path;
 
 use crate::{cores::CoreId, domain::ProxyNode};
@@ -19,168 +17,36 @@ pub use shared::{Compatibility, CompatibilityStatus, GeneratedConfig};
 /// A core adapter must either represent every retained connection option or explain why it
 /// cannot. It must never emit a partial configuration after silently dropping an option.
 pub trait CoreAdapter {
-    /// Generate one native core config for several independently routed benchmark nodes.
-    /// Callers must exclude Unsupported and Invalid nodes before building a batch.
-    fn generate_benchmark_batch_config(
-        &self,
-        targets: &[BenchmarkTarget<'_>],
-    ) -> anyhow::Result<GeneratedConfig> {
-        benchmark_batch::generate(self, targets)
-    }
-
     fn core(&self) -> CoreId;
     fn compatibility(&self, node: &ProxyNode) -> Compatibility;
     fn generate_config(&self, node: &ProxyNode) -> anyhow::Result<GeneratedConfig>;
 
-    /// Add a loopback-only shared SOCKS5 + HTTP listener for interactive activation.
+    /// Generate a native benchmark configuration for a batch of nodes.
+    fn generate_benchmark_batch_config(
+        &self,
+        targets: &[BenchmarkTarget<'_>],
+    ) -> anyhow::Result<GeneratedConfig>;
+
+    /// Add this core's loopback-only SOCKS5 + HTTP activation listener.
     fn generate_activation_config(
         &self,
         node: &ProxyNode,
         listen_port: u16,
-    ) -> anyhow::Result<GeneratedConfig> {
-        use serde_json::json;
+    ) -> anyhow::Result<GeneratedConfig>;
 
-        let generated = self.generate_config(node)?;
-        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
-        match self.core() {
-            CoreId::SingBox => {
-                document["inbounds"] = json!([{
-                    "type": "mixed",
-                    "tag": "proxy-in",
-                    "listen": "127.0.0.1",
-                    "listen_port": listen_port
-                }]);
-                document["route"] = json!({"final": "proxy"});
-            }
-            CoreId::Xray => {
-                // Xray's SOCKS inbound also accepts HTTP proxy requests.
-                document["inbounds"] = json!([{
-                    "listen": "127.0.0.1",
-                    "port": listen_port,
-                    "protocol": "mixed",
-                    "settings": {
-                        "auth": "noauth",
-                        "udp": true,
-                        "ip": "127.0.0.1"
-                    },
-                    "tag": "proxy-in"
-                }]);
-            }
-            CoreId::Mihomo => {
-                document["mixed-port"] = json!(listen_port);
-                document["bind-address"] = json!("127.0.0.1");
-                document["allow-lan"] = json!(false);
-            }
-        }
-        json_config(document)
-    }
-
-    /// Add the selected core's native Linux TUN inbound while preserving the shared local
-    /// SOCKS5/HTTP listener. DNS and firewall integration remain disabled.
+    /// Add this core's native TUN inbound. Activation remains gated by the TUN lifecycle.
     fn generate_tun_activation_config(
         &self,
         node: &ProxyNode,
         listen_port: u16,
-    ) -> anyhow::Result<GeneratedConfig> {
-        use serde_json::json;
+    ) -> anyhow::Result<GeneratedConfig>;
 
-        let generated = self.generate_activation_config(node, listen_port)?;
-        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
-        match self.core() {
-            CoreId::SingBox => {
-                document["inbounds"]
-                    .as_array_mut()
-                    .context("sing-box activation inbounds must be an array")?
-                    .push(json!({
-                        "type": "tun",
-                        "tag": "tun-in",
-                        "interface_name": "tun-proxyctl",
-                        "address": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
-                        "mtu": 1500,
-                        "auto_route": false,
-                        "strict_route": false,
-                        "dns_mode": "disabled"
-                    }));
-                document["route"] = json!({
-                    "final": "proxy",
-                    "auto_detect_interface": true
-                });
-            }
-            CoreId::Xray => {
-                document["inbounds"]
-                    .as_array_mut()
-                    .context("Xray activation inbounds must be an array")?
-                    .push(json!({
-                        "tag": "tun-in",
-                        "protocol": "tun",
-                        "settings": {
-                            "name": "tun-proxyctl",
-                            "mtu": 1500,
-                            "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
-                            "autoSystemRoutingTable": [],
-                            "autoOutboundsInterface": "auto",
-                            "autoSystemDnsToGateway": false
-                        }
-                    }));
-            }
-            CoreId::Mihomo => {
-                document["ipv6"] = json!(true);
-                document["tun"] = json!({
-                    "enable": true,
-                    "device": "tun-proxyctl",
-                    "stack": "system",
-                    "mtu": 1500,
-                    "inet4-address": ["198.18.0.1/30"],
-                    "inet6-address": ["fdfe:dcba:9876::1/126"],
-                    "auto-route": false,
-                    "auto-detect-interface": true,
-                    "auto-redirect": false,
-                    "strict-route": false,
-                    "dns-mode": "disabled",
-                    "dns-hijack": []
-                });
-            }
-        }
-        json_config(document)
-    }
-
-    /// Add a loopback-only HTTP inbound for isolated benchmark traffic.
+    /// Add this core's loopback-only HTTP/SOCKS benchmark listener.
     fn generate_benchmark_config(
         &self,
         node: &ProxyNode,
         listen_port: u16,
-    ) -> anyhow::Result<GeneratedConfig> {
-        use serde_json::json;
-
-        let generated = self.generate_config(node)?;
-        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
-        match self.core() {
-            CoreId::SingBox => {
-                document["inbounds"] = json!([{
-                    "type": "http",
-                    "tag": "benchmark-in",
-                    "listen": "127.0.0.1",
-                    "listen_port": listen_port
-                }]);
-                document["route"] = json!({"final": "proxy"});
-            }
-            CoreId::Xray => {
-                document["inbounds"] = json!([{
-                    "listen": "127.0.0.1",
-                    "port": listen_port,
-                    "protocol": "http",
-                    "settings": {},
-                    "tag": "benchmark-in"
-                }]);
-            }
-            CoreId::Mihomo => {
-                document["port"] = json!(listen_port);
-                document["bind-address"] = json!("127.0.0.1");
-                document["allow-lan"] = json!(false);
-            }
-        }
-        json_config(document)
-    }
+    ) -> anyhow::Result<GeneratedConfig>;
 
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()>;
 }
