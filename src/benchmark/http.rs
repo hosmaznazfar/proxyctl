@@ -3,11 +3,11 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, ensure};
-use curl::easy::Easy;
+use curl::easy::{Easy, ProxyType};
 use ureq::{Agent, Proxy};
 use url::Url;
 
-use crate::domain::{BenchmarkSettings, throughput_bps};
+use crate::domain::{BenchmarkProxyType, BenchmarkSettings, throughput_bps};
 
 const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
 /// Minimum body bytes required before a failed download can be retained as a partial sample.
@@ -101,6 +101,7 @@ pub struct BenchmarkHttpClient {
     download_url: Url,
     upload_url: Url,
     proxy_port: u16,
+    proxy_type: BenchmarkProxyType,
     timeout: Duration,
 }
 
@@ -125,7 +126,7 @@ impl BenchmarkHttpClient {
         let latency_url = validate_endpoint(&settings.latency_url)?;
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
-        let proxy_url = format!("http://127.0.0.1:{port}");
+        let proxy_url = match settings.proxy_type { BenchmarkProxyType::Socks5 => format!("socks5h://127.0.0.1:{port}"), BenchmarkProxyType::Http => format!("http://127.0.0.1:{port}") };
         let proxy =
             Proxy::new(&proxy_url).context("could not configure the local benchmark HTTP proxy")?;
         let config = Agent::config_builder()
@@ -139,6 +140,7 @@ impl BenchmarkHttpClient {
             download_url,
             upload_url,
             proxy_port: port,
+            proxy_type: settings.proxy_type,
             timeout,
         })
     }
@@ -184,10 +186,11 @@ impl BenchmarkHttpClient {
             return Err(MeasurementFailure::InvalidResponse);
         }
 
-        let proxy_url = format!("http://127.0.0.1:{}", self.proxy_port);
+        let proxy_url = match self.proxy_type { BenchmarkProxyType::Socks5 => format!("127.0.0.1:{}", self.proxy_port), BenchmarkProxyType::Http => format!("http://127.0.0.1:{}", self.proxy_port) };
         let mut easy = Easy::new();
         easy.url(self.download_url.as_str())
-            .and_then(|_| easy.proxy(&proxy_url))
+             .and_then(|_| easy.proxy(&proxy_url))
+            .and_then(|_| if self.proxy_type == BenchmarkProxyType::Socks5 { easy.proxy_type(ProxyType::Socks5Hostname) } else { Ok(()) })
             .and_then(|_| easy.timeout(self.timeout))
             .and_then(|_| easy.connect_timeout(self.timeout))
             .and_then(|_| easy.accept_encoding("identity"))
