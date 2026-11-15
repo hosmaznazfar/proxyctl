@@ -32,7 +32,7 @@ Mihomo's GOAMD64 v1 build is selected for broad x86_64 compatibility rather than
 
 ## 4. Shared installation pipeline
 
-1. Query the fixed official GitHub Releases API endpoint.
+1. Query the fixed official GitHub Releases API endpoint and deserialize its response as a stream. Do not use ureq's 10 MiB-limited `read_to_string` convenience method: large release histories (notably sing-box and Xray) can exceed that limit.
 2. Reject drafts and, unless explicitly opted in, prereleases.
 3. Select the exact platform-specific asset by name.
 4. Require the release API's SHA-256 digest.
