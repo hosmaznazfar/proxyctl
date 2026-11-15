@@ -535,6 +535,71 @@ mod tests {
     }
 
     #[test]
+    fn latency_uses_a_local_socks5_proxy_and_remote_dns() {
+        use std::{
+            io::{BufReader, Read, Write},
+            net::TcpListener,
+            thread,
+        };
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut greeting = [0_u8; 3];
+            reader.read_exact(&mut greeting).unwrap();
+            assert_eq!(greeting, [5, 1, 0]);
+            reader.get_mut().write_all(&[5, 0]).unwrap();
+
+            let mut request = [0_u8; 4];
+            reader.read_exact(&mut request).unwrap();
+            assert_eq!(&request[..3], &[5, 1, 0]);
+            let address_length = match request[3] {
+                1 => 4,
+                3 => {
+                    let mut length = [0_u8; 1];
+                    reader.read_exact(&mut length).unwrap();
+                    usize::from(length[0])
+                }
+                4 => 16,
+                other => panic!("unexpected SOCKS5 address type: {other}"),
+            };
+            let mut address = vec![0_u8; address_length + 2];
+            reader.read_exact(&mut address).unwrap();
+            if request[3] == 3 {
+                assert_eq!(&address[..address_length], b"measurement.invalid");
+            }
+            reader.get_mut().write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 80]).unwrap();
+
+            let _ = read_fake_request(&mut reader);
+            reader.get_mut().write_all(
+                b"HTTP/1.1 204 No Content\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n",
+            ).unwrap();
+            reader.get_mut().flush().unwrap();
+        });
+
+        let proxy = Proxy::new(&format!("socks5://127.0.0.1:{port}")).unwrap();
+        let agent: Agent = Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_secs(2)))
+            .build()
+            .into();
+        let client = BenchmarkHttpClient {
+            agent,
+            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
+            proxy_port: port,
+            proxy_type: BenchmarkProxyType::Socks5,
+            timeout: Duration::from_secs(2),
+        };
+
+        assert!(client.latency().is_ok());
+        server.join().unwrap();
+    }
+
+    #[test]
     fn download_keeps_a_useful_partial_transfer_after_body_truncation() {
         use std::{
             io::{BufReader, Write},
