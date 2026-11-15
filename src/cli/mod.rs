@@ -107,7 +107,7 @@ enum Command {
         #[arg(long, value_name = "METRIC", value_parser = ["ping", "tcp-ping", "download", "upload"])]
         sort: Option<String>,
         /// Restrict benchmark sorting to one managed core; requires --sort.
-        #[arg(long, value_name = "CORE", requires = "sort")]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"], requires = "sort")]
         core: Option<String>,
     },
     /// Show benchmark results or connection details for selected nodes.
@@ -139,7 +139,7 @@ enum Command {
         #[arg(required = true, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         nodes: Vec<String>,
         /// Validate only with this managed core; otherwise check all supported cores.
-        #[arg(long, value_name = "CORE")]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"])]
         core: Option<String>,
     },
     /// Show managed core status and versions.
@@ -148,7 +148,7 @@ enum Command {
     Use {
         #[arg(value_name = "NUMBER")]
         id: u64,
-        #[arg(long, value_name = "CORE", required = true)]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"], required = true)]
         core: String,
         /// Override the persistent shared HTTP/SOCKS5 listener port for this activation only.
         #[arg(long, value_name = "PORT")]
@@ -166,7 +166,7 @@ enum Command {
     Stop,
     /// Install all supported cores, or one selected core.
     Setup {
-        #[arg(long, value_name = "CORE")]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"])]
         core: Option<String>,
     },
     /// Run direct TCP ping and real-ping/download/upload tests through managed proxy cores.
@@ -180,7 +180,7 @@ enum Command {
         #[arg(long, num_args = 1.., value_name = "NUMBER|RANGE|all")]
         node: Vec<String>,
         /// Test selected --node values with one managed core (mutually exclusive with --all-cores).
-        #[arg(long, value_name = "CORE", requires = "node")]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"], requires = "node")]
         core: Option<String>,
         /// Run only HTTP latency through the selected core.
         #[arg(long, group = "metric_selection")]
@@ -236,7 +236,7 @@ enum Command {
         #[arg(long)]
         compare: bool,
         /// Restrict --compare to one managed core.
-        #[arg(long, value_name = "CORE", requires = "compare")]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"], requires = "compare")]
         core: Option<String>,
         /// Show the full benchmark detail columns (full display profile).
         #[arg(long)]
@@ -255,7 +255,7 @@ enum Command {
         #[arg(long, requires = "core")]
         unavailable: bool,
         /// Managed core used with --unavailable.
-        #[arg(long, value_name = "CORE", requires = "unavailable")]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"], requires = "unavailable")]
         core: Option<String>,
         /// Preview only (the default); never changes node state.
         #[arg(long, conflicts_with = "apply")]
@@ -282,7 +282,7 @@ enum Command {
         #[arg(long)]
         cores: bool,
         /// Update one selected managed core.
-        #[arg(long, value_name = "CORE")]
+        #[arg(long, value_name = "CORE", value_parser = ["sing-box", "xray", "mihomo"])]
         core: Option<String>,
         /// Include prereleases instead of selecting stable releases only.
         #[arg(long)]
@@ -1709,10 +1709,13 @@ mod tests {
             clap_complete::Shell::Zsh,
         ] {
             let script = super::completion_script(shell);
-            for expected in ["listen-port", "compact", "normal", "full", "tcp-ping", "tested"] {
+            for expected in [
+                "listen-port", "compact", "normal", "full", "tcp-ping", "tested",
+                "sing-box", "xray", "mihomo",
+            ] {
                 assert!(
                     script.contains(expected),
-                    "{shell:?} completion is missing positional value {expected}"
+                    "{shell:?} completion is missing positional or option value {expected}"
                 );
             }
         }
