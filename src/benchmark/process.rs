@@ -42,6 +42,7 @@ impl ManagedCoreProcess {
             node_id: 1,
             node,
             listen_port: port,
+            proxy_type: BenchmarkProxyType::Socks5,
         };
         Self::start_batch(core, &[target], executable, startup_timeout)
     }
