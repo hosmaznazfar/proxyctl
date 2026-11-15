@@ -51,9 +51,9 @@ enum TunCommand {
 #[derive(Debug, Subcommand)]
 enum ConfigAction {
     /// Set the persistent shared HTTP/SOCKS5 listener port.
-    Set { key: String, value: u16 },
+    Set { #[arg(value_parser = ["listen-port"])] key: String, value: u16 },
     /// Restore a setting to its built-in default.
-    Reset { key: String },
+    Reset { #[arg(value_parser = ["listen-port"])] key: String },
     /// Configure table profiles used by show and report.
     Display {
         #[command(subcommand)]
@@ -64,11 +64,11 @@ enum ConfigAction {
 #[derive(Debug, Subcommand)]
 enum DisplayAction {
     /// Select the active table profile: compact, normal, or full.
-    Profile { name: String },
+    Profile { #[arg(value_parser = ["compact", "normal", "full"])] name: String },
     /// Add a supported column to a profile.
-    AddField { profile: String, field: String },
+    AddField { #[arg(value_parser = ["compact", "normal", "full"])] profile: String, #[arg(value_parser = ["node", "name", "server", "port", "protocol", "core", "version", "latency", "tcp-ping", "download", "upload", "status", "samples", "failures", "run", "tested"])] field: String },
     /// Remove a column from a profile (at least one must remain).
-    RemoveField { profile: String, field: String },
+    RemoveField { #[arg(value_parser = ["compact", "normal", "full"])] profile: String, #[arg(value_parser = ["node", "name", "server", "port", "protocol", "core", "version", "latency", "tcp-ping", "download", "upload", "status", "samples", "failures", "run", "tested"])] field: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -302,13 +302,6 @@ fn completion_script(shell: Shell) -> String {
         let mut candidate_rules = Vec::new();
         append_fish_option_candidates(&Cli::command(), &mut Vec::new(), &mut candidate_rules);
         candidate_rules.extend([
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config set'",
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config reset'",
-            "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from profile'",
-            "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from add-field'",
-            "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from remove-field'",
-            "complete -c proxyctl -a 'node name server port protocol core version latency tcp-ping download upload status samples failures run tested' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from add-field'",
-            "complete -c proxyctl -a 'node name server port protocol core version latency tcp-ping download upload status samples failures run tested' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from remove-field'",
         ].into_iter().map(str::to_owned));
         script = format!(
             "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_seen_subcommand_from import'\n{}\n{script}",
@@ -1702,15 +1695,19 @@ mod tests {
     }
 
     #[test]
-    fn fish_completion_offers_known_positional_arguments() {
-        let script = super::completion_script(clap_complete::Shell::Fish);
-        for expected in [
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config set'",
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config reset'",
-            "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from profile'",
-            "complete -c proxyctl -a 'node name server port protocol core version latency tcp-ping download upload status samples failures run tested'",
+    fn positional_value_completions_are_generated_for_all_shells() {
+        for shell in [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::Zsh,
         ] {
-            assert!(script.contains(expected), "missing Fish positional completion: {expected}");
+            let script = super::completion_script(shell);
+            for expected in ["listen-port", "compact", "normal", "full", "tcp-ping", "tested"] {
+                assert!(
+                    script.contains(expected),
+                    "{shell:?} completion is missing positional value {expected}"
+                );
+            }
         }
     }
 
