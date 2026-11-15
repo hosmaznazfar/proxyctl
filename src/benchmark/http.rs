@@ -574,7 +574,7 @@ mod tests {
 
             let _ = read_fake_request(&mut reader);
             reader.get_mut().write_all(
-                b"HTTP/1.1 204 No Content\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n",
+                b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             ).unwrap();
             reader.get_mut().flush().unwrap();
         });
