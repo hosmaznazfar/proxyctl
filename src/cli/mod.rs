@@ -302,6 +302,13 @@ fn completion_script(shell: Shell) -> String {
         let mut candidate_rules = Vec::new();
         append_fish_option_candidates(&Cli::command(), &mut Vec::new(), &mut candidate_rules);
         candidate_rules.extend([
+            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config set'",
+            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config reset'",
+            "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config display profile'",
+            "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config display add-field'",
+            "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config display remove-field'",
+            "complete -c proxyctl -a 'node name server port protocol core version latency tcp-ping download upload status samples failures run tested' -n '__fish_seen_subcommand_from config display add-field'",
+            "complete -c proxyctl -a 'node name server port protocol core version latency tcp-ping download upload status samples failures run tested' -n '__fish_seen_subcommand_from config display remove-field'",
         ].into_iter().map(str::to_owned));
         script = format!(
             "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_seen_subcommand_from import'\n{}\n{script}",
