@@ -264,3 +264,13 @@ The user's comparative observations guide optimization priorities: Throne is the
 Implementation is staged: batch adapter config generation; batch process/readiness lifecycle; bounded-concurrent latency and direct TCP; accurate sequential throughput and progress; orchestration/persistence/report integration; offline performance and fault-injection tests; separately approved real-world comparison. See `docs/BENCHMARK_OPTIMIZATION_PLAN.md` for details and acceptance criteria.
 
 No public endpoint benchmarking, real proxy-core startup, system networking mutation, or TUN activation is part of ordinary tests. Real-world comparative validation requires separate explicit approval.
+
+
+## Local benchmark proxy protocol
+
+Benchmark runs use a loopback SOCKS5 inbound by default, matching the proxy path used by
+V2rayN's HTTP speed tests. The same selected protocol is used for latency, download, and
+upload measurements and is persisted with the run settings. Use
+`proxyctl test --proxy-type http` to select the HTTP inbound when diagnosing compatibility;
+`--proxy-type socks5` explicitly selects the default. sing-box and Xray receive the
+corresponding SOCKS5 or HTTP inbound, while Mihomo's loopback mixed listener supports both.
