@@ -819,29 +819,38 @@ mod tests {
             let mut reader = BufReader::new(stream);
             let (method, _, _) = read_fake_request(&mut reader);
             assert_eq!(method, "GET");
-            let stream = reader.get_mut();
-            stream.write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\nX",
-            ).unwrap();
-            stream.flush().unwrap();
-            // Keep the first response open beyond the client's global timeout.
-            thread::sleep(Duration::from_millis(250));
-            drop(reader);
+            let mut first_stream = reader.into_inner();
+            first_stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\nX",
+                )
+                .unwrap();
+            first_stream.flush().unwrap();
+
+            // Keep the first response open past the read deadline, but do so
+            // concurrently so the listener can accept the client's retry.
+            let stalled_connection = thread::spawn(move || {
+                thread::sleep(Duration::from_millis(750));
+                drop(first_stream);
+            });
 
             let (stream, _) = listener.accept().unwrap();
             let mut reader = BufReader::new(stream);
             let (method, _, _) = read_fake_request(&mut reader);
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
-            stream.write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n",
-            ).unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
             stream.write_all(&vec![0x44; 32 * 1024]).unwrap();
             stream.flush().unwrap();
+            stalled_connection.join().unwrap();
         });
 
         let agent: Agent = Agent::config_builder()
-            .timeout_global(Some(Duration::from_millis(100)))
+            .timeout_global(Some(Duration::from_millis(500)))
             .build()
             .into();
         let endpoint = format!("http://127.0.0.1:{port}");
