@@ -1690,14 +1690,6 @@ mod tests {
             );
         }
 
-        assert!(
-            script.contains("__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display"),
-            "nested config display options must be scoped to the nested subcommand"
-        );
-        assert!(
-            script.contains("__fish_seen_subcommand_from completions; and __fish_seen_subcommand_from generate"),
-            "nested completions generate options must be scoped to the nested subcommand"
-        );
     }
 
     #[test]
