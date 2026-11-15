@@ -150,7 +150,20 @@ impl BenchmarkSample {
             (_, None) => {}
             (_, Some(_)) => return Err("failed samples must not contain a numeric value"),
         }
-        if self.partial && (self.metric != BenchmarkMetric::Download || self.status != BenchmarkSampleStatus::Success) {
+        let is_transfer_metric =
+            matches!(self.metric, BenchmarkMetric::Download | BenchmarkMetric::Upload);
+        if self.transferred_bytes.is_some() && !is_transfer_metric {
+            return Err("transfer byte metadata is only valid for download/upload samples");
+        }
+        if self.status != BenchmarkSampleStatus::Success
+            && (self.transferred_bytes.is_some() || self.partial)
+        {
+            return Err("failed samples cannot contain transfer metadata");
+        }
+        if self.partial
+            && (self.metric != BenchmarkMetric::Download
+                || self.status != BenchmarkSampleStatus::Success)
+        {
             return Err("only successful download samples can be partial");
         }
         if self.partial && self.transferred_bytes.is_none_or(|bytes| bytes == 0) {
@@ -269,6 +282,27 @@ mod tests {
         value.metric = BenchmarkMetric::Latency;
         value.unit = BenchmarkMetric::Latency.unit().into();
         assert_eq!(value.validate(), Err("only successful download samples can be partial"));
+    }
+
+    #[test]
+    fn transfer_byte_metadata_is_restricted_to_successful_transfer_samples() {
+        let mut latency = sample(BenchmarkSampleStatus::Success, Some(12.0));
+        latency.transferred_bytes = Some(1024);
+        assert_eq!(
+            latency.validate(),
+            Err("transfer byte metadata is only valid for download/upload samples")
+        );
+
+        let mut failed_download = sample(BenchmarkSampleStatus::Timeout, None);
+        failed_download.metric = BenchmarkMetric::Download;
+        failed_download.unit = BenchmarkMetric::Download.unit().into();
+        failed_download.failure_category = Some("timeout".into());
+        failed_download.failure_reason = Some("request timed out".into());
+        failed_download.transferred_bytes = Some(1024);
+        assert_eq!(
+            failed_download.validate(),
+            Err("failed samples cannot contain transfer metadata")
+        );
     }
 
     #[test]
