@@ -249,6 +249,26 @@ mod tests {
     }
 
     #[test]
+    fn legacy_samples_default_transfer_metadata() {
+        let mut value = serde_json::to_value(sample(BenchmarkSampleStatus::Success, Some(12.0))).unwrap();
+        value.as_object_mut().unwrap().remove("transferred_bytes");
+        value.as_object_mut().unwrap().remove("partial");
+        let restored: BenchmarkSample = serde_json::from_value(value).unwrap();
+        assert_eq!(restored.transferred_bytes, None);
+        assert!(!restored.partial);
+    }
+
+    #[test]
+    fn only_download_successes_can_be_marked_partial() {
+        let mut value = sample(BenchmarkSampleStatus::Success, Some(12.0));
+        value.partial = true;
+        value.transferred_bytes = Some(16 * 1024);
+        assert_eq!(value.validate(), Ok(()));
+        value.metric = BenchmarkMetric::Latency;
+        assert_eq!(value.validate(), Err("only successful download samples can be partial"));
+    }
+
+    #[test]
     fn median_uses_successful_samples_only() {
         let samples = [
             sample(BenchmarkSampleStatus::Success, Some(40.0)),
