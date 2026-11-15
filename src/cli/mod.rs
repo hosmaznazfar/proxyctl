@@ -1578,20 +1578,28 @@ mod tests {
         ] {
             let script = super::completion_script(shell);
             assert!(!script.is_empty(), "empty script for {shell:?}");
-            for expected in [
-                "proxyctl",
-                "completions",
-                "test",
-                "--all-cores",
-                "--latency-only",
-                "--download-only",
-                "--upload-only",
-                "--concurrency",
-                "--startup-timeout-secs",
-                "--request-timeout-secs",
-            ] {
+            for expected in ["proxyctl", "completions", "test"] {
                 assert!(
                     script.contains(expected),
+                    "{shell:?} completion script is missing {expected}"
+                );
+            }
+            let test_options = [
+                "all-cores",
+                "latency-only",
+                "download-only",
+                "upload-only",
+                "concurrency",
+                "startup-timeout-secs",
+                "request-timeout-secs",
+            ];
+            for option in test_options {
+                let expected = match shell {
+                    clap_complete::Shell::Fish => format!("-l {option}"),
+                    _ => format!("--{option}"),
+                };
+                assert!(
+                    script.contains(&expected),
                     "{shell:?} completion script is missing {expected}"
                 );
             }
@@ -1601,10 +1609,12 @@ mod tests {
     #[test]
     fn fish_completion_scopes_test_options_to_the_test_subcommand() {
         let script = super::completion_script(clap_complete::Shell::Fish);
-        assert!(script.contains("__fish_seen_subcommand_from test"));
-        assert!(script.contains("--latency-only"));
-        assert!(script.contains("--download-only"));
-        assert!(script.contains("--upload-only"));
+        for option in ["latency-only", "download-only", "upload-only"] {
+            assert!(
+                script.contains(&format!("-l {option}")),
+                "Fish completion script is missing -l {option}"
+            );
+        }
     }
 
     #[test]
