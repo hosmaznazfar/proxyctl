@@ -80,7 +80,13 @@ fn validate_staged_executable(
 ) -> anyhow::Result<std::process::Output> {
     const MAX_ATTEMPTS: usize = 4;
     for attempt in 0..MAX_ATTEMPTS {
-        match Command::new(path).arg(version_argument).output() {
+        let mut command = Command::new(path);
+        command.arg(version_argument);
+        match crate::process::run_bounded_command(
+            command,
+            "staged executable version check",
+            Duration::from_secs(10),
+        ) {
             Ok(output) => return Ok(output),
             Err(error)
                 if error.raw_os_error() == Some(libc::ETXTBSY) && attempt + 1 < MAX_ATTEMPTS =>
