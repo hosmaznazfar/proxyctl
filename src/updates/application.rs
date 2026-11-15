@@ -13,7 +13,7 @@ use super::{
 };
 
 const RELEASE_API: &str =
-    "https://api.github.com/repos/hosmaznazfar/proxyctl/releases?per_page=100";
+    "https://api.github.com/repos/hosmaznazfar/proxyctl/releases?per_page=10";
 const RELEASES_PAGE: &str = "https://github.com/hosmaznazfar/proxyctl/releases";
 
 pub fn update_application(check_only: bool, channel: ReleaseChannel) -> anyhow::Result<()> {
