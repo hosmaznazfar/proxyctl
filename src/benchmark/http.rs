@@ -152,20 +152,15 @@ impl BenchmarkHttpClient {
     /// Measure a real HTTP response through the proxy; 204 No Content is valid.
     pub fn latency(&self) -> Result<Measurement, MeasurementFailure> {
         let started = Instant::now();
-        let mut response = self
+        let _response = self
             .agent
             .get(self.latency_url.as_str())
             .header("Accept-Encoding", "identity")
             .call()
             .map_err(classify_error)?;
+        // Latency is strictly time-to-response-headers. Do not read the body:
+        // body transfer time and body-read failures belong to throughput semantics.
         let duration = started.elapsed();
-        // Some configurable ping endpoints return a small body; discard it with a strict cap.
-        response
-            .body_mut()
-            .with_config()
-            .limit(64 * 1024)
-            .read_to_vec()
-            .map_err(classify_response_error)?;
         Ok(Measurement {
             value: duration.as_secs_f64() * 1_000.0,
             duration,
@@ -411,13 +406,10 @@ fn classify_error(error: ureq::Error) -> MeasurementFailure {
 }
 
 fn classify_download_request_error(error: ureq::Error) -> MeasurementFailure {
-    match error {
-        // A malformed/truncated response during a download is an incomplete
-        // transfer, not a generic protocol failure. HTTP status and connection
-        // setup errors retain their more specific classifications.
-        ureq::Error::Protocol(_) => MeasurementFailure::IncompleteResponse,
-        other => classify_error(other),
-    }
+    // This function runs before a response body exists. Protocol errors here
+    // describe an invalid HTTP exchange; truncation after headers is handled
+    // separately by classify_response_error/classify_body_io_error.
+    classify_error(error)
 }
 
 fn classify_response_error(error: ureq::Error) -> MeasurementFailure {
@@ -808,6 +800,57 @@ mod tests {
         assert_eq!(progress.target_bytes, 2_048);
         assert_eq!(progress.elapsed, Duration::from_secs(2));
         assert_eq!(progress.bits_per_second, Some(4_096.0));
+    }
+
+    #[test]
+    fn download_retries_after_a_real_request_timeout() {
+        use std::{
+            io::{BufReader, Write},
+            net::TcpListener,
+            thread,
+        };
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            // First request deliberately exceeds the client's global deadline.
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let _ = read_fake_proxy_request(&mut reader);
+            thread::sleep(Duration::from_millis(180));
+            let _ = reader.get_mut().write_all(
+                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\n",
+            );
+
+            // The retry must be a new request and must complete successfully.
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let (method, _, _) = read_fake_proxy_request(&mut reader);
+            assert_eq!(method, "GET");
+            let stream = reader.get_mut();
+            stream.write_all(
+                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\n",
+            ).unwrap();
+            stream.write_all(&vec![0x44; 32 * 1024]).unwrap();
+            stream.flush().unwrap();
+        });
+
+        let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
+        let agent: Agent = Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_millis(80)))
+            .build()
+            .into();
+        let client = BenchmarkHttpClient {
+            agent,
+            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
+        };
+
+        let measurement = client.download(32 * 1024, |_| {}).unwrap();
+        assert_eq!(measurement.transferred_bytes, Some(32 * 1024));
+        server.join().unwrap();
     }
 
     fn read_fake_proxy_request(
