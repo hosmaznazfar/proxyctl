@@ -8,7 +8,7 @@ use super::{
 };
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct CoreCapabilities {
+pub(crate) struct CoreCapabilities {
     name: &'static str,
     shadowsocks_plugins: bool,
     reality_transport_limited: bool,
@@ -46,7 +46,7 @@ impl CoreCapabilities {
     }
 }
 
-pub(super) const SING_BOX: CoreCapabilities = CoreCapabilities {
+pub(crate) const SING_BOX: CoreCapabilities = CoreCapabilities {
     name: "sing-box",
     shadowsocks_plugins: true,
     reality_transport_limited: true,
@@ -70,7 +70,7 @@ pub(super) const SING_BOX: CoreCapabilities = CoreCapabilities {
     verify_peer_cert_by_name: false,
 };
 
-pub(super) const XRAY: CoreCapabilities = CoreCapabilities {
+pub(crate) const XRAY: CoreCapabilities = CoreCapabilities {
     name: "Xray",
     shadowsocks_plugins: false,
     reality_transport_limited: false,
@@ -95,7 +95,7 @@ pub(super) const XRAY: CoreCapabilities = CoreCapabilities {
     verify_peer_cert_by_name: true,
 };
 
-pub(super) const MIHOMO: CoreCapabilities = CoreCapabilities {
+pub(crate) const MIHOMO: CoreCapabilities = CoreCapabilities {
     name: "Mihomo",
     shadowsocks_plugins: true,
     reality_transport_limited: true,
@@ -319,27 +319,27 @@ pub(crate) fn validate_for_core(capabilities: &'static CoreCapabilities, node: &
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cores::CoreId;
 
     #[test]
-    fn capability_registry_keeps_core_differences_explicit() {
-        assert!(&SING_BOX.reality_vless);
-        assert!(!capabilities(CoreId::SingBox).reality_vmess);
-        assert!(&XRAY.reality_vmess);
-        assert!(capabilities(CoreId::Xray).reality_optional_fields);
-        assert!(!&MIHOMO.reality_optional_fields);
-        assert!(!capabilities(CoreId::SingBox).xhttp);
-        assert!(capabilities(CoreId::Xray).xhttp);
-        assert!(!capabilities(CoreId::Xray).http2);
-        assert!(capabilities(CoreId::Xray).certificate_sha256_pin);
-        assert!(!capabilities(CoreId::SingBox).certificate_sha256_pin);
-        assert!(capabilities(CoreId::Mihomo).certificate_sha256_pin);
-        assert!(capabilities(CoreId::Xray).verify_peer_cert_by_name);
-        assert!(!capabilities(CoreId::SingBox).verify_peer_cert_by_name);
-        assert!(capabilities(CoreId::Mihomo).http2);
-        assert!(capabilities(CoreId::Mihomo).grpc_service_name_required);
-        assert!(capabilities(CoreId::Xray).grpc_authority);
-        assert!(capabilities(CoreId::Xray).grpc_multi_mode);
-        assert!(!capabilities(CoreId::Mihomo).grpc_authority);
+    fn capability_profiles_keep_core_differences_explicit() {
+        assert!(SING_BOX.reality_vless);
+        assert!(!SING_BOX.reality_vmess);
+        assert!(XRAY.reality_vmess);
+        assert!(XRAY.reality_optional_fields);
+        assert!(!MIHOMO.reality_optional_fields);
+        assert!(!SING_BOX.xhttp);
+        assert!(XRAY.xhttp);
+        assert!(!XRAY.http2);
+        assert!(XRAY.certificate_sha256_pin);
+        assert!(!SING_BOX.certificate_sha256_pin);
+        assert!(MIHOMO.certificate_sha256_pin);
+        assert!(XRAY.verify_peer_cert_by_name);
+        assert!(!SING_BOX.verify_peer_cert_by_name);
+        assert!(MIHOMO.http2);
+        assert!(MIHOMO.grpc_service_name_required);
+        assert!(XRAY.grpc_authority);
+        assert!(XRAY.grpc_multi_mode);
+        assert!(!MIHOMO.grpc_authority);
+        assert_eq!(XRAY.websocket_early_data_header, Some("Sec-WebSocket-Protocol"));
     }
 }
