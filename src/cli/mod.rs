@@ -29,10 +29,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum CompletionAction {
-    /// Install completion for the detected shell, or specify --shell fish.
+    /// Install completion for the detected shell, or explicitly select a supported shell.
     Install {
-        /// Shell to install completion for (currently Fish).
-        #[arg(long, value_parser = ["fish"])]
+        /// Shell to install completion for: fish, bash, or zsh.
+        #[arg(long, value_parser = ["fish", "bash", "zsh"])]
         shell: Option<String>,
     },
     /// Print a completion script to standard output.
@@ -298,41 +298,41 @@ fn completion_script(shell: Shell) -> String {
 }
 
 fn install_shell_completion(shell: crate::services::shell_completion::Shell) -> anyhow::Result<()> {
+    let completion_shell = match shell {
+        crate::services::shell_completion::Shell::Bash => Shell::Bash,
+        crate::services::shell_completion::Shell::Fish => Shell::Fish,
+        crate::services::shell_completion::Shell::Zsh => Shell::Zsh,
+    };
+    let path = crate::services::shell_completion::install(shell, &completion_script(completion_shell))?;
+    println!("{} completion installed: {}", shell.name(), path.display());
     match shell {
-        crate::services::shell_completion::Shell::Fish => {
-            let path = crate::services::shell_completion::install_fish(&completion_script(Shell::Fish))?;
-            println!("Fish completion installed: {}", path.display());
-            println!("Fish will load it automatically in new sessions.");
-            Ok(())
-        }
-        crate::services::shell_completion::Shell::Bash
-        | crate::services::shell_completion::Shell::Zsh => {
-            anyhow::bail!("automatic installation is currently supported for Fish; use 'proxyctl completions generate bash' or 'zsh' for other shells")
-        }
+        crate::services::shell_completion::Shell::Fish => println!("Fish loads it automatically in new sessions."),
+        crate::services::shell_completion::Shell::Bash => println!("Bash loads it automatically when bash-completion is installed and enabled."),
+        crate::services::shell_completion::Shell::Zsh => println!("Zsh completion path was added to ~/.zshrc; restart Zsh or run 'source ~/.zshrc'."),
     }
+    Ok(())
 }
 
 fn offer_first_setup_completion() -> anyhow::Result<()> {
     use std::io::{self, IsTerminal, Write};
+    use crate::services::shell_completion::{self, Shell as DetectedShell};
 
-    if crate::services::shell_completion::detect_current()
-        != Some(crate::services::shell_completion::Shell::Fish)
-        || !io::stdin().is_terminal()
-        || !crate::services::shell_completion::should_offer_first_setup_prompt()?
-    {
+    let Some(shell) = shell_completion::detect_current() else { return Ok(()); };
+    if !io::stdin().is_terminal() || !shell_completion::should_offer_first_setup_prompt(shell)? {
         return Ok(());
     }
 
-    print!("Install Fish tab completion for proxyctl now? [y/N] ");
+    print!("Install {} tab completion for proxyctl now? [y/N] ", shell.name());
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
-    crate::services::shell_completion::mark_first_setup_prompted()?;
+    shell_completion::mark_first_setup_prompted(shell)?;
     if matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
-        install_shell_completion(crate::services::shell_completion::Shell::Fish)?;
+        install_shell_completion(shell)?;
     } else {
         println!("Skipped. You can install it later with: proxyctl completions install");
     }
+    let _ = DetectedShell::Fish;
     Ok(())
 }
 
