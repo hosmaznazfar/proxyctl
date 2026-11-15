@@ -6,6 +6,8 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicU64, Ordering},
+    thread,
+    time::Duration,
 };
 
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -43,10 +45,7 @@ pub fn replace_executable(
         // file descriptor for it remains open. Close it before version validation.
         drop(file);
 
-        let output = Command::new(&staged)
-            .arg(version_argument)
-            .output()
-            .context("could not validate staged executable")?;
+        let output = validate_staged_executable(&staged, version_argument)?;
         ensure!(
             output.status.success(),
             "staged executable failed its version check"
@@ -72,6 +71,26 @@ pub fn replace_executable(
         let _ = fs::remove_file(&staged);
     }
     result
+}
+
+/// Execute the staged artifact, retrying only Linux ETXTBSY transient races.
+fn validate_staged_executable(path: &Path, version_argument: &str) -> anyhow::Result<std::process::Output> {
+    const MAX_ATTEMPTS: usize = 4;
+    for attempt in 0..MAX_ATTEMPTS {
+        match Command::new(path).arg(version_argument).output() {
+            Ok(output) => return Ok(output),
+            Err(error)
+                if error.raw_os_error() == Some(libc::ETXTBSY)
+                    && attempt + 1 < MAX_ATTEMPTS =>
+            {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => {
+                return Err(error).context("could not validate staged executable");
+            }
+        }
+    }
+    unreachable!("the bounded validation loop always returns")
 }
 
 fn staged_path(parent: &Path) -> PathBuf {
