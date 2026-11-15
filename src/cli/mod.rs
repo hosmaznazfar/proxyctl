@@ -1578,14 +1578,16 @@ mod tests {
     }
 
     #[test]
-    fn completions_command_supports_generation_and_fish_installation() {
+    fn completions_command_supports_generation_and_installation_for_all_shells() {
         for shell in ["bash", "fish", "zsh"] {
             assert!(Cli::try_parse_from(["proxyctl", "completions", "generate", shell]).is_ok());
         }
         assert!(Cli::try_parse_from(["proxyctl", "completions", "install"]).is_ok());
-        assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", "fish"]).is_ok());
+        for shell in ["bash", "fish", "zsh"] {
+            assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", shell]).is_ok());
+        }
         assert!(Cli::try_parse_from(["proxyctl", "completions", "generate", "unknown"]).is_err());
-        assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", "bash"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", "nu"]).is_err());
     }
 
     #[test]
