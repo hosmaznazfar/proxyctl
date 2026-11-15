@@ -12,7 +12,7 @@ use super::{
     CoreAdapter, json_config,
     shared::{
         Compatibility, GeneratedConfig, normalize_transport, option_string, reality_options,
-        tls_options, validate_for_core,
+        tls_options, validate_for_core, XRAY,
     },
 };
 
@@ -24,7 +24,7 @@ impl CoreAdapter for XrayAdapter {
     }
 
     fn compatibility(&self, node: &ProxyNode) -> Compatibility {
-        match validate_for_core(CoreId::Xray, node) {
+        match validate_for_core(&XRAY, node) {
             Ok(()) => Compatibility::supported(),
             Err(compatibility) => compatibility,
         }
