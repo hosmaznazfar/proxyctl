@@ -15,7 +15,7 @@ use tempfile::NamedTempFile;
 
 use crate::{
     cores::{CoreId, adapters},
-    domain::ProxyNode,
+    domain::{BenchmarkProxyType, ProxyNode},
 };
 
 const STARTUP_ATTEMPTS: usize = 3;
