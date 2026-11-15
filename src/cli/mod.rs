@@ -1632,16 +1632,21 @@ mod tests {
                     "{shell:?} completion script is missing {expected}"
                 );
             }
-            let test_options = [
+            let command_options = [
+                "protocol",
+                "details",
+                "yes",
+                "core",
+                "tun",
                 "all-cores",
                 "latency-only",
                 "download-only",
                 "upload-only",
-                "concurrency",
-                "startup-timeout-secs",
-                "request-timeout-secs",
+                "history",
+                "unavailable-all",
+                "prerelease",
             ];
-            for option in test_options {
+            for option in command_options {
                 let expected = match shell {
                     clap_complete::Shell::Fish => format!("-l {option}"),
                     _ => format!("--{option}"),
