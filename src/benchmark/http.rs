@@ -731,7 +731,7 @@ mod tests {
                 let _ = read_fake_request(&mut reader);
                 let stream = reader.get_mut();
                 stream
-                    .write_all(b"HTTP/1.1 200 OK\r\\nContent-Length: 4\r\\nConnection: close\r\\n\r\\ndata")
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndata")
                     .unwrap();
                 stream.flush().unwrap();
             }
