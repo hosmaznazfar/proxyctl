@@ -1570,11 +1570,18 @@ mod tests {
     use super::{Cli, Command, TunCommand, display_core_version};
 
     #[test]
-    fn fish_completion_script_contains_proxyctl_command_definitions() {
-        let script = super::completion_script(clap_complete::Shell::Fish);
-        assert!(script.contains("complete -c proxyctl"));
-        assert!(script.contains("completions"));
-        assert!(script.contains("--all-cores"));
+    fn every_supported_shell_gets_a_proxyctl_completion_script() {
+        for shell in [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::Zsh,
+        ] {
+            let script = super::completion_script(shell);
+            assert!(!script.is_empty());
+            assert!(script.contains("proxyctl"));
+            assert!(script.contains("completions"));
+            assert!(script.contains("--all-cores"));
+        }
     }
 
     #[test]
