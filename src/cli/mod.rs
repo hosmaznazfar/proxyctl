@@ -1655,27 +1655,48 @@ mod tests {
     }
 
     #[test]
-    fn fish_completion_disables_files_except_for_import_paths() {
+    fn fish_completion_offers_options_for_all_commands_without_hiding_import_paths() {
         let script = super::completion_script(clap_complete::Shell::Fish);
         assert!(script.starts_with("complete -c proxyctl -f\n"));
         assert!(
             script.contains("complete -c proxyctl -F -n '__fish_seen_subcommand_from import'"),
             "Fish completion must retain file suggestions for import"
         );
-        for option in ["latency-only", "download-only", "upload-only", "all-cores"] {
-            assert!(
-                script.contains(&format!(
-                    "complete -c proxyctl -l {option} -n '__fish_seen_subcommand_from test'"
-                )),
-                "Fish completion script is missing normal test option definition {option}"
+
+        for (command, option) in [
+            ("add", "--help"),
+            ("list", "--protocol"),
+            ("show", "--details"),
+            ("remove", "--yes"),
+            ("check", "--core"),
+            ("use", "--tun"),
+            ("config", "--help"),
+            ("test", "--all-cores"),
+            ("report", "--history"),
+            ("prune", "--unavailable-all"),
+            ("update", "--prerelease"),
+        ] {
+            let expected = format!(
+                "complete -c proxyctl -a "
             );
             assert!(
-                script.contains(
-                    "complete -c proxyctl -a '--all-cores --latency-only --download-only --upload-only --node --core --latency-url --download-url --upload-url --download-bytes --upload-bytes --latency-timeout-secs --request-timeout-secs --concurrency --startup-timeout-secs' -n '__fish_seen_subcommand_from test'"
-                ),
-                "Fish completion script must offer full option spellings at an empty test prompt"
+                script.lines().any(|line| {
+                    line.starts_with(&expected)
+                        && line.contains(option)
+                        && line.contains(&format!("__fish_seen_subcommand_from {command}"))
+                }),
+                "Fish completion is missing {option} for {command}"
             );
         }
+
+        assert!(
+            script.contains("__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display"),
+            "nested config display options must be scoped to the nested subcommand"
+        );
+        assert!(
+            script.contains("__fish_seen_subcommand_from completions; and __fish_seen_subcommand_from generate"),
+            "nested completions generate options must be scoped to the nested subcommand"
+        );
     }
 
     #[test]
