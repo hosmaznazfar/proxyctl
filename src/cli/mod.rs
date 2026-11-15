@@ -1660,7 +1660,13 @@ mod tests {
                 script.contains(&format!(
                     "complete -c proxyctl -l {option} -n '__fish_seen_subcommand_from test'"
                 )),
-                "Fish completion script is missing immediate test option {option}"
+                "Fish completion script is missing normal test option definition {option}"
+            );
+            assert!(
+                script.contains(&format!(
+                    "complete -c proxyctl -a '--all-cores --latency-only --download-only --upload-only --node --core --latency-url --download-url --upload-url --download-bytes --upload-bytes --latency-timeout-secs --request-timeout-secs --concurrency --startup-timeout-secs' -n '__fish_seen_subcommand_from test'"
+                )),
+                "Fish completion script must offer full option spellings at an empty test prompt"
             );
         }
     }
