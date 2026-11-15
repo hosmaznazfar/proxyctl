@@ -3,7 +3,7 @@ use super::artifact::validate_github_download_url;
 use std::{io::Read, time::Duration};
 
 use anyhow::{Context, ensure};
-use ureq::{Agent, config::Config};
+use ureq::Agent;
 use semver::Version;
 use serde::Deserialize;
 
