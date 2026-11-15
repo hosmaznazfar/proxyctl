@@ -887,6 +887,8 @@ mod tests {
             failure_reason: None,
             timestamp: 1,
             duration_ms: Some(25),
+            transferred_bytes: None,
+            partial: false,
         }
     }
 
