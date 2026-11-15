@@ -117,9 +117,9 @@ pub(super) fn execute_latency_batch(
 }
 
 pub(super) struct LatencyBatchEntry {
-    display_number: usize,
-    context: SampleContext,
-    port: u16,
+    pub(super) display_number: usize,
+    pub(super) context: SampleContext,
+    pub(super) port: u16,
 }
 
 pub(super) fn execute_tcp_ping_batch(
