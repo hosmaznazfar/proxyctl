@@ -295,3 +295,29 @@ mod validation_diagnostic_tests {
         assert!(summarize_validation_failure(b"", b"TLS certificate invalid").contains("TLS"));
     }
 }
+
+
+#[cfg(test)]
+mod config_contract_tests {
+    use super::*;
+    use crate::parser::parse_proxy_url;
+
+    #[test]
+    fn xray_activation_benchmark_and_tun_options_stay_core_native() {
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+        let activation: serde_json::Value = serde_json::from_slice(&XrayAdapter.generate_activation_config(&node, 43128).unwrap().content).unwrap();
+        assert_eq!(activation["inbounds"][0]["protocol"], "mixed");
+        assert_eq!(activation["inbounds"][0]["listen"], "127.0.0.1");
+        assert_eq!(activation["inbounds"][0]["port"], 43128);
+        assert_eq!(activation["inbounds"][0]["settings"]["udp"], true);
+
+        let benchmark: serde_json::Value = serde_json::from_slice(&XrayAdapter.generate_benchmark_config(&node, 43129).unwrap().content).unwrap();
+        assert_eq!(benchmark["inbounds"][0]["protocol"], "http");
+        assert_eq!(benchmark["inbounds"][0]["port"], 43129);
+
+        let tun: serde_json::Value = serde_json::from_slice(&XrayAdapter.generate_tun_activation_config(&node, 43128).unwrap().content).unwrap();
+        assert_eq!(tun["inbounds"][1]["protocol"], "tun");
+        assert_eq!(tun["inbounds"][1]["settings"]["autoSystemRoutingTable"].as_array().unwrap().len(), 0);
+        assert_eq!(tun["inbounds"][1]["settings"]["autoSystemDnsToGateway"], false);
+    }
+}
