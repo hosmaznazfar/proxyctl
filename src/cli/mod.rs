@@ -297,10 +297,33 @@ fn completion_script(shell: Shell) -> String {
     let mut script = String::from_utf8(output).expect("clap completion scripts are valid UTF-8");
 
     if shell == Shell::Fish {
-        // Fish adds filesystem candidates unless the command explicitly disables them.
-        // Proxyctl only expects a filesystem path for the import subcommand.
+        // Disable unrelated filesystem suggestions, but keep paths for import.
+        // Add the test flags with Fish's native subcommand predicate: this makes
+        // them appear immediately after "proxyctl test " without requiring "-".
+        let test_options = [
+            "all-cores",
+            "latency-only",
+            "download-only",
+            "upload-only",
+            "node",
+            "core",
+            "latency-url",
+            "download-url",
+            "upload-url",
+            "download-bytes",
+            "upload-bytes",
+            "latency-timeout-secs",
+            "request-timeout-secs",
+            "concurrency",
+            "startup-timeout-secs",
+        ];
+        let explicit_test_completions = test_options
+            .iter()
+            .map(|option| format!("complete -c proxyctl -l {option} -n '__fish_seen_subcommand_from test'"))
+            .collect::<Vec<_>>()
+            .join("\n");
         script = format!(
-            "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_proxyctl_using_subcommand import'\n{script}"
+            "complete -c proxyctl -f\ncomplete -c proxyctl -F -n '__fish_seen_subcommand_from import'\n{explicit_test_completions}\n{script}"
         );
     }
 
