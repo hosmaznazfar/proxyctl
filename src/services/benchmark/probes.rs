@@ -93,6 +93,15 @@ pub(super) fn execute_latency_batch(
                                 ),
                                 Err(error) => {
                                     let reason = error.reason();
+                                    // Core logs are private and never exposed verbatim. Attach
+                                    // only the process runner's allowlisted diagnostic so a
+                                    // shared "connection closed" result can be traced to the
+                                    // outbound failure without leaking credentials or URLs.
+                                    let reason = process
+                                        .as_ref()
+                                        .and_then(ManagedCoreProcess::runtime_diagnostic)
+                                        .map(|diagnostic| format!("{reason}; {diagnostic}"))
+                                        .unwrap_or_else(|| reason.to_owned());
                                     println!("{label}: {reason}");
                                     failed_sample(
                                         &entry.context,
