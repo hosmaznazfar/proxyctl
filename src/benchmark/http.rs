@@ -815,7 +815,7 @@ mod tests {
         use std::io::Write;
         reader
             .get_mut()
-            .write_all(b"HTTP/1.1 200 Connection established\\r\\n\\r\\n")
+            .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
             .unwrap();
         reader.get_mut().flush().unwrap();
         read_fake_request(reader)
