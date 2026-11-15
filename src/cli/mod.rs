@@ -1619,7 +1619,7 @@ mod tests {
     #[test]
     fn fish_completion_disables_files_except_for_import_paths() {
         let script = super::completion_script(clap_complete::Shell::Fish);
-        assert!(script.starts_with("complete -c proxyctl -f\\n"));
+        assert!(script.starts_with("complete -c proxyctl -f\n"));
         assert!(
             script.contains("complete -c proxyctl -F -n '__fish_proxyctl_using_subcommand import'"),
             "Fish completion must retain file suggestions for import"
