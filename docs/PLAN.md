@@ -79,11 +79,12 @@ Core updates use the same download/verification/staging policy and preserve the 
 
 #### Shell completion
 
-- On the first successful `proxyctl setup` in an interactive Fish session, offer to install Fish tab completion. The prompt is asked only once; declining does not affect core setup.
-- `proxyctl completions install` detects the current shell and installs supported completion files into the user's shell-specific configuration directory. Fish is the first automatically managed shell.
-- `proxyctl completions install --shell fish` explicitly selects Fish and can be used later to install or refresh completion.
-- `proxyctl completions generate SHELL` remains available for printing scripts for manual installation in Bash, Fish, or Zsh.
-- Completion installation is per-user, atomic, and must not edit shell startup files or require sudo.
+- Bash, Fish, and Zsh are supported by the same Clap-derived command/argument completion definitions.
+- On the first successful `proxyctl setup` in an interactive supported shell, offer to install completion for that detected shell. The prompt is remembered independently per shell; declining does not affect core setup.
+- `proxyctl completions install` detects the current shell; `--shell fish|bash|zsh` explicitly selects or refreshes one.
+- Fish uses its native per-user autoload directory. Bash uses the standard per-user bash-completion directory and requires the system `bash-completion` integration to be installed/enabled. Zsh installs a per-user `_proxyctl` function and adds its completion directory plus `compinit` to `~/.zshrc`.
+- `proxyctl completions generate SHELL` remains available for printing scripts for manual installation.
+- Completion files are written atomically and per-user; no sudo or system-wide file changes are used. Zsh's user startup file is updated idempotently to activate its per-user completion directory.
 
 ### 3.2 URL records and source-file handling
 
