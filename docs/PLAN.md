@@ -85,6 +85,8 @@ Core updates use the same download/verification/staging policy and preserve the 
 - Fish uses its native per-user autoload directory. Bash uses the standard per-user bash-completion directory and requires the system `bash-completion` integration to be installed/enabled. Zsh installs a per-user `_proxyctl` function and adds its completion directory plus `compinit` to `~/.zshrc`.
 - `proxyctl completions generate SHELL` remains available for printing scripts for manual installation.
 - Completion files are written atomically and per-user; no sudo or system-wide file changes are used. Zsh's user startup file is updated idempotently to activate its per-user completion directory.
+- Interactive verification completed by the user in Fish, Zsh, and Bash: root/subcommand suggestions, command options, `--core` values (`sing-box`, `xray`, `mihomo`), and positional config values were checked. Bash required the distribution's `bash-completion` package and interactive initialization in `~/.bashrc`; Zsh's `~/.zshrc` must be sourced from Zsh itself, not from Fish or Bash.
+- Automated local verification completed after the final completion changes: `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo build --release` all passed (user-reported).
 
 ### 3.2 URL records and source-file handling
 
