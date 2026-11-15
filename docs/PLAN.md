@@ -1,6 +1,6 @@
 # Proxyctl — Plan and Architecture Decisions
 
-> Status: approved baseline; benchmark optimization Stages 1–5 are user-verified; Stage 6 focused tests passed with full offline verification pending; real-world runbook is in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`  
+> Status: approved baseline; benchmark optimization Stages 1–5 are user-verified; Stage 6 full offline verification batch passed (final coverage audit remains); real-world runbook is in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`  
 > Repository: https://github.com/hosmaznazfar/proxyctl  
 > Last updated: 2026-11-14
 
@@ -460,7 +460,7 @@ Each stage should leave the default branch buildable and tested. Apply related C
 
 ## Benchmark optimization implementation status
 
-Stages 1–5 are now committed on `main`: adapters can generate independently routed multi-node configs; the process manager starts one core for a batch and waits for every loopback listener; the scheduler is core-first; real HTTP latency and direct TCP probes use persisted bounded concurrency; latency and throughput have separate persisted timeouts. Downloads are capped at the configured byte count and expose throttled byte/rate progress; useful partial transfers of at least 16 KiB are retained after a body truncation, using libcurl's streaming write callback so received bytes survive later transport/framing errors. Upload timing includes request transmission and response completion. Selected multi-node runs share one run ID, handled cancellation records unattempted scheduled samples, and each run stores a sample-count summary. Throughput remains sequential and the full-mode latency gate is preserved. Stages 1–5 have been user-verified; offline performance/fault-injection and separately approved real-world comparison remain outstanding.
+Stages 1–5 are now committed on `main`: adapters can generate independently routed multi-node configs; the process manager starts one core for a batch and waits for every loopback listener; the scheduler is core-first; real HTTP latency and direct TCP probes use persisted bounded concurrency; latency and throughput have separate persisted timeouts. Downloads are capped at the configured byte count and expose throttled byte/rate progress; useful partial transfers of at least 16 KiB are retained after a body truncation, using libcurl's streaming write callback so received bytes survive later transport/framing errors. Upload timing includes request transmission and response completion. Selected multi-node runs share one run ID, handled cancellation records unattempted scheduled samples, and each run stores a sample-count summary. Throughput remains sequential and the full-mode latency gate is preserved. Stages 1–5 have been user-verified. The Stage 6 offline verification batch (formatting, full tests, Clippy with warnings denied, and release build) was reported passing on 2026-11-15; the final test-coverage audit remains before Stage 6 closure. Stage 7 real-world comparison is user-run under the separate validation runbook.
 
 ## 8. Open implementation details
 
