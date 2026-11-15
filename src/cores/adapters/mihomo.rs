@@ -276,7 +276,27 @@ impl CoreAdapter for MihomoAdapter {
     }
 
     fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
-        super::benchmark_batch::generate_mihomo(self, targets)
+        super::benchmark_batch::validate_targets(self, targets)?;
+        let mut proxies = Vec::with_capacity(targets.len());
+        let mut listeners = Vec::with_capacity(targets.len());
+        for target in targets {
+            let document = super::benchmark_batch::node_config(self, target.node)?;
+            let proxy = document.get("proxies").and_then(serde_json::Value::as_array)
+                .and_then(|entries| entries.first())
+                .ok_or_else(|| anyhow::anyhow!("Mihomo node config must contain a proxy entry"))?;
+            let mut proxy = proxy.clone();
+            let proxy_name = format!("proxyctl-benchmark-out-{}", target.node_id);
+            let listener_name = format!("proxyctl-benchmark-in-{}", target.node_id);
+            proxy["name"] = json!(proxy_name);
+            proxies.push(proxy);
+            listeners.push(json!({
+                "name": listener_name, "type": "mixed", "port": target.listen_port,
+                "listen": "127.0.0.1", "proxy": proxy_name
+            }));
+        }
+        json_config(json!({
+            "allow-lan": false, "mode": "rule", "proxies": proxies, "listeners": listeners
+        }))
     }
 
     fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
