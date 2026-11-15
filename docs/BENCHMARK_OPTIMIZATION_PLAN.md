@@ -1,6 +1,6 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: Stages 1–6 full offline verification user-reported passing; Stage 6 coverage audit remains; Stage 7 real-world validation is user-run
+> Status: Stages 1–6 implementation and offline verification complete (user-reported); Stage 7 real-world validation runbook ready for user execution
 > Last updated: 2026-11-15
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
@@ -175,13 +175,13 @@ Acceptance: offline service tests cover multi-node scope resolution and cancella
 - Existing offline tests cover per-listener readiness, startup timeout, adapter isolation, latency worker caps, throughput gating, truncated downloads, cancellation remainder persistence, and benchmark history.
 - This is synthetic structural/fault coverage, not a real performance benchmark; it does not claim an elapsed-time or RSS improvement measurement.
 
-### Stage 6 — remaining offline acceptance work
-- **Passed (user-reported, 2026-11-15):** `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo build --release`.
-- **Coverage audit:** reviewed the offline fixtures across config generation/routing, native validation, process startup/readiness, HTTP latency/download/upload, persistence/recovery/retention, and cancellation. Added `validation_uses_each_cores_native_check_command`, which drives all three adapters through fake executables and verifies their exact native validation argument sequences, private config permissions, and temporary-file cleanup. The new test is committed but awaits the user's local verification before Stage 6 can be closed.
+### Stage 6 — offline acceptance work (complete)
+- **Passed (user-reported, 2026-11-15):** `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo build --release`, including the added `validation_uses_each_cores_native_check_command` test.
+- Coverage audit reviewed config generation/routing, native validation, process startup/readiness, HTTP latency/download/upload, persistence/recovery/retention, and cancellation. The added fake-executable test verifies exact native validation arguments for sing-box, Xray, and Mihomo, private config permissions, and temporary-file cleanup. User confirmed the focused test and full verification batch passed.
 - The current 1/10/50-node adapter scaling test proves structural batch growth and routing isolation; it does not measure elapsed-time or peak-RSS improvement. Treat those as optional profiling measurements, not claims established by unit tests.
 - No real remote proxy nodes or public speed-test endpoints are used by this stage.
 
-Acceptance: demonstrate fewer core starts (up to one per selected core batch), bounded active requests, no leaked child/listener/config, correct partial persistence, and no system network mutation.
+Acceptance: **met for offline implementation and tests** based on the user's reported successful full verification batch. Structural tests establish batch growth/routing isolation and lifecycle/failure behavior; they do not claim measured elapsed-time or RSS improvement.
 
 ### Stage 7 — user-run real-world validation (runbook prepared)
 - The user will run the commands in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md` after the complete offline verification batch passes.
