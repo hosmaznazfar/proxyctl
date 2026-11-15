@@ -122,6 +122,12 @@ pub struct BenchmarkSample {
     pub failure_reason: Option<String>,
     pub timestamp: u64,
     pub duration_ms: Option<u64>,
+    /// Number of body bytes actually received for transfer metrics.
+    #[serde(default)]
+    pub transferred_bytes: Option<u64>,
+    /// True when a useful download sample ended before the configured byte cap.
+    #[serde(default)]
+    pub partial: bool,
 }
 
 impl BenchmarkSample {
@@ -143,6 +149,12 @@ impl BenchmarkSample {
             }
             (_, None) => {}
             (_, Some(_)) => return Err("failed samples must not contain a numeric value"),
+        }
+        if self.partial && (self.metric != BenchmarkMetric::Download || self.status != BenchmarkSampleStatus::Success) {
+            return Err("only successful download samples can be partial");
+        }
+        if self.partial && self.transferred_bytes.is_none_or(|bytes| bytes == 0) {
+            return Err("partial download samples require a positive transferred byte count");
         }
         if self.status == BenchmarkSampleStatus::Success && self.sample_index == 0 {
             return Err("preflight sample index 0 cannot be successful");
@@ -212,6 +224,8 @@ mod tests {
             failure_reason: None,
             timestamp: 1,
             duration_ms: None,
+            transferred_bytes: None,
+            partial: false,
         }
     }
 
