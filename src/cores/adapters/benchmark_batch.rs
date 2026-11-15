@@ -25,45 +25,6 @@ pub struct BenchmarkTarget<'a> {
     pub proxy_type: BenchmarkProxyType,
 }
 
-pub(super) fn generate<A: CoreAdapter + ?Sized>(
-    adapter: &A,
-    targets: &[BenchmarkTarget<'_>],
-) -> anyhow::Result<GeneratedConfig> {
-    ensure!(
-        !targets.is_empty(),
-        "benchmark batch must contain at least one node"
-    );
-
-    let mut node_ids = HashSet::with_capacity(targets.len());
-    let mut ports = HashSet::with_capacity(targets.len());
-    for target in targets {
-        ensure!(target.node_id > 0, "benchmark node ID must be non-zero");
-        ensure!(
-            target.listen_port > 0,
-            "benchmark listener port must be non-zero"
-        );
-        ensure!(
-            node_ids.insert(target.node_id),
-            "benchmark batch contains a duplicate node ID"
-        );
-        ensure!(
-            ports.insert(target.listen_port),
-            "benchmark batch contains a duplicate listener port"
-        );
-        ensure!(
-            adapter.compatibility(target.node).is_supported(),
-            "benchmark batch contains a node unsupported by {}",
-            adapter.core()
-        );
-    }
-
-    match adapter.core() {
-        CoreId::SingBox => generate_sing_box(adapter, targets),
-        CoreId::Xray => generate_xray(adapter, targets),
-        CoreId::Mihomo => generate_mihomo(adapter, targets),
-    }
-}
-
 fn node_config<A: CoreAdapter + ?Sized>(adapter: &A, node: &ProxyNode) -> anyhow::Result<Value> {
     let generated = adapter
         .generate_config(node)
@@ -72,7 +33,7 @@ fn node_config<A: CoreAdapter + ?Sized>(adapter: &A, node: &ProxyNode) -> anyhow
         .context("adapter generated an invalid JSON configuration")
 }
 
-fn generate_sing_box<A: CoreAdapter + ?Sized>(
+pub(super) fn generate_sing_box<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
@@ -121,7 +82,7 @@ fn generate_sing_box<A: CoreAdapter + ?Sized>(
     }))
 }
 
-fn generate_xray<A: CoreAdapter + ?Sized>(
+pub(super) fn generate_xray<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
@@ -171,7 +132,7 @@ fn generate_xray<A: CoreAdapter + ?Sized>(
     }))
 }
 
-fn generate_mihomo<A: CoreAdapter + ?Sized>(
+pub(super) fn generate_mihomo<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
@@ -237,7 +198,7 @@ mod tests {
         let second = parse_proxy_url("trojan://second-secret@second.example:8443").unwrap();
 
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-            let generated = generate(adapter(core), &targets(&first, &second)).unwrap();
+            let generated = adapter(core).generate_benchmark_batch_config(&targets(&first, &second)).unwrap();
             let document: Value = serde_json::from_slice(&generated.content).unwrap();
             match core {
                 CoreId::SingBox => {
@@ -304,7 +265,7 @@ mod tests {
                 proxy_type,
             }];
             for core in [CoreId::SingBox, CoreId::Xray] {
-                let generated = generate(adapter(core), &targets).unwrap();
+                let generated = adapter(core).generate_benchmark_batch_config(&targets).unwrap();
                 let document: Value = serde_json::from_slice(&generated.content).unwrap();
                 match core {
                     CoreId::SingBox => assert_eq!(
@@ -350,7 +311,7 @@ mod tests {
                 proxy_type: BenchmarkProxyType::Socks5,
             },
         ];
-        assert!(generate(adapter(CoreId::SingBox), &duplicate_id).is_err());
+        assert!(adapter(CoreId::SingBox).generate_benchmark_batch_config(&duplicate_id).is_err());
 
         let duplicate_port = [
             BenchmarkTarget {
@@ -366,7 +327,7 @@ mod tests {
                 proxy_type: BenchmarkProxyType::Socks5,
             },
         ];
-        assert!(generate(adapter(CoreId::Xray), &duplicate_port).is_err());
+        assert!(adapter(CoreId::Xray).generate_benchmark_batch_config(&duplicate_port).is_err());
     }
 
     #[test]
@@ -389,7 +350,7 @@ mod tests {
                 proxy_type: BenchmarkProxyType::Socks5,
             },
         ];
-        assert!(generate(adapter(CoreId::Xray), &targets).is_err());
+        assert!(adapter(CoreId::Xray).generate_benchmark_batch_config(&targets).is_err());
     }
     #[test]
     fn synthetic_batch_scaling_keeps_one_listener_and_route_per_node() {
