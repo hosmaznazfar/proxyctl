@@ -302,8 +302,8 @@ fn completion_script(shell: Shell) -> String {
         let mut candidate_rules = Vec::new();
         append_fish_option_candidates(&Cli::command(), &mut Vec::new(), &mut candidate_rules);
         candidate_rules.extend([
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set'",
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from reset'",
+            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config set'",
+            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config reset'",
             "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from profile'",
             "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from add-field'",
             "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from remove-field'",
@@ -1705,8 +1705,8 @@ mod tests {
     fn fish_completion_offers_known_positional_arguments() {
         let script = super::completion_script(clap_complete::Shell::Fish);
         for expected in [
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set'",
-            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from reset'",
+            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config set'",
+            "complete -c proxyctl -a 'listen-port' -n '__fish_seen_subcommand_from config reset'",
             "complete -c proxyctl -a 'compact normal full' -n '__fish_seen_subcommand_from config; and __fish_seen_subcommand_from display; and __fish_seen_subcommand_from profile'",
             "complete -c proxyctl -a 'node name server port protocol core version latency tcp-ping download upload status samples failures run tested'",
         ] {
