@@ -31,7 +31,7 @@ use crate::{
 static CANCELLED: AtomicBool = AtomicBool::new(false);
 const SAMPLES_PER_METRIC: u8 = 3;
 const BENCHMARK_HISTORY_LIMIT: usize = 3;
-const METHODOLOGY: &str = "proxyctl-benchmark-v7";
+const METHODOLOGY: &str = "proxyctl-benchmark-v8";
 const DIRECT_TARGET: &str = "direct";
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROBE_CONCURRENCY: usize = 3;
@@ -150,6 +150,13 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         "Benchmark run #{run_id}: {} node(s), {} core(s)",
         nodes.len(),
         cores.len()
+    );
+    println!(
+        "Local HTTP measurement inbound: {}",
+        match options.settings.proxy_type {
+            BenchmarkProxyType::Socks5 => "SOCKS5",
+            BenchmarkProxyType::Http => "HTTP",
+        }
     );
     match options.metric_selection {
         BenchmarkMetricSelection::All => println!(
