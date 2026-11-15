@@ -1,5 +1,6 @@
 //! Shared core installation use case: resolve, verify, extract, validate, and install.
 use anyhow::{Context, ensure};
+use semver::Version;
 
 use crate::{
     cores::{CoreId, archive::extract_binary, core_binary_path, core_install_directory, releases},
@@ -62,12 +63,28 @@ pub fn current_version(core: CoreId, path: &std::path::Path) -> anyhow::Result<S
         output.status.success(),
         "installed {core} version command failed"
     );
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    ensure!(
-        !text.is_empty(),
-        "installed {core} returned an empty version"
-    );
-    Ok(text)
+    let banner = String::from_utf8_lossy(&output.stdout);
+    reported_version(&banner)
+        .with_context(|| format!("could not parse installed {core} version banner"))
+}
+
+fn reported_version(output: &str) -> anyhow::Result<String> {
+    output
+        .split_whitespace()
+        .filter_map(|part| {
+            let token = part
+                .trim_matches(|character: char| {
+                    !character.is_ascii_alphanumeric()
+                        && character != '.'
+                        && character != '-'
+                        && character != '+'
+                })
+                .trim_start_matches('v');
+            Version::parse(token).ok()
+        })
+        .next()
+        .map(|version| version.to_string())
+        .context("version banner contains no semantic version")
 }
 
 fn reported_version_matches(output: &str, expected: &str) -> bool {
@@ -88,6 +105,26 @@ fn reported_version_matches(output: &str, expected: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extracts_only_the_core_version_from_multiline_banners() {
+        assert_eq!(
+            reported_version("sing-box version 1.14.4\nEnvironment: go1.26.10 linux/amd64")
+                .unwrap(),
+            "1.14.4"
+        );
+        assert_eq!(
+            reported_version("Xray 26.11.9 (Xray, Penetrates Everything.) 676eaf6")
+                .unwrap(),
+            "26.11.9"
+        );
+        assert_eq!(
+            reported_version("Mihomo Meta v1.19.34 linux amd64 with go1.26.11")
+                .unwrap(),
+            "1.19.34"
+        );
+        assert!(reported_version("version unknown").is_err());
+    }
 
     #[test]
     fn matches_core_versions_with_optional_v_prefix() {
