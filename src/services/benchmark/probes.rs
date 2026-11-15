@@ -10,6 +10,8 @@ use std::{
 use crate::{
     benchmark::{http::{BenchmarkHttpClient, MeasurementFailure}, tcp},
     database::NodeRecord,
+    cores::CoreId,
+    benchmark::process::ManagedCoreProcess,
     domain::{BenchmarkMetric, BenchmarkSample, BenchmarkSampleStatus, BenchmarkSettings},
 };
 
