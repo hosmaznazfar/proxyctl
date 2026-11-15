@@ -126,7 +126,10 @@ impl BenchmarkHttpClient {
         let latency_url = validate_endpoint(&settings.latency_url)?;
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
-        let proxy_url = match settings.proxy_type { BenchmarkProxyType::Socks5 => format!("socks5://127.0.0.1:{port}"), BenchmarkProxyType::Http => format!("http://127.0.0.1:{port}") };
+        let proxy_url = match settings.proxy_type {
+            BenchmarkProxyType::Socks5 => format!("socks5://127.0.0.1:{port}"),
+            BenchmarkProxyType::Http => format!("http://127.0.0.1:{port}"),
+        };
         let proxy =
             Proxy::new(&proxy_url).context("could not configure the local benchmark HTTP proxy")?;
         let config = Agent::config_builder()
@@ -186,11 +189,20 @@ impl BenchmarkHttpClient {
             return Err(MeasurementFailure::InvalidResponse);
         }
 
-        let proxy_url = match self.proxy_type { BenchmarkProxyType::Socks5 => format!("127.0.0.1:{}", self.proxy_port), BenchmarkProxyType::Http => format!("http://127.0.0.1:{}", self.proxy_port) };
+        let proxy_url = match self.proxy_type {
+            BenchmarkProxyType::Socks5 => format!("127.0.0.1:{}", self.proxy_port),
+            BenchmarkProxyType::Http => format!("http://127.0.0.1:{}", self.proxy_port),
+        };
         let mut easy = Easy::new();
         easy.url(self.download_url.as_str())
-             .and_then(|_| easy.proxy(&proxy_url))
-            .and_then(|_| if self.proxy_type == BenchmarkProxyType::Socks5 { easy.proxy_type(ProxyType::Socks5Hostname) } else { Ok(()) })
+            .and_then(|_| easy.proxy(&proxy_url))
+            .and_then(|_| {
+                if self.proxy_type == BenchmarkProxyType::Socks5 {
+                    easy.proxy_type(ProxyType::Socks5Hostname)
+                } else {
+                    Ok(())
+                }
+            })
             .and_then(|_| easy.timeout(self.timeout))
             .and_then(|_| easy.connect_timeout(self.timeout))
             .and_then(|_| easy.accept_encoding("identity"))
