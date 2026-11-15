@@ -34,7 +34,7 @@ pub(crate) fn run_bounded_command(
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                anyhow::bail!("{description}: process exceeded its deadline and was terminated");
+                anyhow::bail!("{description}: process exceeded its {}-second deadline and was terminated", timeout.as_secs());
             }
             Err(error) => {
                 let _ = child.kill();
