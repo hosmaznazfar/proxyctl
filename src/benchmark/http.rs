@@ -670,22 +670,22 @@ mod tests {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let server = thread::spawn(move || {
-            let (stream, _) = listener.accept().unwrap();
-            let mut reader = BufReader::new(stream);
-            let _ = read_fake_request(&mut reader);
-            let body = vec![0x33; 32 * 1024];
-            let stream = reader.get_mut();
-            stream
-                .write_all(
-                    b"HTTP/1.1 200 OK\r\nContent-Length: 131072\r\nConnection: close\r\n\r\n",
-                )
-                .unwrap();
-            // Deliver the body over multiple socket writes so the HTTP reader can
-            // yield already-received bytes before the peer closes the truncated stream.
-            for chunk in body.chunks(8 * 1024) {
-                stream.write_all(chunk).unwrap();
-                stream.flush().unwrap();
-                thread::sleep(Duration::from_millis(20));
+            for _ in 0..DOWNLOAD_ATTEMPTS {
+                let (stream, _) = listener.accept().unwrap();
+                let mut reader = BufReader::new(stream);
+                let _ = read_fake_request(&mut reader);
+                let body = vec![0x33; 32 * 1024];
+                let stream = reader.get_mut();
+                stream
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 131072\r\nConnection: close\r\n\r\n",
+                    )
+                    .unwrap();
+                for chunk in body.chunks(8 * 1024) {
+                    stream.write_all(chunk).unwrap();
+                    stream.flush().unwrap();
+                    thread::sleep(Duration::from_millis(20));
+                }
             }
         });
         let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
