@@ -233,7 +233,7 @@ Each metric summary reports:
 - The number of samples not run when a run ended before all three attempts.
 - A preflight outcome such as unsupported, invalid, or unavailable when the core was not tested.
 
-A median based on one or two successful samples is explicitly labelled partial. Three successes are labelled complete. No failed or missing sample is represented as zero. The report does not infer a failure for a sample that was never attempted.
+A median based on one or two successful samples is explicitly labelled partial. Three successes are labelled complete. A successful download that reached the useful-byte threshold but ended before the configured cap is separately marked as a partial transfer in the report (for example, `1.25 Mbps (2/3, 1 partial)`). Persisted samples retain actual transferred bytes and a partial flag; older database records default these fields safely. No failed or missing sample is represented as zero. The report does not infer a failure for a sample that was never attempted.
 
 
 ## 13. Configurable CLI result tables
