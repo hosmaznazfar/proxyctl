@@ -495,10 +495,14 @@ mod tests {
         let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             base64::engine::general_purpose::STANDARD.decode(PRIVATE_KEY).unwrap(),
         ));
-        let server_config = ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(vec![certificate], private_key)
-            .unwrap();
+        let server_config = ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(vec![certificate], private_key)
+        .unwrap();
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let address = listener.local_addr().unwrap();
