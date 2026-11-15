@@ -112,6 +112,36 @@ proxyctl completions install --shell zsh
 
 Fish loads its completion file automatically. Bash installs into the standard per-user `bash-completion` directory and requires the `bash-completion` package to be installed and enabled. Zsh installs a `_proxyctl` function and adds its per-user completion directory plus `compinit` to `~/.zshrc`; restart Zsh (or source that file) afterward. No root privileges are used.
 
+#### Shell-specific setup and verification
+
+- **Fish:** install with `proxyctl completions install --shell fish`, then start a fresh Fish session. Use `complete -C 'proxyctl test --core '` to inspect suggestions without pressing Tab.
+- **Bash:** install `bash-completion` with your distribution package manager, then ensure interactive Bash sources `/usr/share/bash-completion/bash_completion`. On systems where `~/.bashrc` does not already initialize it, add:
+
+  ```bash
+  if [[ $- == *i* ]] && [[ -r /usr/share/bash-completion/bash_completion ]]; then
+      source /usr/share/bash-completion/bash_completion
+  fi
+  ```
+
+  Install with `proxyctl completions install --shell bash`, start a new Bash session, and verify registration with `complete -p proxyctl`.
+- **Zsh:** install with `proxyctl completions install --shell zsh`, then enter Zsh before sourcing its startup file: `zsh` followed by `source ~/.zshrc`. Do not source `~/.zshrc` from Fish or Bash. Verify with `whence -v _proxyctl` and `print -r -- ${+functions[_proxyctl]}` (expected: `1`).
+
+In each shell, test command, option, and value completion by typing these prefixes and pressing Tab (or use the Fish `complete -C` form):
+
+```sh
+proxyctl 
+proxyctl test 
+proxyctl test --core 
+proxyctl use 1 --core 
+proxyctl update --core 
+proxyctl config set 
+proxyctl config reset 
+proxyctl config display profile 
+proxyctl config display add-field 
+```
+
+Core values offered by `--core` are `sing-box`, `xray`, and `mihomo`. Finite config values include `listen-port`, display profiles (`compact`, `normal`, `full`), and supported display fields. Arbitrary node IDs, URLs, search text, and numeric port values remain user-entered.
+
 Inspect command help:
 
 ~~~sh
