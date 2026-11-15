@@ -278,4 +278,4 @@ corresponding SOCKS5 or HTTP inbound, while Mihomo's loopback mixed listener sup
 
 ### Download HTTP client
 
-Benchmark downloads use ureq's streaming response reader, the same HTTP client used for latency and upload. The reader counts each chunk as it arrives, preserving useful partial bytes if the connection later closes or times out. Downloads remain bounded by the configured byte cap and use the selected loopback proxy (SOCKS5 with remote hostname resolution by default). This avoids the separate statically linked libcurl transport.
+Benchmark downloads use ureq's streaming response reader, the same HTTP client used for latency and upload. The reader counts each chunk as it arrives, preserving useful partial bytes if the connection later closes or times out. A request-phase HTTP protocol error is classified as `protocol_failed`; a malformed/truncated body after headers is classified separately as `incomplete_response`. Downloads remain bounded by the configured byte cap and use the selected loopback proxy (SOCKS5 with remote hostname resolution by default). This avoids the separate statically linked libcurl transport.
