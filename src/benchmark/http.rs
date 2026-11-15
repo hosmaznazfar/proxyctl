@@ -1,6 +1,9 @@
 //! Bounded HTTP measurements routed through the benchmark's explicit local proxy.
 
-use std::{io::Read, time::{Duration, Instant}};
+use std::{
+    io::Read,
+    time::{Duration, Instant},
+};
 
 use anyhow::{Context, ensure};
 use ureq::{Agent, Proxy};
@@ -101,7 +104,6 @@ pub struct BenchmarkHttpClient {
     latency_url: Url,
     download_url: Url,
     upload_url: Url,
-    timeout: Duration,
 }
 
 impl BenchmarkHttpClient {
@@ -144,7 +146,6 @@ impl BenchmarkHttpClient {
             latency_url,
             download_url,
             upload_url,
-            timeout,
         })
     }
 
@@ -523,9 +524,6 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-            proxy_port,
-            proxy_type: BenchmarkProxyType::Http,
-            timeout: Duration::from_secs(2),
         };
 
         assert!(client.latency().unwrap().value >= 0.0);
@@ -603,9 +601,6 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-            proxy_port: port,
-            proxy_type: BenchmarkProxyType::Socks5,
-            timeout: Duration::from_secs(2),
         };
 
         assert!(client.latency().is_ok());
@@ -652,9 +647,6 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-            proxy_port: port,
-            proxy_type: BenchmarkProxyType::Http,
-            timeout: Duration::from_secs(2),
         };
 
         let measurement = client.download(64 * 1024, |_| {}).unwrap();
@@ -680,7 +672,9 @@ mod tests {
                 let _ = read_fake_request(&mut reader);
                 let stream = reader.get_mut();
                 stream
-                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndata")
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndata",
+                    )
                     .unwrap();
                 stream.flush().unwrap();
             }
@@ -696,9 +690,6 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-            proxy_port: port,
-            proxy_type: BenchmarkProxyType::Http,
-            timeout: Duration::from_secs(2),
         };
         assert_eq!(
             client.download(8, |_| {}),
@@ -739,9 +730,6 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-            proxy_port: port,
-            proxy_type: BenchmarkProxyType::Http,
-            timeout: Duration::from_secs(2),
         };
 
         assert_eq!(
@@ -791,9 +779,6 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-            proxy_port: port,
-            proxy_type: BenchmarkProxyType::Http,
-            timeout: Duration::from_secs(2),
         };
 
         assert_eq!(client.upload(8), Err(MeasurementFailure::HttpStatus(500)));
