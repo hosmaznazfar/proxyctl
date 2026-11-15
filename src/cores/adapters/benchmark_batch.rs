@@ -9,10 +9,7 @@ use std::collections::HashSet;
 use anyhow::{Context, ensure};
 use serde_json::{Value, json};
 
-use crate::{
-    cores::CoreId,
-    domain::{BenchmarkProxyType, ProxyNode},
-};
+use crate::domain::{BenchmarkProxyType, ProxyNode};
 
 use super::{CoreAdapter, GeneratedConfig, json_config};
 
@@ -23,6 +20,27 @@ pub struct BenchmarkTarget<'a> {
     pub node: &'a ProxyNode,
     pub listen_port: u16,
     pub proxy_type: BenchmarkProxyType,
+}
+
+fn validate_targets<A: CoreAdapter + ?Sized>(
+    adapter: &A,
+    targets: &[BenchmarkTarget<'_>],
+) -> anyhow::Result<()> {
+    ensure!(!targets.is_empty(), "benchmark batch must contain at least one node");
+    let mut node_ids = HashSet::with_capacity(targets.len());
+    let mut ports = HashSet::with_capacity(targets.len());
+    for target in targets {
+        ensure!(target.node_id > 0, "benchmark node ID must be non-zero");
+        ensure!(target.listen_port > 0, "benchmark listener port must be non-zero");
+        ensure!(node_ids.insert(target.node_id), "benchmark batch contains a duplicate node ID");
+        ensure!(ports.insert(target.listen_port), "benchmark batch contains a duplicate listener port");
+        ensure!(
+            adapter.compatibility(target.node).is_supported(),
+            "benchmark batch contains a node unsupported by {}",
+            adapter.core()
+        );
+    }
+    Ok(())
 }
 
 fn node_config<A: CoreAdapter + ?Sized>(adapter: &A, node: &ProxyNode) -> anyhow::Result<Value> {
@@ -37,6 +55,7 @@ pub(super) fn generate_sing_box<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
+    validate_targets(adapter, targets)?;
     let mut outbounds = Vec::with_capacity(targets.len());
     let mut inbounds = Vec::with_capacity(targets.len());
     let mut rules = Vec::with_capacity(targets.len());
@@ -86,6 +105,7 @@ pub(super) fn generate_xray<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
+    validate_targets(adapter, targets)?;
     let mut outbounds = Vec::with_capacity(targets.len());
     let mut inbounds = Vec::with_capacity(targets.len());
     let mut rules = Vec::with_capacity(targets.len());
@@ -136,6 +156,7 @@ pub(super) fn generate_mihomo<A: CoreAdapter + ?Sized>(
     adapter: &A,
     targets: &[BenchmarkTarget<'_>],
 ) -> anyhow::Result<GeneratedConfig> {
+    validate_targets(adapter, targets)?;
     let mut proxies = Vec::with_capacity(targets.len());
     let mut listeners = Vec::with_capacity(targets.len());
 
@@ -171,7 +192,7 @@ pub(super) fn generate_mihomo<A: CoreAdapter + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{cores::adapters::adapter, parser::parse_proxy_url};
+    use crate::{cores::{CoreId, adapters::adapter}, parser::parse_proxy_url};
 
     fn targets<'a>(first: &'a ProxyNode, second: &'a ProxyNode) -> [BenchmarkTarget<'a>; 2] {
         [
@@ -369,7 +390,7 @@ mod tests {
                 .collect::<Vec<_>>();
 
             for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-                let generated = generate(adapter(core), &targets).unwrap();
+                let generated = adapter(core).generate_benchmark_batch_config(&targets).unwrap();
                 let document: Value = serde_json::from_slice(&generated.content).unwrap();
                 let (inbounds, outbounds) = match core {
                     CoreId::SingBox => (
