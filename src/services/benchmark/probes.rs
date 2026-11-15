@@ -1,5 +1,11 @@
 //! Bounded concurrent direct TCP and HTTP latency probes.
-use std::{collections::BTreeMap, path::Path, sync::mpsc, thread, time::Duration};
+use std::{
+    collections::BTreeMap,
+    path::Path,
+    sync::{atomic::Ordering, mpsc},
+    thread,
+    time::Duration,
+};
 
 use crate::{
     benchmark::process::ManagedCoreProcess,
