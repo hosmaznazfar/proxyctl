@@ -220,11 +220,10 @@ pub(crate) fn reserve_loopback_port() -> anyhow::Result<u16> {
     Ok(port)
 }
 
-/// Preserve each adapter's established single-node HTTP benchmark configuration.
+/// Preserve each adapter's established single-node benchmark configuration.
 ///
-/// A one-node run still uses the batch generator by default in SOCKS5 mode, but the
-/// legacy single-node HTTP configuration is retained as a control path. This lets us
-/// distinguish adapter batch-routing regressions from failures in the shared HTTP client.
+/// Xray's adapter now uses its managed-activation mixed inbound for both benchmark
+/// proxy types. Other adapters retain their dedicated single-node benchmark listeners.
 fn generate_benchmark_runtime_config(
     core: CoreId,
     targets: &[adapters::BenchmarkTarget<'_>],
@@ -626,7 +625,7 @@ exec sleep 30
                     assert!(document.get("route").is_some());
                 }
                 CoreId::Xray => {
-                    assert_eq!(document["inbounds"][0]["protocol"], "http");
+                    assert_eq!(document["inbounds"][0]["protocol"], "mixed");
                     assert_eq!(document["inbounds"][0]["port"], 43137);
                     assert!(document.get("routing").is_none());
                 }
@@ -658,7 +657,7 @@ exec sleep 30
                 serde_json::from_slice(&generated.content).unwrap();
             match core {
                 CoreId::SingBox => assert_eq!(document["inbounds"][0]["type"], "socks"),
-                CoreId::Xray => assert_eq!(document["inbounds"][0]["protocol"], "socks"),
+                CoreId::Xray => assert_eq!(document["inbounds"][0]["protocol"], "mixed"),
                 CoreId::Mihomo => assert!(document.get("listeners").is_some()),
             }
         }
