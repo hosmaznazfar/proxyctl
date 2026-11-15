@@ -302,7 +302,7 @@ fn install_shell_completion(shell: crate::services::shell_completion::Shell) -> 
         crate::services::shell_completion::Shell::Fish => {
             let path = crate::services::shell_completion::install_fish(&completion_script(Shell::Fish))?;
             println!("Fish completion installed: {}", path.display());
-            println!("Open a new Fish session or run: source {}", path.display());
+            println!("Fish will load it automatically in new sessions.");
             Ok(())
         }
         crate::services::shell_completion::Shell::Bash
