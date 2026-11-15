@@ -1183,11 +1183,17 @@ fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
         } else {
             format!("{value:.2} ms")
         };
-        if summary.successful < 3 {
-            format!("{formatted} ({}/3)", summary.successful)
+        let sample_count = if summary.successful < 3 {
+            format!(" ({}/3)", summary.successful)
         } else {
-            formatted
-        }
+            String::new()
+        };
+        let partial_count = if summary.partial_successful > 0 {
+            format!(", {} partial", summary.partial_successful)
+        } else {
+            String::new()
+        };
+        format!("{formatted}{sample_count}{partial_count}")
     } else if let Some(status) = summary.preflight {
         sample_status_label(status).to_owned()
     } else if summary.attempted == 0 {
