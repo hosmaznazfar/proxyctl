@@ -18,6 +18,7 @@ pub struct BenchmarkTarget<'a> {
     pub node_id: u64,
     pub node: &'a ProxyNode,
     pub listen_port: u16,
+                proxy_type: BenchmarkProxyType::Socks5,
     pub proxy_type: BenchmarkProxyType,
 }
 
@@ -295,11 +296,13 @@ mod tests {
                 node_id: 11,
                 node: &first,
                 listen_port: 43131,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
             BenchmarkTarget {
                 node_id: 11,
                 node: &second,
                 listen_port: 43132,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
         ];
         assert!(generate(adapter(CoreId::SingBox), &duplicate_id).is_err());
@@ -309,11 +312,13 @@ mod tests {
                 node_id: 11,
                 node: &first,
                 listen_port: 43131,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
             BenchmarkTarget {
                 node_id: 22,
                 node: &second,
                 listen_port: 43131,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
         ];
         assert!(generate(adapter(CoreId::Xray), &duplicate_port).is_err());
@@ -330,11 +335,13 @@ mod tests {
                 node_id: 11,
                 node: &first,
                 listen_port: 43131,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
             BenchmarkTarget {
                 node_id: 22,
                 node: &unsupported,
                 listen_port: 43132,
+                proxy_type: BenchmarkProxyType::Socks5,
             },
         ];
         assert!(generate(adapter(CoreId::Xray), &targets).is_err());
@@ -352,6 +359,7 @@ mod tests {
                     node_id: index as u64 + 1,
                     node: &node,
                     listen_port: 20_000 + index as u16,
+                proxy_type: BenchmarkProxyType::Socks5,
                 })
                 .collect::<Vec<_>>();
 
