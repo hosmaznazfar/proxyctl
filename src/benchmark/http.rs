@@ -803,7 +803,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn download_retries_after_a_real_request_timeout() {
         use std::{
             io::{BufReader, Write},
@@ -811,46 +810,46 @@ mod tests {
             thread,
         };
 
+        // Use a direct loopback HTTP endpoint here: this test targets the
+        // download retry loop, not proxy CONNECT or TLS negotiation.
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let server = thread::spawn(move || {
-            // Send headers and a byte, then stall the body beyond the request
-            // deadline. This deterministically exercises a body-read timeout.
             let (stream, _) = listener.accept().unwrap();
             let mut reader = BufReader::new(stream);
-            let _ = read_fake_proxy_request(&mut reader);
-            let stream = reader.get_mut();
-            stream.write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\nX",
-            ).unwrap();
-            stream.flush().unwrap();
-            thread::sleep(Duration::from_millis(250));
-            drop(reader);
-
-            // A second accepted request proves the timeout caused a retry.
-            let (stream, _) = listener.accept().unwrap();
-            let mut reader = BufReader::new(stream);
-            let (method, _, _) = read_fake_proxy_request(&mut reader);
+            let (method, _, _) = read_fake_request(&mut reader);
             assert_eq!(method, "GET");
             let stream = reader.get_mut();
             stream.write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n",
+                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\nX",
+            ).unwrap();
+            stream.flush().unwrap();
+            // Keep the first response open beyond the client's global timeout.
+            thread::sleep(Duration::from_millis(250));
+            drop(reader);
+
+            let (stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let (method, _, _) = read_fake_request(&mut reader);
+            assert_eq!(method, "GET");
+            let stream = reader.get_mut();
+            stream.write_all(
+                b"HTTP/1.1 200 OK\\r\\nContent-Length: 32768\\r\\nConnection: close\\r\\n\\r\\n",
             ).unwrap();
             stream.write_all(&vec![0x44; 32 * 1024]).unwrap();
             stream.flush().unwrap();
         });
 
-        let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
         let agent: Agent = Agent::config_builder()
-            .proxy(Some(proxy))
             .timeout_global(Some(Duration::from_millis(100)))
             .build()
             .into();
+        let endpoint = format!("http://127.0.0.1:{port}");
         let client = BenchmarkHttpClient {
             agent,
-            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
-            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
-            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
+            latency_url: Url::parse(&format!("{endpoint}/ping")).unwrap(),
+            download_url: Url::parse(&format!("{endpoint}/download")).unwrap(),
+            upload_url: Url::parse(&format!("{endpoint}/upload")).unwrap(),
         };
 
         let measurement = client.download(32 * 1024, |_| {}).unwrap();
