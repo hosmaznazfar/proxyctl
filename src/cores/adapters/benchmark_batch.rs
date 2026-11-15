@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::domain::{BenchmarkProxyType, ProxyNode};
 
-use super::{CoreAdapter, GeneratedConfig, json_config};
+use super::CoreAdapter;
 
 /// One independently routed node in a temporary benchmark batch.
 #[derive(Clone, Copy)]
