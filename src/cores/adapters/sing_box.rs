@@ -230,3 +230,28 @@ impl CoreAdapter for SingBoxAdapter {
         Ok(())
     }
 }
+
+
+#[cfg(test)]
+mod config_contract_tests {
+    use super::*;
+    use crate::parser::parse_proxy_url;
+
+    #[test]
+    fn sing_box_activation_benchmark_and_tun_options_stay_core_native() {
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+        let activation: serde_json::Value = serde_json::from_slice(&SingBoxAdapter.generate_activation_config(&node, 43128).unwrap().content).unwrap();
+        assert_eq!(activation["inbounds"][0]["type"], "mixed");
+        assert_eq!(activation["inbounds"][0]["listen"], "127.0.0.1");
+        assert_eq!(activation["inbounds"][0]["listen_port"], 43128);
+
+        let benchmark: serde_json::Value = serde_json::from_slice(&SingBoxAdapter.generate_benchmark_config(&node, 43129).unwrap().content).unwrap();
+        assert_eq!(benchmark["inbounds"][0]["type"], "http");
+        assert_eq!(benchmark["inbounds"][0]["listen_port"], 43129);
+
+        let tun: serde_json::Value = serde_json::from_slice(&SingBoxAdapter.generate_tun_activation_config(&node, 43128).unwrap().content).unwrap();
+        assert_eq!(tun["inbounds"][1]["type"], "tun");
+        assert_eq!(tun["inbounds"][1]["auto_route"], false);
+        assert_eq!(tun["inbounds"][1]["dns_mode"], "disabled");
+    }
+}
