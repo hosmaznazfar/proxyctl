@@ -328,6 +328,9 @@ mod config_contract_tests {
 
     #[test]
     fn xray_activation_benchmark_and_tun_options_stay_core_native() {
+        assert!(!CAPABILITIES.hysteria2 && CAPABILITIES.reality_vmess);
+        assert!(CAPABILITIES.reality_optional_fields && CAPABILITIES.xhttp);
+        assert!(CAPABILITIES.certificate_sha256_pin && CAPABILITIES.grpc_authority);
         let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
         let activation: serde_json::Value = serde_json::from_slice(&XrayAdapter.generate_activation_config(&node, 43128).unwrap().content).unwrap();
         assert_eq!(activation["inbounds"][0]["protocol"], "mixed");
