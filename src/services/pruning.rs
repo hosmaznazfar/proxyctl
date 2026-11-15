@@ -324,6 +324,8 @@ mod tests {
             failure_reason: (status != BenchmarkSampleStatus::Success).then(|| "test".into()),
             timestamp: run_id * 10,
             duration_ms: Some(10),
+            transferred_bytes: None,
+            partial: false,
         }
     }
 
