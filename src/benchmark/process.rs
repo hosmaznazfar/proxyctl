@@ -101,7 +101,10 @@ impl ManagedCoreProcess {
             executable.is_file(),
             "managed {core} executable is not installed"
         );
-        let ports = targets.iter().map(|target| target.listen_port).collect::<Vec<_>>();
+        let ports = targets
+            .iter()
+            .map(|target| target.listen_port)
+            .collect::<Vec<_>>();
         let adapter = adapters::adapter(core);
         let mut last_failure = "the core did not open every local HTTP listener".to_owned();
         let overall_started = Instant::now();
@@ -353,8 +356,15 @@ fn wait_for_listeners(child: &mut Child, ports: &[u16], timeout: Duration) -> Re
             return Ok(());
         }
         if started.elapsed() >= timeout {
-            let missing = ready.iter().zip(ports).filter_map(|(is_ready, port)| (!is_ready).then_some(port.to_string())).collect::<Vec<_>>().join(", ");
-            return Err(format!("local HTTP listener readiness timed out for port(s): {missing}"));
+            let missing = ready
+                .iter()
+                .zip(ports)
+                .filter_map(|(is_ready, port)| (!is_ready).then_some(port.to_string()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(format!(
+                "local HTTP listener readiness timed out for port(s): {missing}"
+            ));
         }
         thread::sleep(READINESS_POLL_INTERVAL);
     }
@@ -413,7 +423,11 @@ exec sleep 30
         );
         assert!(result.is_err());
         assert!(started.elapsed() < Duration::from_secs(2));
-        let child_pid: u32 = fs::read_to_string(pid_file).unwrap().trim().parse().unwrap();
+        let child_pid: u32 = fs::read_to_string(pid_file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
         assert!(
             !Path::new(&format!("/proc/{child_pid}")).exists(),
             "failed startup must stop and reap the exact fake child"
@@ -428,12 +442,14 @@ exec sleep 30
         let first_port = first.local_addr().unwrap().port();
         let second_port = second.local_addr().unwrap().port();
         let mut child = Command::new("sleep").arg("30").spawn().unwrap();
-        assert!(wait_for_listeners(
-            &mut child,
-            &[first_port, second_port],
-            Duration::from_millis(200)
-        )
-        .is_ok());
+        assert!(
+            wait_for_listeners(
+                &mut child,
+                &[first_port, second_port],
+                Duration::from_millis(200)
+            )
+            .is_ok()
+        );
         terminate_child(&mut child);
 
         let missing_port = reserve_loopback_port().unwrap();

@@ -150,10 +150,8 @@ mod tests {
         let marker = directory.path().join("config-path");
         write_fake_core_with_arguments(&executable, &arguments, &marker);
 
-        let node = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@example.com:443",
-        )
-        .unwrap();
+        let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
+            .unwrap();
         let cases = [
             (CoreId::SingBox, vec!["check", "-c"]),
             (CoreId::Xray, vec!["run", "-test", "-c"]),
@@ -191,11 +189,7 @@ mod tests {
         );
     }
 
-    fn write_fake_core_with_arguments(
-        executable: &Path,
-        arguments: &Path,
-        marker: &Path,
-    ) {
+    fn write_fake_core_with_arguments(executable: &Path, arguments: &Path, marker: &Path) {
         let script = format!(
             r#"#!/bin/sh
 printf '%s\n' "$@" > '{}'

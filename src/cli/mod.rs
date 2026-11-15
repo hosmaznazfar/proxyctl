@@ -51,9 +51,16 @@ enum TunCommand {
 #[derive(Debug, Subcommand)]
 enum ConfigAction {
     /// Set the persistent shared HTTP/SOCKS5 listener port.
-    Set { #[arg(value_parser = ["listen-port"])] key: String, value: u16 },
+    Set {
+        #[arg(value_parser = ["listen-port"])]
+        key: String,
+        value: u16,
+    },
     /// Restore a setting to its built-in default.
-    Reset { #[arg(value_parser = ["listen-port"])] key: String },
+    Reset {
+        #[arg(value_parser = ["listen-port"])]
+        key: String,
+    },
     /// Configure table profiles used by show and report.
     Display {
         #[command(subcommand)]
@@ -64,11 +71,24 @@ enum ConfigAction {
 #[derive(Debug, Subcommand)]
 enum DisplayAction {
     /// Select the active table profile: compact, normal, or full.
-    Profile { #[arg(value_parser = ["compact", "normal", "full"])] name: String },
+    Profile {
+        #[arg(value_parser = ["compact", "normal", "full"])]
+        name: String,
+    },
     /// Add a supported column to a profile.
-    AddField { #[arg(value_parser = ["compact", "normal", "full"])] profile: String, #[arg(value_parser = ["node", "name", "server", "port", "protocol", "core", "version", "latency", "tcp-ping", "download", "upload", "status", "samples", "failures", "run", "tested"])] field: String },
+    AddField {
+        #[arg(value_parser = ["compact", "normal", "full"])]
+        profile: String,
+        #[arg(value_parser = ["node", "name", "server", "port", "protocol", "core", "version", "latency", "tcp-ping", "download", "upload", "status", "samples", "failures", "run", "tested"])]
+        field: String,
+    },
     /// Remove a column from a profile (at least one must remain).
-    RemoveField { #[arg(value_parser = ["compact", "normal", "full"])] profile: String, #[arg(value_parser = ["node", "name", "server", "port", "protocol", "core", "version", "latency", "tcp-ping", "download", "upload", "status", "samples", "failures", "run", "tested"])] field: String },
+    RemoveField {
+        #[arg(value_parser = ["compact", "normal", "full"])]
+        profile: String,
+        #[arg(value_parser = ["node", "name", "server", "port", "protocol", "core", "version", "latency", "tcp-ping", "download", "upload", "status", "samples", "failures", "run", "tested"])]
+        field: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -363,26 +383,38 @@ fn install_shell_completion(shell: crate::services::shell_completion::Shell) -> 
         crate::services::shell_completion::Shell::Fish => Shell::Fish,
         crate::services::shell_completion::Shell::Zsh => Shell::Zsh,
     };
-    let path = crate::services::shell_completion::install(shell, &completion_script(completion_shell))?;
+    let path =
+        crate::services::shell_completion::install(shell, &completion_script(completion_shell))?;
     println!("{} completion installed: {}", shell.name(), path.display());
     match shell {
-        crate::services::shell_completion::Shell::Fish => println!("Fish loads it automatically in new sessions."),
-        crate::services::shell_completion::Shell::Bash => println!("Bash loads it automatically when bash-completion is installed and enabled."),
-        crate::services::shell_completion::Shell::Zsh => println!("Zsh completion path was added to ~/.zshrc; restart Zsh or run 'source ~/.zshrc'."),
+        crate::services::shell_completion::Shell::Fish => {
+            println!("Fish loads it automatically in new sessions.")
+        }
+        crate::services::shell_completion::Shell::Bash => {
+            println!("Bash loads it automatically when bash-completion is installed and enabled.")
+        }
+        crate::services::shell_completion::Shell::Zsh => println!(
+            "Zsh completion path was added to ~/.zshrc; restart Zsh or run 'source ~/.zshrc'."
+        ),
     }
     Ok(())
 }
 
 fn offer_first_setup_completion() -> anyhow::Result<()> {
-    use std::io::{self, IsTerminal, Write};
     use crate::services::shell_completion;
+    use std::io::{self, IsTerminal, Write};
 
-    let Some(shell) = shell_completion::detect_current() else { return Ok(()); };
+    let Some(shell) = shell_completion::detect_current() else {
+        return Ok(());
+    };
     if !io::stdin().is_terminal() || !shell_completion::should_offer_first_setup_prompt(shell)? {
         return Ok(());
     }
 
-    print!("Install {} tab completion for proxyctl now? [y/N] ", shell.name());
+    print!(
+        "Install {} tab completion for proxyctl now? [y/N] ",
+        shell.name()
+    );
     io::stdout().flush()?;
     let mut answer = String::new();
     io::stdin().read_line(&mut answer)?;
@@ -559,7 +591,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let database_path = default_database_path()?;
     match command {
         // Completion commands are handled before database initialization above.
-        Command::Completions { .. } => unreachable!("completion command returned before database access"),
+        Command::Completions { .. } => {
+            unreachable!("completion command returned before database access")
+        }
         Command::Add { url } => match nodes::add_url(&database_path, &url)? {
             AddNodeOutcome::Added(id) => {
                 let number = nodes::active_display_number(&database_path, id)?
@@ -1707,7 +1741,6 @@ mod tests {
                 "Fish completion is missing {option} for {command}"
             );
         }
-
     }
 
     #[test]
@@ -1719,8 +1752,15 @@ mod tests {
         ] {
             let script = super::completion_script(shell);
             for expected in [
-                "listen-port", "compact", "normal", "full", "tcp-ping", "tested",
-                "sing-box", "xray", "mihomo",
+                "listen-port",
+                "compact",
+                "normal",
+                "full",
+                "tcp-ping",
+                "tested",
+                "sing-box",
+                "xray",
+                "mihomo",
             ] {
                 assert!(
                     script.contains(expected),
@@ -1737,10 +1777,15 @@ mod tests {
         }
         assert!(Cli::try_parse_from(["proxyctl", "completions", "install"]).is_ok());
         for shell in ["bash", "fish", "zsh"] {
-            assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", shell]).is_ok());
+            assert!(
+                Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", shell])
+                    .is_ok()
+            );
         }
         assert!(Cli::try_parse_from(["proxyctl", "completions", "generate", "unknown"]).is_err());
-        assert!(Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", "nu"]).is_err());
+        assert!(
+            Cli::try_parse_from(["proxyctl", "completions", "install", "--shell", "nu"]).is_err()
+        );
     }
 
     #[test]
@@ -1864,10 +1909,18 @@ mod tests {
     #[test]
     fn test_command_defaults_to_socks5_and_accepts_http_override() {
         let default = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
-        assert!(matches!(default.command, Some(Command::Test { ref proxy_type, .. }) if proxy_type == "socks5"));
-        let http = Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--proxy-type", "http"]).unwrap();
-        assert!(matches!(http.command, Some(Command::Test { ref proxy_type, .. }) if proxy_type == "http"));
-        assert!(Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--proxy-type", "invalid"]).is_err());
+        assert!(
+            matches!(default.command, Some(Command::Test { ref proxy_type, .. }) if proxy_type == "socks5")
+        );
+        let http = Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--proxy-type", "http"])
+            .unwrap();
+        assert!(
+            matches!(http.command, Some(Command::Test { ref proxy_type, .. }) if proxy_type == "http")
+        );
+        assert!(
+            Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--proxy-type", "invalid"])
+                .is_err()
+        );
     }
 
     #[test]
@@ -1887,14 +1940,7 @@ mod tests {
             .is_ok()
         );
         assert!(
-            Cli::try_parse_from([
-                "proxyctl",
-                "test",
-                "--all-cores",
-                "--concurrency",
-                "4"
-            ])
-            .is_err()
+            Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--concurrency", "4"]).is_err()
         );
     }
 

@@ -71,10 +71,8 @@ pub fn latest_release_optional(
     // Deserialize directly from the response stream. ureq's convenience
     // read_to_string applies a 10 MiB default body limit, which is too small
     // for repositories with many releases and assets.
-    let releases: Vec<Release> = serde_json::from_reader(
-        response.into_body().into_reader(),
-    )
-    .context("could not read or parse GitHub release metadata")?;
+    let releases: Vec<Release> = serde_json::from_reader(response.into_body().into_reader())
+        .context("could not read or parse GitHub release metadata")?;
     let Some(release) = select_release(releases, channel) else {
         return Ok(None);
     };

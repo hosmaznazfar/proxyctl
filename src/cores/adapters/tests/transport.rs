@@ -419,7 +419,10 @@ fn xray_trojan_websocket_tls_matches_v2rayn_native_fields() {
     let stream = &outbound["streamSettings"];
 
     assert_eq!(outbound["protocol"], "trojan");
-    assert_eq!(outbound["settings"]["servers"][0]["address"], "199.232.78.159");
+    assert_eq!(
+        outbound["settings"]["servers"][0]["address"],
+        "199.232.78.159"
+    );
     assert_eq!(outbound["settings"]["servers"][0]["port"], 443);
     assert_eq!(stream["network"], "ws");
     assert_eq!(

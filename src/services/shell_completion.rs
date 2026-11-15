@@ -1,9 +1,5 @@
 //! Shell detection and per-user shell completion installation.
-use std::{
-    fs,
-    io::Write,
-    path::PathBuf,
-};
+use std::{fs, io::Write, path::PathBuf};
 
 use anyhow::{Context, bail};
 use tempfile::NamedTempFile;
@@ -63,19 +59,27 @@ pub fn detect_current() -> Option<Shell> {
 fn config_home() -> anyhow::Result<PathBuf> {
     match std::env::var_os("XDG_CONFIG_HOME") {
         Some(path) => Ok(PathBuf::from(path)),
-        None => Ok(PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?).join(".config")),
+        None => {
+            Ok(PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?).join(".config"))
+        }
     }
 }
 
 fn data_home() -> anyhow::Result<PathBuf> {
     match std::env::var_os("XDG_DATA_HOME") {
         Some(path) => Ok(PathBuf::from(path)),
-        None => Ok(PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?).join(".local").join("share")),
+        None => Ok(
+            PathBuf::from(std::env::var_os("HOME").context("HOME is not set")?)
+                .join(".local")
+                .join("share"),
+        ),
     }
 }
 
 fn install_atomic(destination: &std::path::Path, script: &str) -> anyhow::Result<PathBuf> {
-    let directory = destination.parent().context("completion path has no parent directory")?;
+    let directory = destination
+        .parent()
+        .context("completion path has no parent directory")?;
     fs::create_dir_all(directory)
         .with_context(|| format!("could not create {}", directory.display()))?;
     let mut temporary = NamedTempFile::new_in(directory)
@@ -92,15 +96,24 @@ fn install_atomic(destination: &std::path::Path, script: &str) -> anyhow::Result
 pub fn install(shell: Shell, script: &str) -> anyhow::Result<PathBuf> {
     match shell {
         Shell::Fish => install_atomic(
-            &config_home()?.join("fish").join("completions").join("proxyctl.fish"),
+            &config_home()?
+                .join("fish")
+                .join("completions")
+                .join("proxyctl.fish"),
             script,
         ),
         Shell::Bash => install_atomic(
-            &data_home()?.join("bash-completion").join("completions").join("proxyctl"),
+            &data_home()?
+                .join("bash-completion")
+                .join("completions")
+                .join("proxyctl"),
             script,
         ),
         Shell::Zsh => {
-            let destination = data_home()?.join("zsh").join("site-functions").join("_proxyctl");
+            let destination = data_home()?
+                .join("zsh")
+                .join("site-functions")
+                .join("_proxyctl");
             let installed = install_atomic(&destination, script)?;
             ensure_zsh_fpath()?;
             Ok(installed)
@@ -121,7 +134,10 @@ fn ensure_zsh_fpath() -> anyhow::Result<()> {
     if existing.contains(marker) {
         return Ok(());
     }
-    let mut file = fs::OpenOptions::new().create(true).append(true).open(&startup)
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&startup)
         .with_context(|| format!("could not update {}", startup.display()))?;
     file.write_all(snippet.as_bytes())?;
     Ok(())
@@ -157,7 +173,9 @@ pub fn mark_first_setup_prompted(shell: Shell) -> anyhow::Result<()> {
 }
 
 fn prompt_marker_path(shell: Shell) -> anyhow::Result<PathBuf> {
-    Ok(data_home()?.join("proxyctl").join(format!("{}-completion-prompted", shell.name())))
+    Ok(data_home()?
+        .join("proxyctl")
+        .join(format!("{}-completion-prompted", shell.name())))
 }
 
 #[cfg(test)]

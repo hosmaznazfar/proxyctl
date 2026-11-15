@@ -9,7 +9,10 @@ use std::collections::HashSet;
 use anyhow::{Context, ensure};
 use serde_json::{Value, json};
 
-use crate::{cores::CoreId, domain::{BenchmarkProxyType, ProxyNode}};
+use crate::{
+    cores::CoreId,
+    domain::{BenchmarkProxyType, ProxyNode},
+};
 
 use super::{CoreAdapter, GeneratedConfig, json_config};
 
@@ -390,10 +393,9 @@ mod tests {
     }
     #[test]
     fn synthetic_batch_scaling_keeps_one_listener_and_route_per_node() {
-        let node = parse_proxy_url(
-            "vless://11111111-1111-4111-8111-111111111111@batch.example:443",
-        )
-        .unwrap();
+        let node =
+            parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@batch.example:443")
+                .unwrap();
 
         for count in [1_usize, 10, 50] {
             let targets = (0..count)
@@ -401,7 +403,7 @@ mod tests {
                     node_id: index as u64 + 1,
                     node: &node,
                     listen_port: 20_000 + index as u16,
-                proxy_type: BenchmarkProxyType::Socks5,
+                    proxy_type: BenchmarkProxyType::Socks5,
                 })
                 .collect::<Vec<_>>();
 
@@ -422,19 +424,27 @@ mod tests {
                         document["proxies"].as_array().unwrap().len(),
                     ),
                 };
-                assert_eq!(inbounds, count, "{core} listener count at batch size {count}");
-                assert_eq!(outbounds, count, "{core} outbound count at batch size {count}");
+                assert_eq!(
+                    inbounds, count,
+                    "{core} listener count at batch size {count}"
+                );
+                assert_eq!(
+                    outbounds, count,
+                    "{core} outbound count at batch size {count}"
+                );
                 match core {
                     CoreId::SingBox => {
                         assert_eq!(document["route"]["rules"].as_array().unwrap().len(), count);
                     }
                     CoreId::Xray => {
-                        assert_eq!(document["routing"]["rules"].as_array().unwrap().len(), count);
+                        assert_eq!(
+                            document["routing"]["rules"].as_array().unwrap().len(),
+                            count
+                        );
                     }
                     CoreId::Mihomo => {}
                 }
             }
         }
     }
-
 }

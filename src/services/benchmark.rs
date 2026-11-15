@@ -116,7 +116,12 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         "choose --all-cores (optionally with --node), or both --node and --core"
     );
     ensure!(
-        options.node_ids.iter().copied().collect::<std::collections::BTreeSet<_>>().len()
+        options
+            .node_ids
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
             == options.node_ids.len(),
         "selected node IDs must be unique"
     );
@@ -208,9 +213,15 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
 
     let database = NodeDatabase::open(database_path)?;
     let samples = database.list_benchmark_samples(run_id)?;
-    let success_count = samples.iter().filter(|sample| sample.status == BenchmarkSampleStatus::Success).count();
+    let success_count = samples
+        .iter()
+        .filter(|sample| sample.status == BenchmarkSampleStatus::Success)
+        .count();
     let failed_count = samples.len().saturating_sub(success_count);
-    let summary = Some(format!("{}: {success_count} successful sample(s), {failed_count} failed/skipped/cancelled sample(s)", summary.unwrap_or_else(|| "completed".to_owned())));
+    let summary = Some(format!(
+        "{}: {success_count} successful sample(s), {failed_count} failed/skipped/cancelled sample(s)",
+        summary.unwrap_or_else(|| "completed".to_owned())
+    ));
     database
         .finish_benchmark_run(run_id, status, unix_timestamp(), summary)
         .context("could not finalize benchmark run")?;
@@ -226,7 +237,6 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
     }
     Ok(run_id)
 }
-
 
 fn record_cancelled_remainder(
     database_path: &Path,
@@ -317,9 +327,11 @@ fn load_scope(
             })
             .collect::<anyhow::Result<Vec<_>>>()?
     } else if let Some(node_id) = options.node_id {
-        vec![database
-            .get_node(node_id)?
-            .with_context(|| format!("node #{node_id} was not found"))?]
+        vec![
+            database
+                .get_node(node_id)?
+                .with_context(|| format!("node #{node_id} was not found"))?,
+        ]
     } else {
         database.list_nodes(false)?
     };
@@ -391,7 +403,13 @@ fn execute_run(
 
     // Direct TCP is independent of a core and uses the same bounded worker limit.
     if metric_selection.includes_direct_tcp() {
-        execute_tcp_ping_batch(database_path, run_id, nodes, &display_numbers, latency_concurrency)?;
+        execute_tcp_ping_batch(
+            database_path,
+            run_id,
+            nodes,
+            &display_numbers,
+            latency_concurrency,
+        )?;
     }
 
     // Core-first scheduling means one managed process per selected core, never multiple cores
@@ -436,13 +454,29 @@ fn execute_run(
                     ),
                     crate::cores::adapters::CompatibilityStatus::Supported => unreachable!(),
                 };
-                record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
+                record_preflight(
+                    database_path,
+                    &context,
+                    metric_selection.metrics(),
+                    status,
+                    category,
+                    reason,
+                )?;
                 println!("run #{run_id} node #{display_number} {core}: {category}");
                 continue;
             }
-            if let Err(error) = ManagedCoreProcess::validate_node_config(*core, &record.node, &executable) {
+            if let Err(error) =
+                ManagedCoreProcess::validate_node_config(*core, &record.node, &executable)
+            {
                 let (status, category, reason) = classify_core_start_failure(&error);
-                record_preflight(database_path, &context, metric_selection.metrics(), status, category, reason)?;
+                record_preflight(
+                    database_path,
+                    &context,
+                    metric_selection.metrics(),
+                    status,
+                    category,
+                    reason,
+                )?;
                 println!("run #{run_id} node #{display_number} {core}: {reason}");
                 continue;
             }
@@ -479,7 +513,14 @@ fn execute_run(
             Err(error) => {
                 let (status, category, reason) = classify_core_start_failure(&error);
                 for (_, display_number, context) in &eligible {
-                    record_preflight(database_path, context, metric_selection.metrics(), status, category, reason)?;
+                    record_preflight(
+                        database_path,
+                        context,
+                        metric_selection.metrics(),
+                        status,
+                        category,
+                        reason,
+                    )?;
                     println!("run #{run_id} node #{display_number} {core}: {reason}");
                 }
                 continue;
@@ -497,7 +538,10 @@ fn execute_run(
             .collect::<Vec<_>>();
         let mut process = Some(process);
         let mut completed_samples = Vec::new();
-        let latency_succeeded = if metric_selection.metrics().contains(&BenchmarkMetric::Latency) {
+        let latency_succeeded = if metric_selection
+            .metrics()
+            .contains(&BenchmarkMetric::Latency)
+        {
             execute_latency_batch(
                 *core,
                 run_id,
@@ -563,13 +607,8 @@ fn execute_run(
                         metric.label()
                     );
                     println!("{label}: starting...");
-                    let outcome = measure_interruptibly(
-                        &client,
-                        metric,
-                        settings,
-                        &mut process,
-                        &label,
-                    );
+                    let outcome =
+                        measure_interruptibly(&client, metric, settings, &mut process, &label);
                     if metric == BenchmarkMetric::Download {
                         println!();
                     }
@@ -657,13 +696,10 @@ fn execute_latency_batch(
                 for (local_index, entry) in chunk.iter().enumerate() {
                     let sender = sender.clone();
                     scope.spawn(move || {
-                        let result = BenchmarkHttpClient::new_with_timeout(
-                            entry.port,
-                            settings,
-                            timeout,
-                        )
-                        .map_err(|_| MeasurementFailure::Unavailable)
-                        .and_then(|client| client.latency());
+                        let result =
+                            BenchmarkHttpClient::new_with_timeout(entry.port, settings, timeout)
+                                .map_err(|_| MeasurementFailure::Unavailable)
+                                .and_then(|client| client.latency());
                         let _ = sender.send((offset + local_index, result));
                     });
                 }
@@ -689,7 +725,12 @@ fn execute_latency_batch(
                                 Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
                                     println!("{label}: {:.2} ms", measurement.value);
                                     succeeded[index] = true;
-                                    successful_sample(&entry.context, BenchmarkMetric::Latency, sample_index, measurement)
+                                    successful_sample(
+                                        &entry.context,
+                                        BenchmarkMetric::Latency,
+                                        sample_index,
+                                        measurement,
+                                    )
                                 }
                                 Ok(_) | Err(MeasurementFailure::Cancelled) => failed_sample(
                                     &entry.context,
@@ -750,11 +791,8 @@ fn execute_tcp_ping_batch(
                 for record in chunk {
                     let sender = sender.clone();
                     scope.spawn(move || {
-                        let result = tcp::ping(
-                            &record.node.server,
-                            record.node.port,
-                            TCP_CONNECT_TIMEOUT,
-                        );
+                        let result =
+                            tcp::ping(&record.node.server, record.node.port, TCP_CONNECT_TIMEOUT);
                         let _ = sender.send((record.id, result));
                     });
                 }
@@ -775,7 +813,12 @@ fn execute_tcp_ping_batch(
                         let sample = match result {
                             Ok(measurement) => {
                                 println!("{label}: {:.2} ms", measurement.value);
-                                successful_sample(&context, BenchmarkMetric::TcpPing, sample_index, measurement)
+                                successful_sample(
+                                    &context,
+                                    BenchmarkMetric::TcpPing,
+                                    sample_index,
+                                    measurement,
+                                )
                             }
                             Err(error) => {
                                 let reason = error.reason();
@@ -842,8 +885,7 @@ fn measure_interruptibly(
                     let rate = progress.bits_per_second.unwrap_or_default() / 1_000_000.0;
                     print!(
                         "\r{label}: {}/{} bytes ({rate:.2} Mbps)",
-                        progress.transferred_bytes,
-                        progress.target_bytes
+                        progress.transferred_bytes, progress.target_bytes
                     );
                     let _ = std::io::stdout().flush();
                 }),
@@ -1093,7 +1135,10 @@ mod tests {
             metric_selection: BenchmarkMetricSelection::All,
         };
         let (nodes, cores) = load_scope(&path, &options).unwrap();
-        assert_eq!(nodes.iter().map(|node| node.id).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(
+            nodes.iter().map(|node| node.id).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
         assert_eq!(cores, vec![CoreId::Xray]);
     }
 

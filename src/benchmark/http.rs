@@ -122,7 +122,10 @@ impl BenchmarkHttpClient {
     ) -> anyhow::Result<Self> {
         validate_settings(settings)?;
         ensure!(port != 0, "benchmark proxy port must be non-zero");
-        ensure!(!timeout.is_zero(), "benchmark request timeout must be non-zero");
+        ensure!(
+            !timeout.is_zero(),
+            "benchmark request timeout must be non-zero"
+        );
         let latency_url = validate_endpoint(&settings.latency_url)?;
         let download_url = validate_endpoint(&settings.download_url)?;
         let upload_url = validate_endpoint(&settings.upload_url)?;
@@ -219,10 +222,16 @@ impl BenchmarkHttpClient {
             transfer
                 .write_function(|data| {
                     let remaining = max_bytes.saturating_sub(received);
-                    let accepted = data.len().min(usize::try_from(remaining).unwrap_or(usize::MAX));
+                    let accepted = data
+                        .len()
+                        .min(usize::try_from(remaining).unwrap_or(usize::MAX));
                     received = received.saturating_add(accepted as u64);
                     if last_progress.elapsed() >= PROGRESS_INTERVAL || received == max_bytes {
-                        progress(TransferProgress::new(received, max_bytes, started.elapsed()));
+                        progress(TransferProgress::new(
+                            received,
+                            max_bytes,
+                            started.elapsed(),
+                        ));
                         last_progress = Instant::now();
                     }
                     // A short write deliberately stops at the sample cap. libcurl reports a
@@ -298,7 +307,6 @@ impl BenchmarkHttpClient {
         })
     }
 }
-
 
 fn partial_download_measurement(
     received: u64,
@@ -526,9 +534,14 @@ mod tests {
 
         assert!(client.latency().unwrap().value >= 0.0);
         let mut progress = Vec::new();
-        let download = client.download(8, |snapshot| progress.push(snapshot)).unwrap();
+        let download = client
+            .download(8, |snapshot| progress.push(snapshot))
+            .unwrap();
         assert_eq!(download.transferred_bytes, Some(8));
-        assert_eq!(progress.last().map(|value| value.transferred_bytes), Some(8));
+        assert_eq!(
+            progress.last().map(|value| value.transferred_bytes),
+            Some(8)
+        );
         assert_eq!(progress.last().map(|value| value.target_bytes), Some(8));
         assert!(client.upload(8).unwrap().value > 0.0);
         server.join().unwrap();
@@ -544,40 +557,44 @@ mod tests {
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
-        let server = thread::spawn(move || {
-            let (stream, _) = listener.accept().unwrap();
-            let mut reader = BufReader::new(stream);
-            let mut greeting = [0_u8; 3];
-            reader.read_exact(&mut greeting).unwrap();
-            assert_eq!(greeting, [5, 1, 0]);
-            reader.get_mut().write_all(&[5, 0]).unwrap();
+        let server =
+            thread::spawn(move || {
+                let (stream, _) = listener.accept().unwrap();
+                let mut reader = BufReader::new(stream);
+                let mut greeting = [0_u8; 3];
+                reader.read_exact(&mut greeting).unwrap();
+                assert_eq!(greeting, [5, 1, 0]);
+                reader.get_mut().write_all(&[5, 0]).unwrap();
 
-            let mut request = [0_u8; 4];
-            reader.read_exact(&mut request).unwrap();
-            assert_eq!(&request[..3], &[5, 1, 0]);
-            let address_length = match request[3] {
-                1 => 4,
-                3 => {
-                    let mut length = [0_u8; 1];
-                    reader.read_exact(&mut length).unwrap();
-                    usize::from(length[0])
+                let mut request = [0_u8; 4];
+                reader.read_exact(&mut request).unwrap();
+                assert_eq!(&request[..3], &[5, 1, 0]);
+                let address_length = match request[3] {
+                    1 => 4,
+                    3 => {
+                        let mut length = [0_u8; 1];
+                        reader.read_exact(&mut length).unwrap();
+                        usize::from(length[0])
+                    }
+                    4 => 16,
+                    other => panic!("unexpected SOCKS5 address type: {other}"),
+                };
+                let mut address = vec![0_u8; address_length + 2];
+                reader.read_exact(&mut address).unwrap();
+                if request[3] == 3 {
+                    assert_eq!(&address[..address_length], b"measurement.invalid");
                 }
-                4 => 16,
-                other => panic!("unexpected SOCKS5 address type: {other}"),
-            };
-            let mut address = vec![0_u8; address_length + 2];
-            reader.read_exact(&mut address).unwrap();
-            if request[3] == 3 {
-                assert_eq!(&address[..address_length], b"measurement.invalid");
-            }
-            reader.get_mut().write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 80]).unwrap();
+                reader
+                    .get_mut()
+                    .write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 80])
+                    .unwrap();
 
-            let _ = read_fake_request(&mut reader);
-            reader.get_mut().write_all(
+                let _ = read_fake_request(&mut reader);
+                reader.get_mut().write_all(
                 b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             ).unwrap();
-            reader.get_mut().flush().unwrap();
-        });
+                reader.get_mut().flush().unwrap();
+            });
 
         let proxy = Proxy::new(&format!("socks5h://127.0.0.1:{port}")).unwrap();
         let agent: Agent = Agent::config_builder()
@@ -652,7 +669,11 @@ mod tests {
 
     #[test]
     fn download_rejects_early_eof_instead_of_scoring_a_short_sample() {
-        use std::{io::{BufReader, Write}, net::TcpListener, thread};
+        use std::{
+            io::{BufReader, Write},
+            net::TcpListener,
+            thread,
+        };
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -661,7 +682,9 @@ mod tests {
             let mut reader = BufReader::new(stream);
             let _ = read_fake_request(&mut reader);
             let stream = reader.get_mut();
-            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndata").unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndata")
+                .unwrap();
             stream.flush().unwrap();
         });
         let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
@@ -688,7 +711,11 @@ mod tests {
 
     #[test]
     fn download_preserves_http_status_failures_after_response_headers() {
-        use std::{io::{BufReader, Write}, net::TcpListener, thread};
+        use std::{
+            io::{BufReader, Write},
+            net::TcpListener,
+            thread,
+        };
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -728,7 +755,11 @@ mod tests {
 
     #[test]
     fn upload_rejects_unsuccessful_http_response() {
-        use std::{io::{BufReader, Write}, net::TcpListener, thread};
+        use std::{
+            io::{BufReader, Write},
+            net::TcpListener,
+            thread,
+        };
 
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();

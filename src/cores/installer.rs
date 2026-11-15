@@ -113,13 +113,11 @@ mod tests {
             "1.14.4"
         );
         assert_eq!(
-            reported_version("Xray 26.11.9 (Xray, Penetrates Everything.) 676eaf6")
-                .unwrap(),
+            reported_version("Xray 26.11.9 (Xray, Penetrates Everything.) 676eaf6").unwrap(),
             "26.11.9"
         );
         assert_eq!(
-            reported_version("Mihomo Meta v1.19.34 linux amd64 with go1.26.11")
-                .unwrap(),
+            reported_version("Mihomo Meta v1.19.34 linux amd64 with go1.26.11").unwrap(),
             "1.19.34"
         );
         assert!(reported_version("version unknown").is_err());
