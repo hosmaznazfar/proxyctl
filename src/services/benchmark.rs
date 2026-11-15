@@ -89,6 +89,7 @@ impl Default for BenchmarkOptions {
 
 pub fn default_settings() -> BenchmarkSettings {
     BenchmarkSettings {
+        proxy_type: BenchmarkProxyType::default(),
         methodology: METHODOLOGY.into(),
         latency_url: "https://www.google.com/generate_204".into(),
         download_url: "https://cachefly.cachefly.net/10mb.test".into(),
