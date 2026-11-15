@@ -274,3 +274,8 @@ upload measurements and is persisted with the run settings. Use
 `proxyctl test --proxy-type http` to select the HTTP inbound when diagnosing compatibility;
 `--proxy-type socks5` explicitly selects the default. sing-box and Xray receive the
 corresponding SOCKS5 or HTTP inbound, while Mihomo's loopback mixed listener supports both.
+
+
+### Download HTTP client
+
+Benchmark downloads use ureq's streaming response reader, the same HTTP client used for latency and upload. The reader counts each chunk as it arrives, preserving useful partial bytes if the connection later closes or times out. Downloads remain bounded by the configured byte cap and use the selected loopback proxy (SOCKS5 with remote hostname resolution by default). This avoids the separate statically linked libcurl transport.
