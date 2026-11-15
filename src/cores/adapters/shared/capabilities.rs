@@ -162,9 +162,9 @@ pub(crate) fn validate_for_core(
                 TransportKind::Http2 | TransportKind::HttpUpgrade | TransportKind::WebSocket
             )
         {
-            return Err(compatibility_failure(
-                format!("{core} does not support REALITY with this transport mapping"),
-            ));
+            return Err(compatibility_failure(format!(
+                "{core} does not support REALITY with this transport mapping"
+            )));
         }
     }
 
