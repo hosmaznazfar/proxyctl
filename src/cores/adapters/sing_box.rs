@@ -181,6 +181,42 @@ impl CoreAdapter for SingBoxAdapter {
         json_config(json!({ "outbounds": [outbound] }))
     }
 
+    fn generate_benchmark_batch_config(&self, targets: &[super::BenchmarkTarget<'_>]) -> anyhow::Result<GeneratedConfig> {
+        super::benchmark_batch::generate_sing_box(self, targets)
+    }
+
+    fn generate_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_config(node)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["inbounds"] = json!([{
+            "type": "mixed", "tag": "proxy-in", "listen": "127.0.0.1", "listen_port": listen_port
+        }]);
+        document["route"] = json!({"final": "proxy"});
+        json_config(document)
+    }
+
+    fn generate_tun_activation_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_activation_config(node, listen_port)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["inbounds"].as_array_mut().ok_or_else(|| anyhow::anyhow!("sing-box activation inbounds must be an array"))?.push(json!({
+            "type": "tun", "tag": "tun-in", "interface_name": "tun-proxyctl",
+            "address": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"], "mtu": 1500,
+            "auto_route": false, "strict_route": false, "dns_mode": "disabled"
+        }));
+        document["route"] = json!({"final": "proxy", "auto_detect_interface": true});
+        json_config(document)
+    }
+
+    fn generate_benchmark_config(&self, node: &ProxyNode, listen_port: u16) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_config(node)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["inbounds"] = json!([{
+            "type": "http", "tag": "benchmark-in", "listen": "127.0.0.1", "listen_port": listen_port
+        }]);
+        document["route"] = json!({"final": "proxy"});
+        json_config(document)
+    }
+
     fn validate_config(&self, executable: &Path, config: &Path) -> anyhow::Result<()> {
         let mut command = Command::new(executable);
         command.arg("check").arg("-c").arg(config);
