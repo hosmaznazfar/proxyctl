@@ -233,7 +233,7 @@ impl BenchmarkHttpClient {
         let results = std::thread::scope(|scope| {
             let mut handles = Vec::with_capacity(streams);
             for index in 0..streams {
-                let target = base + u64::from((index as u64) < remainder);
+                let target = base + if (index as u64) < remainder { 1 } else { 0 };
                 let proxy = match Proxy::new(&self.proxy_url) {
                     Ok(proxy) => proxy,
                     Err(_) => return vec![Err(MeasurementFailure::Unavailable)],
