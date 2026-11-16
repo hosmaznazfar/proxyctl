@@ -704,6 +704,23 @@ mod tests {
     }
 
     #[test]
+    fn validates_profile_stream_duration_and_download_caps() {
+        let mut settings = crate::services::benchmark::default_settings();
+        assert!(validate_settings(&settings).is_ok());
+
+        settings.download_streams = 4;
+        assert!(validate_settings(&settings).is_err());
+        settings.download_streams = 3;
+
+        settings.download_duration_ms = 0;
+        assert!(validate_settings(&settings).is_err());
+        settings.download_duration_ms = 20_000;
+
+        settings.download_bytes = 33 * 1024 * 1024;
+        assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
     fn accepts_v2rayn_style_https_endpoints() {
         assert!(validate_endpoint("https://www.google.com/generate_204").is_ok());
         assert!(validate_endpoint("https://cachefly.cachefly.net/10mb.test").is_ok());
