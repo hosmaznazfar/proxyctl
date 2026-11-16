@@ -38,7 +38,7 @@ Proxyctl reports four distinct measurements for each node:
 
 Do not combine TCP ping and real ping into one value. Their paths and meanings differ. These results measure the complete route, remote endpoint, and current test conditions; they do not isolate core CPU performance.
 
-The command remains sequential by default: one node/core process at a time. The direct TCP test runs once per node in a run, not once for every core. Each metric keeps three individual samples; summaries use successful samples only.
+The scheduler is core-first: one managed core process at a time serves a batch of compatible nodes. Latency and direct TCP probes use bounded concurrency; throughput transfers are processed one node/sample at a time, with up to three download streams inside an Accurate sample. The direct TCP test runs once per node in a run, not once for every core. Each metric keeps three individual samples; summaries use successful samples only.
 
 ## 2. v2rayN-inspired endpoint defaults
 
@@ -59,6 +59,8 @@ LibreSpeed remains a supported endpoint family when a user supplies a compatible
 ```sh
 # Test all active nodes against installed compatible cores
 proxyctl test --all-cores
+proxyctl test --all-cores --profile quick
+proxyctl test --node 12 --core xray --profile accurate
 
 # Test one node against every installed compatible core
 proxyctl test --node 12 --all-cores
@@ -83,7 +85,7 @@ proxyctl test --node 12 --core sing-box \
 
 The all-cores scope can cover every active node or be restricted to selected nodes with `--node`. A specific node/core pair uses `--node` with `--core`; `--core` and `--all-cores` are mutually exclusive. By default, all three HTTP metrics run. The mutually exclusive `--latency-only`, `--download-only`, and `--upload-only` selectors run only the named metric; omitting them preserves the full benchmark. Direct TCP ping is included only in the default all-metrics mode, once per selected node. Metric-only modes skip direct TCP ping. HTTP samples run once per supported node/core pair, with three samples for each selected metric.
 
-The run stores effective endpoint URLs, payload limits, separate latency/throughput timeouts, bounded probe concurrency, and methodology version (`proxyctl-benchmark-v14` for the current 1 MiB / 60-second throughput defaults, three-attempt download retry policy (including transient timeouts), and streaming ureq download implementation). Download and upload default to 1 MiB each, and neither payload may exceed the 1 MiB safety cap. Proxyctl stops reading once the download target is reached and closes the response rather than downloading the full object. Each download and upload request has its own 60-second default deadline, configurable with `--request-timeout-secs`; users can lower payload sizes for slower links. Upload requests still have a finite configurable timeout, and each download sample gets up to three total attempts when the response closes early, the body read fails, or a transient timeout occurs. Every retry issues a fresh HTTP request. A complete bounded response ends the retry loop; otherwise Proxyctl retains the fastest useful partial attempt (at least 16 KiB). HTTP status errors are not retried. Upload samples are not retried. Keep the request timeout finite and configurable.
+The run stores effective endpoint URLs, profile, byte caps, download duration/stream count/warm-up, separate latency/throughput timeouts, bounded probe concurrency, and methodology version (`proxyctl-benchmark-v15`). Quick defaults to one stream, a 1 MiB aggregate download cap, a 5-second budget, and no warm-up. Accurate defaults to three concurrent streams, an 8 MiB aggregate cap, a 20-second budget, and a best-effort 64 KiB warm-up excluded from timing. Download caps are hard-limited to 32 MiB; upload remains capped at 1 MiB. The configured download budget is divided across the three-attempt retry allowance per stream; every retry uses a fresh request. Bytes are counted against one aggregate cap and never combined across attempts. A partial result requires at least 16 KiB and is explicitly marked. HTTP status errors are not scored; uploads are sequential, not retried, and require the complete synthetic request body plus a successful response.
 
 ## 4. Measurement semantics
 
