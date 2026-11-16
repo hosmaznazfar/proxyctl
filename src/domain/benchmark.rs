@@ -63,23 +63,53 @@ pub enum BenchmarkProxyType {
     Http,
 }
 
+/// Throughput measurement profile.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BenchmarkProfile {
+    /// Fast one-stream sample with a small transfer budget.
+    #[default]
+    Quick,
+    /// Longer, bounded multi-stream sample with a warm-up request.
+    Accurate,
+}
+
 /// Effective, non-secret settings captured with every run.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct BenchmarkSettings {
     #[serde(default)]
     pub proxy_type: BenchmarkProxyType,
+    #[serde(default)]
+    pub profile: BenchmarkProfile,
     pub methodology: String,
     pub latency_url: String,
     pub download_url: String,
     pub upload_url: String,
     pub download_bytes: u64,
     pub upload_bytes: u64,
+    /// Per-download wall-clock budget, shared by all streams and retries.
+    #[serde(default = "default_download_duration_ms")]
+    pub download_duration_ms: u64,
+    /// Number of simultaneous download streams (hard maximum 3).
+    #[serde(default = "default_download_streams")]
+    pub download_streams: u8,
+    /// Bytes fetched before timing begins; warm-up bytes are never scored.
+    #[serde(default)]
+    pub warmup_bytes: u64,
     pub request_timeout_ms: u64,
     #[serde(default = "default_latency_timeout_ms")]
     pub latency_timeout_ms: u64,
     #[serde(default = "default_probe_concurrency")]
     pub probe_concurrency: u8,
     pub startup_timeout_ms: u64,
+}
+
+fn default_download_duration_ms() -> u64 {
+    5_000
+}
+
+fn default_download_streams() -> u8 {
+    1
 }
 
 fn default_latency_timeout_ms() -> u64 {
