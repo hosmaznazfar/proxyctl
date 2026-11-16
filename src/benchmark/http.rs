@@ -188,7 +188,7 @@ impl BenchmarkHttpClient {
         mut progress: F,
     ) -> Result<Measurement, MeasurementFailure>
     where
-        F: FnMut(TransferProgress),
+        F: FnMut(TransferProgress) + Send,
     {
         if max_bytes == 0
             || duration.is_zero()
@@ -230,6 +230,12 @@ impl BenchmarkHttpClient {
             .min(self.request_timeout)
             .max(Duration::from_millis(1));
 
+        let progress_callback = std::sync::Arc::new(std::sync::Mutex::new(progress));
+        let stream_progress = std::sync::Arc::new(
+            (0..streams)
+                .map(|_| std::sync::atomic::AtomicU64::new(0))
+                .collect::<Vec<_>>(),
+        );
         let results = std::thread::scope(|scope| {
             let mut handles = Vec::with_capacity(streams);
             for index in 0..streams {
@@ -251,7 +257,28 @@ impl BenchmarkHttpClient {
                     proxy_url: self.proxy_url.clone(),
                     request_timeout: per_attempt_timeout,
                 };
-                handles.push(scope.spawn(move || worker.download(target, |_| {})));
+                let callback = std::sync::Arc::clone(&progress_callback);
+                let counters = std::sync::Arc::clone(&stream_progress);
+                handles.push(scope.spawn(move || {
+                    let publish = |bytes: u64| {
+                        counters[index].store(bytes, std::sync::atomic::Ordering::Relaxed);
+                        let total = counters
+                            .iter()
+                            .map(|counter| counter.load(std::sync::atomic::Ordering::Relaxed))
+                            .sum::<u64>()
+                            .min(max_bytes);
+                        if let Ok(mut callback) = callback.lock() {
+                            callback(TransferProgress::new(total, max_bytes, started.elapsed()));
+                        }
+                    };
+                    let result = worker.download(target, |snapshot| {
+                        publish(snapshot.transferred_bytes);
+                    });
+                    if let Ok(measurement) = &result {
+                        publish(measurement.transferred_bytes.unwrap_or(0));
+                    }
+                    result
+                }));
             }
             handles
                 .into_iter()
@@ -274,7 +301,9 @@ impl BenchmarkHttpClient {
         received = received.min(max_bytes);
         let elapsed = started.elapsed().max(longest);
         if received >= max_bytes {
-            progress(TransferProgress::new(max_bytes, max_bytes, elapsed));
+            if let Ok(mut callback) = progress_callback.lock() {
+                callback(TransferProgress::new(max_bytes, max_bytes, elapsed));
+            }
             return Ok(Measurement {
                 value: throughput_bps(max_bytes, elapsed)
                     .ok_or(MeasurementFailure::InvalidResponse)?,
@@ -284,7 +313,9 @@ impl BenchmarkHttpClient {
             });
         }
         if received >= MIN_PARTIAL_DOWNLOAD_BYTES {
-            progress(TransferProgress::new(received, max_bytes, elapsed));
+            if let Ok(mut callback) = progress_callback.lock() {
+                callback(TransferProgress::new(received, max_bytes, elapsed));
+            }
             return partial_download_measurement(received, elapsed);
         }
         Err(last_failure)
