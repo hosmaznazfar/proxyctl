@@ -45,7 +45,7 @@ The scheduler is core-first: one managed core process at a time serves a batch o
 Use the same practical separation as v2rayN:
 
 - Real-ping default: `https://www.google.com/generate_204`.
-- Download default: `https://cachefly.cachefly.net/10mb.test`, sampling at most 1 MiB per measurement.
+- Download default: `https://cachefly.cachefly.net/10mb.test`, sampling 1 MiB by default in Quick and 8 MiB by default in Accurate.
 - Upload default: `https://speed.cloudflare.com/__up` because v2rayN's current speed-test workflow does not provide an equivalent upload measurement.
 
 These are defaults, not hard dependencies. Provide CLI overrides for all three HTTP endpoints. Keep TCP ping independent of HTTP endpoint selection.
