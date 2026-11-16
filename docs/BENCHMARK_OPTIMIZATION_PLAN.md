@@ -1,7 +1,7 @@
 # Benchmark performance and measurement optimization plan
 
-> Status: Stages 1–6 implementation and offline verification complete (user-reported); Stage 7 real-world validation runbook ready for user execution
-> Last updated: 2026-11-15
+> Status: Stages 1–6 implementation and offline verification complete (user-reported); Quick/Accurate profile implementation committed and awaiting local verification; real-world comparison remains user-run
+> Last updated: 2026-11-16
 > Scope: benchmark execution, measurement quality, and progress/cancellation only
 > Safety: offline implementation and synthetic tests first; no real-network validation without separate approval
 
@@ -231,3 +231,28 @@ the same selected protocol. The choice is stored in the effective benchmark sett
 run. HTTP remains selectable with `proxyctl test --proxy-type http`; use
 `--proxy-type socks5` to make the default explicit. The core batch adapters generate SOCKS5
 inbounds for sing-box and Xray, while Mihomo uses its existing loopback mixed listener.
+
+
+## Throughput profile implementation
+
+The profile implementation is committed on `main` and awaits local verification.
+
+| Setting | Quick (default) | Accurate |
+|---|---:|---:|
+| Download streams | 1 | 3 |
+| Aggregate download cap | 1 MiB | 8 MiB |
+| Total download budget | 5 seconds | 20 seconds |
+| Warm-up | none | best-effort 64 KiB, excluded from timing |
+| Upload | sequential, 1 MiB default | sequential, 1 MiB default |
+
+The download cap is hard-bounded at 32 MiB and the upload cap remains 1 MiB. The configured total time budget is divided across the existing three-attempt retry budget for each stream; each retry uses a fresh request. Accurate streams execute concurrently and their received bytes are aggregated against one total cap. Failed attempts are never combined with a later attempt; only the best valid partial result from each stream contributes. The existing 16 KiB minimum for partial downloads remains in force. Upload remains strict: the full synthetic body and successful HTTP response are required.
+
+CLI:
+
+```sh
+proxyctl test --all-cores --profile quick
+proxyctl test --node 12 --core xray --profile accurate
+proxyctl test --node 12 --core xray --profile accurate --download-max-bytes 12582912
+```
+
+The selected profile and effective stream, warm-up, byte, and duration settings are persisted with the run. Older run settings deserialize with Quick-compatible defaults. Offline tests cover profile defaults, legacy deserialization, stream aggregation, and warm-up exclusion. No public measurement endpoint is used by tests.
