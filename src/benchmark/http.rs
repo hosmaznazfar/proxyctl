@@ -197,6 +197,7 @@ impl BenchmarkHttpClient {
         {
             return Err(MeasurementFailure::InvalidResponse);
         }
+        let streams = streams.min(max_bytes as usize);
 
         // Warm-up is deliberately best-effort and is excluded from the measurement clock.
         if warmup_bytes > 0 {
@@ -824,6 +825,70 @@ mod tests {
 };
 
         assert!(client.latency().is_ok());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn accurate_profile_aggregates_three_streams_and_excludes_warmup_bytes() {
+        use std::{
+            io::{BufReader, Write},
+            net::TcpListener,
+            thread,
+        };
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            // One warm-up request followed by three independently measured streams.
+            for index in 0..4 {
+                let (stream, _) = listener.accept().unwrap();
+                let mut reader = BufReader::new(stream);
+                let _ = read_fake_proxy_request(&mut reader);
+                let body = if index == 0 {
+                    vec![0x11; 1024]
+                } else {
+                    vec![0x33; 32 * 1024]
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let stream = reader.get_mut();
+                stream.write_all(response.as_bytes()).unwrap();
+                stream.write_all(&body).unwrap();
+                stream.flush().unwrap();
+            }
+        });
+        let proxy_url = format!("http://127.0.0.1:{port}");
+        let proxy = Proxy::new(&proxy_url).unwrap();
+        let agent: Agent = Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_secs(3)))
+            .build()
+            .into();
+        let client = BenchmarkHttpClient {
+            agent,
+            latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
+            download_url: Url::parse("http://measurement.invalid/download").unwrap(),
+            upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
+            proxy_url,
+            request_timeout: Duration::from_secs(3),
+        };
+
+        let mut progress = Vec::new();
+        let result = client
+            .download_profile(
+                96 * 1024,
+                Duration::from_secs(6),
+                3,
+                1024,
+                |snapshot| progress.push(snapshot),
+            )
+            .unwrap();
+        assert_eq!(result.transferred_bytes, Some(96 * 1024));
+        assert!(!result.partial);
+        assert_eq!(progress.last().unwrap().transferred_bytes, 96 * 1024);
+        assert_eq!(progress.last().unwrap().target_bytes, 96 * 1024);
         server.join().unwrap();
     }
 
