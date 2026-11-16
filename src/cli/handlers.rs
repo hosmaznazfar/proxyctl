@@ -417,6 +417,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             latency_only,
             download_only,
             upload_only,
+            profile,
             download_bytes,
             upload_bytes,
             request_timeout_secs,
@@ -433,7 +434,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             let startup_timeout_ms = startup_timeout_secs
                 .checked_mul(1_000)
                 .ok_or_else(|| anyhow::anyhow!("startup timeout is too large"))?;
-            let mut settings = crate::services::benchmark::default_settings();
+            let selected_profile = match profile.as_str() {
+                "quick" => crate::domain::BenchmarkProfile::Quick,
+                "accurate" => crate::domain::BenchmarkProfile::Accurate,
+                _ => unreachable!("clap validates benchmark profile"),
+            };
+            let mut settings =
+                crate::services::benchmark::default_settings_for(selected_profile);
             settings.proxy_type = match proxy_type.as_str() {
                 "socks5" => crate::domain::BenchmarkProxyType::Socks5,
                 "http" => crate::domain::BenchmarkProxyType::Http,
@@ -442,8 +449,12 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             settings.latency_url = latency_url;
             settings.download_url = download_url;
             settings.upload_url = upload_url;
-            settings.download_bytes = download_bytes;
-            settings.upload_bytes = upload_bytes;
+            if let Some(bytes) = download_bytes {
+                settings.download_bytes = bytes;
+            }
+            if let Some(bytes) = upload_bytes {
+                settings.upload_bytes = bytes;
+            }
             settings.request_timeout_ms = request_timeout_ms;
             settings.latency_timeout_ms = latency_timeout_ms;
             settings.probe_concurrency = concurrency;
