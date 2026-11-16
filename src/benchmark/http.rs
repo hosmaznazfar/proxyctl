@@ -11,7 +11,9 @@ use url::Url;
 
 use crate::domain::{BenchmarkProxyType, BenchmarkSettings, throughput_bps};
 
-const MAX_PAYLOAD_BYTES: u64 = 1024 * 1024;
+const MAX_DOWNLOAD_BYTES: u64 = 32 * 1024 * 1024;
+const MAX_UPLOAD_BYTES: u64 = 1024 * 1024;
+const MAX_WARMUP_BYTES: u64 = 1024 * 1024;
 /// Three total attempts, matching the v2rayN retry budget.
 const DOWNLOAD_ATTEMPTS: usize = 3;
 /// Minimum body bytes required before a failed download can be retained as a partial sample.
@@ -106,6 +108,8 @@ pub struct BenchmarkHttpClient {
     latency_url: Url,
     download_url: Url,
     upload_url: Url,
+    proxy_url: String,
+    request_timeout: Duration,
 }
 
 impl BenchmarkHttpClient {
@@ -148,6 +152,8 @@ impl BenchmarkHttpClient {
             latency_url,
             download_url,
             upload_url,
+            proxy_url,
+            request_timeout: timeout,
         })
     }
 
@@ -169,6 +175,118 @@ impl BenchmarkHttpClient {
             transferred_bytes: None,
             partial: false,
         })
+    }
+
+    /// Measure a profile-bounded download. Warm-up traffic is discarded; measured
+    /// streams run concurrently and share one total byte budget.
+    pub fn download_profile<F>(
+        &self,
+        max_bytes: u64,
+        duration: Duration,
+        streams: usize,
+        warmup_bytes: u64,
+        mut progress: F,
+    ) -> Result<Measurement, MeasurementFailure>
+    where
+        F: FnMut(TransferProgress),
+    {
+        if max_bytes == 0
+            || duration.is_zero()
+            || !(1..=3).contains(&streams)
+            || warmup_bytes > MAX_WARMUP_BYTES
+        {
+            return Err(MeasurementFailure::InvalidResponse);
+        }
+
+        // Warm-up is deliberately best-effort and is excluded from the measurement clock.
+        if warmup_bytes > 0 {
+            let timeout = self.request_timeout.min(Duration::from_secs(2));
+            if let Ok(proxy) = Proxy::new(&self.proxy_url) {
+                let agent: Agent = Agent::config_builder()
+                    .proxy(Some(proxy))
+                    .timeout_global(Some(timeout))
+                    .build()
+                    .into();
+                if let Ok(mut response) = agent
+                    .get(self.download_url.as_str())
+                    .header("Accept-Encoding", "identity")
+                    .call()
+                {
+                    let mut discarded = Vec::new();
+                    let _ = response
+                        .body_mut()
+                        .as_reader()
+                        .take(warmup_bytes)
+                        .read_to_end(&mut discarded);
+                }
+            }
+        }
+
+        let started = Instant::now();
+        let base = max_bytes / streams as u64;
+        let remainder = max_bytes % streams as u64;
+        let per_attempt_timeout = (duration / DOWNLOAD_ATTEMPTS as u32)
+            .min(self.request_timeout)
+            .max(Duration::from_millis(1));
+
+        let results = std::thread::scope(|scope| {
+            let mut handles = Vec::with_capacity(streams);
+            for index in 0..streams {
+                let target = base + u64::from((index as u64) < remainder);
+                let proxy = match Proxy::new(&self.proxy_url) {
+                    Ok(proxy) => proxy,
+                    Err(_) => return vec![Err(MeasurementFailure::Unavailable)],
+                };
+                let agent: Agent = Agent::config_builder()
+                    .proxy(Some(proxy))
+                    .timeout_global(Some(per_attempt_timeout))
+                    .build()
+                    .into();
+                let worker = Self {
+                    agent,
+                    latency_url: self.latency_url.clone(),
+                    download_url: self.download_url.clone(),
+                    upload_url: self.upload_url.clone(),
+                    proxy_url: self.proxy_url.clone(),
+                    request_timeout: per_attempt_timeout,
+                };
+                handles.push(scope.spawn(move || worker.download(target, |_| {})));
+            }
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap_or(Err(MeasurementFailure::Unavailable)))
+                .collect::<Vec<_>>()
+        });
+
+        let mut received = 0_u64;
+        let mut longest = Duration::ZERO;
+        let mut last_failure = MeasurementFailure::Unavailable;
+        for result in results {
+            match result {
+                Ok(measurement) => {
+                    received = received.saturating_add(measurement.transferred_bytes.unwrap_or(0));
+                    longest = longest.max(measurement.duration);
+                }
+                Err(failure) => last_failure = failure,
+            }
+        }
+        received = received.min(max_bytes);
+        let elapsed = started.elapsed().max(longest);
+        if received >= max_bytes {
+            progress(TransferProgress::new(max_bytes, max_bytes, elapsed));
+            return Ok(Measurement {
+                value: throughput_bps(max_bytes, elapsed)
+                    .ok_or(MeasurementFailure::InvalidResponse)?,
+                duration: elapsed,
+                transferred_bytes: Some(max_bytes),
+                partial: false,
+            });
+        }
+        if received >= MIN_PARTIAL_DOWNLOAD_BYTES {
+            progress(TransferProgress::new(received, max_bytes, elapsed));
+            return partial_download_measurement(received, elapsed);
+        }
+        Err(last_failure)
     }
 
     /// Measure a bounded download through ureq's streaming response reader.
@@ -345,12 +463,24 @@ pub fn validate_settings(settings: &BenchmarkSettings) -> anyhow::Result<()> {
     validate_endpoint(&settings.download_url)?;
     validate_endpoint(&settings.upload_url)?;
     ensure!(
-        settings.download_bytes > 0 && settings.download_bytes <= MAX_PAYLOAD_BYTES,
-        "download sample must be between 1 byte and 1 MiB"
+        settings.download_bytes > 0 && settings.download_bytes <= MAX_DOWNLOAD_BYTES,
+        "download sample must be between 1 byte and 32 MiB"
     );
     ensure!(
-        settings.upload_bytes > 0 && settings.upload_bytes <= MAX_PAYLOAD_BYTES,
+        settings.upload_bytes > 0 && settings.upload_bytes <= MAX_UPLOAD_BYTES,
         "upload payload must be between 1 byte and 1 MiB"
+    );
+    ensure!(
+        settings.download_duration_ms > 0,
+        "download duration must be positive"
+    );
+    ensure!(
+        (1..=3).contains(&settings.download_streams),
+        "download streams must be between 1 and 3"
+    );
+    ensure!(
+        settings.warmup_bytes <= MAX_WARMUP_BYTES,
+        "download warm-up must not exceed 1 MiB"
     );
     ensure!(
         settings.request_timeout_ms > 0,
