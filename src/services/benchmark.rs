@@ -45,7 +45,7 @@ pub(super) const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub(super) const MAX_PROBE_CONCURRENCY: usize = 3;
 
 mod options;
-pub use options::{BenchmarkMetricSelection, BenchmarkOptions, METHODOLOGY, default_settings};
+pub use options::{BenchmarkMetricSelection, BenchmarkOptions, METHODOLOGY, default_settings, default_settings_for};
 
 /// Run the requested benchmark scope and persist each node/core sample batch after its core exits.
 pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow::Result<u64> {
@@ -648,14 +648,20 @@ fn measure_interruptibly(
             let result = match metric {
                 BenchmarkMetric::TcpPing => Err(MeasurementFailure::InvalidResponse),
                 BenchmarkMetric::Latency => client.latency(),
-                BenchmarkMetric::Download => client.download(settings.download_bytes, |progress| {
-                    let rate = progress.bits_per_second.unwrap_or_default() / 1_000_000.0;
-                    print!(
-                        "\r{label}: {}/{} bytes ({rate:.2} Mbps)",
-                        progress.transferred_bytes, progress.target_bytes
-                    );
-                    let _ = std::io::stdout().flush();
-                }),
+                BenchmarkMetric::Download => client.download_profile(
+                    settings.download_bytes,
+                    Duration::from_millis(settings.download_duration_ms),
+                    usize::from(settings.download_streams),
+                    settings.warmup_bytes,
+                    |progress| {
+                        let rate = progress.bits_per_second.unwrap_or_default() / 1_000_000.0;
+                        print!(
+                            "\r{label}: {}/{} bytes ({rate:.2} Mbps)",
+                            progress.transferred_bytes, progress.target_bytes
+                        );
+                        let _ = std::io::stdout().flush();
+                    },
+                ),
                 BenchmarkMetric::Upload => client.upload(settings.upload_bytes),
             };
             let _ = sender.send(result);
