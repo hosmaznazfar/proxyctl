@@ -561,11 +561,18 @@ Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listene
 
 ## Benchmark performance optimization
 
-**Approved for staged implementation; not yet implemented.** The current benchmark starts one core process per node/core pair and performs samples sequentially. The optimization target is to batch compatible nodes per core while still running only one managed core process at a time. Latency probes will use bounded concurrency (initial target 3), preserve three samples and median aggregation, and follow the Throne latency reference. Download/upload will use v2rayN as the user's throughput-quality reference, but transfers remain sequential by default to avoid competing transfers distorting rates.
+**Core batching and the Quick/Accurate profile implementation are committed; profile verification is pending user-run checks.** Proxyctl uses one managed core process per core batch, bounded-concurrent latency/TCP probes (maximum three workers), three samples and median aggregation, independent latency/throughput timeouts, explicit cancellation records, and persisted run summaries.
 
-The full plan defines adapter batch configuration, per-listener readiness, failure isolation, independent latency/throughput timeouts, cancellation, progress, run metadata, offline tests, and separately approved real-world comparison. See [Benchmark Optimization Plan](BENCHMARK_OPTIMIZATION_PLAN.md).
+Throughput profiles:
+- **Quick (default):** one download stream, 1 MiB aggregate cap, 5-second budget, no warm-up.
+- **Accurate:** three concurrent download streams, 8 MiB aggregate cap, 20-second budget, and a best-effort 64 KiB warm-up excluded from timing.
+- Download cap hard limit: 32 MiB. Upload remains sequential and capped at 1 MiB.
+- The three-attempt fresh-connection retry budget is bounded by the profile's total download budget. Partial results still require at least 16 KiB and are marked explicitly.
+- Effective profile and settings are persisted; legacy settings deserialize to Quick defaults.
 
-Until implementation stages pass local verification, the existing scheduler remains authoritative. No stage may start multiple managed cores concurrently, alter system networking, enable TUN, or contact public test endpoints during automated tests.
+CLI examples: `proxyctl test --all-cores --profile quick` and `proxyctl test --node 12 --core xray --profile accurate`. The implementation and acceptance criteria are tracked in [BENCHMARK_OPTIMIZATION_PLAN.md](BENCHMARK_OPTIMIZATION_PLAN.md) and [BENCHMARK_DESIGN.md](BENCHMARK_DESIGN.md).
+
+Do not claim profile verification until the user reports formatting, Clippy, tests, and release build. No automated test contacts public endpoints, runs multiple managed cores, changes system networking, or activates TUN.
 
 
 - **Xray WebSocket Host schema correction:** Xray Trojan/VLESS/VMess WebSocket outbounds now serialize the imported WebSocket Host to the native `wsSettings.host` field, matching v2rayN's Xray configuration model. SNI remains independently mapped to `tlsSettings.serverName`, and certificate verification remains enabled by default. Regression coverage includes a Trojan + WS + TLS fixture with distinct Host and SNI values. Local Rust checks are pending user verification.
