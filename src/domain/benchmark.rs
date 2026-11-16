@@ -289,6 +289,10 @@ mod tests {
             }"#,
         )
         .unwrap();
+        assert_eq!(settings.profile, BenchmarkProfile::Quick);
+        assert_eq!(settings.download_duration_ms, 5_000);
+        assert_eq!(settings.download_streams, 1);
+        assert_eq!(settings.warmup_bytes, 0);
         assert_eq!(settings.latency_timeout_ms, 5_000);
         assert_eq!(settings.probe_concurrency, 3);
     }
