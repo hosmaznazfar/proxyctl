@@ -214,28 +214,27 @@ enum Command {
         /// Run only upload throughput measurements.
         #[arg(long, group = "metric_selection")]
         upload_only: bool,
+        /// Throughput profile: quick (default) or accurate.
+        #[arg(long, value_parser = ["quick", "accurate"], default_value = "quick")]
+        profile: String,
         /// Local benchmark inbound protocol (default SOCKS5; HTTP remains available).
         #[arg(long, value_parser = ["socks5", "http"], default_value = "socks5")]
         proxy_type: String,
         /// HTTPS URL used for real HTTP ping through the selected core.
         #[arg(long, default_value = "https://www.google.com/generate_204")]
         latency_url: String,
-        /// HTTPS URL of a download test object (only the first 1 MiB are measured by default).
+        /// HTTPS URL of a download test object (profile default: 1 MiB quick, 8 MiB accurate).
         #[arg(long, default_value = "https://cachefly.cachefly.net/10mb.test")]
         download_url: String,
         /// HTTPS endpoint accepting a POST body for uploads.
         #[arg(long, default_value = "https://speed.cloudflare.com/__up")]
         upload_url: String,
-        /// Number of bytes to sample per download (default and maximum 1 MiB).
-        #[arg(
-            long = "download-max-bytes",
-            alias = "download-bytes",
-            default_value_t = 1_048_576
-        )]
-        download_bytes: u64,
-        /// Upload payload size for each sample (default and maximum 1 MiB).
-        #[arg(long, default_value_t = 1_048_576)]
-        upload_bytes: u64,
+        /// Override the profile's download byte budget (maximum 32 MiB).
+        #[arg(long = "download-max-bytes", alias = "download-bytes")]
+        download_bytes: Option<u64>,
+        /// Override the profile's upload payload size (maximum 1 MiB).
+        #[arg(long)]
+        upload_bytes: Option<u64>,
         /// Maximum duration of each download/upload HTTP request, in seconds (default 60).
         #[arg(long, alias = "throughput-timeout-secs", default_value_t = 60)]
         request_timeout_secs: u64,
@@ -737,6 +736,26 @@ mod tests {
     }
 
     #[test]
+    fn test_command_defaults_to_quick_profile_and_accepts_accurate_override() {
+        let default = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
+        assert!(matches!(
+            default.command,
+            Some(Command::Test { ref profile, download_bytes: None, upload_bytes: None, .. })
+                if profile == "quick"
+        ));
+        let accurate = Cli::try_parse_from([
+            "proxyctl", "test", "--all-cores", "--profile", "accurate"
+        ]).unwrap();
+        assert!(matches!(
+            accurate.command,
+            Some(Command::Test { ref profile, .. }) if profile == "accurate"
+        ));
+        assert!(Cli::try_parse_from([
+            "proxyctl", "test", "--all-cores", "--profile", "invalid"
+        ]).is_err());
+    }
+
+    #[test]
     fn test_command_defaults_to_socks5_and_accepts_http_override() {
         let default = Cli::try_parse_from(["proxyctl", "test", "--all-cores"]).unwrap();
         assert!(
@@ -898,8 +917,8 @@ mod tests {
                 all_cores: false,
                 ref node,
                 core: Some(ref core),
-                download_bytes: 1_048_576,
-                upload_bytes: 1_048_576,
+                download_bytes: Some(1_048_576),
+                upload_bytes: Some(1_048_576),
                 ..
             }) if node == &vec!["7".to_owned()] && core == "sing-box"
         ));
