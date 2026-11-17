@@ -297,9 +297,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
                 return Err("VLESS TCP headerType is only valid for TCP transport".into());
             }
             if !header_type.eq_ignore_ascii_case("none") {
-                return Err(
-                    "VLESS TCP header types other than none are not supported yet".into(),
-                );
+                return Err("VLESS TCP header types other than none are not supported yet".into());
             }
         }
         if option_string(node, "encryption").is_some_and(|value| value != "none") {
