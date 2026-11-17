@@ -100,6 +100,11 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
         let kind = read_u16(bytes, offset + 4)?;
         let flags = read_u16(bytes, offset + 6)?;
         let sequence = read_u32(bytes, offset + 8)?;
+        let sender_port_id = read_u32(bytes, offset + 12)?;
+        ensure!(
+            sender_port_id == 0,
+            "netlink message was not sent by the kernel"
+        );
         ensure!(
             length >= NLMSG_HEADER_LEN && length <= bytes.len() - offset,
             "netlink message has an invalid length"
@@ -426,6 +431,23 @@ mod tests {
         assert!(accumulator
             .push_datagram(&message(NLMSG_DONE, 7, &[]))
             .is_err());
+    }
+
+    #[test]
+    fn rejects_non_kernel_netlink_sender_port_ids() {
+        let mut response = message(NLMSG_DONE, 7, &[]);
+        response[12..16].copy_from_slice(&42u32.to_ne_bytes());
+        assert!(decode_datagram(&response, 7).is_err());
+    }
+
+    #[test]
+    fn accumulator_enforces_datagram_count_limit() {
+        let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
+        let noop = message(NLMSG_NOOP, 7, &[]);
+        for _ in 0..MAX_DUMP_DATAGRAMS {
+            accumulator.push_datagram(&noop).unwrap();
+        }
+        assert!(accumulator.push_datagram(&noop).is_err());
     }
 
     #[test]
