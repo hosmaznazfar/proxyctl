@@ -15,6 +15,38 @@ pub(super) enum Separator {
     Dotted(usize),
 }
 
+
+/// Read the live width of stdout's terminal, falling back when output is redirected.
+fn terminal_width() -> usize {
+    use std::io::IsTerminal;
+
+    if std::io::stdout().is_terminal() {
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+
+            let mut size = unsafe { std::mem::zeroed::<libc::winsize>() };
+            // TIOCGWINSZ only writes the winsize structure supplied above.
+            let result = unsafe {
+                libc::ioctl(
+                    std::io::stdout().as_raw_fd(),
+                    libc::TIOCGWINSZ,
+                    &mut size,
+                )
+            };
+            if result == 0 && size.ws_col >= 60 {
+                return usize::from(size.ws_col);
+            }
+        }
+    }
+
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width >= 60)
+        .unwrap_or(100)
+}
+
 /// Apply terminal-aware word wrapping and the common rounded table theme.
 /// Explicit separators allow grouped reports to distinguish group and section boundaries.
 pub(super) fn apply_formatting(
@@ -28,11 +60,7 @@ pub(super) fn apply_formatting(
         return;
     }
 
-    let terminal_width = std::env::var("COLUMNS")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|width| *width >= 60)
-        .unwrap_or(100);
+    let terminal_width = terminal_width();
     let border_width = columns.saturating_mul(3).saturating_add(1);
     let available = terminal_width.saturating_sub(border_width).max(columns * 8);
     let preferred_total = preferred_widths.iter().sum::<usize>();
