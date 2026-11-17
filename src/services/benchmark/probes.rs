@@ -45,6 +45,7 @@ pub(super) fn execute_latency_batch(
             let (sender, receiver) = mpsc::channel();
             thread::scope(|scope| {
                 for (local_index, entry) in chunk.iter().enumerate() {
+                    if succeeded[offset + local_index] { continue; }
                     let sender = sender.clone();
                     scope.spawn(move || {
                         let result =
@@ -55,9 +56,10 @@ pub(super) fn execute_latency_batch(
                     });
                 }
                 drop(sender);
+                let expected = chunk.iter().enumerate().filter(|(local, _)| !succeeded[offset + *local]).count();
                 let mut received = 0;
                 let mut stopped = false;
-                while received < chunk.len() {
+                while received < expected {
                     if CANCELLED.load(Ordering::Relaxed) && !stopped {
                         if let Some(process) = process.take() {
                             let _ = process.stop();
@@ -69,7 +71,7 @@ pub(super) fn execute_latency_batch(
                             received += 1;
                             let entry = &entries[index];
                             let label = format!(
-                                "run #{run_id} node #{} {core} real latency sample {sample_index}/{SAMPLES_PER_METRIC}",
+                                "run #{run_id} node #{} {core} real latency attempt {sample_index}/{SAMPLES_PER_METRIC}",
                                 entry.display_number
                             );
                             let sample = match result {
@@ -141,6 +143,7 @@ pub(super) fn execute_tcp_ping_batch(
     display_numbers: &BTreeMap<u64, usize>,
     concurrency: usize,
 ) -> anyhow::Result<()> {
+    let mut succeeded = std::collections::BTreeSet::new();
     for sample_index in 1..=SAMPLES_PER_METRIC {
         if CANCELLED.load(Ordering::Relaxed) {
             break;
@@ -149,6 +152,7 @@ pub(super) fn execute_tcp_ping_batch(
             let batch_samples = thread::scope(|scope| {
                 let (sender, receiver) = mpsc::channel();
                 for record in chunk {
+                    if succeeded.contains(&record.id) { continue; }
                     let sender = sender.clone();
                     scope.spawn(move || {
                         let result =
@@ -157,8 +161,9 @@ pub(super) fn execute_tcp_ping_batch(
                     });
                 }
                 drop(sender);
-                let mut batch_samples = Vec::with_capacity(chunk.len());
-                for _ in 0..chunk.len() {
+                let expected = chunk.iter().filter(|record| !succeeded.contains(&record.id)).count();
+                let mut batch_samples = Vec::with_capacity(expected);
+                for _ in 0..expected {
                     if let Ok((node_id, result)) = receiver.recv() {
                         let context = SampleContext {
                             run_id,
@@ -168,11 +173,12 @@ pub(super) fn execute_tcp_ping_batch(
                         };
                         let display_number = display_numbers[&node_id];
                         let label = format!(
-                            "run #{run_id} node #{display_number} direct TCP ping sample {sample_index}/{SAMPLES_PER_METRIC}"
+                            "run #{run_id} node #{display_number} direct TCP ping attempt {sample_index}/{SAMPLES_PER_METRIC}"
                         );
                         let sample = match result {
                             Ok(measurement) => {
                                 println!("{label}: {:.2} ms", measurement.value);
+                                succeeded.insert(node_id);
                                 successful_sample(
                                     &context,
                                     BenchmarkMetric::TcpPing,
