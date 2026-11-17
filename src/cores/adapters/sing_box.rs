@@ -381,5 +381,18 @@ mod config_contract_tests {
         assert_eq!(tun["inbounds"][1]["type"], "tun");
         assert_eq!(tun["inbounds"][1]["auto_route"], false);
         assert_eq!(tun["inbounds"][1]["dns_mode"], "disabled");
+
+        let mark = super::super::TunOutboundMark::new(0x42, 0xff).unwrap();
+        let marked: serde_json::Value = serde_json::from_slice(
+            &SingBoxAdapter
+                .generate_tun_activation_config_with_mark(&node, 43128, mark)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
+        assert_eq!(marked["outbounds"][0]["routing_mark"], 0x42);
+        assert!(marked["inbounds"][0].get("routing_mark").is_none());
+        assert!(marked["inbounds"][1].get("routing_mark").is_none());
+        assert!(activation["outbounds"][0].get("routing_mark").is_none());
     }
 }
