@@ -350,7 +350,7 @@ A Linux read-only probe now resolves fixed IPv4 and IPv6 destinations with the p
 
 ## Core-scoped outbound socket marks
 
-The adapter contract now requires a validated non-zero mark/mask as an argument to every TUN configuration request. There is no unmarked TUN-generation path in the adapter API; unsupported adapters fail closed by default when they lack a proven outbound-scoped native option.
+The adapter contract now requires a validated non-zero mark/mask as an argument to every TUN configuration request; the mark value is bounded to the common signed 32-bit range accepted by Xray's native socket option. There is no unmarked TUN-generation path in the adapter API; unsupported adapters fail closed by default when they lack a proven outbound-scoped native option.
 
 - **sing-box:** the mark is written to `outbounds[proxy].routing_mark`, using its native outbound dial option. It is not added to inbound listeners or ordinary activation/benchmark configs.
 - **Xray:** the mark is written to `outbounds[proxy].streamSettings.sockopt.mark`, using the outbound stream socket options. It is not written to inbound socket options.
