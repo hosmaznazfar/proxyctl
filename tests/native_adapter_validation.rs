@@ -8,7 +8,7 @@
 
 use base64::{Engine as _, engine::general_purpose};
 use proxyctl::{
-    cores::{CoreId, adapters, core_binary_path},
+    cores::{CoreId, adapters, adapters::TunOutboundMark, core_binary_path},
     parser::parse_proxy_url,
 };
 
@@ -35,6 +35,8 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
         .collect::<Vec<_>>();
 
     let fixtures = fixtures();
+    let tun_mark = TunOutboundMark::new(0x100, 0xffff)
+        .expect("native TUN validation mark should satisfy the shared contract");
     let mut validated = 0usize;
     let mut benchmark_configs_validated = 0usize;
     let mut activation_configs_validated = 0usize;
@@ -131,11 +133,21 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
                 );
             }
             activation_configs_validated += 1;
+            if *core == CoreId::Mihomo {
+                assert!(
+                    adapter
+                        .generate_tun_activation_config(&node, 43129, tun_mark)
+                        .is_err(),
+                    "Mihomo must fail closed until outbound-only socket marking is verified"
+                );
+                continue;
+            }
+
             let tun_generated = adapter
-                .generate_tun_activation_config(&node, 43129)
+                .generate_tun_activation_config(&node, 43129, tun_mark)
                 .unwrap_or_else(|error| {
                     panic!(
-                        "fixture '{}' TUN config generation failed for {core}: {error:#}",
+                        "fixture '{}' marked TUN config generation failed for {core}: {error:#}",
                         fixture.name
                     )
                 });
@@ -157,7 +169,7 @@ fn validates_supported_adapter_fixtures_with_native_core_binaries() {
     }
 
     println!(
-        "Native validation succeeded for {validated} standard configs, {benchmark_configs_validated} loopback benchmark configs, {activation_configs_validated} shared SOCKS5/HTTP activation configs, and {tun_configs_validated} native TUN activation configs across {} fixtures.",
+        "Native validation succeeded for {validated} standard configs, {benchmark_configs_validated} loopback benchmark configs, {activation_configs_validated} shared SOCKS5/HTTP activation configs, and {tun_configs_validated} marked native TUN activation configs (sing-box/Xray; Mihomo fail-closed) across {} fixtures.",
         fixtures.len()
     );
 }
