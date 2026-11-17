@@ -293,12 +293,25 @@ pub(super) fn print_benchmark_report(
 ) {
     use crate::services::display_config::DisplayField as F;
     use reporting::ReportMode;
+    use tabled::settings::{
+        Modify, Width,
+        object::Columns,
+        style::{HorizontalLine, Style},
+        themes::Theme,
+    };
 
     let fields = config.fields();
+    let mut builder = Builder::default();
+    builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
+
     if report.mode == ReportMode::Compare {
-        let mut builder = Builder::default();
-        builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
-        for comparison in &report.comparisons {
+        let mut comparisons = report.comparisons.iter().collect::<Vec<_>>();
+        comparisons.sort_by(|left, right| {
+            let left_number = display_numbers.get(&left.node.id).copied().unwrap_or(left.node.id as usize);
+            let right_number = display_numbers.get(&right.node.id).copied().unwrap_or(right.node.id as usize);
+            left_number.cmp(&right_number).then_with(|| report_target_order(&left.target).cmp(&report_target_order(&right.target)))
+        });
+        for comparison in comparisons {
             if comparison.target == "direct" && !fields.contains(&F::TcpPing) {
                 continue;
             }
@@ -319,86 +332,164 @@ pub(super) fn print_benchmark_report(
         }
         if builder.count_records() == 1 {
             println!("No completed benchmark comparisons found.");
-        } else {
-            println!("{}", builder.build().with(Style::rounded()));
+            return;
         }
+    } else {
+        let mut nodes = report.nodes.iter().collect::<Vec<_>>();
+        nodes.sort_by_key(|node| display_numbers.get(&node.node.id).copied().unwrap_or(node.node.id as usize));
+        let mut separator_rows = Vec::new();
+
+        for (node_index, node) in nodes.iter().enumerate() {
+            let rows_before_node = builder.count_records();
+            if node.runs.is_empty() {
+                builder.push_record(report_empty_node_row(&fields, &node.node, display_numbers));
+            } else {
+                let mut targets = node
+                    .runs
+                    .iter()
+                    .flat_map(|run| run.targets.iter().map(|target| target.target.clone()))
+                    .collect::<Vec<_>>();
+                targets.sort_by_key(|target| report_target_order(target));
+                targets.dedup();
+
+                // Group by core first, then keep each core's runs newest-first.
+                for target_name in targets {
+                    for run in &node.runs {
+                        let Some(target) = run.targets.iter().find(|item| item.target == target_name)
+                        else {
+                            continue;
+                        };
+                        if target.target == "direct" && !fields.contains(&F::TcpPing) {
+                            continue;
+                        }
+                        builder.push_record(report_row(
+                            &fields,
+                            &node.node,
+                            display_numbers,
+                            ReportRowData {
+                                target: &target.target,
+                                core_version: target.core_version.as_deref(),
+                                metrics: &target.metrics,
+                                run_id: Some(run.run.id),
+                                tested: run.run.completed_at.or(Some(run.run.started_at)),
+                                run_status: Some(run.run.status),
+                                verbose,
+                            },
+                        ));
+                    }
+                }
+            }
+
+            if builder.count_records() == rows_before_node {
+                continue;
+            }
+            if node_index + 1 < nodes.len() {
+                separator_rows.push(builder.count_records());
+            }
+        }
+
+        if builder.count_records() == 1 {
+            println!(
+                "{}",
+                match report.mode {
+                    ReportMode::Latest => "No benchmark results.",
+                    ReportMode::History => "No benchmark history.",
+                    ReportMode::Compare => "No completed benchmark comparisons found.",
+                }
+            );
+            return;
+        }
+
+        let terminal_width = std::env::var("COLUMNS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|width| *width >= 60)
+            .unwrap_or(100);
+        let metric_columns = fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let fixed_width = fields
+            .iter()
+            .filter(|field| !matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
+            .map(|field| report_column_width(*field))
+            .sum::<usize>();
+        let border_width = fields.len().saturating_mul(3).saturating_add(1);
+        let metric_width = if metric_columns.is_empty() {
+            24
+        } else {
+            terminal_width
+                .saturating_sub(fixed_width + border_width)
+                .checked_div(metric_columns.len())
+                .unwrap_or(18)
+                .clamp(12, 36)
+        };
+
+        let mut table = builder.build();
+        for (index, field) in fields.iter().enumerate() {
+            let width = if matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload) {
+                metric_width
+            } else {
+                report_column_width(*field)
+            };
+            table.with(Modify::new(Columns::single(index)).with(Width::wrap(width).keep_words(false)));
+        }
+
+        let mut theme = Theme::from_style(Style::rounded());
+        for row in separator_rows {
+            theme.insert_horizontal_line(row, HorizontalLine::inherit(Style::rounded()));
+        }
+        table.with(theme);
+        println!("{table}");
         return;
     }
 
-    let mut found_any = false;
-    for node in &report.nodes {
-        let mut builder = Builder::default();
-        builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
+    let mut table = builder.build();
+    apply_report_column_widths(&mut table, &fields);
+    println!("{}", table.with(Style::rounded()));
+}
 
-        if node.runs.is_empty() {
-            builder.push_record(report_empty_node_row(&fields, &node.node, display_numbers));
-        } else {
-            let mut targets = node
-                .runs
-                .iter()
-                .flat_map(|run| run.targets.iter().map(|target| target.target.clone()))
-                .collect::<Vec<_>>();
-            targets.sort_by_key(|target| match target.as_str() {
-                "sing-box" => (0, target.clone()),
-                "xray" => (1, target.clone()),
-                "mihomo" => (2, target.clone()),
-                "direct" => (3, target.clone()),
-                _ => (4, target.clone()),
-            });
-            targets.dedup();
+fn report_target_order(target: &str) -> (u8, &str) {
+    let order = match target {
+        "sing-box" => 0,
+        "xray" => 1,
+        "mihomo" => 2,
+        "direct" => 3,
+        _ => 4,
+    };
+    (order, target)
+}
 
-            // Keep all runs for one core adjacent, newest run first within that core.
-            for target_name in targets {
-                for run in &node.runs {
-                    let Some(target) = run.targets.iter().find(|item| item.target == target_name)
-                    else {
-                        continue;
-                    };
-                    if target.target == "direct" && !fields.contains(&F::TcpPing) {
-                        continue;
-                    }
-                    builder.push_record(report_row(
-                        &fields,
-                        &node.node,
-                        display_numbers,
-                        ReportRowData {
-                            target: &target.target,
-                            core_version: target.core_version.as_deref(),
-                            metrics: &target.metrics,
-                            run_id: Some(run.run.id),
-                            tested: run.run.completed_at.or(Some(run.run.started_at)),
-                            run_status: Some(run.run.status),
-                            verbose,
-                        },
-                    ));
-                }
-            }
-        }
-
-        if builder.count_records() > 1 {
-            found_any = true;
-            let number = display_numbers
-                .get(&node.node.id)
-                .copied()
-                .unwrap_or(node.node.id as usize);
-            if report.nodes.len() > 1 {
-                println!("Node #{number}");
-            }
-            // Each node gets its own bordered table, giving history a clear separator.
-            println!("{}", builder.build().with(Style::rounded()));
-            println!();
-        }
+fn report_column_width(field: crate::services::display_config::DisplayField) -> usize {
+    use crate::services::display_config::DisplayField as F;
+    match field {
+        F::Node => 4,
+        F::Core => 8,
+        F::Version => 10,
+        F::Server | F::Name => 16,
+        F::Protocol => 10,
+        F::Port => 5,
+        F::Status => 10,
+        F::Samples | F::Failures => 7,
+        F::Run => 6,
+        F::Tested => 12,
+        F::Latency | F::TcpPing | F::Download | F::Upload => 18,
     }
+}
 
-    if !found_any {
-        println!(
-            "{}",
-            match report.mode {
-                ReportMode::Latest => "No benchmark results.",
-                ReportMode::History => "No benchmark history.",
-                ReportMode::Compare => "No completed benchmark comparisons found.",
-            }
-        );
+fn apply_report_column_widths(
+    table: &mut tabled::Table,
+    fields: &[crate::services::display_config::DisplayField],
+) {
+    use crate::services::display_config::DisplayField as F;
+    use tabled::settings::{Modify, Width, object::Columns};
+    for (index, field) in fields.iter().enumerate() {
+        table.with(Modify::new(Columns::single(index)).with(Width::wrap(report_column_width(*field)).keep_words(false)));
+        if matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload) {
+            table.with(Modify::new(Columns::single(index)).with(Width::wrap(18).keep_words(false)));
+        }
     }
 }
 
