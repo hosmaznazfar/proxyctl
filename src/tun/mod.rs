@@ -24,6 +24,8 @@ pub mod resource_snapshot;
 pub mod route_policy;
 pub mod service_manager;
 #[cfg(target_os = "linux")]
+pub mod socket_ownership;
+#[cfg(target_os = "linux")]
 pub mod supervisor;
 
 #[cfg(target_os = "linux")]
