@@ -509,8 +509,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 },
             )?;
         }
-        Command::Nodes { .. }
-        | Command::Cores
+        Command::Cores
         | Command::Setup { .. }
         | Command::Update { .. }
         | Command::Use { .. }
