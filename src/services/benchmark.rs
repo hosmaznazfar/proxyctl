@@ -1078,7 +1078,7 @@ mod tests {
             ),
             (
                 MeasurementFailure::IncompleteResponse,
-                BenchmarkSampleStatus::Unavailable,
+                BenchmarkSampleStatus::Incomplete,
             ),
             (
                 MeasurementFailure::ReadFailed,
