@@ -346,3 +346,14 @@ The journal recovery classifier now distinguishes unresolved intent, applied res
 ## Marked physical-egress preflight evidence
 
 A Linux read-only probe now resolves fixed IPv4 and IPv6 destinations with the planned core socket mark using bounded `ip -j route get` invocations. It accepts only one unambiguous result per family, requires the main routing table, resolves the output interface to the current sysfs name/ifindex inventory, rejects the planned TUN interface, loopback, TUN-kind links, and interfaces without a sysfs hardware-device association. The evidence records the mark/mask, destination, gateway, interface name/index, and table. This is a preflight snapshot only: it neither sends traffic nor proves that a core actually applies `SO_MARK`. Core adapter mark configuration and live end-to-end readiness remain separate mandatory gates. IPv4 or IPv6 lookup failure blocks readiness; no family is silently skipped. Tests use synthetic JSON and temporary sysfs fixtures only.
+
+
+## Core-scoped outbound socket marks
+
+The adapter contract now has a separate marked-TUN configuration entry point. It requires a non-zero mark that fits the non-zero policy mask and fails closed by default when an adapter has no proven outbound-scoped option.
+
+- **sing-box:** the mark is written to `outbounds[proxy].routing_mark`, using its native outbound dial option. It is not added to inbound listeners or ordinary activation/benchmark configs.
+- **Xray:** the mark is written to `outbounds[proxy].streamSettings.sockopt.mark`, using the outbound stream socket options. It is not written to inbound socket options.
+- **Mihomo:** marked TUN configuration remains unsupported. The global routing-mark option has not yet been demonstrated to have the required proxy-outbound-only scope for the pinned native version, so Proxyctl deliberately does not guess or emit it.
+
+Synthetic adapter tests assert the exact location and absence of marks on inbounds and ordinary configs. These tests prove generated structure only; native binary validation against the pinned releases and runtime socket-mark observation are still required. A generated mark is not proof that the running process applied it. The readiness gate must remain closed until the mark can be observed on actual outbound sockets and both marked route lookups resolve to the intended physical egress. TUN activation remains disabled.
