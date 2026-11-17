@@ -828,6 +828,58 @@ mod tests {
     }
 
     #[test]
+    fn permanent_purge_removes_node_samples_and_preserves_shared_run_data() {
+        let directory = tempdir().unwrap();
+        let database = NodeDatabase::open(directory.path().join("proxyctl.redb")).unwrap();
+        database.add_node(&sample_node()).unwrap();
+        let second = parse_proxy_url("vless://uuid@second.example:443").unwrap();
+        database.add_node(&second).unwrap();
+
+        let mut run = sample_run();
+        run.node_ids = vec![1, 2];
+        let run_id = database.start_benchmark_run(run).unwrap();
+        database.record_benchmark_sample(sample_value(run_id)).unwrap();
+        let mut second_sample = sample_value(run_id);
+        second_sample.id = 0;
+        second_sample.node_id = 2;
+        database.record_benchmark_sample(second_sample).unwrap();
+        database.finish_benchmark_run(run_id, BenchmarkRunStatus::Completed, 2, None).unwrap();
+        database.soft_delete(1).unwrap();
+
+        let preview = database.purge_deleted_nodes(u64::MAX, false).unwrap();
+        assert_eq!(preview.eligible_nodes, 1);
+        assert_eq!(preview.purged_nodes, 0);
+        assert_eq!(database.list_all_benchmark_samples().unwrap().len(), 2);
+
+        let applied = database.purge_deleted_nodes(u64::MAX, true).unwrap();
+        assert_eq!(applied.purged_nodes, 1);
+        assert_eq!(applied.removed_samples, 1);
+        assert_eq!(applied.removed_runs, 0);
+        assert!(database.get_node(1).unwrap().is_none());
+        assert_eq!(database.list_nodes(false).unwrap().len(), 1);
+        assert_eq!(database.list_all_benchmark_samples().unwrap().len(), 1);
+        let retained_run = database.get_benchmark_run(run_id).unwrap().unwrap();
+        assert_eq!(retained_run.node_ids, vec![2]);
+        assert_eq!(database.add_node(&sample_node()).unwrap(), AddNodeOutcome::Added(3));
+    }
+
+    #[test]
+    fn permanent_purge_skips_nodes_in_running_benchmarks() {
+        let directory = tempdir().unwrap();
+        let database = NodeDatabase::open(directory.path().join("proxyctl.redb")).unwrap();
+        database.add_node(&sample_node()).unwrap();
+        let run_id = database.start_benchmark_run(sample_run()).unwrap();
+        database.soft_delete(1).unwrap();
+
+        let summary = database.purge_deleted_nodes(u64::MAX, true).unwrap();
+        assert_eq!(summary.eligible_nodes, 1);
+        assert_eq!(summary.skipped_running, 1);
+        assert_eq!(summary.purged_nodes, 0);
+        assert!(database.get_node(1).unwrap().is_some());
+        assert_eq!(database.get_benchmark_run(run_id).unwrap().unwrap().status, BenchmarkRunStatus::Running);
+    }
+
+    #[test]
     fn soft_deleted_nodes_can_be_restored() {
         let directory = tempdir().unwrap();
         let database = NodeDatabase::open(directory.path().join("proxyctl.redb")).unwrap();
