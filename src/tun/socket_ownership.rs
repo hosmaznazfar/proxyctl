@@ -7,7 +7,10 @@
 use anyhow::{Context, Result, ensure};
 use std::{collections::BTreeSet, fs, path::Path};
 
-use super::process::{ProcessHandle, ProcessIdentity};
+use super::{
+    process::{ProcessHandle, ProcessIdentity},
+    socket_diag_records::SocketDiagnosticRecord,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessSocketSnapshot {
@@ -20,6 +23,52 @@ pub struct ProcessSocketSnapshot {
 /// Identity is checked before and after walking procfs to reject PID reuse and process-exit
 /// races. The caller must still match returned inodes against privileged INET_DIAG records and
 /// must not accept a mark unless the diagnostic record itself was successfully obtained.
+
+/// Attribute marked INET diagnostic records to one stable process socket snapshot.
+///
+/// This is deliberately candidate evidence only: inode ownership proves that a socket
+/// descriptor belongs to the process, not that it is a proxy-outbound socket. The caller
+/// must perform protocol/peer-direction classification and a live process identity check
+/// before using any result as readiness evidence.
+pub fn attribute_process_socket_marks(
+    before: &ProcessSocketSnapshot,
+    after: &ProcessSocketSnapshot,
+    records: &[SocketDiagnosticRecord],
+    expected_mark: u32,
+    mark_mask: u32,
+) -> Result<Vec<SocketDiagnosticRecord>> {
+    ensure!(
+        before.process == after.process && before.socket_inodes == after.socket_inodes,
+        "managed core socket ownership changed during diagnostic collection"
+    );
+    ensure!(
+        expected_mark != 0
+            && expected_mark <= i32::MAX as u32
+            && mark_mask != 0
+            && expected_mark & !mark_mask == 0,
+        "expected core socket mark or mask is invalid"
+    );
+
+    let mut seen = BTreeSet::new();
+    let mut attributed = Vec::new();
+    for record in records {
+        ensure!(
+            seen.insert(record.inode),
+            "socket diagnostic dump contains an ambiguous duplicate inode"
+        );
+        if before.socket_inodes.contains(&(record.inode as u64))
+            && record.mark & mark_mask == expected_mark
+        {
+            attributed.push(record.clone());
+        }
+    }
+    ensure!(
+        !attributed.is_empty(),
+        "no process-owned INET socket has the expected core mark"
+    );
+    Ok(attributed)
+}
+
 #[cfg(target_os = "linux")]
 pub fn inspect_process_sockets(handle: &ProcessHandle) -> Result<ProcessSocketSnapshot> {
     let identity = handle.identity();
@@ -95,7 +144,89 @@ fn parse_socket_link(target: &Path) -> Result<Option<u64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::symlink;
+    use std::{os::unix::fs::symlink, path::PathBuf};
+
+    fn snapshot(inodes: &[u64]) -> ProcessSocketSnapshot {
+        ProcessSocketSnapshot {
+            process: ProcessIdentity {
+                pid: 123,
+                start_time_ticks: 456,
+                executable: PathBuf::from("/usr/bin/fake-core"),
+            },
+            socket_inodes: inodes.iter().copied().collect(),
+        }
+    }
+
+    fn diagnostic(inode: u32, mark: u32) -> SocketDiagnosticRecord {
+        SocketDiagnosticRecord {
+            family: super::super::socket_diag_records::SocketAddressFamily::Ipv4,
+            state: 1,
+            inode,
+            mark,
+        }
+    }
+
+    #[test]
+    fn attributes_only_matching_process_owned_marked_inodes() {
+        let before = snapshot(&[100, 200]);
+        let after = before.clone();
+        let records = [diagnostic(100, 0x142), diagnostic(300, 0x142)];
+        let matched =
+            attribute_process_socket_marks(&before, &after, &records, 0x42, 0xff).unwrap();
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].inode, 100);
+    }
+
+    #[test]
+    fn rejects_socket_snapshot_races_and_ambiguous_diagnostic_inodes() {
+        let before = snapshot(&[100]);
+        let changed = snapshot(&[100, 101]);
+        assert!(
+            attribute_process_socket_marks(
+                &before,
+                &changed,
+                &[diagnostic(100, 0x42)],
+                0x42,
+                0xff,
+            )
+            .is_err()
+        );
+        assert!(
+            attribute_process_socket_marks(
+                &before,
+                &before,
+                &[diagnostic(100, 0x42), diagnostic(100, 0x42)],
+                0x42,
+                0xff,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_missing_expected_mark_and_invalid_mark_policy() {
+        let snapshot = snapshot(&[100]);
+        assert!(
+            attribute_process_socket_marks(
+                &snapshot,
+                &snapshot,
+                &[diagnostic(100, 0x41)],
+                0x42,
+                0xff,
+            )
+            .is_err()
+        );
+        assert!(
+            attribute_process_socket_marks(
+                &snapshot,
+                &snapshot,
+                &[diagnostic(100, 0x42)],
+                0,
+                0xff,
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn parses_only_valid_socket_inode_links() {
