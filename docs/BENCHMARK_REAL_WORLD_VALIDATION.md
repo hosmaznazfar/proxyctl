@@ -45,7 +45,7 @@ The selected endpoint URLs are persisted in benchmark settings. They may disclos
 | Warm-up | None | Best-effort 64 KiB, excluded from timing |
 | Upload | 1 MiB, sequential | Same |
 
-Download cap can be overridden with `--download-max-bytes` (hard maximum 32 MiB). Upload can be overridden with `--upload-bytes` (hard maximum 1 MiB). The upload measurement requires the complete synthetic request body and a successful HTTP response; partial uploads are not scored. Each metric retains three samples, and reports use successful samples only. A useful partial download is explicitly marked and is never presented as a complete transfer.
+Download cap can be overridden with `--download-max-bytes` (hard maximum 32 MiB). Upload can be overridden with `--upload-bytes` (hard maximum 1 MiB). The upload measurement requires the complete synthetic request body and a successful HTTP response; partial uploads are not scored. Each metric retains up to three attempts, stopping at the first success, and reports use successful attempt(s) only. A useful partial download is explicitly marked and is never presented as a complete transfer.
 
 Use the same endpoint URLs, payload sizes, profile, and timeout values for every client in a comparison. Do not assume unrelated speed-test services produce directly comparable results. A custom upload URL must accept the documented HTTP POST body and return a successful HTTP status.
 
@@ -79,7 +79,7 @@ proxyctl test --node NODE_ID --all-cores --upload-only
 
 Upload settings are currently the same for Quick and Accurate. Intermittent upload failures should be retained as failures; do not treat them as zero throughput or relax the success criteria.
 
-In full mode, throughput is gated on at least one successful real-latency sample for that node/core pair. If all latency samples fail, use the metric-only commands above to isolate throughput.
+In full mode, throughput is gated on at least one successful real-latency sample for that node/core pair. If all latency attempt(s) fail, use the metric-only commands above to isolate throughput.
 
 ## 4. Same-node comparison with Throne and v2rayN
 
@@ -126,3 +126,8 @@ Stop testing and retain the report if any of the following occurs:
 - the endpoint rejects the request or its behavior is unclear.
 
 Do not attempt to repair system networking by running more benchmark commands. The benchmark is not intended to mutate system networking.
+
+
+### Accurate download retry policy
+
+Quick accepts a useful partial download after one attempt. Accurate retries an incomplete download up to three total attempts, stopping only when the configured byte cap is reached. Each Accurate attempt receives the full configured download duration; attempts are not divided into one shared duration. Latency, TCP-connect, and upload checks retry failures up to three total attempts and stop at the first success. Attempt history records only the attempts actually made.
