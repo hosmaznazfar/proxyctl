@@ -180,7 +180,13 @@ fn build_run_report(run: &BenchmarkRun, node_id: u64, samples: &[BenchmarkSample
                 core_version,
                 metrics: metrics
                     .into_iter()
-                     .map(|metric| summarize_metric(metric, &target_samples, endpoint_for_metric(&run.settings, metric)))
+                    .map(|metric| {
+                        summarize_metric(
+                            metric,
+                            &target_samples,
+                            endpoint_for_metric(&run.settings, metric),
+                        )
+                    })
                     .collect(),
             })
         })
@@ -284,7 +290,13 @@ fn comparison_for(
         core_version,
         metrics: metrics_for_target(target)
             .into_iter()
-             .map(|metric| summarize_metric(metric, &target_samples, endpoint_for_metric(&run.settings, metric)))
+            .map(|metric| {
+                summarize_metric(
+                    metric,
+                    &target_samples,
+                    endpoint_for_metric(&run.settings, metric),
+                )
+            })
             .collect(),
     }
 }
@@ -304,7 +316,11 @@ fn endpoint_for_metric(
     };
     let url = url::Url::parse(raw).ok()?;
     let host = url.host_str()?;
-    let path = if url.path().is_empty() { "/" } else { url.path() };
+    let path = if url.path().is_empty() {
+        "/"
+    } else {
+        url.path()
+    };
     Some(format!("{host}{path}"))
 }
 
@@ -466,7 +482,8 @@ mod tests {
     #[test]
     fn endpoint_labels_exclude_query_fragments_and_credentials() {
         let mut settings = run(1, BenchmarkRunStatus::Completed, Some(2)).settings;
-        settings.upload_url = "https://user:secret@example.test/upload?token=private#fragment".into();
+        settings.upload_url =
+            "https://user:secret@example.test/upload?token=private#fragment".into();
         assert_eq!(
             endpoint_for_metric(&settings, BenchmarkMetric::Upload).as_deref(),
             Some("example.test/upload")
@@ -484,7 +501,11 @@ mod tests {
         );
         failed.duration_ms = Some(12_500);
         let samples = vec![&failed];
-        let summary = summarize_metric(BenchmarkMetric::Upload, &samples, Some("example.test/up".into()));
+        let summary = summarize_metric(
+            BenchmarkMetric::Upload,
+            &samples,
+            Some("example.test/up".into()),
+        );
         assert_eq!(summary.failed_transfers.len(), 1);
         assert_eq!(summary.failed_transfers[0].duration_ms, Some(12_500));
         assert_eq!(summary.failed_transfers[0].transferred_bytes, None);
@@ -539,7 +560,10 @@ mod tests {
         assert_eq!(summary.median, None);
         assert_eq!(summary.failed_transfers.len(), 1);
         assert_eq!(summary.failed_transfers[0].sample_index, 2);
-        assert_eq!(summary.failed_transfers[0].transferred_bytes, Some(5 * 1024 * 1024));
+        assert_eq!(
+            summary.failed_transfers[0].transferred_bytes,
+            Some(5 * 1024 * 1024)
+        );
         assert_eq!(summary.failed_transfers[0].duration_ms, Some(20_000));
     }
 
