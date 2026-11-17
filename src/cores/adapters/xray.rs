@@ -294,6 +294,27 @@ impl CoreAdapter for XrayAdapter {
         json_config(document)
     }
 
+
+    fn generate_tun_activation_config_with_mark(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+        mark: super::TunOutboundMark,
+    ) -> anyhow::Result<GeneratedConfig> {
+        let generated = self.generate_tun_activation_config(node, listen_port)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        let outbounds = document
+            .get_mut("outbounds")
+            .and_then(serde_json::Value::as_array_mut)
+            .ok_or_else(|| anyhow::anyhow!("Xray TUN config must contain an outbound array"))?;
+        anyhow::ensure!(
+            outbounds.len() == 1 && outbounds[0]["tag"] == "proxy",
+            "Xray TUN config must contain exactly the tagged proxy outbound"
+        );
+        outbounds[0]["streamSettings"]["sockopt"]["mark"] = json!(mark.value());
+        json_config(document)
+    }
+
     fn generate_benchmark_config(
         &self,
         node: &ProxyNode,
