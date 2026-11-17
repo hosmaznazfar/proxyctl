@@ -1053,6 +1053,31 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_transfer_failure_persists_measured_bytes_and_duration() {
+        let context = SampleContext {
+            run_id: 7,
+            node_id: 3,
+            target: CoreId::Xray.as_str().into(),
+            version: Some("test-version".into()),
+        };
+        let sample = failed_transfer_sample(
+            &context,
+            BenchmarkMetric::Download,
+            2,
+            MeasurementFailure::IncompleteTransfer {
+                transferred_bytes: 5 * 1024 * 1024,
+                duration_ms: 20_000,
+            },
+        );
+        assert_eq!(sample.status, BenchmarkSampleStatus::Incomplete);
+        assert_eq!(sample.transferred_bytes, Some(5 * 1024 * 1024));
+        assert_eq!(sample.duration_ms, Some(20_000));
+        assert_eq!(sample.value, None);
+        assert!(!sample.partial);
+        assert_eq!(sample.validate(), Ok(()));
+    }
+
+    #[test]
     fn measurement_failures_map_to_stable_sample_statuses() {
         let cases = [
             (MeasurementFailure::Timeout, BenchmarkSampleStatus::Timeout),
