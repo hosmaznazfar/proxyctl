@@ -241,12 +241,32 @@ pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary) -> String 
     } else if summary.attempted == 0 {
         "not-run".into()
     } else {
-        summary
-            .failures
-            .iter()
-            .map(|f| format!("{}×{}", sample_status_label(f.status), f.count))
-            .collect::<Vec<_>>()
-            .join(", ")
+        {
+            let mut details = summary
+                .failures
+                .iter()
+                .map(|f| format!("{}×{}", sample_status_label(f.status), f.count))
+                .collect::<Vec<_>>()
+                .join(", ");
+            if !summary.failed_transfers.is_empty() {
+                let transfers = summary
+                    .failed_transfers
+                    .iter()
+                    .map(|attempt| format!(
+                        "#{}: {} bytes / {:.2}s",
+                        attempt.sample_index,
+                        attempt.transferred_bytes,
+                        attempt.duration_ms as f64 / 1000.0
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                if !details.is_empty() {
+                    details.push_str("; ");
+                }
+                details.push_str(&transfers);
+            }
+            details
+        }
     }
 }
 
