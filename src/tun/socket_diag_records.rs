@@ -37,8 +37,8 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
         "socket diagnostic message is shorter than inet_diag_msg"
     );
     let family = match payload[0] {
-        libc::AF_INET as u8 => SocketAddressFamily::Ipv4,
-        libc::AF_INET6 as u8 => SocketAddressFamily::Ipv6,
+        family if family == libc::AF_INET as u8 => SocketAddressFamily::Ipv4,
+        family if family == libc::AF_INET6 as u8 => SocketAddressFamily::Ipv6,
         _ => anyhow::bail!("socket diagnostic message has an unsupported address family"),
     };
     let state = payload[1];
