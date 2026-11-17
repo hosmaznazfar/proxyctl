@@ -267,6 +267,7 @@ impl CoreAdapter for SingBoxAdapter {
         &self,
         node: &ProxyNode,
         listen_port: u16,
+        mark: super::TunOutboundMark,
     ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
@@ -279,18 +280,6 @@ impl CoreAdapter for SingBoxAdapter {
                 "auto_route": false, "strict_route": false, "dns_mode": "disabled"
             }));
         document["route"] = json!({"final": "proxy", "auto_detect_interface": true});
-        json_config(document)
-    }
-
-
-    fn generate_tun_activation_config_with_mark(
-        &self,
-        node: &ProxyNode,
-        listen_port: u16,
-        mark: super::TunOutboundMark,
-    ) -> anyhow::Result<GeneratedConfig> {
-        let generated = self.generate_tun_activation_config(node, listen_port)?;
-        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
         let outbounds = document
             .get_mut("outbounds")
             .and_then(serde_json::Value::as_array_mut)
@@ -302,6 +291,7 @@ impl CoreAdapter for SingBoxAdapter {
         outbounds[0]["routing_mark"] = json!(mark.value());
         json_config(document)
     }
+
 
     fn generate_benchmark_config(
         &self,
@@ -373,7 +363,7 @@ mod config_contract_tests {
 
         let tun: serde_json::Value = serde_json::from_slice(
             &SingBoxAdapter
-                .generate_tun_activation_config(&node, 43128)
+                .generate_tun_activation_config(&node, 43128, super::super::TunOutboundMark::new(0x42, 0xff).unwrap())
                 .unwrap()
                 .content,
         )
@@ -382,17 +372,9 @@ mod config_contract_tests {
         assert_eq!(tun["inbounds"][1]["auto_route"], false);
         assert_eq!(tun["inbounds"][1]["dns_mode"], "disabled");
 
-        let mark = super::super::TunOutboundMark::new(0x42, 0xff).unwrap();
-        let marked: serde_json::Value = serde_json::from_slice(
-            &SingBoxAdapter
-                .generate_tun_activation_config_with_mark(&node, 43128, mark)
-                .unwrap()
-                .content,
-        )
-        .unwrap();
-        assert_eq!(marked["outbounds"][0]["routing_mark"], 0x42);
-        assert!(marked["inbounds"][0].get("routing_mark").is_none());
-        assert!(marked["inbounds"][1].get("routing_mark").is_none());
+        assert_eq!(tun["outbounds"][0]["routing_mark"], 0x42);
+        assert!(tun["inbounds"][0].get("routing_mark").is_none());
+        assert!(tun["inbounds"][1].get("routing_mark").is_none());
         assert!(activation["outbounds"][0].get("routing_mark").is_none());
     }
 }
