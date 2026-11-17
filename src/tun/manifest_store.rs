@@ -26,10 +26,8 @@ use std::{
 };
 
 const STORE_FILE: &str = "tun-manifest.json";
-const JOURNAL_FILE: &str = "tun-transaction-journal.json";
 const STORE_VERSION: u32 = 1;
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
-const MAX_JOURNAL_BYTES: u64 = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestSnapshot {
