@@ -192,14 +192,49 @@ fn record_cancelled_remainder(
     selection: BenchmarkMetricSelection,
 ) -> anyhow::Result<()> {
     let existing = NodeDatabase::open(database_path)?.list_benchmark_samples(run_id)?;
-    let has_sample = |node_id: u64, target: &str, metric: BenchmarkMetric, index: u8| {
-        existing.iter().any(|sample| {
-            sample.node_id == node_id
-                && sample.core == target
+    let record_next_cancelled = |context: &SampleContext, metric: BenchmarkMetric| {
+        let attempts = existing
+            .iter()
+            .filter(|sample| {
+                sample.node_id == context.node_id
+                    && sample.core == context.target
+                    && sample.metric == metric
+                    && sample.sample_index > 0
+            })
+            .collect::<Vec<_>>();
+        if attempts.iter().any(|sample| sample.status == BenchmarkSampleStatus::Success) {
+            return Ok(());
+        }
+        if existing.iter().any(|sample| {
+            sample.node_id == context.node_id
+                && sample.core == context.target
                 && sample.metric == metric
-                && sample.sample_index == index
-        })
+                && sample.sample_index == 0
+        }) {
+            return Ok(());
+        }
+        let next_attempt = attempts
+            .iter()
+            .map(|sample| sample.sample_index)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
+        if next_attempt <= SAMPLES_PER_METRIC {
+            persist_sample(
+                database_path,
+                failed_sample(
+                    context,
+                    metric,
+                    next_attempt,
+                    BenchmarkSampleStatus::Cancelled,
+                    "cancelled",
+                    "next attempt was not run because the benchmark was cancelled",
+                ),
+            )?;
+        }
+        Ok::<(), anyhow::Error>(())
     };
+
     for node in nodes {
         if selection.includes_direct_tcp() {
             let context = SampleContext {
@@ -208,21 +243,7 @@ fn record_cancelled_remainder(
                 target: DIRECT_TARGET.to_owned(),
                 version: None,
             };
-            for index in 1..=SAMPLES_PER_METRIC {
-                if !has_sample(node.id, DIRECT_TARGET, BenchmarkMetric::TcpPing, index) {
-                    persist_sample(
-                        database_path,
-                        failed_sample(
-                            &context,
-                            BenchmarkMetric::TcpPing,
-                            index,
-                            BenchmarkSampleStatus::Cancelled,
-                            "cancelled",
-                            "sample was not run because the benchmark was cancelled",
-                        ),
-                    )?;
-                }
-            }
+            record_next_cancelled(&context, BenchmarkMetric::TcpPing)?;
         }
         for core in cores {
             let context = SampleContext {
@@ -232,24 +253,7 @@ fn record_cancelled_remainder(
                 version: core_versions.get(core.as_str()).cloned(),
             };
             for &metric in selection.metrics() {
-                if has_sample(node.id, core.as_str(), metric, 0) {
-                    continue;
-                }
-                for index in 1..=SAMPLES_PER_METRIC {
-                    if !has_sample(node.id, core.as_str(), metric, index) {
-                        persist_sample(
-                            database_path,
-                            failed_sample(
-                                &context,
-                                metric,
-                                index,
-                                BenchmarkSampleStatus::Cancelled,
-                                "cancelled",
-                                "sample was not run because the benchmark was cancelled",
-                            ),
-                        )?;
-                    }
-                }
+                record_next_cancelled(&context, metric)?;
             }
         }
     }
