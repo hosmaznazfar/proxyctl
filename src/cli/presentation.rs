@@ -828,7 +828,7 @@ mod tests {
         let mut targets = ["mihomo", "direct", "xray", "sing-box", "other"]
             .into_iter()
             .collect::<Vec<_>>();
-        targets.sort_by_key(|target| report_target_order(target));
+        targets.sort_by(|left, right| report_target_order(left).cmp(&report_target_order(right)));
         assert_eq!(targets, ["sing-box", "xray", "mihomo", "direct", "other"]);
     }
 
