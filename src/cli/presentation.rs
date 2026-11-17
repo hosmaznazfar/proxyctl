@@ -219,74 +219,90 @@ pub(super) fn aggregate_target_status(
 }
 
 pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary, verbose: bool) -> String {
-    let mut result = if let Some(value) = summary.median {
+    let mut parts = Vec::new();
+
+    if let Some(value) = summary.median {
         let formatted = if summary.metric == crate::domain::BenchmarkMetric::Download
             || summary.metric == crate::domain::BenchmarkMetric::Upload
         {
             format!("{:.2} Mbps", value / 1_000_000.0)
         } else {
-            format!("{value:.2} ms")
+            format!("{value:.0} ms")
         };
-        let mut qualifiers = Vec::new();
-        if summary.successful < 3 {
-            qualifiers.push(format!("{}/3", summary.successful));
-        } else {
-            qualifiers.push("3/3 complete".to_owned());
-        }
+        parts.push(formatted);
+        parts.push(format!("{}/3", summary.successful));
         if summary.partial_successful > 0 {
-            qualifiers.push(format!(
-                "{} partial transfer(s)",
-                summary.partial_successful
-            ));
+            parts.push(format!("{} partial", summary.partial_successful));
         }
-        format!("{formatted} ({})", qualifiers.join(", "))
     } else if let Some(status) = summary.preflight {
-        sample_status_label(status).to_owned()
+        parts.push(sample_status_label(status).to_owned());
     } else if summary.attempted == 0 {
-        "not-run".into()
+        parts.push("not run".into());
     } else {
-        summary
-            .failures
-            .iter()
-            .map(|failure| format!("{}×{}", sample_status_label(failure.status), failure.count))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
+        parts.push(
+            summary
+                .failures
+                .iter()
+                .map(|failure| {
+                    format!("{} ×{}", sample_status_label(failure.status), failure.count)
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+    }
 
     if verbose {
         if summary.median.is_some() && !summary.failures.is_empty() {
-            let failures = summary
-                .failures
-                .iter()
-                .map(|failure| format!("{}×{}", sample_status_label(failure.status), failure.count))
-                .collect::<Vec<_>>()
-                .join(", ");
-            result.push_str(&format!("; failed: {failures}"));
+            parts.push(format!(
+                "failed: {}",
+                summary
+                    .failures
+                    .iter()
+                    .map(|failure| {
+                        format!("{} ×{}", sample_status_label(failure.status), failure.count)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
-        if !summary.failed_transfers.is_empty() {
-            let transfers = summary
-                .failed_transfers
-                .iter()
-                .map(|attempt| {
-                    let bytes = attempt
-                        .transferred_bytes
-                        .map(|value| format!("{value} bytes"))
-                        .unwrap_or_else(|| "bytes unknown".into());
-                    let duration = attempt
-                        .duration_ms
-                        .map(|value| format!("{:.2}s", value as f64 / 1000.0))
-                        .unwrap_or_else(|| "duration unknown".into());
-                    format!("#{}: {bytes} / {duration}", attempt.sample_index)
-                })
-                .collect::<Vec<_>>()
-                .join("; ");
-            result.push_str(&format!("; attempts: {transfers}"));
+        for attempt in &summary.failed_transfers {
+            let bytes = attempt
+                .transferred_bytes
+                .map(format_byte_count)
+                .unwrap_or_else(|| "size unknown".into());
+            let duration = attempt
+                .duration_ms
+                .map(|value| format!("{:.1}s", value as f64 / 1000.0))
+                .unwrap_or_else(|| "time unknown".into());
+            parts.push(format!("attempt {}: {bytes} in {duration}", attempt.sample_index));
         }
         if let Some(endpoint) = &summary.endpoint {
-            result.push_str(&format!(" [{endpoint}]"));
+            parts.push(format!("via {}", endpoint_label(endpoint)));
         }
     }
-    result
+
+    parts.join(" · ")
+}
+
+fn format_byte_count(bytes: u64) -> String {
+    const MIB: u64 = 1024 * 1024;
+    if bytes >= MIB {
+        format!("{:.1} MiB", bytes as f64 / MIB as f64)
+    } else if bytes >= 1024 {
+        format!("{:.0} KiB", bytes as f64 / 1024.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn endpoint_label(endpoint: &str) -> String {
+    let host = endpoint.split('/').next().unwrap_or(endpoint);
+    match host {
+        "www.google.com" | "google.com" => "Google".into(),
+        "cachefly.cachefly.net" => "CacheFly".into(),
+        "speed.cloudflare.com" => "Cloudflare".into(),
+        _ => host.to_owned(),
+    }
 }
 
 pub(super) fn print_benchmark_report(
