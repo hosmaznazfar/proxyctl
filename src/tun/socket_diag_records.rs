@@ -5,6 +5,7 @@
 //! the responsibility of the future narrow read-only broker.
 
 use anyhow::{Context, Result, ensure};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Linux UAPI value of the INET_DIAG_MARK netlink attribute.
 pub const INET_DIAG_MARK: u16 = 15;
@@ -23,6 +24,10 @@ pub enum SocketAddressFamily {
 pub struct SocketDiagnosticRecord {
     pub family: SocketAddressFamily,
     pub state: u8,
+    pub local_address: IpAddr,
+    pub local_port: u16,
+    pub remote_address: IpAddr,
+    pub remote_port: u16,
     pub inode: u32,
     pub mark: u32,
 }
@@ -42,6 +47,10 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
         _ => anyhow::bail!("socket diagnostic message has an unsupported address family"),
     };
     let state = payload[1];
+    let local_port = u16::from_be_bytes(payload[4..6].try_into()?);
+    let remote_port = u16::from_be_bytes(payload[6..8].try_into()?);
+    let local_address = parse_address(family, &payload[8..24])?;
+    let remote_address = parse_address(family, &payload[24..40])?;
     let inode = u32::from_ne_bytes(
         payload[68..72]
             .try_into()
@@ -89,8 +98,20 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
     Ok(SocketDiagnosticRecord {
         family,
         state,
+        local_address,
+        local_port,
+        remote_address,
+        remote_port,
         inode,
         mark,
+    })
+}
+
+fn parse_address(family: SocketAddressFamily, bytes: &[u8]) -> Result<IpAddr> {
+    ensure!(bytes.len() == 16, "socket diagnostic address has an invalid length");
+    Ok(match family {
+        SocketAddressFamily::Ipv4 => IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3])),
+        SocketAddressFamily::Ipv6 => IpAddr::V6(Ipv6Addr::from(<[u8; 16]>::try_from(bytes)?)),
     })
 }
 
@@ -109,6 +130,10 @@ mod tests {
         let mut bytes = vec![0u8; INET_DIAG_MSG_LEN];
         bytes[0] = family;
         bytes[1] = 1;
+        bytes[4..6].copy_from_slice(&443u16.to_be_bytes());
+        bytes[6..8].copy_from_slice(&8443u16.to_be_bytes());
+        bytes[8..12].copy_from_slice(&[192, 0, 2, 10]);
+        bytes[24..28].copy_from_slice(&[198, 51, 100, 20]);
         bytes[68..72].copy_from_slice(&inode.to_ne_bytes());
         bytes.extend_from_slice(&8u16.to_ne_bytes());
         bytes.extend_from_slice(&INET_DIAG_MARK.to_ne_bytes());
@@ -127,6 +152,14 @@ mod tests {
             assert_eq!(parsed.state, 1);
             assert_eq!(parsed.inode, 1234);
             assert_eq!(parsed.mark, 0x142);
+            assert_eq!(parsed.local_port, 443);
+            assert_eq!(parsed.remote_port, 8443);
+            assert_eq!(parsed.local_address, if expected == SocketAddressFamily::Ipv4 {
+                IpAddr::V4(Ipv4Addr::new(192, 0, 2, 10))
+            } else { IpAddr::V6(Ipv6Addr::from([192, 0, 2, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])) });
+            assert_eq!(parsed.remote_address, if expected == SocketAddressFamily::Ipv4 {
+                IpAddr::V4(Ipv4Addr::new(198, 51, 100, 20))
+            } else { IpAddr::V6(Ipv6Addr::from([198, 51, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])) });
         }
     }
 
