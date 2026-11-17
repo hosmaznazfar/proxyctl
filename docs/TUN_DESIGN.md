@@ -63,6 +63,18 @@ The core's TUN interface should be created without automatic route/rule installa
 
 On cleanup, delete only exact resources still matching the manifest. Treat already-absent resources as success. If a resource changed or is now owned by another actor, do not delete it; report a conflict and retain the manifest for explicit recovery. Cleanup must be idempotent after every partial step.
 
+## Durable storage boundaries
+
+The implementation separates two durable records and their APIs:
+
+- `ManifestStore` owns the activation lifecycle snapshot: activation identity, generation, phase, route manifest, and exact managed-core process identity.
+- `JournalStore` owns the write-ahead kernel transaction journal: ordered operation intents, observed resource fingerprints, and durable cleanup progress.
+- Both stores reuse `manifest_fs.rs` for owner checks, private 0700 directories, private 0600 files, no-follow opens, atomic replacement, and directory fsync.
+
+The lifecycle coordinator serializes both stores under the same activation lock. Journal intent must be durable before a kernel mutation; an applied fingerprint must be durable before the next dependent operation; cleanup progress is persisted only after exact compare-and-delete or confirmed absence. An unresolved intent is ambiguous and never authorizes deletion. The compatibility journal methods on `ManifestStore` delegate to `JournalStore` while transaction callers migrate; they do not create a second journal or weaker storage path.
+
+This is a storage-boundary improvement only. It does not add a privileged executor, kernel mutation, recovery service, or TUN activation.
+
 ## Recovery and lifecycle
 
 A serialized operation coordinator uses activation generations to prevent concurrent start/stop/switch races. The recovery supervisor is independent of the CLI and monitors the exact core process instance (PID plus start time/pidfd and canonical executable). Opening a pidfd is race-aware: if the pinned pidfd is already readable, the process has exited and recovery may proceed; otherwise the PID start-time and executable must still match. A PID reused by a live replacement is never accepted. Core exit triggers cleanup.
