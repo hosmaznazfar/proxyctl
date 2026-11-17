@@ -110,7 +110,7 @@ pub(super) fn print_node_results(
                         .sum();
                     let metric_cell = |summary: Option<&reporting::MetricSummary>| {
                         summary
-                            .map(metric_summary_cell)
+                            .map(|summary| metric_summary_cell(summary, verbose))
                             .unwrap_or_else(|| "not-run".into())
                     };
                     builder.push_record(
@@ -214,10 +214,7 @@ pub(super) fn aggregate_target_status(
     run_status_label(run_status).into()
 }
 
-pub(super) fn metric_summary_cell(
-    summary: &reporting::MetricSummary,
-    verbose: bool,
-) -> String {
+pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary, verbose: bool) -> String {
     let mut result = if let Some(value) = summary.median {
         let formatted = if summary.metric == crate::domain::BenchmarkMetric::Download
             || summary.metric == crate::domain::BenchmarkMetric::Upload
@@ -789,7 +786,6 @@ pub(super) fn safe_field(value: &str, max_chars: usize) -> String {
         .take(max_chars)
         .collect()
 }
-
 
 #[cfg(test)]
 mod tests {
