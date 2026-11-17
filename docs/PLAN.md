@@ -612,3 +612,6 @@ Do not claim profile verification until the user reports formatting, Clippy, tes
 
 
 - The dump accumulator now offers a production-facing receive method that requires `recvmsg` sender-port metadata and the `MSG_TRUNC` result, rejecting non-kernel senders and truncated datagrams before parsing. The byte-only method is retained for pure decoder tests; a real collector must use the metadata-aware method.
+
+
+- **Race-checked socket attribution:** a pure reconciliation function now compares pre/post process socket snapshots, rejects identity/inode-set changes and duplicate diagnostic inodes, and selects matching-mark records only when their inode belongs to the stable process snapshot. Synthetic tests cover unrelated inodes, races, duplicates, and invalid/missing marks. This is candidate attribution only: it does not distinguish inbound sockets from proxy-outbound sockets and must not populate readiness evidence until protocol/peer-direction classification and live pidfd-bound collection are implemented.
