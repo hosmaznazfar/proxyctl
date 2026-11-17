@@ -320,19 +320,13 @@ impl CoreAdapter for MihomoAdapter {
 
     fn generate_tun_activation_config(
         &self,
-        node: &ProxyNode,
-        listen_port: u16,
+        _node: &ProxyNode,
+        _listen_port: u16,
+        _mark: super::TunOutboundMark,
     ) -> anyhow::Result<GeneratedConfig> {
-        let generated = self.generate_activation_config(node, listen_port)?;
-        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
-        document["ipv6"] = json!(true);
-        document["tun"] = json!({
-            "enable": true, "device": "tun-proxyctl", "stack": "system", "mtu": 1500,
-            "inet4-address": ["198.18.0.1/30"], "inet6-address": ["fdfe:dcba:9876::1/126"],
-            "auto-route": false, "auto-detect-interface": true, "auto-redirect": false,
-            "strict-route": false, "dns-mode": "disabled", "dns-hijack": []
-        });
-        json_config(document)
+        anyhow::bail!(
+            "Mihomo TUN activation is unsupported until a proxy-outbound-only socket mark is verified"
+        )
     }
 
     fn generate_benchmark_config(
@@ -402,22 +396,10 @@ mod config_contract_tests {
         assert_eq!(benchmark["bind-address"], "127.0.0.1");
         assert_eq!(benchmark["allow-lan"], false);
 
-        let tun: serde_json::Value = serde_json::from_slice(
-            &MihomoAdapter
-                .generate_tun_activation_config(&node, 43128)
-                .unwrap()
-                .content,
-        )
-        .unwrap();
-        assert_eq!(tun["tun"]["enable"], true);
-        assert_eq!(tun["tun"]["auto-route"], false);
-        assert_eq!(tun["tun"]["auto-redirect"], false);
-        assert_eq!(tun["tun"]["dns-mode"], "disabled");
-
         let mark = super::super::TunOutboundMark::new(0x42, 0xff).unwrap();
         assert!(
             MihomoAdapter
-                .generate_tun_activation_config_with_mark(&node, 43128, mark)
+                .generate_tun_activation_config(&node, 43128, mark)
                 .is_err(),
             "Mihomo must fail closed until outbound-only mark scope is verified"
         );
