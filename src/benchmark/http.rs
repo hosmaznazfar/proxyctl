@@ -185,7 +185,7 @@ impl BenchmarkHttpClient {
         duration: Duration,
         streams: usize,
         warmup_bytes: u64,
-        mut progress: F,
+        progress: F,
     ) -> Result<Measurement, MeasurementFailure>
     where
         F: FnMut(TransferProgress) + Send,
