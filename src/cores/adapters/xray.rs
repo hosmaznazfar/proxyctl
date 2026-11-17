@@ -460,5 +460,18 @@ mod config_contract_tests {
             tun["inbounds"][1]["settings"]["autoSystemDnsToGateway"],
             false
         );
+
+        let mark = super::super::TunOutboundMark::new(0x42, 0xff).unwrap();
+        let marked: serde_json::Value = serde_json::from_slice(
+            &XrayAdapter
+                .generate_tun_activation_config_with_mark(&node, 43128, mark)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
+        assert_eq!(marked["outbounds"][0]["streamSettings"]["sockopt"]["mark"], 0x42);
+        assert!(marked["inbounds"][0].get("sockopt").is_none());
+        assert!(marked["inbounds"][1].get("streamSettings").is_none());
+        assert!(activation["outbounds"][0]["streamSettings"].get("sockopt").is_none());
     }
 }
