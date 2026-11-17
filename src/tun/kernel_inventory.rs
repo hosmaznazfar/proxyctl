@@ -64,7 +64,7 @@ const IP_COMMAND_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_IP_COMMAND_OUTPUT_BYTES: u64 = 4 * 1024 * 1024;
 
 #[cfg(target_os = "linux")]
-fn run_ip(arguments: &[&str]) -> Result<Vec<u8>> {
+pub(crate) fn run_ip(arguments: &[&str]) -> Result<Vec<u8>> {
     run_ip_command("ip", arguments, IP_COMMAND_TIMEOUT)
 }
 
