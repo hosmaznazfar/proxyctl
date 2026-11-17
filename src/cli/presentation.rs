@@ -403,7 +403,7 @@ pub(super) fn print_benchmark_report(
 
         let mut theme = Theme::from_style(Style::rounded());
         for row in separator_rows {
-            theme.insert_horizontal_line(row, HorizontalLine::inherit(Style::rounded()));
+            theme.insert_horizontal_line(row, HorizontalLine::full('─', '┼', '├', '┤'));
         }
         table.with(theme);
         println!("{table}");
@@ -481,7 +481,7 @@ fn apply_report_column_widths(
         } else {
             report_column_width(*field)
         };
-        table.with(Modify::new(Columns::single(index)).with(Width::wrap(width).keep_words(false)));
+        table.with(Modify::new(Columns::new(index..=index)).with(Width::wrap(width).keep_words(false)));
     }
 }
 
