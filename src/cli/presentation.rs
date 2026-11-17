@@ -651,13 +651,11 @@ pub(super) fn print_node_list(
         println!("No proxy nodes found.");
         return;
     }
-    println!(
-        "{:>5}  {:<12}  {:<32}  {:>5}  NAME",
-        "NO.", "PROTOCOL", "SERVER", "PORT"
-    );
+
+    let mut builder = Builder::default();
+    builder.push_record(["NO.", "PROTOCOL", "SERVER", "PORT", "NAME"]);
     for record in records {
-        println!(
-            "{:>5}  {:<12}  {:<32}  {:>5}  {}",
+        builder.push_record([
             if record.is_deleted() {
                 format!(
                     "D{}",
@@ -673,17 +671,16 @@ pub(super) fn print_node_list(
                     .unwrap_or_default()
                     .to_string()
             },
-            record.node.protocol,
-            safe_field(&record.node.server, 32),
-            record.node.port,
-            record
-                .node
-                .name
-                .as_deref()
-                .map(|name| safe_field(name, 32))
-                .unwrap_or_else(|| "-".to_owned())
-        );
+            record.node.protocol.to_string(),
+            safe_field(&record.node.server, usize::MAX),
+            record.node.port.to_string(),
+            record.node.name.as_deref().map(|name| safe_field(name, usize::MAX)).unwrap_or_else(|| "-".to_owned()),
+        ]);
     }
+
+    let mut table_view = builder.build();
+    table::apply_formatting(&mut table_view, &[5, 12, 32, 5, 32], &[]);
+    println!("{table_view}");
 }
 
 pub(super) fn print_sorted_node_list(
@@ -696,36 +693,23 @@ pub(super) fn print_sorted_node_list(
         println!("No proxy nodes found.");
         return;
     }
+
     let core_width = records
         .iter()
         .map(|record| record.cores.chars().count())
         .max()
         .unwrap_or_default()
         .max("CORE(S)".len());
-    println!(
-        "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<width$}  NAME",
-        "RANK",
-        "NO.",
-        "PROTOCOL",
-        "SERVER",
-        "PORT",
-        metric.label(),
-        "CORE(S)",
-        width = core_width
-    );
+    let mut builder = Builder::default();
+    builder.push_record(["RANK", "NO.", "PROTOCOL", "SERVER", "PORT", metric.label(), "CORE(S)", "NAME"]);
     for (index, record) in records.iter().enumerate() {
         let value = match record.value {
             Some(value) if record.unit == "ms" => format!("{value:.2} ms"),
             Some(value) => format!("{:.2} Mbps", value / 1_000_000.0),
             None => "unmeasured".to_owned(),
         };
-        println!(
-            "{:>4}  {:>5}  {:<12}  {:<32}  {:>5}  {:>14}  {:<width$}  {}",
-            if record.value.is_some() {
-                (index + 1).to_string()
-            } else {
-                "-".into()
-            },
+        builder.push_record([
+            if record.value.is_some() { (index + 1).to_string() } else { "-".into() },
             if record.node.is_deleted() {
                 format!(
                     "D{}",
@@ -741,21 +725,22 @@ pub(super) fn print_sorted_node_list(
                     .unwrap_or_default()
                     .to_string()
             },
-            record.node.node.protocol,
-            safe_field(&record.node.node.server, 32),
-            record.node.node.port,
+            record.node.node.protocol.to_string(),
+            safe_field(&record.node.node.server, usize::MAX),
+            record.node.node.port.to_string(),
             value,
-            safe_field(&record.cores, core_width),
-            record
-                .node
-                .node
-                .name
-                .as_deref()
-                .map(|name| safe_field(name, 32))
-                .unwrap_or_else(|| "-".to_owned()),
-            width = core_width
-        );
+            safe_field(&record.cores, usize::MAX),
+            record.node.node.name.as_deref().map(|name| safe_field(name, usize::MAX)).unwrap_or_else(|| "-".to_owned()),
+        ]);
     }
+
+    let mut table_view = builder.build();
+    table::apply_formatting(
+        &mut table_view,
+        &[4, 5, 12, 32, 5, 14, core_width.max(7), 32],
+        &[],
+    );
+    println!("{table_view}");
 }
 
 pub(super) fn print_node_details(records: &[NodeRecord], display_numbers: &HashMap<u64, usize>) {
