@@ -65,7 +65,16 @@ pub struct MetricSummary {
     pub attempted: usize,
     pub median: Option<f64>,
     pub failures: Vec<FailureCount>,
+    /// Failed transfer attempts with known body-byte and elapsed-time measurements.
+    pub failed_transfers: Vec<FailedTransferDetail>,
     pub preflight: Option<BenchmarkSampleStatus>,
+}
+
+#[derive(Clone, Debug)]
+pub struct FailedTransferDetail {
+    pub sample_index: u8,
+    pub transferred_bytes: u64,
+    pub duration_ms: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -343,6 +352,16 @@ fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> Me
         attempted: attempted_samples.len(),
         median: median_successful_samples(&values),
         failures,
+        failed_transfers: attempted_samples
+            .iter()
+            .filter_map(|sample| {
+                Some(FailedTransferDetail {
+                    sample_index: sample.sample_index,
+                    transferred_bytes: sample.transferred_bytes?,
+                    duration_ms: sample.duration_ms?,
+                })
+            })
+            .collect(),
         preflight,
     }
 }
