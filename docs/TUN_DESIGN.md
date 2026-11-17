@@ -357,3 +357,8 @@ The adapter contract now requires a validated non-zero mark/mask as an argument 
 - **Mihomo:** marked TUN configuration remains unsupported. The global routing-mark option has not yet been demonstrated to have the required proxy-outbound-only scope for the pinned native version, so Proxyctl deliberately does not guess or emit it.
 
 Synthetic adapter tests assert the exact location and absence of marks on inbounds and ordinary configs. These tests prove generated structure only; native binary validation against the pinned releases and runtime socket-mark observation are still required. A generated mark is not proof that the running process applied it. The readiness gate must remain closed until the mark can be observed on actual outbound sockets and both marked route lookups resolve to the intended physical egress. TUN activation remains disabled.
+
+
+### Readiness requires observed outbound-mark evidence
+
+The pure readiness evaluator now requires an observed mark from the core's proxy outbound socket and compares it under the exact policy mask against the expected mark. Missing observations, zero/invalid expectations, and mismatches fail closed before physical-egress and end-to-end checks can pass. Synthetic tests include masked-value matching. The collector that obtains trustworthy mark evidence from a running core is not implemented; a generated config or a marked route lookup cannot populate this field by assumption.
