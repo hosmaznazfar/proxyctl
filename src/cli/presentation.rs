@@ -215,7 +215,7 @@ pub(super) fn aggregate_target_status(
 }
 
 pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
-    if let Some(value) = summary.median {
+    let mut result = if let Some(value) = summary.median {
         let formatted = if summary.metric == crate::domain::BenchmarkMetric::Download
             || summary.metric == crate::domain::BenchmarkMetric::Upload
         {
@@ -241,33 +241,38 @@ pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary) -> String 
     } else if summary.attempted == 0 {
         "not-run".into()
     } else {
-        {
-            let mut details = summary
-                .failures
+        let mut details = summary
+            .failures
+            .iter()
+            .map(|failure| format!("{}×{}", sample_status_label(failure.status), failure.count))
+            .collect::<Vec<_>>()
+            .join(", ");
+        if !summary.failed_transfers.is_empty() {
+            let transfers = summary
+                .failed_transfers
                 .iter()
-                .map(|f| format!("{}×{}", sample_status_label(f.status), f.count))
+                .map(|attempt| {
+                    let bytes = attempt.transferred_bytes
+                        .map(|value| format!("{value} bytes"))
+                        .unwrap_or_else(|| "bytes unknown".into());
+                    let duration = attempt.duration_ms
+                        .map(|value| format!("{:.2}s", value as f64 / 1000.0))
+                        .unwrap_or_else(|| "duration unknown".into());
+                    format!("#{}: {bytes} / {duration}", attempt.sample_index)
+                })
                 .collect::<Vec<_>>()
-                .join(", ");
-            if !summary.failed_transfers.is_empty() {
-                let transfers = summary
-                    .failed_transfers
-                    .iter()
-                    .map(|attempt| format!(
-                        "#{}: {} bytes / {:.2}s",
-                        attempt.sample_index,
-                        attempt.transferred_bytes,
-                        attempt.duration_ms as f64 / 1000.0
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("; ");
-                if !details.is_empty() {
-                    details.push_str("; ");
-                }
-                details.push_str(&transfers);
+                .join("; ");
+            if !details.is_empty() {
+                details.push_str("; ");
             }
-            details
+            details.push_str(&transfers);
         }
+        details
+    };
+    if let Some(endpoint) = &summary.endpoint {
+        result.push_str(&format!(" [{endpoint}]"));
     }
+    result
 }
 
 pub(super) fn print_benchmark_report(
