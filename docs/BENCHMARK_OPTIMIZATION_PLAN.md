@@ -13,7 +13,7 @@ The optimization must improve elapsed time without sacrificing trustworthy measu
 
 The user's comparative observations are explicit product requirements:
 
-- **Throne is the latency reference:** prioritize low-overhead HTTP latency probes, prompt tunnel readiness, bounded concurrent probing, and short configurable latency timeouts. Do not copy a fastest-of-two policy; Proxyctl retains three samples and reports their median.
+- **Throne is the latency reference:** prioritize low-overhead HTTP latency probes, prompt tunnel readiness, bounded concurrent probing, and short configurable latency timeouts. Do not copy a fastest-of-two policy; Proxyctl retains up to three attempts, stopping at the first success and reports their median.
 - **v2rayN is the throughput reference:** prioritize representative and repeatable download/upload measurements, accurate transfer accounting, useful progress, and a bounded timeout. Do not trade throughput accuracy for aggressive concurrency.
 - These are measurement-quality targets based on the user's own comparisons, not a claim that one project's implementation is universally superior.
 
@@ -24,11 +24,11 @@ The user's comparative observations are explicit product requirements:
 3. Never change system proxy settings, DNS, routes, firewall, TUN, or other network state.
 4. Keep benchmark inbounds loopback-only and ephemeral.
 5. Compatibility outcomes remain per node/core. Unsupported or Invalid means skip that node/core entirely; it must not poison a valid peer in a batch.
-6. In full mode, run three real-latency samples first. Run download/upload only if at least one latency sample succeeds. If all three fail, persist throughput as `skipped` with `latency_gate`; do not send transfer requests.
+6. In full mode, run three real-latency attempt(s) first. Run download/upload only if at least one latency sample succeeds. If all three fail, persist throughput as `skipped` with `latency_gate`; do not send transfer requests.
 7. Metric-only modes remain independent and continue to run only the explicitly selected metric.
-8. Keep three samples per metric and use successful-sample medians. Quick defaults to a 1 MiB download, Accurate to 8 MiB; downloads are hard-capped at 32 MiB. Upload defaults to and is capped at 1 MiB. The transfer request timeout remains bounded and configurable; profile download budgets are 5 seconds (Quick) and 20 seconds (Accurate). Never represent failures as zero.
+8. Keep up to three attempts per metric; stop at the first success and use successful-sample medians. Quick defaults to a 1 MiB download, Accurate to 8 MiB; downloads are hard-capped at 32 MiB. Upload defaults to and is capped at 1 MiB. The transfer request timeout remains bounded and configurable; profile download budgets are 5 seconds (Quick) and 20 seconds (Accurate). Never represent failures as zero.
 9. Keep redb closed during process execution and network I/O. Persist completed batch results after the managed child has stopped.
-10. Cancellation must stop and reap the exact managed child, preserve completed samples, and record unfinished work as cancelled/interrupted.
+10. Cancellation must stop and reap the exact managed child, preserve completed attempt(s), and record unfinished work as cancelled/interrupted.
 11. Do not expose credentials, raw URLs containing secrets, response bodies, generated configs, raw core logs, or raw transport diagnostics.
 12. No TUN activation or real-network validation is part of these changes.
 
@@ -44,7 +44,7 @@ Change scheduling from one process per node/core pair to one process per selecte
 4. Give every node a unique loopback-only HTTP inbound (or another adapter-supported isolated local endpoint) mapped to its own outbound.
 5. Native-validate the complete configuration before starting the core.
 6. Start that one core, wait for all required local inbounds to be ready, run its batch, stop and reap it, then move to the next core.
-7. Persist the batch's completed samples only after the process is stopped.
+7. Persist the batch's completed attempt(s) only after the process is stopped.
 
 A malformed or unsupported node must be excluded before configuration generation; it must not invalidate other supported nodes. If native validation rejects a combined configuration, isolate the failure with a deterministic divide-and-conquer or per-node validation fallback. Never silently mark all nodes invalid because one node broke a batch.
 
@@ -53,13 +53,13 @@ Core-first batching is intended to remove repeated process startup. It is not pe
 ### 3.2 Latency: Throne-inspired bounded concurrency
 
 - Probe independent node inbounds concurrently with a configurable, conservative limit. The CLI now accepts 1–3 workers (default 3), with a hard cap of 3; offline tests verify the cap. Real-world memory/socket behavior remains part of separately approved comparison.
-- Keep three real HTTP latency samples per node.
+- Keep three real HTTP latency attempt(s) per node.
 - Current implementation creates an isolated client per node/probe and does not intentionally share clients across nodes; connection reuse/cold-connect methodology remains an offline review item. Define and test connection reuse explicitly.
 - Use a small response endpoint, disable redirects for consistent semantics, bound response-body draining, and measure until response headers (or a clearly documented response-completion point) are received.
 - Wait for each node's tunnel/inbound readiness before its first probe; do not use arbitrary long fixed sleeps as readiness checks.
 - Give latency its own shorter configurable timeout. Proposed initial default: 5 seconds, subject to local offline tests and later user-approved real-world evaluation.
 - One node's timeout/failure must not block unrelated nodes.
-- Report per-node progress and retain all three samples; do not use a fastest-of-two shortcut.
+- Report per-node progress and retain all up to three attempts, stopping at the first success; do not use a fastest-of-two shortcut.
 
 ### 3.3 Throughput: v2rayN-inspired accuracy, conservative execution
 
@@ -72,7 +72,7 @@ Download and upload are accuracy-sensitive and must not compete with one another
 - Upload: use a bounded synthetic in-memory payload; measure the completed request/response exchange; require a successful server response; never send user files or credentials; bound response-body consumption.
 - Keep upload and download sizes independently configurable.
 - Emit throttled progress for active transfers without flooding the terminal.
-- Do not add hidden retries. Each of the three samples is an independent recorded attempt.
+- Do not add hidden retries. Each of the up to three attempts, stopping at the first success is an independent recorded attempt.
 - Record endpoint, payload size, timeout, methodology version, duration, and transferred bytes needed to interpret the result.
 - Evaluate endpoint behavior and server-side semantics before changing defaults. The current Cloudflare upload endpoint is not automatically assumed to be equivalent to v2rayN's throughput path.
 
@@ -80,7 +80,7 @@ Download and upload are accuracy-sensitive and must not compete with one another
 
 - Keep direct TCP ping separate from real HTTP latency.
 - Execute direct TCP probes with bounded concurrency across selected nodes.
-- Retain three samples, bounded DNS/connect timeouts, and the existing direct target identity.
+- Retain up to three attempts, stopping at the first success, bounded DNS/connect timeouts, and the existing direct target identity.
 - Do not require a proxy core or affect the latency gate.
 
 ## 4. Async and concurrency decision
@@ -142,12 +142,12 @@ Acceptance: fake-child/fake-listener integration tests cover startup, partial re
 
 ### Stage 3 — concurrent latency and direct TCP (implemented and user-verified)
 - Add bounded concurrency with a hard maximum of 3 workers.
-- Preserve three samples and median semantics.
+- Preserve up to three attempts, stopping at the first success and median semantics.
 - Use an independent five-second latency request deadline; throughput retains the configured request timeout.
 - On cancellation, stop the batch core to interrupt in-flight proxy requests and join workers before continuing cleanup.
 - Make direct TCP probes bounded-concurrent and separate.
 
-Acceptance: the hard worker cap has an offline unit test; deterministic fake-proxy tests must still verify all three samples, failure isolation, prompt timeout/cancellation, and the latency gate. Stages 2–3 have been user-verified.
+Acceptance: the hard worker cap has an offline unit test; deterministic fake-proxy tests must still verify all up to three attempts, stopping at the first success, failure isolation, prompt timeout/cancellation, and the latency gate. Stages 2–3 have been user-verified.
 
 ### Stage 4 — throughput accuracy and progress (implementation committed; awaiting local verification)
 - Downloads stop at the configured cap; early-close/read-failed bodies are retried up to three total attempts on fresh connections. If none completes, the fastest partial attempt is retained only after 16 KiB, while smaller fragments remain failures. Progress snapshots include transferred/target bytes, elapsed time, and current rate.
@@ -163,7 +163,7 @@ Acceptance: offline tests cover exact byte counts, early EOF, upload body size, 
 - Selected multi-node ID/range selections now use one consistent run ID; target identity remains per node/core.
 - Preserve run/sample retention, latest/history/compare reports, sorting, and pruning semantics.
 - Persist effective concurrency, separate latency/throughput timeout, endpoint, payload, and methodology settings; older run settings deserialize with safe defaults.
-- On handled cancellation, persist explicit cancelled samples for scheduled work not reached, without replacing preflight or latency-gate outcomes; persist a run summary with success/failure counts.
+- On handled cancellation, persist explicit cancelled attempt(s) for scheduled work not reached, without replacing preflight or latency-gate outcomes; persist a run summary with success/failure counts.
 - Preserve metric-only modes and the full-mode latency gate.
 
 Acceptance: offline service tests cover multi-node scope resolution and cancellation remainder semantics; the user confirmed the focused tests and complete local verification batch pass, including retention, reporting, sorting, and pruning coverage.
@@ -256,3 +256,8 @@ proxyctl test --node 12 --core xray --profile accurate --download-max-bytes 1258
 ```
 
 The selected profile and effective stream, warm-up, byte, and duration settings are persisted with the run. Older run settings deserialize with Quick-compatible defaults. Offline tests cover profile defaults, legacy deserialization, stream aggregation, and warm-up exclusion. No public measurement endpoint is used by tests.
+
+
+### Accurate download retry policy
+
+Quick accepts a useful partial download after one attempt. Accurate retries an incomplete download up to three total attempts, stopping only when the configured byte cap is reached. Each Accurate attempt receives the full configured download duration; attempts are not divided into one shared duration. Latency, TCP-connect, and upload checks retry failures up to three total attempts and stop at the first success. Attempt history records only the attempts actually made.
