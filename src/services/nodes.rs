@@ -161,11 +161,11 @@ fn parse_age_seconds(value: &str) -> anyhow::Result<u64> {
     );
     anyhow::ensure!(!digits.is_empty(), "age must be a positive duration such as 30d");
     let amount = digits.parse::<u64>()?;
-    anyhow::ensure!(amount > 0, "age must be greater than zero");
     let multiplier = match unit {
         "d" => 86_400,
         "h" => 3_600,
         "m" => 60,
+        "s" => 1,
         _ => anyhow::bail!("unsupported age '{value}'; use a duration such as 30d, 12h, or 45m"),
     };
     amount.checked_mul(multiplier).context("age duration is too large")
@@ -196,6 +196,16 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn purge_age_parser_accepts_seconds_minutes_hours_and_days() {
+        assert_eq!(parse_age_seconds("30d").unwrap(), 2_592_000);
+        assert_eq!(parse_age_seconds("12h").unwrap(), 43_200);
+        assert_eq!(parse_age_seconds("45m").unwrap(), 2_700);
+        assert_eq!(parse_age_seconds("0s").unwrap(), 0);
+        assert!(parse_age_seconds("yesterday").is_err());
+        assert!(parse_age_seconds("2w").is_err());
+    }
 
     #[test]
     fn imports_valid_lines_and_preserves_source_file() {
