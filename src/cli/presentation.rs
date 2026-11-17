@@ -348,6 +348,9 @@ pub(super) fn print_benchmark_report(
                     .collect::<Vec<_>>();
                 targets.sort_by(|left, right| report_target_order(left).cmp(&report_target_order(right)));
                 targets.dedup();
+                if !fields.contains(&F::TcpPing) {
+                    targets.retain(|target| target != "direct");
+                }
 
                 // Group by core first, then keep each core's runs newest-first.
                 let target_count = targets.len();
