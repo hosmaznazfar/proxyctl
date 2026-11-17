@@ -198,6 +198,24 @@ impl SocketDiagnosticDumpAccumulator {
         })
     }
 
+    /// Add a datagram together with transport metadata returned by recvmsg.
+    ///
+    /// The collector must pass the sender port ID from sockaddr_nl and whether MSG_TRUNC
+    /// was reported. A truncated or non-kernel datagram is never decoded or retained.
+    pub fn push_received_datagram(
+        &mut self,
+        sender_port_id: u32,
+        truncated: bool,
+        bytes: &[u8],
+    ) -> Result<()> {
+        ensure!(
+            sender_port_id == 0,
+            "socket diagnostic datagram was not received from the kernel"
+        );
+        ensure!(!truncated, "socket diagnostic datagram was truncated");
+        self.push_datagram(bytes)
+    }
+
     /// Add one complete datagram. Any malformed, interrupted, oversized, or post-DONE
     /// input is rejected; callers must discard the accumulator after an error.
     pub fn push_datagram(&mut self, bytes: &[u8]) -> Result<()> {
@@ -438,6 +456,18 @@ mod tests {
         let mut response = message(NLMSG_DONE, 7, &[]);
         response[12..16].copy_from_slice(&42u32.to_ne_bytes());
         assert!(decode_datagram(&response, 7).is_err());
+    }
+
+    #[test]
+    fn received_datagrams_require_kernel_sender_and_no_truncation() {
+        let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
+        let done = message(NLMSG_DONE, 7, &[]);
+        assert!(accumulator.push_received_datagram(12, false, &done).is_err());
+        assert!(accumulator.push_received_datagram(0, true, &done).is_err());
+        accumulator
+            .push_received_datagram(0, false, &done)
+            .unwrap();
+        assert!(accumulator.into_complete_dump().unwrap().complete);
     }
 
     #[test]
