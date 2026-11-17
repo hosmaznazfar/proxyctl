@@ -2,14 +2,13 @@
 
 use std::{
     collections::BTreeMap,
-    io::Write,
     path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, ensure};
@@ -555,9 +554,6 @@ fn execute_run(
                     println!("{label}: starting...");
                     let outcome =
                         measure_interruptibly(&client, metric, settings, &mut process, &label);
-                    if metric == BenchmarkMetric::Download {
-                        println!();
-                    }
                     let sample = match outcome {
                         Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
                             println!(
@@ -655,13 +651,21 @@ fn measure_interruptibly(
                     Duration::from_millis(settings.download_duration_ms),
                     usize::from(settings.download_streams),
                     settings.warmup_bytes,
-                    |progress| {
-                        let rate = progress.bits_per_second.unwrap_or_default() / 1_000_000.0;
-                        print!(
-                            "\r{label}: {}/{} bytes ({rate:.2} Mbps)",
-                            progress.transferred_bytes, progress.target_bytes
-                        );
-                        let _ = std::io::stdout().flush();
+                    {
+                        let mut last_progress = Instant::now();
+                        move |progress| {
+                            if last_progress.elapsed() >= Duration::from_secs(1)
+                                || progress.transferred_bytes >= progress.target_bytes
+                            {
+                                let rate =
+                                    progress.bits_per_second.unwrap_or_default() / 1_000_000.0;
+                                println!(
+                                    "{label}: {}/{} bytes ({rate:.2} Mbps)",
+                                    progress.transferred_bytes, progress.target_bytes
+                                );
+                                last_progress = Instant::now();
+                            }
+                        }
                     },
                 ),
                 BenchmarkMetric::Upload => client.upload(settings.upload_bytes),
