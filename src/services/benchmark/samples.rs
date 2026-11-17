@@ -14,12 +14,12 @@ pub(super) fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSample
         MeasurementFailure::Timeout => BenchmarkSampleStatus::Timeout,
         MeasurementFailure::Unreachable => BenchmarkSampleStatus::Unreachable,
         MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
+        MeasurementFailure::IncompleteResponse => BenchmarkSampleStatus::Incomplete,
         MeasurementFailure::Unavailable
         | MeasurementFailure::ProxyTunnelFailed
         | MeasurementFailure::TlsFailed
         | MeasurementFailure::HttpStatus(_)
         | MeasurementFailure::ProtocolFailed
-        | MeasurementFailure::IncompleteResponse
         | MeasurementFailure::ReadFailed => BenchmarkSampleStatus::Unavailable,
         MeasurementFailure::Cancelled => BenchmarkSampleStatus::Cancelled,
     }
