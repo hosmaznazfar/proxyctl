@@ -561,8 +561,11 @@ fn execute_run(
                         metric.label()
                     );
                     println!("{label}: starting...");
+                    let measurement_started = std::time::Instant::now();
                     let outcome =
                         measure_interruptibly(&client, metric, settings, &mut process, &label);
+                    let failed_duration_ms = u64::try_from(measurement_started.elapsed().as_millis())
+                        .unwrap_or(u64::MAX);
                     let outcome = match outcome {
                         Ok(measurement)
                             if metric == BenchmarkMetric::Download
@@ -608,7 +611,7 @@ fn execute_run(
                         Err(error) => {
                             let reason = error.reason();
                             println!("{label}: {reason}");
-                            if matches!(error, MeasurementFailure::IncompleteTransfer { .. }) {
+                            let mut sample = if matches!(error, MeasurementFailure::IncompleteTransfer { .. }) {
                                 failed_transfer_sample(&entry.context, metric, attempt, error)
                             } else {
                                 failed_sample(
@@ -619,7 +622,11 @@ fn execute_run(
                                     error.category(),
                                     &reason,
                                 )
+                            };
+                            if metric == BenchmarkMetric::Upload {
+                                sample.duration_ms = Some(failed_duration_ms);
                             }
+                            sample
                         }
                     };
                     completed_samples.push(sample);
