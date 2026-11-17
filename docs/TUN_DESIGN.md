@@ -389,3 +389,10 @@ The pure netlink decoder now also requires every response message header to carr
 
 
 The accumulator also exposes a receive-metadata entry point that requires the collector to supply the `sockaddr_nl` sender port ID and `MSG_TRUNC` status from the same `recvmsg` operation. It rejects non-kernel senders and truncated datagrams before parsing. The lower-level byte-only method remains useful for deterministic parser tests; production collection must use the metadata-aware entry point.
+
+
+### Race-checked process socket attribution
+
+The unprivileged ownership layer now has a pure reconciliation function that compares the process socket-inode snapshots taken before and after a diagnostic dump, rejects any identity or inode-set change, rejects duplicate diagnostic inodes, and selects only records whose inode belongs to that stable process snapshot and whose mark matches the expected masked policy. Synthetic tests cover unrelated process sockets, snapshot races, duplicate records, missing matching marks, and invalid mark policies.
+
+This output is intentionally only **candidate attribution**, not readiness evidence. A process may own inbound listeners, accepted connections, and outbound sockets; inode ownership and a matching mark alone do not prove that a record represents a proxy-outbound connection. The future collector must additionally classify protocol and peer direction, bind collection to the live pidfd identity, and prove that the selected socket is an actual core proxy-outbound socket. No privileged collector or TUN activation has been added.
