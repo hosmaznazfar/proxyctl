@@ -609,3 +609,6 @@ Do not claim profile verification until the user reports formatting, Clippy, tes
 
 
 - **Netlink response-origin and datagram bounds:** the pure socket-diagnostic decoder rejects response headers whose sender port ID is non-zero, and the multipart accumulator has a regression test for its 1,024-datagram ceiling. This is only an additional parser check. The future broker must still validate the kernel sender address from `recvmsg`, detect `MSG_TRUNC`, enforce a monotonic deadline, and discard incomplete collections. No netlink socket I/O or privileged execution is implemented.
+
+
+- The dump accumulator now offers a production-facing receive method that requires `recvmsg` sender-port metadata and the `MSG_TRUNC` result, rejecting non-kernel senders and truncated datagrams before parsing. The byte-only method is retained for pure decoder tests; a real collector must use the metadata-aware method.
