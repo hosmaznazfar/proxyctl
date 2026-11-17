@@ -576,60 +576,86 @@ impl NodeDatabase {
         let write_txn = self.inner.begin_write()?;
         let node_records = {
             let nodes = write_txn.open_table(NODES)?;
-            nodes.iter()?.map(|entry| {
-                let (key, value) = entry?;
-                let record: NodeRecord = serde_json::from_slice(value.value())?;
-                debug_assert_eq!(record.id, key.value());
-                Ok(record)
-            }).collect::<anyhow::Result<Vec<_>>>()?
+            nodes
+                .iter()?
+                .map(|entry| {
+                    let (key, value) = entry?;
+                    let record: NodeRecord = serde_json::from_slice(value.value())?;
+                    debug_assert_eq!(record.id, key.value());
+                    Ok(record)
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?
         };
         let run_records = {
             let runs = write_txn.open_table(BENCHMARK_RUNS)?;
-            runs.iter()?.map(|entry| {
-                let (key, value) = entry?;
-                let run: BenchmarkRun = serde_json::from_slice(value.value())?;
-                debug_assert_eq!(run.id, key.value());
-                Ok(run)
-            }).collect::<anyhow::Result<Vec<_>>>()?
+            runs.iter()?
+                .map(|entry| {
+                    let (key, value) = entry?;
+                    let run: BenchmarkRun = serde_json::from_slice(value.value())?;
+                    debug_assert_eq!(run.id, key.value());
+                    Ok(run)
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?
         };
         let sample_records = {
             let samples = write_txn.open_table(BENCHMARK_SAMPLES)?;
-            samples.iter()?.map(|entry| {
-                let (key, value) = entry?;
-                let sample: BenchmarkSample = serde_json::from_slice(value.value())?;
-                debug_assert_eq!(sample.id, key.value());
-                Ok(sample)
-            }).collect::<anyhow::Result<Vec<_>>>()?
+            samples
+                .iter()?
+                .map(|entry| {
+                    let (key, value) = entry?;
+                    let sample: BenchmarkSample = serde_json::from_slice(value.value())?;
+                    debug_assert_eq!(sample.id, key.value());
+                    Ok(sample)
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?
         };
 
-        let running_nodes = run_records.iter()
+        let running_nodes = run_records
+            .iter()
             .filter(|run| run.status == BenchmarkRunStatus::Running)
             .flat_map(|run| run.node_ids.iter().copied())
             .collect::<BTreeSet<_>>();
-        let selected = node_records.iter()
-            .filter(|record| record.deleted_at.is_some_and(|deleted_at| deleted_at <= deleted_before))
+        let selected = node_records
+            .iter()
+            .filter(|record| {
+                record
+                    .deleted_at
+                    .is_some_and(|deleted_at| deleted_at <= deleted_before)
+            })
             .collect::<Vec<_>>();
-        let selected_ids = selected.iter().map(|record| record.id).collect::<BTreeSet<_>>();
-        let purge_ids = selected_ids.iter()
+        let selected_ids = selected
+            .iter()
+            .map(|record| record.id)
+            .collect::<BTreeSet<_>>();
+        let purge_ids = selected_ids
+            .iter()
             .filter(|id| !running_nodes.contains(id))
             .copied()
             .collect::<BTreeSet<_>>();
 
         let mut summary = PurgeSummary {
             eligible_nodes: selected_ids.len(),
-            skipped_running: selected_ids.iter().filter(|id| running_nodes.contains(id)).count(),
+            skipped_running: selected_ids
+                .iter()
+                .filter(|id| running_nodes.contains(id))
+                .count(),
             ..PurgeSummary::default()
         };
         if !apply || purge_ids.is_empty() {
             return Ok(summary);
         }
 
-        let removed_sample_ids = sample_records.iter()
+        let removed_sample_ids = sample_records
+            .iter()
             .filter(|sample| purge_ids.contains(&sample.node_id))
             .map(|sample| sample.id)
             .collect::<Vec<_>>();
-        let removed_sample_set = removed_sample_ids.iter().copied().collect::<BTreeSet<_>>();
-        let remaining_sample_runs = sample_records.iter()
+        let removed_sample_set = removed_sample_ids
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let remaining_sample_runs = sample_records
+            .iter()
             .filter(|sample| !removed_sample_set.contains(&sample.id))
             .map(|sample| sample.run_id)
             .collect::<BTreeSet<_>>();
@@ -648,9 +674,6 @@ impl NodeDatabase {
                 } else {
                     updated_runs.push(run);
                 }
-            } else if !remaining_sample_runs.contains(&run.id) {
-                // Clean up any pre-existing empty finalized run encountered during purge.
-                removed_run_ids.push(run.id);
             }
         }
 
