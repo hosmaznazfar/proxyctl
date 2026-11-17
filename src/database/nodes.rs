@@ -9,7 +9,7 @@ use anyhow::{Context, bail};
 use redb::{Database as RedbDatabase, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::ProxyNode;
+use crate::domain::{BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, ProxyNode};
 
 const SCHEMA_VERSION: u64 = 3;
 pub(super) const METADATA: TableDefinition<&str, u64> = TableDefinition::new("metadata");
