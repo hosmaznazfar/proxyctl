@@ -191,6 +191,7 @@ pub(super) fn aggregate_target_status(
         (S::Unsupported, "unsupported"),
         (S::Invalid, "invalid"),
         (S::Timeout, "timeout"),
+        (S::Incomplete, "incomplete"),
         (S::Unreachable, "unreachable"),
         (S::Cancelled, "cancelled"),
     ] {
@@ -497,6 +498,7 @@ pub(super) fn sample_status_label(status: crate::domain::BenchmarkSampleStatus) 
         crate::domain::BenchmarkSampleStatus::Unsupported => "unsupported",
         crate::domain::BenchmarkSampleStatus::Invalid => "invalid",
         crate::domain::BenchmarkSampleStatus::Timeout => "timeout",
+        crate::domain::BenchmarkSampleStatus::Incomplete => "incomplete",
         crate::domain::BenchmarkSampleStatus::Unavailable => "unavailable",
         crate::domain::BenchmarkSampleStatus::Skipped => "skipped",
         crate::domain::BenchmarkSampleStatus::Cancelled => "cancelled",
