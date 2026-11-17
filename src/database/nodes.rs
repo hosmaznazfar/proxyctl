@@ -36,6 +36,21 @@ impl NodeRecord {
     }
 }
 
+/// Counts for a permanent node purge operation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PurgeSummary {
+    /// Soft-deleted nodes old enough to satisfy the requested cutoff.
+    pub eligible_nodes: usize,
+    /// Eligible nodes protected because a benchmark run is still running.
+    pub skipped_running: usize,
+    /// Nodes permanently removed (zero for a dry run).
+    pub purged_nodes: usize,
+    /// Per-node benchmark samples removed with purged nodes.
+    pub removed_samples: usize,
+    /// Finalized benchmark runs that became empty and were removed.
+    pub removed_runs: usize,
+}
+
 /// Result of adding a node to the database.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AddNodeOutcome {
