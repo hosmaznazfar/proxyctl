@@ -878,8 +878,8 @@ mod tests {
         assert!(!concise.contains("1572864"));
 
         let verbose = metric_summary_cell(&summary, true);
-        assert!(verbose.contains("timeout×2"));
-        assert!(verbose.contains("#2: 1572864 bytes / 20.00s"));
-        assert!(verbose.contains("[example.test/download]"));
+        assert!(verbose.contains("timeout ×2"));
+        assert!(verbose.contains("attempt 2: 1.5 MiB in 20.0s"));
+        assert!(verbose.contains("via example.test"));
     }
 }
