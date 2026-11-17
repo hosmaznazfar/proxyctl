@@ -103,10 +103,10 @@ mod tests {
     #[test]
     fn selects_only_owned_established_tcp_socket_to_exact_proxy_peer() {
         let records = [
-            record(10, 0x142, 443, libc::TCP_ESTABLISHED as u8),
-            record(11, 0x142, 8443, libc::TCP_ESTABLISHED as u8),
+            record(10, 0x142, 443, TCP_STATE_ESTABLISHED),
+            record(11, 0x142, 8443, TCP_STATE_ESTABLISHED),
             record(12, 0x142, 443, 10),
-            record(13, 0x242, 443, libc::TCP_ESTABLISHED as u8),
+            record(13, 0x242, 443, TCP_STATE_ESTABLISHED),
         ];
         let owned = [10, 11, 12, 13].into_iter().collect();
         let found = classify_proxy_peer_sockets(
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn rejects_matching_peer_when_inode_is_not_owned_by_core() {
-        let records = [record(10, 0x142, 443, libc::TCP_ESTABLISHED as u8)];
+        let records = [record(10, 0x142, 443, TCP_STATE_ESTABLISHED)];
         let owned = BTreeSet::new();
         assert!(classify_proxy_peer_sockets(
             &records, &owned, peer(), SocketTransport::Tcp, 0x142, 0xffff,
@@ -127,14 +127,14 @@ mod tests {
     #[test]
     fn rejects_duplicate_inode_records_and_invalid_mark_policy() {
         let duplicate = [
-            record(10, 0x142, 443, libc::TCP_ESTABLISHED as u8),
-            record(10, 0x142, 443, libc::TCP_ESTABLISHED as u8),
+            record(10, 0x142, 443, TCP_STATE_ESTABLISHED),
+            record(10, 0x142, 443, TCP_STATE_ESTABLISHED),
         ];
         let owned = [10].into_iter().collect();
         assert!(classify_proxy_peer_sockets(
             &duplicate, &owned, peer(), SocketTransport::Tcp, 0x142, 0xffff,
         ).is_err());
-        let one = [record(10, 0x142, 443, libc::TCP_ESTABLISHED as u8)];
+        let one = [record(10, 0x142, 443, TCP_STATE_ESTABLISHED)];
         assert!(classify_proxy_peer_sockets(
             &one, &owned, peer(), SocketTransport::Tcp, 0x100, 0x0f,
         ).is_err());
