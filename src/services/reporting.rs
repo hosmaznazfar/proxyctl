@@ -464,6 +464,34 @@ mod tests {
     }
 
     #[test]
+    fn endpoint_labels_exclude_query_fragments_and_credentials() {
+        let mut settings = run(1, BenchmarkRunStatus::Completed, Some(2)).settings;
+        settings.upload_url = "https://user:secret@example.test/upload?token=private#fragment".into();
+        assert_eq!(
+            endpoint_for_metric(&settings, BenchmarkMetric::Upload).as_deref(),
+            Some("example.test/upload")
+        );
+    }
+
+    #[test]
+    fn report_retains_upload_failure_duration_without_assuming_sent_bytes() {
+        let mut failed = sample(
+            1,
+            BenchmarkMetric::Upload,
+            1,
+            BenchmarkSampleStatus::Timeout,
+            None,
+        );
+        failed.duration_ms = Some(12_500);
+        let samples = vec![&failed];
+        let summary = summarize_metric(BenchmarkMetric::Upload, &samples, Some("example.test/up".into()));
+        assert_eq!(summary.failed_transfers.len(), 1);
+        assert_eq!(summary.failed_transfers[0].duration_ms, Some(12_500));
+        assert_eq!(summary.failed_transfers[0].transferred_bytes, None);
+        assert_eq!(summary.endpoint.as_deref(), Some("example.test/up"));
+    }
+
+    #[test]
     fn report_summarizes_partial_samples_without_treating_them_as_complete() {
         let samples = [
             sample(
