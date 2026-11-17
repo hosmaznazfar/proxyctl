@@ -55,6 +55,7 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         "encryption",
         "flow",
         "type",
+        "headerType",
         "host",
         "path",
         "serviceName",
@@ -288,6 +289,19 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     }
 
     if node.protocol == Protocol::Vless {
+        if let Some(value) = node.option("headerType") {
+            let header_type = value
+                .as_str()
+                .ok_or_else(|| "VLESS TCP headerType must be a string".to_owned())?;
+            if !matches!(&transport.kind, TransportKind::Tcp) {
+                return Err("VLESS TCP headerType is only valid for TCP transport".into());
+            }
+            if !header_type.eq_ignore_ascii_case("none") {
+                return Err(
+                    "VLESS TCP header types other than none are not supported yet".into(),
+                );
+            }
+        }
         if option_string(node, "encryption").is_some_and(|value| value != "none") {
             return Err("only VLESS encryption=none is currently mapped".into());
         }
@@ -349,4 +363,43 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_proxy_url;
+
+    #[test]
+    fn vless_tcp_header_type_none_is_supported() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?encryption=none&security=reality&sni=example.com&fp=firefox&pbk=public-key&sid=abcd&type=tcp&headerType=none",
+        )
+        .unwrap();
+
+        assert!(validate_common(&node).is_ok());
+    }
+
+    #[test]
+    fn vless_tcp_header_type_other_than_none_is_not_silently_accepted() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=tcp&headerType=http",
+        )
+        .unwrap();
+
+        let error = validate_common(&node).unwrap_err();
+        assert!(error.contains("header types other than none are not supported"));
+    }
+
+    #[test]
+    fn vless_tcp_header_type_is_rejected_for_non_tcp_transports() {
+        let node = parse_proxy_url(
+            "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&headerType=none",
+        )
+        .unwrap();
+
+        let error = validate_common(&node).unwrap_err();
+        assert!(error.contains("only valid for TCP transport"));
+    }
 }
