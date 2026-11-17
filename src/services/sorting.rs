@@ -252,6 +252,7 @@ mod tests {
                 probe_concurrency: 3,
                 startup_timeout_ms: 1000,
                 proxy_type: Default::default(),
+                ..Default::default()
             },
             core_versions: Default::default(),
             summary: None,
