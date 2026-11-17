@@ -11,6 +11,8 @@ use std::{
 
 use anyhow::{Result, ensure};
 
+const TCP_STATE_ESTABLISHED: u8 = 1;
+
 use super::{
     socket_diag_netlink::SocketTransport,
     socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord},
@@ -62,7 +64,7 @@ pub fn classify_proxy_peer_sockets(
         }
 
         match transport {
-            SocketTransport::Tcp if record.state != libc::TCP_ESTABLISHED as u8 => continue,
+            SocketTransport::Tcp if record.state != TCP_STATE_ESTABLISHED => continue,
             SocketTransport::Udp if record.remote_port == 0 => continue,
             _ => {}
         }
@@ -103,7 +105,7 @@ mod tests {
         let records = [
             record(10, 0x142, 443, libc::TCP_ESTABLISHED as u8),
             record(11, 0x142, 8443, libc::TCP_ESTABLISHED as u8),
-            record(12, 0x142, 443, libc::TCP_LISTEN as u8),
+            record(12, 0x142, 443, 10),
             record(13, 0x242, 443, libc::TCP_ESTABLISHED as u8),
         ];
         let owned = [10, 11, 12, 13].into_iter().collect();
