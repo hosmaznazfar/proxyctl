@@ -347,7 +347,7 @@ pub(super) fn print_benchmark_report(
                     .iter()
                     .flat_map(|run| run.targets.iter().map(|target| target.target.clone()))
                     .collect::<Vec<_>>();
-                targets.sort_by_key(|target| report_target_order(target));
+                targets.sort_by(|left, right| report_target_order(left).cmp(&report_target_order(right)));
                 targets.dedup();
 
                 // Group by core first, then keep each core's runs newest-first.
