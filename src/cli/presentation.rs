@@ -294,8 +294,6 @@ pub(super) fn print_benchmark_report(
     use crate::services::display_config::DisplayField as F;
     use reporting::ReportMode;
     use tabled::settings::{
-        Modify, Width,
-        object::Columns,
         style::{HorizontalLine, Style},
         themes::Theme,
     };
