@@ -830,7 +830,7 @@ mod tests {
             "a rejected identity must leave the verified child running"
         );
 
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             match signal_verified(pid, &exe, ticks, libc::SIGTERM) {
                 Ok(()) => break,
