@@ -52,6 +52,25 @@ enum TunCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum NodesCommand {
+    /// Permanently purge soft-deleted nodes and their node-specific benchmark data.
+    Purge {
+        /// Select soft-deleted nodes only; active nodes are never eligible.
+        #[arg(long, required = true)]
+        deleted: bool,
+        /// Minimum time since deletion (for example 30d, 12h, or 45m).
+        #[arg(long, default_value = "30d")]
+        older_than: String,
+        /// Apply the purge. Without this flag the command is a dry run.
+        #[arg(long, conflicts_with = "dry_run")]
+        apply: bool,
+        /// Explicitly request a preview without changing the database.
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum ConfigAction {
     /// Set the persistent shared HTTP/SOCKS5 listener port.
     Set {
@@ -100,6 +119,11 @@ enum Command {
     Completions {
         #[command(subcommand)]
         action: CompletionAction,
+    },
+    /// Permanently manage stored node records.
+    Nodes {
+        #[command(subcommand)]
+        command: NodesCommand,
     },
     /// Add one proxy URL to the local database.
     Add {
