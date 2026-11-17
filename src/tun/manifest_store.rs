@@ -4,7 +4,6 @@
 //! The caller must serialize lifecycle operations; this store prevents stale activations from
 //! overwriting or deleting a different activation's recovery record.
 
-pub(super) use super::journal::MAX_JOURNAL_OPERATIONS;
 pub use super::journal::{
     JournalOperation, JournalOperationKind, JournalOperationState, JournalRecoveryAction,
     JournalRecoveryDecision, TransactionJournal, plan_journal_recovery, recovery_action,
@@ -777,7 +776,7 @@ mod tests {
             0o600
         );
         let mut journal = store.load_transaction_journal().unwrap().unwrap();
-        journal.operations = (0..=MAX_JOURNAL_OPERATIONS)
+        journal.operations = (0..=super::super::journal::MAX_JOURNAL_OPERATIONS)
             .map(|index| JournalOperation {
                 sequence: index as u32,
                 kind: JournalOperationKind::AddRule,
