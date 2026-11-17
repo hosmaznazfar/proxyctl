@@ -386,3 +386,6 @@ The Linux socket-diagnostic groundwork now includes a pure request builder, per-
 ### Kernel-origin validation and aggregate dump fault bounds
 
 The pure netlink decoder now also requires every response message header to carry kernel sender port ID zero, in addition to the expected request sequence. This is defense in depth: the eventual collector must independently verify the sender address returned by `recvmsg` is the kernel (`sockaddr_nl.nl_pid == 0`) and reject `MSG_TRUNC`; a header field alone is not a substitute for transport-level sender validation. Synthetic tests cover forged non-kernel header IDs and the 1,024-datagram accumulator ceiling. The collector must additionally enforce a monotonic elapsed-time deadline and discard the entire collection after any receive, sender, truncation, or decode error. No netlink I/O or privilege handling has been added, and TUN remains disabled.
+
+
+The accumulator also exposes a receive-metadata entry point that requires the collector to supply the `sockaddr_nl` sender port ID and `MSG_TRUNC` status from the same `recvmsg` operation. It rejects non-kernel senders and truncated datagrams before parsing. The lower-level byte-only method remains useful for deterministic parser tests; production collection must use the metadata-aware entry point.
