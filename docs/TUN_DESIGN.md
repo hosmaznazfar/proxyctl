@@ -358,6 +358,7 @@ The adapter contract now requires a validated non-zero mark/mask as an argument 
 
 Synthetic adapter tests assert the exact location and absence of marks on inbounds and ordinary configs. These tests prove generated structure only; native binary validation against the pinned releases and runtime socket-mark observation are still required. A generated mark is not proof that the running process applied it. The readiness gate must remain closed until the mark can be observed on actual outbound sockets and both marked route lookups resolve to the intended physical egress. TUN activation remains disabled.
 
+The ordinary activation service deliberately does not manufacture a placeholder mark or call the TUN adapter: it rejects TUN mode before configuration generation until a runtime-assigned mark is bound to the route policy and live readiness collector. This keeps the new mandatory adapter argument from being satisfied with an arbitrary constant while the feature is disabled.
 
 ### Readiness requires observed outbound-mark evidence
 
