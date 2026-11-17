@@ -865,7 +865,10 @@ mod tests {
                 probe_concurrency: 3,
                 startup_timeout_ms: 10_000,
                 proxy_type: Default::default(),
-                ..Default::default()
+                profile: Default::default(),
+                download_duration_ms: 5_000,
+                download_streams: 1,
+                warmup_bytes: 0,
             },
             core_versions: BTreeMap::new(),
             summary: None,
