@@ -5,12 +5,12 @@
 //!
 //! Runtime service-manager discovery is also read-only and distro-agnostic.
 
+pub mod egress_probe;
 pub mod journal;
 pub mod journal_store;
 pub mod kernel_backend;
 pub mod kernel_inventory;
 pub mod kernel_transaction;
-pub mod egress_probe;
 pub mod lifecycle_coordinator;
 pub(crate) mod manifest_fs;
 pub mod manifest_store;

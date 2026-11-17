@@ -304,7 +304,6 @@ impl CoreAdapter for XrayAdapter {
         json_config(document)
     }
 
-
     fn generate_benchmark_config(
         &self,
         node: &ProxyNode,
@@ -433,7 +432,11 @@ mod config_contract_tests {
 
         let tun: serde_json::Value = serde_json::from_slice(
             &XrayAdapter
-                .generate_tun_activation_config(&node, 43128, super::super::TunOutboundMark::new(0x42, 0xff).unwrap())
+                .generate_tun_activation_config(
+                    &node,
+                    43128,
+                    super::super::TunOutboundMark::new(0x42, 0xff).unwrap(),
+                )
                 .unwrap()
                 .content,
         )
@@ -451,9 +454,16 @@ mod config_contract_tests {
             false
         );
 
-        assert_eq!(tun["outbounds"][0]["streamSettings"]["sockopt"]["mark"], 0x42);
+        assert_eq!(
+            tun["outbounds"][0]["streamSettings"]["sockopt"]["mark"],
+            0x42
+        );
         assert!(tun["inbounds"][0].get("sockopt").is_none());
         assert!(tun["inbounds"][1].get("streamSettings").is_none());
-        assert!(activation["outbounds"][0]["streamSettings"].get("sockopt").is_none());
+        assert!(
+            activation["outbounds"][0]["streamSettings"]
+                .get("sockopt")
+                .is_none()
+        );
     }
 }

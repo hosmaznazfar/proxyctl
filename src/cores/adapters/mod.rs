@@ -26,10 +26,7 @@ pub struct TunOutboundMark {
 impl TunOutboundMark {
     pub fn new(value: u32, mask: u32) -> anyhow::Result<Self> {
         anyhow::ensure!(
-            value != 0
-                && value <= i32::MAX as u32
-                && mask != 0
-                && value & !mask == 0,
+            value != 0 && value <= i32::MAX as u32 && mask != 0 && value & !mask == 0,
             "TUN outbound socket mark must be non-zero, fit the common native-core range, and fit its non-zero policy mask"
         );
         Ok(Self { value, mask })

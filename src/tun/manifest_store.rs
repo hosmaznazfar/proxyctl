@@ -8,8 +8,8 @@ pub use super::journal::{
     JournalOperation, JournalOperationKind, JournalOperationState, JournalRecoveryAction,
     JournalRecoveryDecision, TransactionJournal, plan_journal_recovery, recovery_action,
 };
-use super::manifest_fs::*;
 use super::journal_store::JournalStore;
+use super::manifest_fs::*;
 #[cfg(target_os = "linux")]
 use super::process::ProcessIdentity;
 use super::{
@@ -225,8 +225,12 @@ impl ManifestStore {
         kind: JournalOperationKind,
         resource_key: &str,
     ) -> Result<()> {
-        JournalStore::from_directory(self.directory.clone())
-            .record_operation_intent(activation_id, generation, kind, resource_key)
+        JournalStore::from_directory(self.directory.clone()).record_operation_intent(
+            activation_id,
+            generation,
+            kind,
+            resource_key,
+        )
     }
 
     pub fn mark_operation_applied(
@@ -236,8 +240,12 @@ impl ManifestStore {
         resource_key: &str,
         fingerprint: &str,
     ) -> Result<()> {
-        JournalStore::from_directory(self.directory.clone())
-            .mark_operation_applied(activation_id, generation, resource_key, fingerprint)
+        JournalStore::from_directory(self.directory.clone()).mark_operation_applied(
+            activation_id,
+            generation,
+            resource_key,
+            fingerprint,
+        )
     }
 
     /// Mark cleanup only after compare-and-delete confirms removal or absence.
@@ -247,8 +255,11 @@ impl ManifestStore {
         generation: u64,
         resource_key: &str,
     ) -> Result<()> {
-        JournalStore::from_directory(self.directory.clone())
-            .mark_operation_removed(activation_id, generation, resource_key)
+        JournalStore::from_directory(self.directory.clone()).mark_operation_removed(
+            activation_id,
+            generation,
+            resource_key,
+        )
     }
 
     pub fn load_transaction_journal(&self) -> Result<Option<TransactionJournal>> {
@@ -262,8 +273,11 @@ impl ManifestStore {
         generation: u64,
         resource_key: &str,
     ) -> Result<()> {
-        JournalStore::from_directory(self.directory.clone())
-            .mark_intent_absent(activation_id, generation, resource_key)
+        JournalStore::from_directory(self.directory.clone()).mark_intent_absent(
+            activation_id,
+            generation,
+            resource_key,
+        )
     }
 
     pub fn remove_completed_transaction_journal(

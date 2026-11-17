@@ -292,7 +292,6 @@ impl CoreAdapter for SingBoxAdapter {
         json_config(document)
     }
 
-
     fn generate_benchmark_config(
         &self,
         node: &ProxyNode,
@@ -363,7 +362,11 @@ mod config_contract_tests {
 
         let tun: serde_json::Value = serde_json::from_slice(
             &SingBoxAdapter
-                .generate_tun_activation_config(&node, 43128, super::super::TunOutboundMark::new(0x42, 0xff).unwrap())
+                .generate_tun_activation_config(
+                    &node,
+                    43128,
+                    super::super::TunOutboundMark::new(0x42, 0xff).unwrap(),
+                )
                 .unwrap()
                 .content,
         )

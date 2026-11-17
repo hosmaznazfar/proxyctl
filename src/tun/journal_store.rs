@@ -5,8 +5,8 @@
 
 use super::{
     journal::{
-        JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal,
-        MAX_JOURNAL_OPERATIONS,
+        JournalOperation, JournalOperationKind, JournalOperationState, MAX_JOURNAL_OPERATIONS,
+        TransactionJournal,
     },
     manifest_fs::{
         open_private_file, set_private_file, sync_directory, verify_owner, verify_private_file,
@@ -320,7 +320,15 @@ mod tests {
                 "interface:tun-proxyctl",
             )
             .unwrap();
-        assert!(store.remove_completed_transaction_journal(activation, 3).is_err());
-        assert!(store.remove_completed_transaction_journal(activation, 4).is_err());
+        assert!(
+            store
+                .remove_completed_transaction_journal(activation, 3)
+                .is_err()
+        );
+        assert!(
+            store
+                .remove_completed_transaction_journal(activation, 4)
+                .is_err()
+        );
     }
 }

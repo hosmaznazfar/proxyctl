@@ -10,7 +10,7 @@ use std::path::Path;
 
 use super::{
     kernel_inventory::{self, KernelInterfaceRecord},
-    route_policy::{AddressFamily, RoutingPolicyPlan, RT_TABLE_MAIN},
+    route_policy::{AddressFamily, RT_TABLE_MAIN, RoutingPolicyPlan},
 };
 
 const IPV4_PROBE_DESTINATION: &str = "1.1.1.1";
@@ -85,16 +85,9 @@ fn resolve_marked_route(
         AddressFamily::Ipv4 => "-4",
         AddressFamily::Ipv6 => "-6",
     };
-    let output = kernel_inventory::run_ip(&[
-        "-j",
-        family_flag,
-        "route",
-        "get",
-        destination,
-        "mark",
-        mark,
-    ])
-    .with_context(|| format!("could not resolve {family:?} marked egress route"))?;
+    let output =
+        kernel_inventory::run_ip(&["-j", family_flag, "route", "get", destination, "mark", mark])
+            .with_context(|| format!("could not resolve {family:?} marked egress route"))?;
     parse_marked_route(&output, family, destination, interfaces, tun_name)
 }
 
@@ -105,12 +98,15 @@ fn parse_marked_route(
     interfaces: &[KernelInterfaceRecord],
     tun_name: &str,
 ) -> Result<EgressRouteEvidence> {
-    let value: Value = serde_json::from_slice(bytes)
-        .context("marked route lookup returned invalid JSON")?;
+    let value: Value =
+        serde_json::from_slice(bytes).context("marked route lookup returned invalid JSON")?;
     let routes = value
         .as_array()
         .context("marked route lookup returned a non-array response")?;
-    ensure!(routes.len() == 1, "marked route lookup must return exactly one route");
+    ensure!(
+        routes.len() == 1,
+        "marked route lookup must return exactly one route"
+    );
     let route = &routes[0];
 
     let interface_name = route
@@ -157,10 +153,7 @@ fn parse_marked_route(
 }
 
 #[cfg(target_os = "linux")]
-fn verify_hardware_backed_egress(
-    route: &EgressRouteEvidence,
-    sysfs_root: &Path,
-) -> Result<()> {
+fn verify_hardware_backed_egress(route: &EgressRouteEvidence, sysfs_root: &Path) -> Result<()> {
     let device_path = sysfs_root.join(&route.interface_name).join("device");
     ensure!(
         device_path.exists(),
@@ -173,7 +166,10 @@ fn parse_table_id(value: &Value) -> Result<u32> {
     if let Some(number) = value.as_u64() {
         return u32::try_from(number).context("route table ID exceeds u32");
     }
-    match value.as_str().context("route table is not a number or name")? {
+    match value
+        .as_str()
+        .context("route table is not a number or name")?
+    {
         "main" => Ok(RT_TABLE_MAIN),
         "default" => Ok(crate::tun::route_policy::RT_TABLE_DEFAULT),
         "local" => Ok(crate::tun::route_policy::RT_TABLE_LOCAL),
