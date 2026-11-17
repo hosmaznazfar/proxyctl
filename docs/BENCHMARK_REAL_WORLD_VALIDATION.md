@@ -45,7 +45,7 @@ The selected endpoint URLs are persisted in benchmark settings. They may disclos
 | Warm-up | None | Best-effort 64 KiB, excluded from timing |
 | Upload | 1 MiB, sequential | Same |
 
-Download cap can be overridden with `--download-max-bytes` (hard maximum 32 MiB). Upload can be overridden with `--upload-bytes` (hard maximum 1 MiB). The upload measurement requires the complete synthetic request body and a successful HTTP response; partial uploads are not scored. Each metric retains up to three attempts, stopping at the first success, and reports use successful attempt(s) only. A useful partial download is explicitly marked and is never presented as a complete transfer.
+Download cap can be overridden with `--download-max-bytes` (hard maximum 32 MiB). Upload can be overridden with `--upload-bytes` (hard maximum 1 MiB). The upload measurement requires the complete synthetic request body and a successful HTTP response; partial uploads are not scored. Each metric retains up to three attempts, stopping at the first success, and reports use successful attempts only. A useful partial download is explicitly marked and is never presented as a complete transfer.
 
 Use the same endpoint URLs, payload sizes, profile, and timeout values for every client in a comparison. Do not assume unrelated speed-test services produce directly comparable results. A custom upload URL must accept the documented HTTP POST body and return a successful HTTP status.
 
@@ -79,7 +79,7 @@ proxyctl test --node NODE_ID --all-cores --upload-only
 
 Upload settings are currently the same for Quick and Accurate. Intermittent upload failures should be retained as failures; do not treat them as zero throughput or relax the success criteria.
 
-In full mode, throughput is gated on at least one successful real-latency sample for that node/core pair. If all latency attempt(s) fail, use the metric-only commands above to isolate throughput.
+In full mode, throughput is gated on at least one successful real-latency sample for that node/core pair. If all latency attempts fail, use the metric-only commands above to isolate throughput.
 
 ## 4. Same-node comparison with Throne and v2rayN
 
@@ -89,7 +89,7 @@ Choose a small representative set of nodes that are confirmed working in each cl
 2. Use equivalent protocol/inbound settings where possible; Proxyctl defaults to a local SOCKS5 measurement inbound. Its HTTP alternative is selected with `--proxy-type http`.
 3. Alternate client order between repetitions (for example Proxyctl → Throne → v2rayN, then v2rayN → Proxyctl → Throne).
 4. Repeat at different times if possible; record network conditions and endpoint.
-5. Compare three-sample medians and inspect individual sample statuses and transferred bytes. Do not compare a failed or latency-gated throughput result as a measured zero.
+5. Compare successful-attempt measurements and inspect individual sample statuses and transferred bytes. Do not compare a failed or latency-gated throughput result as a measured zero.
 6. Do not change Proxyctl defaults based on a single run.
 
 Example Proxyctl commands:
