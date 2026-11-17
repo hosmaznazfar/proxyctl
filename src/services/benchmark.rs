@@ -570,7 +570,11 @@ fn execute_run(
                                     == crate::domain::BenchmarkProfile::Accurate
                                 && measurement.partial =>
                         {
-                            Err(MeasurementFailure::IncompleteTransfer {\n                                transferred_bytes: measurement.transferred_bytes.unwrap_or_default(),\n                                duration_ms: u64::try_from(measurement.duration.as_millis()).unwrap_or(u64::MAX),\n                            })
+                            Err(MeasurementFailure::IncompleteTransfer {
+                                transferred_bytes: measurement.transferred_bytes.unwrap_or_default(),
+                                duration_ms: u64::try_from(measurement.duration.as_millis())
+                                    .unwrap_or(u64::MAX),
+                            })
                         }
                         other => other,
                     };
@@ -1082,6 +1086,13 @@ mod tests {
             ),
             (
                 MeasurementFailure::IncompleteResponse,
+                BenchmarkSampleStatus::Incomplete,
+            ),
+            (
+                MeasurementFailure::IncompleteTransfer {
+                    transferred_bytes: 1024,
+                    duration_ms: 50,
+                },
                 BenchmarkSampleStatus::Incomplete,
             ),
             (
