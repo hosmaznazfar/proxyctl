@@ -13,6 +13,7 @@ use crate::{
 };
 
 use super::*;
+use super::table::{self, Separator};
 
 pub(super) fn print_display_config(config: &crate::services::display_config::DisplayConfig) {
     use crate::services::display_config::DisplayProfile;
@@ -178,7 +179,10 @@ pub(super) fn print_node_results(
         println!("No benchmark results.");
         return;
     }
-    println!("{}", builder.build().with(Style::rounded()));
+    let mut table_view = builder.build();
+    let widths = fields.iter().map(|field| report_column_width(*field)).collect::<Vec<_>>();
+    table::apply_formatting(&mut table_view, &widths, &[]);
+    println!("{table_view}");
 }
 
 pub(super) fn aggregate_target_status(
@@ -335,7 +339,7 @@ pub(super) fn print_benchmark_report(
     } else {
         let mut nodes = report.nodes.iter().collect::<Vec<_>>();
         nodes.sort_by_key(|node| display_numbers.get(&node.node.id).copied().unwrap_or(node.node.id as usize));
-        let mut separator_rows = Vec::new();
+        let mut separators = Vec::new();
 
         for (node_index, node) in nodes.iter().enumerate() {
             let rows_before_node = builder.count_records();
@@ -351,7 +355,8 @@ pub(super) fn print_benchmark_report(
                 targets.dedup();
 
                 // Group by core first, then keep each core's runs newest-first.
-                for target_name in targets {
+                let target_count = targets.len();
+                for (target_index, target_name) in targets.into_iter().enumerate() {
                     for run in &node.runs {
                         let Some(target) = run.targets.iter().find(|item| item.target == target_name)
                         else {
@@ -375,6 +380,9 @@ pub(super) fn print_benchmark_report(
                             },
                         ));
                     }
+                    if target_index + 1 < target_count {
+                        separators.push(Separator::Dotted(builder.count_records()));
+                    }
                 }
             }
 
@@ -382,7 +390,7 @@ pub(super) fn print_benchmark_report(
                 continue;
             }
             if node_index + 1 < nodes.len() {
-                separator_rows.push(builder.count_records());
+                separators.push(Separator::Solid(builder.count_records()));
             }
         }
 
@@ -398,21 +406,17 @@ pub(super) fn print_benchmark_report(
             return;
         }
 
-        let mut table = builder.build();
-        apply_report_column_widths(&mut table, &fields);
-
-        let mut theme = Theme::from_style(Style::rounded());
-        for row in separator_rows {
-            theme.insert_horizontal_line(row, HorizontalLine::full('─', '┼', '├', '┤'));
-        }
-        table.with(theme);
-        println!("{table}");
+        let mut table_view = builder.build();
+        let widths = fields.iter().map(|field| report_column_width(*field)).collect::<Vec<_>>();
+        table::apply_formatting(&mut table_view, &widths, &separators);
+        println!("{table_view}");
         return;
     }
 
-    let mut table = builder.build();
-    apply_report_column_widths(&mut table, &fields);
-    println!("{}", table.with(Style::rounded()));
+    let mut table_view = builder.build();
+    let widths = fields.iter().map(|field| report_column_width(*field)).collect::<Vec<_>>();
+    table::apply_formatting(&mut table_view, &widths, &[]);
+    println!("{table_view}");
 }
 
 fn report_target_order(target: &str) -> (u8, &str) {
@@ -443,47 +447,6 @@ fn report_column_width(field: crate::services::display_config::DisplayField) -> 
     }
 }
 
-fn apply_report_column_widths(
-    table: &mut tabled::Table,
-    fields: &[crate::services::display_config::DisplayField],
-) {
-    use crate::services::display_config::DisplayField as F;
-    use tabled::settings::{Modify, Width, object::Columns};
-
-    let terminal_width = std::env::var("COLUMNS")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|width| *width >= 60)
-        .unwrap_or(100);
-    let metric_columns = fields
-        .iter()
-        .filter(|field| matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
-        .count();
-    let fixed_width = fields
-        .iter()
-        .filter(|field| !matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
-        .map(|field| report_column_width(*field))
-        .sum::<usize>();
-    let border_width = fields.len().saturating_mul(3).saturating_add(1);
-    let metric_width = if metric_columns == 0 {
-        18
-    } else {
-        terminal_width
-            .saturating_sub(fixed_width + border_width)
-            .checked_div(metric_columns)
-            .unwrap_or(18)
-            .clamp(10, 36)
-    };
-
-    for (index, field) in fields.iter().enumerate() {
-        let width = if matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload) {
-            metric_width
-        } else {
-            report_column_width(*field)
-        };
-        table.with(Modify::new(Columns::new(index..=index)).with(Width::wrap(width).keep_words(false)));
-    }
-}
 
 pub(super) fn report_empty_node_row(
     fields: &[crate::services::display_config::DisplayField],
