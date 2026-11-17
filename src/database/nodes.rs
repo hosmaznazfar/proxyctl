@@ -443,7 +443,7 @@ pub fn default_database_path() -> anyhow::Result<PathBuf> {
     Ok(data_home.join("proxyctl").join("proxyctl.redb"))
 }
 
-pub(super) pub(super) fn unix_timestamp() -> u64 {
+pub(super) fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
