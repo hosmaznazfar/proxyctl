@@ -64,10 +64,18 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
         );
         let value = &payload[offset + 4..offset + length];
         if kind == INET_DIAG_MARK {
-            ensure!(mark.is_none(), "socket diagnostic record contains duplicate mark attributes");
-            ensure!(value.len() == 4, "socket diagnostic mark attribute must contain exactly four bytes");
+            ensure!(
+                mark.is_none(),
+                "socket diagnostic record contains duplicate mark attributes"
+            );
+            ensure!(
+                value.len() == 4,
+                "socket diagnostic mark attribute must contain exactly four bytes"
+            );
             mark = Some(u32::from_ne_bytes(
-                value.try_into().context("socket diagnostic mark is truncated")?,
+                value
+                    .try_into()
+                    .context("socket diagnostic mark is truncated")?,
             ));
         }
         let aligned = align_attribute(length)?;
