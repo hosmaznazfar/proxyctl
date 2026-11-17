@@ -150,7 +150,7 @@ mod tests {
         ProcessSocketSnapshot {
             process: ProcessIdentity {
                 pid: 123,
-                start_time_ticks: 456,
+                start_ticks: 456,
                 executable: PathBuf::from("/usr/bin/fake-core"),
             },
             socket_inodes: inodes.iter().copied().collect(),
