@@ -5,6 +5,8 @@
 
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
+#[cfg(target_os = "linux")]
+use std::path::Path;
 
 use super::{
     kernel_inventory::{self, KernelInterfaceRecord},
@@ -56,6 +58,8 @@ pub fn inspect_marked_egress(plan: &RoutingPolicyPlan) -> Result<EgressBypassEvi
         &snapshot.interfaces,
         &plan.interface_name,
     )?;
+    verify_hardware_backed_egress(&ipv4, Path::new("/sys/class/net"))?;
+    verify_hardware_backed_egress(&ipv6, Path::new("/sys/class/net"))?;
     Ok(EgressBypassEvidence {
         mark: plan.core_mark,
         mask: plan.core_mark_mask,
@@ -150,6 +154,19 @@ fn parse_marked_route(
         gateway,
         table_id,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn verify_hardware_backed_egress(
+    route: &EgressRouteEvidence,
+    sysfs_root: &Path,
+) -> Result<()> {
+    let device_path = sysfs_root.join(&route.interface_name).join("device");
+    ensure!(
+        device_path.exists(),
+        "marked route resolves through an interface without a verified hardware device"
+    );
+    Ok(())
 }
 
 fn parse_table_id(value: &Value) -> Result<u32> {
@@ -262,6 +279,25 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn requires_a_hardware_backed_egress_interface() {
+        let directory = tempfile::tempdir().unwrap();
+        let route = EgressRouteEvidence {
+            family: AddressFamily::Ipv4,
+            destination: IPV4_PROBE_DESTINATION.into(),
+            interface_name: "wlo1".into(),
+            interface_index: 3,
+            gateway: None,
+            table_id: RT_TABLE_MAIN,
+        };
+        let interface = directory.path().join("wlo1");
+        std::fs::create_dir_all(&interface).unwrap();
+        assert!(verify_hardware_backed_egress(&route, directory.path()).is_err());
+        std::fs::create_dir_all(interface.join("device")).unwrap();
+        verify_hardware_backed_egress(&route, directory.path()).unwrap();
     }
 
     #[test]
