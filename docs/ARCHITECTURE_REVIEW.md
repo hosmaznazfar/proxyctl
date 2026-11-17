@@ -1,6 +1,6 @@
 # Architecture and SOLID review
 
-> Review date: 2026-11-15  
+> Review date: 2026-11-17  
 > Scope: current `main` source after architecture refactor Phase 2  
 > Method: static source/module-boundary review plus user-reported local verification  
 > Verification: `cargo fmt --all -- --check`, strict Clippy, locked tests, and locked release build were reported passing by the user. This review does not claim independent execution.
@@ -67,7 +67,7 @@ No critical SOLID violation was found that justifies a broad rewrite before real
 
 | Priority | Area | Recommended action | Timing |
 |---|---|---|---|
-| P1 | Database | Separate benchmark persistence from node CRUD/schema concerns without changing redb schema or transaction semantics | After real-network benchmark validation |
+| P1 | Database | **Completed 2026-11-17:** benchmark run/sample/history persistence moved to `database/benchmarks.rs`; public API, schema, and transaction behavior preserved | Verified by user-run checks pending |
 | P2 | TUN storage | Separate journal persistence API from manifest lifecycle storage; reuse the existing secure file primitives | Before implementing live TUN recovery |
 | P2 | CLI | Move completion generation/installation and interactive prompts out of command-definition module | When next changing CLI completion/setup |
 | P3 | Activation | Consider extracting persisted runtime-state encoding/atomic writes if more activation features are added | Before expanding activation |
@@ -76,10 +76,10 @@ No critical SOLID violation was found that justifies a broad rewrite before real
 
 ## Recommended next work
 
-1. Use the real-world validation runbook with a known-good node and one core. This validates actual network behavior without contaminating the offline unit suite.
-2. Compare the recorded latency/download/upload samples and diagnostics. Do not tune defaults from one node or one run.
-3. Implement Quick and Accurate benchmark profiles with persisted methodology/settings and deterministic offline tests.
-4. Address the P1 database boundary as a separate behavior-preserving batch; then handle the TUN journal store before any TUN activation work.
+1. Complete any remaining real-world benchmark comparison using the separate validation runbook; keep it user-run and isolated from the offline test suite.
+2. Separate TUN journal persistence from manifest lifecycle storage before implementing live TUN recovery.
+3. Move shell-completion installation/generation and interactive prompts out of `cli/mod.rs` when that CLI support area is next changed.
+4. Keep activation runtime-state extraction deferred until activation grows; do not broaden the current database refactor.
 
 ## Non-goals
 
