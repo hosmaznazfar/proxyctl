@@ -164,7 +164,7 @@ pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow:
         .count();
     let failed_count = samples.len().saturating_sub(success_count);
     let summary = Some(format!(
-        "{}: {success_count} successful sample(s), {failed_count} failed/skipped/cancelled sample(s)",
+        "{}: {success_count} successful attempt(s), {failed_count} failed/skipped/cancelled attempt(s)",
         summary.unwrap_or_else(|| "completed".to_owned())
     ));
     database
@@ -545,31 +545,43 @@ fn execute_run(
                     ));
                     continue;
                 }
-                for sample_index in 1..=SAMPLES_PER_METRIC {
+                for attempt in 1..=SAMPLES_PER_METRIC {
                     let label = format!(
-                        "run #{run_id} node #{} {core} {} sample {sample_index}/{SAMPLES_PER_METRIC}",
+                        "run #{run_id} node #{} {core} {} attempt {attempt}/{SAMPLES_PER_METRIC}",
                         entry.display_number,
                         metric.label()
                     );
                     println!("{label}: starting...");
                     let outcome =
                         measure_interruptibly(&client, metric, settings, &mut process, &label);
+                    let outcome = match outcome {
+                        Ok(measurement)
+                            if metric == BenchmarkMetric::Download
+                                && settings.profile == crate::domain::BenchmarkProfile::Accurate
+                                && measurement.partial =>
+                        {
+                            Err(MeasurementFailure::IncompleteResponse)
+                        }
+                        other => other,
+                    };
+                    let succeeded = matches!(outcome, Ok(_));
                     let sample = match outcome {
                         Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
                             println!(
-                                "{label}: {:.2} {} ({:.2}s)",
+                                "{label}: {:.2} {} ({:.2}s){}",
                                 measurement.value,
                                 metric.unit(),
-                                measurement.duration.as_secs_f64()
+                                measurement.duration.as_secs_f64(),
+                                if measurement.partial { " (partial)" } else { "" }
                             );
-                            successful_sample(&entry.context, metric, sample_index, measurement)
+                            successful_sample(&entry.context, metric, attempt, measurement)
                         }
                         Ok(_) | Err(MeasurementFailure::Cancelled) => {
                             println!("{label}: cancelled");
                             failed_sample(
                                 &entry.context,
                                 metric,
-                                sample_index,
+                                attempt,
                                 BenchmarkSampleStatus::Cancelled,
                                 "cancelled",
                                 "measurement cancelled by user",
@@ -581,7 +593,7 @@ fn execute_run(
                             failed_sample(
                                 &entry.context,
                                 metric,
-                                sample_index,
+                                attempt,
                                 status_for_failure(error),
                                 error.category(),
                                 &reason,
@@ -589,7 +601,7 @@ fn execute_run(
                         }
                     };
                     completed_samples.push(sample);
-                    if CANCELLED.load(Ordering::Relaxed) {
+                    if succeeded || CANCELLED.load(Ordering::Relaxed) {
                         break;
                     }
                 }
