@@ -566,14 +566,15 @@ fn execute_run(
                     let outcome = match outcome {
                         Ok(measurement)
                             if metric == BenchmarkMetric::Download
-                                && settings.profile == crate::domain::BenchmarkProfile::Accurate
+                                && settings.profile
+                                    == crate::domain::BenchmarkProfile::Accurate
                                 && measurement.partial =>
                         {
                             Err(MeasurementFailure::IncompleteResponse)
                         }
                         other => other,
                     };
-                    let succeeded = matches!(outcome, Ok(_));
+                    let succeeded = outcome.is_ok();
                     let sample = match outcome {
                         Ok(measurement) if !CANCELLED.load(Ordering::Relaxed) => {
                             println!(
@@ -581,7 +582,11 @@ fn execute_run(
                                 measurement.value,
                                 metric.unit(),
                                 measurement.duration.as_secs_f64(),
-                                if measurement.partial { " (partial)" } else { "" }
+                                if measurement.partial {
+                                    " (partial)"
+                                } else {
+                                    ""
+                                }
                             );
                             successful_sample(&entry.context, metric, attempt, measurement)
                         }
