@@ -51,7 +51,8 @@ pub fn build_dump_request(request: SocketDiagnosticRequest) -> Result<Vec<u8>> {
     ensure!(request.sequence != 0, "netlink sequence must be non-zero");
 
     let mut bytes = vec![0u8; NLMSG_HEADER_LEN + INET_DIAG_REQUEST_LEN];
-    put_u32(&mut bytes, 0, bytes.len() as u32)?;
+    let message_len = bytes.len() as u32;
+    put_u32(&mut bytes, 0, message_len)?;
     put_u16(&mut bytes, 4, SOCK_DIAG_BY_FAMILY)?;
     put_u16(&mut bytes, 6, NLM_F_REQUEST | NLM_F_DUMP)?;
     put_u32(&mut bytes, 8, request.sequence)?;
