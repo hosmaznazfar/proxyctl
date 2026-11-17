@@ -5,4 +5,4 @@
 
 mod nodes;
 
-pub use nodes::{AddNodeOutcome, NodeDatabase, NodeRecord, default_database_path};
+pub use nodes::{AddNodeOutcome, NodeDatabase, NodeRecord, PurgeSummary, default_database_path};
