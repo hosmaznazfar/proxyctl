@@ -33,7 +33,7 @@ pub(super) fn print_display_config(config: &crate::services::display_config::Dis
         );
     }
     println!(
-        "Available fields: node, name, server, port, protocol, core, version, latency, tcp-ping, download, upload, status, samples, failures, run, tested"
+        "Available fields: node, name, server, port, protocol, core, version, latency, tcp-ping, download, upload, status, attempts, failures, run, tested"
     );
     println!("Add:    proxyctl config display add-field <compact|normal|full> <field>");
     println!("Remove: proxyctl config display remove-field <compact|normal|full> <field>");
