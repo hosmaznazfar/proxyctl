@@ -16,6 +16,7 @@ const NLMSG_ERROR: u16 = 2;
 const NLMSG_DONE: u16 = 3;
 const NLM_F_REQUEST: u16 = 0x01;
 const NLM_F_DUMP: u16 = 0x300;
+const NLM_F_DUMP_INTR: u16 = 0x10;
 
 /// Maximum records accepted from one datagram. The broker must also cap total dump bytes.
 pub const MAX_RECORDS_PER_DATAGRAM: usize = 4096;
@@ -91,10 +92,15 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
         );
         let length = read_u32(bytes, offset)? as usize;
         let kind = read_u16(bytes, offset + 4)?;
+        let flags = read_u16(bytes, offset + 6)?;
         let sequence = read_u32(bytes, offset + 8)?;
         ensure!(
             length >= NLMSG_HEADER_LEN && length <= bytes.len() - offset,
             "netlink message has an invalid length"
+        );
+        ensure!(
+            flags & NLM_F_DUMP_INTR == 0,
+            "kernel reported an interrupted socket diagnostic dump"
         );
         ensure!(
             sequence == expected_sequence,
@@ -291,6 +297,17 @@ mod tests {
 
         let error = message(NLMSG_ERROR, 7, &(-libc::EPERM).to_ne_bytes());
         assert!(decode_datagram(&error, 7).is_err());
+    }
+
+    #[test]
+    fn rejects_interrupted_dump_even_when_done_is_present() {
+        let mut done = message(NLMSG_DONE, 7, &[]);
+        done[6..8].copy_from_slice(&NLM_F_DUMP_INTR.to_ne_bytes());
+        assert!(decode_datagram(&done, 7).is_err());
+
+        let mut record = message(SOCK_DIAG_BY_FAMILY, 7, &marked_record(123, 1));
+        record[6..8].copy_from_slice(&NLM_F_DUMP_INTR.to_ne_bytes());
+        assert!(decode_datagram(&record, 7).is_err());
     }
 
     #[test]
