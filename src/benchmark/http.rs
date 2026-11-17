@@ -226,8 +226,7 @@ impl BenchmarkHttpClient {
         let started = Instant::now();
         let base = max_bytes / streams as u64;
         let remainder = max_bytes % streams as u64;
-        let per_attempt_timeout = (duration / DOWNLOAD_ATTEMPTS as u32)
-            .min(self.request_timeout)
+        let per_attempt_timeout = duration.min(self.request_timeout)
             .max(Duration::from_millis(1));
 
         let progress_callback = std::sync::Arc::new(std::sync::Mutex::new(progress));
@@ -271,7 +270,7 @@ impl BenchmarkHttpClient {
                             callback(TransferProgress::new(total, max_bytes, started.elapsed()));
                         }
                     };
-                    let result = worker.download(target, |snapshot| {
+                    let result = worker.download_once(target, |snapshot| {
                         publish(snapshot.transferred_bytes);
                     });
                     if let Ok(measurement) = &result {
@@ -329,8 +328,7 @@ impl BenchmarkHttpClient {
     ///
     /// Read each body chunk directly from the response stream so bytes received before a
     /// later EOF, timeout, or connection reset are retained in the partial sample.
-    /// Retry interrupted/closed downloads up to three total attempts. Each attempt uses
-    /// a fresh request; failed attempts never contribute bytes to another attempt.
+    /// Perform one bounded request; profile-aware retry policy belongs to orchestration.
     pub fn download<F>(
         &self,
         max_bytes: u64,
