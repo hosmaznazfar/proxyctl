@@ -42,6 +42,7 @@ pub enum MeasurementFailure {
     HttpStatus(u16),
     ProtocolFailed,
     IncompleteResponse,
+    IncompleteTransfer { transferred_bytes: u64, duration_ms: u64 },
     ReadFailed,
     Cancelled,
 }
@@ -57,7 +58,7 @@ impl MeasurementFailure {
             Self::TlsFailed => "tls_failed",
             Self::HttpStatus(_) => "http_status",
             Self::ProtocolFailed => "protocol_failed",
-            Self::IncompleteResponse => "incomplete_response",
+            Self::IncompleteResponse | Self::IncompleteTransfer { .. } => "incomplete_response",
             Self::ReadFailed => "read_failed",
             Self::Cancelled => "cancelled",
         }
@@ -75,7 +76,7 @@ impl MeasurementFailure {
             Self::TlsFailed => "the TLS connection to the measurement endpoint failed".into(),
             Self::HttpStatus(status) => format!("the measurement endpoint returned HTTP status {status}"),
             Self::ProtocolFailed => "the measurement endpoint returned an invalid HTTP response".into(),
-            Self::IncompleteResponse => "the response ended before the expected transfer was complete".into(),
+            Self::IncompleteResponse | Self::IncompleteTransfer { .. } => "the response ended before the expected transfer was complete".into(),
             Self::ReadFailed => "the response stream could not be read".into(),
             Self::Cancelled => "measurement cancelled by user".into(),
         }
