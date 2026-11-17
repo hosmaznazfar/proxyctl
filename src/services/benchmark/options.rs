@@ -5,7 +5,7 @@ use crate::{
     domain::{BenchmarkMetric, BenchmarkProfile, BenchmarkProxyType, BenchmarkSettings},
 };
 
-pub const METHODOLOGY: &str = "proxyctl-benchmark-v15";
+pub const METHODOLOGY: &str = "proxyctl-benchmark-v16";
 
 #[derive(Clone, Debug)]
 pub struct BenchmarkOptions {
