@@ -6,7 +6,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 
 | Protocol / feature | sing-box | Xray | Mihomo |
 |---|---:|---:|---:|
-| VLESS, basic TCP | Yes | Yes | Yes |
+| VLESS, basic TCP (including `headerType=none`) | Yes | Yes | Yes |
 | VLESS, TLS + SNI | Yes | Yes | Yes |
 | VLESS, TLS + ALPN | Yes | Yes | Yes |
 | VLESS, TLS + client fingerprint | Yes | Yes | Yes |
@@ -37,7 +37,7 @@ Compatibility outcomes are distinct: **Supported** means every retained option w
 ## Safety contract
 
 - The parser retains repeated URI query parameters and structured VMess values. The source transport alias `raw` is normalized to TCP without changing the preserved original URL. For VLESS URI and VMess JSON, `http`, `h2`, and `http2` normalize to the shared HTTP/2 transport representation; adapters serialize that representation using each core's native key.
-- The adapter checks every retained option against its explicit supported-option set.
+- The adapter checks every retained option against its explicit supported-option set. VLESS TCP `headerType=none` is accepted as the native default (no extra TCP header); other header types remain unsupported, and the option is rejected on non-TCP transports.
 - ALPN accepts comma-separated URI values, repeated URI `alpn` keys, and VMess JSON string arrays; values are normalized into an ordered list.
 - Repeated ALPN keys are intentional multi-value input. Other repeated keys remain unsupported because their semantics are ambiguous.
 - ALPN requires TLS. Empty, repeated, oversized, or control-character-containing ALPN identifiers are rejected.
