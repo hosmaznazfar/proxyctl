@@ -615,3 +615,6 @@ Do not claim profile verification until the user reports formatting, Clippy, tes
 
 
 - **Race-checked socket attribution:** a pure reconciliation function now compares pre/post process socket snapshots, rejects identity/inode-set changes and duplicate diagnostic inodes, and selects matching-mark records only when their inode belongs to the stable process snapshot. Synthetic tests cover unrelated inodes, races, duplicates, and invalid/missing marks. This is candidate attribution only: it does not distinguish inbound sockets from proxy-outbound sockets and must not populate readiness evidence until protocol/peer-direction classification and live pidfd-bound collection are implemented.
+
+
+- **Proxy-peer socket classification:** INET_DIAG records now preserve local/remote addresses and ports, and a pure classifier narrows marked process-owned sockets to the exact configured proxy endpoint. TCP candidates require ESTABLISHED state; UDP requires a concrete connected peer. The classifier rejects duplicate inodes and invalid mark/peer policies. It is deliberately conservative and does not resolve hostnames, collect live diagnostics, or claim end-to-end traffic readiness. The broker collector and pidfd-bound before/after snapshots remain outstanding; TUN stays disabled.
