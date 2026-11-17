@@ -170,9 +170,9 @@ fn parse_age_seconds(value: &str) -> anyhow::Result<u64> {
         "h" => 3_600,
         "m" => 60,
         "s" => 1,
-        _ => anyhow::bail!(
-            "unsupported age '{value}'; use a duration such as 30d, 12h, 45m, or 0s"
-        ),
+        _ => {
+            anyhow::bail!("unsupported age '{value}'; use a duration such as 30d, 12h, 45m, or 0s")
+        },
     };
     amount
         .checked_mul(multiplier)
