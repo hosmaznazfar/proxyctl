@@ -38,7 +38,7 @@ Proxyctl reports four distinct measurements for each node:
 
 Do not combine TCP ping and real ping into one value. Their paths and meanings differ. These results measure the complete route, remote endpoint, and current test conditions; they do not isolate core CPU performance.
 
-The scheduler is core-first: one managed core process at a time serves a batch of compatible nodes. Latency and direct TCP probes use bounded concurrency; throughput transfers are processed one node/sample at a time, with up to three download streams inside an Accurate sample. The direct TCP test runs once per node in a run, not once for every core. Each metric keeps three individual attempts; summaries use successful attempts only.
+The scheduler is core-first: one managed core process at a time serves a batch of compatible nodes. Latency and direct TCP probes use bounded concurrency; throughput transfers are processed one node/attempt at a time, with up to three download streams inside an Accurate sample. The direct TCP test runs once per node in a run, not once for every core. Each metric makes one initial attempt and retries failures up to two more times; it stops at the first success.
 
 ## 2. v2rayN-inspired endpoint defaults
 
@@ -50,7 +50,7 @@ Use the same practical separation as v2rayN:
 
 These are defaults, not hard dependencies. Provide CLI overrides for all three HTTP endpoints. Keep TCP ping independent of HTTP endpoint selection.
 
-The v2rayN reference implementation uses a direct TCP connect to the node host/port for TCPing, an HTTP response-time request through its local proxy for real ping, and a configurable download URL (including CacheFly and Cloudflare options). Its real-ping defaults include Google, YouTube, and Apple small-response URLs. Proxyctl uses three retained attempts and a median rather than silently keeping only the fastest of two requests.
+The v2rayN reference implementation uses a direct TCP connect to the node host/port for TCPing, an HTTP response-time request through its local proxy for real ping, and a configurable download URL (including CacheFly and Cloudflare options). Its real-ping defaults include Google, YouTube, and Apple small-response URLs. Proxyctl retries failed measurements up to three total attempts and stops at the first success rather than silently keeping the fastest of two requests.
 
 LibreSpeed remains a supported endpoint family when a user supplies a compatible server. Do not silently select a public LibreSpeed server: operators and locations vary, and the public librespeed.org service currently discloses telemetry collection including IP address, ISP/location estimates, and test results. No public speed-test provider is assumed to be privacy-neutral.
 
@@ -85,21 +85,21 @@ proxyctl test --node 12 --core sing-box \
 
 The all-cores scope can cover every active node or be restricted to selected nodes with `--node`. A specific node/core pair uses `--node` with `--core`; `--core` and `--all-cores` are mutually exclusive. By default, all three HTTP metrics run. The mutually exclusive `--latency-only`, `--download-only`, and `--upload-only` selectors run only the named metric; omitting them preserves the full benchmark. Direct TCP ping is included only in the default all-metrics mode, once per selected node. Metric-only modes skip direct TCP ping. HTTP attempts run once per supported node/core pair, with up to three attempts, stopping at the first success for each selected metric.
 
-The run stores effective endpoint URLs, profile, byte caps, download duration/stream count/warm-up, separate latency/throughput timeouts, bounded probe concurrency, and methodology version (`proxyctl-benchmark-v15`). Quick defaults to one stream, a 1 MiB aggregate download cap, a 5-second budget, and no warm-up. Accurate defaults to three concurrent streams, an 8 MiB aggregate cap, a 20-second budget, and a best-effort 64 KiB warm-up excluded from timing. Download caps are hard-limited to 32 MiB; upload remains capped at 1 MiB. The configured download budget is divided across the three-attempt retry allowance per stream; every retry uses a fresh request. Bytes are counted against one aggregate cap and never combined across attempts. A partial result requires at least 16 KiB and is explicitly marked. HTTP status errors are not scored; uploads are sequential, not retried, and require the complete synthetic request body plus a successful response.
+The run stores effective endpoint URLs, profile, byte caps, download duration/stream count/warm-up, separate latency/throughput timeouts, bounded probe concurrency, and methodology version (`proxyctl-benchmark-v16`). Quick defaults to one stream, a 1 MiB aggregate download cap, a 5-second budget, and no warm-up. Accurate defaults to three concurrent streams, an 8 MiB aggregate cap, a 20-second budget, and a best-effort 64 KiB warm-up excluded from timing. Download caps are hard-limited to 32 MiB; upload remains capped at 1 MiB. Each Accurate attempt receives the full configured download duration. Its concurrent streams share one aggregate cap; incomplete attempts trigger another full attempt and bytes are never combined across attempts. Quick accepts a partial result only after at least 16 KiB and marks it explicitly. HTTP status errors are not scored; uploads are sequential, not retried, and require the complete synthetic request body plus a successful response.
 
 ## 4. Measurement semantics
 
 ### 4.1 Direct TCP ping
 
-Resolve the node hostname and attempt a TCP connection to its configured port. Time from immediately before connection until the connection succeeds. Use a bounded connect timeout and up to three attempts, stopping at the first success. Do not send proxy credentials or application data. This test does not use the selected core and may use the machine's normal DNS resolver; it must not modify DNS configuration.
+Resolve the node hostname and attempt a TCP connection to its configured port. Time from immediately before connection until the connection succeeds. Use a bounded connect timeout and retry failures up to three total attempts, stopping at the first success. Do not send proxy credentials or application data. This test does not use the selected core and may use the machine's normal DNS resolver; it must not modify DNS configuration.
 
 ### 4.2 Real ping through the selected core
 
-Use the explicit loopback HTTP proxy created for the selected core. Send a GET request to the configured real-ping URL and measure until response headers arrive. Accept successful HTTP responses including 204 No Content; do not require a special query parameter or a zero-length response body. Stop timing as soon as response headers arrive; do not consume the response body. up to three attempts, stopping at the first success are retained.
+Use the explicit loopback HTTP proxy created for the selected core. Send a GET request to the configured real-ping URL and measure until response headers arrive. Accept successful HTTP responses including 204 No Content; do not require a special query parameter or a zero-length response body. Stop timing as soon as response headers arrive; do not consume the response body. Retry failed latency probes up to three total attempts, stopping at the first success.
 
 ### 4.3 Download through the selected core
 
-GET the configured download URL exactly as supplied. Do not append provider-specific query parameters. Stream the response body in bounded chunks, count the actual bytes received, and calculate throughput from the exact configured sample byte count and monotonic elapsed time. Stop reading once the configured sample byte count is reached, even if the remote object is larger; close the response without downloading the remainder. If the server ends the response early or the body read fails, retain the actual bytes and elapsed time as a partial successful download sample only when at least 16 KiB arrived; smaller fragments remain failures. Partial attempts must be distinguishable from complete attempts in detailed reports. Downloads use ureq's HTTP/1.1 streaming response reader. The reader counts each chunk as it arrives and preserves bytes already received if a later read ends with a timeout, reset, or truncated Content-Length. Reading stops at the configured byte cap; HTTP error statuses are never scored as successful downloads. Latency, download, and upload now share the same ureq HTTP stack and selected loopback proxy. This removes the separate libcurl dependency and avoids maintaining different proxy/HTTP implementations for download versus the other metrics. This follows v2rayN's useful partial-transfer behavior while keeping Proxyctl's average bytes-per-second calculation and three-sample median.  Emit throttled progress with transferred bytes, target bytes, elapsed time, and current rate.
+GET the configured download URL exactly as supplied. Do not append provider-specific query parameters. Stream the response body in bounded chunks, count the actual bytes received, and calculate throughput from the actual transferred bytes and monotonic elapsed time. Stop reading once the configured sample byte count is reached, even if the remote object is larger; close the response without downloading the remainder. Quick treats an early response with at least 16 KiB as a partial successful download. Accurate treats any result below the configured byte cap as incomplete and retries it up to three total attempts; smaller fragments remain failures. Partial attempts must be distinguishable from complete attempts in detailed reports. Downloads use ureq's HTTP/1.1 streaming response reader. The reader counts each chunk as it arrives and preserves bytes already received if a later read ends with a timeout, reset, or truncated Content-Length. Reading stops at the configured byte cap; HTTP error statuses are never scored as successful downloads. Latency, download, and upload now share the same ureq HTTP stack and selected loopback proxy. This removes the separate libcurl dependency and avoids maintaining different proxy/HTTP implementations for download versus the other metrics. Quick follows v2rayN's useful partial-transfer behavior; Accurate prioritizes reaching its configured byte cap. Throughput is calculated from actual bytes and elapsed time.  Emit throttled progress with transferred bytes, target bytes, elapsed time, and current rate.
 
 ### 4.4 Upload through the selected core
 
@@ -112,7 +112,7 @@ POST a deterministic in-memory payload containing no user data. Start timing imm
 - Throughput = `transferred_bytes * 8 / elapsed_seconds`.
 - Use a monotonic clock.
 - Never turn a failed request into zero.
-- Keep all individual attempts and calculate medians from successful attempts only.
+- Keep each actual attempt and stop after the first success; do not manufacture three independent samples.
 
 A failure in one metric must not erase successful attempts from another metric.
 
@@ -159,7 +159,7 @@ TCP ping is independent of core compatibility. An unsupported or invalid node/co
 
 Keep distinct outcomes for success, unreachable, unsupported, invalid, timeout, unavailable, and cancelled. Never store a numeric value for a failed sample. Store the direct TCP metric under a reserved `direct` target rather than pretending it belongs to a proxy core; the run scope must explicitly include that target.
 
-For the full benchmark selection, latency is the gate for throughput: run three real-ping attempts first. If at least one succeeds, continue with download and upload. If all three fail, record download and upload as skipped with the `latency_gate` reason and send no transfer requests. Metric-only modes remain independent and run only the selected metric. Unsupported/invalid compatibility and core preflight failures skip all metrics for that node/core pair.
+For the full benchmark selection, latency is the gate for throughput: run up to three real-ping attempts first, stopping on success. If all three fail, record download and upload as skipped with the `latency_gate` reason and send no transfer requests. Metric-only modes remain independent and run only the selected metric. Unsupported/invalid compatibility and core preflight failures skip all metrics for that node/core pair.
 
 **Current implementation:** scheduling is core-first: Proxyctl starts one managed process for each selected core batch, with one isolated loopback inbound/outbound per compatible node. Core batches run sequentially, latency and direct TCP probes are bounded to at most three workers, and throughput transfers remain sequential. The implementation records exact transfer bytes, supports explicitly marked useful partial downloads, retries transient download failures with fresh requests, and persists cancellation outcomes. Stages 1–6 have passed the user's local offline verification. Stage 7 is reserved for separately run real-world comparisons; no speed or reliability comparison is claimed until those measurements are collected. The staged design, Throne latency reference, v2rayN throughput reference, acceptance criteria, and offline-only test policy are specified in `docs/BENCHMARK_OPTIMIZATION_PLAN.md`.
 
@@ -253,8 +253,8 @@ Latest mode selects the most recent run containing each selected node, regardles
 Comparison mode is intentionally different: it selects the latest **completed** run independently for each node/core pair. A newer completed run supersedes an older one even if it has no successful attempts; comparison never falls back to stale measurements. Cancelled, interrupted, and running runs remain visible in history but do not replace the latest completed comparison. Direct TCP ping is shown as its own `direct` row and is not attributed to a proxy core.
 
 Each metric summary reports:
-- The median of successful attempts only, when at least one succeeded.
-- The successful count out of the three scheduled attempts.
+- The successful measurement, when at least one attempt succeeded.
+- The number of attempts made (maximum three).
 - Failure counts by outcome (for example, timeout or unreachable).
 - The number of attempts not run when a run ended before all three attempts.
 - A preflight outcome such as unsupported, invalid, or unavailable when the core was not tested.
