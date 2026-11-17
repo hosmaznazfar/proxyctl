@@ -293,12 +293,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             print_batch_summary("Restored", &summary, "already active");
         }
         Command::Nodes {
-            command: NodesCommand::Purge {
-                deleted: _,
-                older_than,
-                apply,
-                ..
-            },
+            command:
+                NodesCommand::Purge {
+                    deleted: _,
+                    older_than,
+                    apply,
+                    ..
+                },
         } => {
             let summary = nodes::purge_deleted_nodes(&database_path, &older_than, apply)?;
             if apply {
