@@ -15,6 +15,7 @@ use clap_complete::Shell;
 
 mod handlers;
 mod presentation;
+mod table;
 pub use handlers::dispatch;
 use presentation::*;
 use std::path::PathBuf;
