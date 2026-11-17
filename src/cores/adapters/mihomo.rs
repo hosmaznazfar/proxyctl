@@ -413,5 +413,13 @@ mod config_contract_tests {
         assert_eq!(tun["tun"]["auto-route"], false);
         assert_eq!(tun["tun"]["auto-redirect"], false);
         assert_eq!(tun["tun"]["dns-mode"], "disabled");
+
+        let mark = super::super::TunOutboundMark::new(0x42, 0xff).unwrap();
+        assert!(
+            MihomoAdapter
+                .generate_tun_activation_config_with_mark(&node, 43128, mark)
+                .is_err(),
+            "Mihomo must fail closed until outbound-only mark scope is verified"
+        );
     }
 }
