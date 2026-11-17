@@ -65,6 +65,7 @@ pub fn verify_readiness(
     );
     ensure!(
         expected.core_mark != 0
+            && expected.core_mark <= i32::MAX as u32
             && expected.core_mark_mask != 0
             && expected.core_mark & !expected.core_mark_mask == 0,
         "expected core socket mark or mask is invalid"
@@ -169,6 +170,9 @@ mod tests {
         assert!(verify_readiness(&expected, &healthy()).is_err());
         expected.core_mark = 0x100;
         expected.core_mark_mask = 0xff;
+        assert!(verify_readiness(&expected, &healthy()).is_err());
+        expected.core_mark = 0x8000_0000;
+        expected.core_mark_mask = u32::MAX;
         assert!(verify_readiness(&expected, &healthy()).is_err());
     }
 
