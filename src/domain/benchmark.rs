@@ -346,6 +346,18 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_transfer_attempts_are_a_distinct_failure_status() {
+        let mut value = sample(BenchmarkSampleStatus::Incomplete, None);
+        value.failure_category = Some("incomplete_response".into());
+        value.failure_reason = Some("response ended early".into());
+        value.metric = BenchmarkMetric::Download;
+        value.unit = BenchmarkMetric::Download.unit().into();
+        value.transferred_bytes = Some(12 * 1024);
+        value.duration_ms = Some(1500);
+        assert_eq!(value.validate(), Ok(()));
+    }
+
+    #[test]
     fn median_uses_successful_samples_only() {
         let samples = [
             sample(BenchmarkSampleStatus::Success, Some(40.0)),
