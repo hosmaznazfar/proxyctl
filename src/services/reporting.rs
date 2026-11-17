@@ -60,7 +60,7 @@ pub struct TargetReport {
 pub struct MetricSummary {
     pub metric: BenchmarkMetric,
     pub successful: usize,
-    /// Successful download samples retained from a truncated response.
+    /// Successful partial downloads accepted by the Quick profile.
     pub partial_successful: usize,
     pub attempted: usize,
     pub median: Option<f64>,
