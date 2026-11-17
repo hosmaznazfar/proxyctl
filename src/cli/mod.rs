@@ -59,7 +59,7 @@ enum NodesCommand {
         #[arg(long, required = true)]
         deleted: bool,
         /// Minimum time since deletion (for example 30d, 12h, or 45m).
-        #[arg(long, default_value = "30d")]
+        #[arg(long, default_value = "0s")]
         older_than: String,
         /// Apply the purge. Without this flag the command is a dry run.
         #[arg(long, conflicts_with = "dry_run")]
@@ -889,6 +889,18 @@ mod tests {
                 ..
             }) if node == &vec!["18".to_owned()]
         ));
+    }
+
+    #[test]
+    fn node_purge_requires_explicit_deleted_scope_and_supports_preview_or_apply() {
+        assert!(Cli::try_parse_from(["proxyctl", "nodes", "purge"]).is_err());
+        assert!(Cli::try_parse_from(["proxyctl", "nodes", "purge", "--deleted"]).is_ok());
+        assert!(Cli::try_parse_from([
+            "proxyctl", "nodes", "purge", "--deleted", "--older-than", "30d", "--apply"
+        ]).is_ok());
+        assert!(Cli::try_parse_from([
+            "proxyctl", "nodes", "purge", "--deleted", "--apply", "--dry-run"
+        ]).is_err());
     }
 
     #[test]
