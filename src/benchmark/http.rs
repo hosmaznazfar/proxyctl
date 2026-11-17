@@ -42,7 +42,10 @@ pub enum MeasurementFailure {
     HttpStatus(u16),
     ProtocolFailed,
     IncompleteResponse,
-    IncompleteTransfer { transferred_bytes: u64, duration_ms: u64 },
+    IncompleteTransfer {
+        transferred_bytes: u64,
+        duration_ms: u64,
+    },
     ReadFailed,
     Cancelled,
 }
