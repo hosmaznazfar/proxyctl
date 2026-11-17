@@ -201,6 +201,7 @@ pub(crate) fn validate_string_options(node: &ProxyNode) -> Result<(), String> {
         "encryption",
         "flow",
         "type",
+        "headerType",
         "host",
         "path",
         "serviceName",
