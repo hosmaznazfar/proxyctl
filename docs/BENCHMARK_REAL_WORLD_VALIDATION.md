@@ -1,95 +1,113 @@
 # Real-world benchmark validation runbook
 
-> Status: prepared; user-run validation only
+> Status: user-run validation in progress
 > Scope: real URLs and explicitly selected stored proxy nodes
 > Safety: this document does not authorize automatic tests, core activation, TUN, or system network changes by Proxyctl
 
-## 1. Before network testing
+## 1. Offline verification gate
 
-Complete the offline verification batch first:
+Before comparing real network performance, run:
 
-```sh
+```fish
 cargo fmt --all -- --check
-cargo test
-cargo clippy --all-targets --all-features -- -D warnings
-cargo build --release
+cargo clippy --all-targets --all-features --locked -- -D warnings
+cargo test --locked
+cargo build --release --locked
 ```
 
-The ordinary test suite must remain offline. These commands must not launch managed proxy cores or contact public measurement endpoints. Record the output and resolve failures before continuing.
+The ordinary test suite must remain offline. Do not launch managed proxy cores or contact public measurement endpoints during these checks.
 
 Confirm the intended nodes and managed core installations:
 
-```sh
+```fish
 proxyctl list
 proxyctl cores
 proxyctl config
 ```
 
-Use only Proxyctl-managed core binaries. Do not start Throne, v2rayN, or V2rayA at the same time as a Proxyctl-managed core during the comparison. Do not use TUN mode; TUN activation remains disabled.
+Use only Proxyctl-managed core binaries. Do not start Throne, v2rayN, or V2rayA at the same time as a Proxyctl-managed core during a comparison. Do not use TUN mode; TUN activation remains disabled.
 
-## 2. Endpoint selection
+## 2. Endpoint selection and measurement profiles
 
-Proxyctl's current defaults are:
+Current defaults:
 
 - Real latency: `https://www.google.com/generate_204`
 - Download: `https://cachefly.cachefly.net/10mb.test`
 - Upload: `https://speed.cloudflare.com/__up`
 
-The default transfer payloads are 1 MiB each (hard maximum 1 MiB), with a 60-second deadline per download/upload request. These defaults contact third-party services and disclose ordinary connection metadata such as source IP and request timing. Use endpoints whose terms and telemetry you accept. A custom upload URL must accept the documented HTTP POST body and return a successful HTTP status. Do not put credentials or secret tokens in command-line URLs; URLs are persisted in benchmark run settings and may be visible in local reports/database backups.
+The selected endpoint URLs are persisted in benchmark settings. They may disclose ordinary connection metadata such as source IP and request timing. Use endpoints whose terms and telemetry you accept. Do not put credentials or secret tokens in command-line URLs.
 
-Use the same endpoint URLs, payload sizes, and timeout values for every client in a comparison. Do not assume unrelated speed-test services produce directly comparable results.
+| Setting | Quick (default) | Accurate |
+|---|---:|---:|
+| Download streams | 1 | 3 concurrent |
+| Aggregate download cap | 1 MiB | 8 MiB |
+| Download time budget | 5 seconds | 20 seconds |
+| Warm-up | None | Best-effort 64 KiB, excluded from timing |
+| Upload | 1 MiB, sequential | Same |
 
-## 3. First real-network smoke test
+Download cap can be overridden with `--download-max-bytes` (hard maximum 32 MiB). Upload can be overridden with `--upload-bytes` (hard maximum 1 MiB). The upload measurement requires the complete synthetic request body and a successful HTTP response; partial uploads are not scored. Each metric retains three samples, and reports use successful samples only. A useful partial download is explicitly marked and is never presented as a complete transfer.
 
-Choose one known-good stored node ID and test it through one installed managed core. Start with latency-only:
+Use the same endpoint URLs, payload sizes, profile, and timeout values for every client in a comparison. Do not assume unrelated speed-test services produce directly comparable results. A custom upload URL must accept the documented HTTP POST body and return a successful HTTP status.
 
-```sh
-proxyctl test --node NODE_ID --core sing-box --latency-only \
-  --latency-url https://www.google.com/generate_204 \
-  --latency-timeout-secs 5 --concurrency 1
+## 3. Verify the profiles on a known-good node
+
+First verify Quick through each compatible core:
+
+```fish
+proxyctl test --node NODE_ID --all-cores --profile quick
 ```
 
-Replace `NODE_ID` with the actual stored node number. Repeat for Xray and Mihomo only if those managed cores are installed. Each invocation starts only the selected Proxyctl-managed core, uses a loopback-only benchmark listener, and stops it before returning. It does not change system proxy, DNS, routes, firewall, or TUN.
+Then verify Accurate download independently of the latency gate:
 
-If latency succeeds, run one full test for that node/core:
-
-```sh
-proxyctl test --node NODE_ID --core sing-box \
-  --latency-url https://www.google.com/generate_204 \
-  --download-url https://cachefly.cachefly.net/10mb.test \
-  --upload-url https://speed.cloudflare.com/__up \
-  --download-max-bytes 1048576 --upload-bytes 1048576 \
-  --latency-timeout-secs 5 --request-timeout-secs 60 --concurrency 1
+```fish
+proxyctl test --node NODE_ID --all-cores --profile accurate --download-only
 ```
 
-Use the same settings when repeating with other cores. In full mode, download and upload are skipped when all three real-latency samples fail. Metric-only download/upload modes intentionally bypass that gate.
+Metric-only download/upload modes intentionally bypass the full-mode latency gate. This is useful when validating throughput profile behavior separately from latency reliability. Start with one known-good node and avoid running other proxy clients or speed tests concurrently.
 
-## 4. Multi-node and comparative run
+For a focused per-core check:
 
-After the single-node smoke test behaves correctly, select a small representative set of node IDs and run:
-
-```sh
-proxyctl test --node NODE_ID_1 NODE_ID_2 --all-cores \
-  --latency-url https://www.google.com/generate_204 \
-  --download-url https://cachefly.cachefly.net/10mb.test \
-  --upload-url https://speed.cloudflare.com/__up \
-  --download-max-bytes 1048576 --upload-bytes 1048576 \
-  --latency-timeout-secs 5 --request-timeout-secs 60 --concurrency 3
+```fish
+proxyctl test --node NODE_ID --core xray --download-only --profile accurate
 ```
 
-For a fair comparison with Throne or v2rayN:
+After download profile verification, test upload independently:
 
-1. Use the same imported node links and endpoint URLs wherever the other client permits.
-2. Keep payload sizes and timeout limits equivalent.
-3. Run one client/core at a time; ensure no duplicate core or competing test is active.
-4. Alternate client order between repetitions (for example Proxyctl → Throne → v2rayN, then v2rayN → Proxyctl → Throne).
-5. Repeat at different times if possible; record network conditions and endpoint.
-6. Compare three-sample medians and inspect individual sample statuses. Do not compare a failed or latency-gated throughput result as a measured zero.
-7. Do not change Proxyctl defaults based on a single run.
+```fish
+proxyctl test --node NODE_ID --all-cores --upload-only
+```
+
+Upload settings are currently the same for Quick and Accurate. Intermittent upload failures should be retained as failures; do not treat them as zero throughput or relax the success criteria.
+
+In full mode, throughput is gated on at least one successful real-latency sample for that node/core pair. If all latency samples fail, use the metric-only commands above to isolate throughput.
+
+## 4. Same-node comparison with Throne and v2rayN
+
+Choose a small representative set of nodes that are confirmed working in each client. Use the same imported link, measurement endpoint, profile-equivalent payload size, and timeout limits wherever each client allows them.
+
+1. Run only one client/core at a time. Ensure no duplicate core or competing speed test is active.
+2. Use equivalent protocol/inbound settings where possible; Proxyctl defaults to a local SOCKS5 measurement inbound. Its HTTP alternative is selected with `--proxy-type http`.
+3. Alternate client order between repetitions (for example Proxyctl → Throne → v2rayN, then v2rayN → Proxyctl → Throne).
+4. Repeat at different times if possible; record network conditions and endpoint.
+5. Compare three-sample medians and inspect individual sample statuses and transferred bytes. Do not compare a failed or latency-gated throughput result as a measured zero.
+6. Do not change Proxyctl defaults based on a single run.
+
+Example Proxyctl commands:
+
+```fish
+# Quick, all cores
+proxyctl test --node NODE_ID --all-cores --profile quick
+
+# Accurate download, all cores
+proxyctl test --node NODE_ID --all-cores --profile accurate --download-only
+
+# Upload-only, all cores
+proxyctl test --node NODE_ID --all-cores --upload-only
+```
 
 ## 5. Inspect and preserve results
 
-```sh
+```fish
 proxyctl report --history
 proxyctl report --compare
 proxyctl report --verbose
@@ -108,15 +126,3 @@ Stop testing and retain the report if any of the following occurs:
 - the endpoint rejects the request or its behavior is unclear.
 
 Do not attempt to repair system networking by running more benchmark commands. The benchmark is not intended to mutate system networking.
-
-
-## Compare local proxy inbound protocols
-
-The default benchmark route is SOCKS5. To compare the alternative HTTP inbound without
-changing the endpoints or node/core selection, run the same test once with
-`--proxy-type http`. The selected protocol is recorded in the benchmark run metadata.
-
-```bash
-proxyctl test --node 5 --core xray --proxy-type socks5
-proxyctl test --node 5 --core xray --proxy-type http
-```
