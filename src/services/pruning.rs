@@ -219,6 +219,9 @@ fn evaluate_core(
         | Some(BenchmarkSampleStatus::Unavailable)
         | Some(BenchmarkSampleStatus::Timeout)
         | Some(BenchmarkSampleStatus::Unreachable) => return CoreConnectivity::Unreachable,
+        Some(BenchmarkSampleStatus::Incomplete) => {
+            return CoreConnectivity::Incomplete("preflight response was incomplete".into());
+        }
         Some(BenchmarkSampleStatus::Skipped) => {
             return CoreConnectivity::Incomplete("latency sample was skipped".into());
         }
