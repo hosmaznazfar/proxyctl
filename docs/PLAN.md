@@ -33,7 +33,7 @@ Initial cores: sing-box, Xray, and Mihomo. Proxyctl orchestrates official core b
 | Source file | Read-only input; proxyctl never edits it |
 | Persistent storage | Embedded redb database |
 | Database lifecycle | Open only for a command's read/write phase, then close; no database daemon |
-| Benchmark history | Keep multiple runs and individual samples |
+| Benchmark history | Keep multiple runs and individual attempt(s) |
 | Default URL display | Mask credentials and sensitive URL fields |
 | Benchmark probe concurrency | Bounded to three concurrent latency/TCP probes; throughput transfers sequential |
 | TUN | Disabled until exact route ownership, crash-safe recovery, and isolation are proven |
@@ -103,7 +103,7 @@ Use versioned logical tables, initially:
 - nodes: original URL, parsed fields, fingerprint, display metadata, lifecycle state, timestamps.
 - node_fingerprints: unique fingerprint-to-node lookup.
 - benchmark_runs: run metadata, selected cores, test settings, start/end state.
-- benchmark_samples: individual metric samples, status, value/unit, error category, and timestamp.
+- benchmark_attempt(s): individual metric attempt(s), status, value/unit, error category, and timestamp.
 
 The schema must include a migration/version strategy from the first implementation. Database access is behind repository interfaces so the storage engine can be replaced without changing domain services.
 
@@ -195,11 +195,11 @@ This work does not start cores, activate proxies, or modify system networking. A
 
 The default endpoints remain Google `generate_204` for real ping, CacheFly's 10 MB test file for download, and Cloudflare's upload endpoint for a synthetic upload body. Proxyctl never sends user files or proxy credentials to the upload endpoint. Public LibreSpeed endpoints may be configured, but Proxyctl does not silently select a public server with operator-dependent telemetry/privacy behavior.
 
-TCP ping runs once per node and is stored under the reserved `direct` target. HTTP tests run for each compatible node/core pair. The CLI prints node/core/metric/sample progress. Ctrl-C stops the active managed core to interrupt loopback proxy requests, waits for measurement workers and the child to exit, persists completed/cancelled samples, and finalizes the run as cancelled.
+TCP ping runs once per node and is stored under the reserved `direct` target. HTTP tests run for each compatible node/core pair. The CLI prints node/core/metric/sample progress. Ctrl-C stops the active managed core to interrupt loopback proxy requests, waits for measurement workers and the child to exit, persists completed/cancelled attempt(s), and finalizes the run as cancelled.
 
-**Implementation status: core-batched benchmark and profile implementation committed; latest profile verification pending user report.** Typed run/sample records, schema version 3, incremental persistence, median/throughput helpers, stale-run recovery, loopback-only per-core configs, native config validation, bounded child lifecycle, HTTP measurements, progress, and cooperative cancellation are implemented. Failure diagnostics are allowlisted and do not expose raw core logs or transport details. Quick defaults to a 1 MiB one-stream download with a 5-second budget; Accurate defaults to three concurrent streams, an 8 MiB aggregate cap, a 20-second budget, and a best-effort 64 KiB warm-up excluded from timing. The download hard cap is 32 MiB; upload remains sequential and capped at 1 MiB. Three samples per metric and median aggregation remain unchanged. In full-suite mode, throughput remains gated on at least one successful real-latency sample for that node/core pair. The core-first scheduler starts only one managed core process at a time and batches compatible nodes. No system networking is changed.
+**Implementation status: core-batched benchmark and profile implementation committed; latest profile verification pending user report.** Typed run/sample records, schema version 3, incremental persistence, median/throughput helpers, stale-run recovery, loopback-only per-core configs, native config validation, bounded child lifecycle, HTTP measurements, progress, and cooperative cancellation are implemented. Failure diagnostics are allowlisted and do not expose raw core logs or transport details. Quick defaults to a 1 MiB one-stream download with a 5-second budget; Accurate defaults to three concurrent streams, an 8 MiB aggregate cap, a 20-second budget, and a best-effort 64 KiB warm-up excluded from timing. The download hard cap is 32 MiB; upload remains sequential and capped at 1 MiB. up to three attempts per metric; stop at the first success and median aggregation remain unchanged. In full-suite mode, throughput remains gated on at least one successful real-latency sample for that node/core pair. The core-first scheduler starts only one managed core process at a time and batches compatible nodes. No system networking is changed.
 
-The remaining work is broader metric coverage and hardening, not a blocker for read-only reporting. Report and sorting views consume persisted samples only and never start cores.
+The remaining work is broader metric coverage and hardening, not a blocker for read-only reporting. Report and sorting views consume persisted attempt(s) only and never start cores.
   
 ### 3.6 Sorting and comparison semantics
 
@@ -216,7 +216,7 @@ proxyctl list --sort download --core sing-box
 proxyctl list --sort upload --core mihomo
 ~~~
 
-For each node/core pair, use its latest completed run and calculate the median of successful samples. A newer completed run supersedes an older one even if it contains no successful samples; do not fall back to stale measurements. Ignore interrupted, cancelled, and running runs.
+For each node/core pair, use its latest completed run and calculate the median of successful attempt(s). A newer completed run supersedes an older one even if it contains no successful attempt(s); do not fall back to stale measurements. Ignore interrupted, cancelled, and running runs.
 
 Cross-core sorting takes the median of available per-core medians, giving each successful core equal weight rather than selecting only the fastest core. Core-specific sorting restricts the calculation to the selected core. Direct TCP ping uses the reserved `direct` target and is never combined with real ping.
 
@@ -241,9 +241,9 @@ proxyctl report --compare --node 18
 proxyctl report --compare --core xray
 ~~~
 
-Latest mode displays the newest run containing each node, regardless of lifecycle status. History mode displays all matching runs newest first. Compare mode independently selects the latest completed run for each node/core pair; newer completed runs supersede older ones even when all samples failed. Cancelled, interrupted, and running runs do not replace comparison results. Direct TCP ping is shown under the separate `direct` target.
+Latest mode displays the newest run containing each node, regardless of lifecycle status. History mode displays all matching runs newest first. Compare mode independently selects the latest completed run for each node/core pair; newer completed runs supersede older ones even when all attempt(s) failed. Cancelled, interrupted, and running runs do not replace comparison results. Direct TCP ping is shown under the separate `direct` target.
 
-Every metric reports the successful count out of three, the median of successful samples, failure counts, and samples not run. One or two successful samples produce an explicitly partial median; three successful samples are complete. Preflight outcomes (unsupported, invalid, unavailable) remain distinct from attempted network failures. Missing or failed measurements are never rendered as zero.
+Every metric reports the successful count out of three, the median of successful attempt(s), failure counts, and attempt(s) not run. One or two successful attempt(s) produce an explicitly partial median; three successful attempt(s) are complete. Preflight outcomes (unsupported, invalid, unavailable) remain distinct from attempted network failures. Missing or failed measurements are never rendered as zero.
 
 Reports do not start proxy cores, contact measurement endpoints, or modify system networking. `show` and all report modes share the configurable compact/normal/full table profiles. Normal is the default; compact and full can be selected persistently with `proxyctl config display profile`. `show --details` displays connection/configuration fields with secrets masked. `report --details` selects the full benchmark table profile for that invocation, while `--verbose` expands core version metadata without changing table columns. Latest output has one row per node/core, history has one row per node/core/run, and compare has one row per node/core from the latest completed run.
 
@@ -263,9 +263,9 @@ proxyctl prune --core xray --unavailable --dry-run
 proxyctl prune --core xray --unavailable --apply
 ~~~
 
-**Implementation status: updated.** `proxyctl prune --unavailable-all` evaluates every active node against all three managed cores: sing-box, Xray, and Mihomo. Unsupported and invalid adapter outcomes count as a core that cannot use the node. For supported combinations, the latest completed run must contain three distinct real-ping attempts with no successful sample; timeout, unreachable, and unavailable outcomes count as failed connectivity. Any successful real-ping sample through any core keeps the node. Missing runs, incomplete samples, and cancelled evidence remain inconclusive. `proxyctl prune --core xray --unavailable` remains available for a single-core evaluation. Preview is the default; `--apply` is the only mode that soft-deletes nodes.
+**Implementation status: updated.** `proxyctl prune --unavailable-all` evaluates every active node against all three managed cores: sing-box, Xray, and Mihomo. Unsupported and invalid adapter outcomes count as a core that cannot use the node. For supported combinations, the latest completed run must contain three distinct real-ping attempts with no successful sample; timeout, unreachable, and unavailable outcomes count as failed connectivity. Any successful real-ping sample through any core keeps the node. Missing runs, incomplete attempt(s), and cancelled evidence remain inconclusive. `proxyctl prune --core xray --unavailable` remains available for a single-core evaluation. Preview is the default; `--apply` is the only mode that soft-deletes nodes.
 
-Benchmark history is automatically retained to at most three newest runs per node/target pair. Samples for older target histories are removed; shared run metadata is retained only while another target in that run still has retained samples. Running runs are never pruned.
+Benchmark history is automatically retained to at most three newest runs per node/target pair. attempt(s) for older target histories are removed; shared run metadata is retained only while another target in that run still has retained attempt(s). Running runs are never pruned.
 
 Pruning is a soft-delete/lifecycle-state change, not immediate permanent erasure. Use `list --include-deleted` to see deleted positions (`D1`, `D2`, ...), then `proxyctl restore 1` to restore the first deleted row. Pruning reads persisted benchmark evidence only: it does not start cores, contact measurement endpoints, or change system networking.
 
@@ -365,7 +365,7 @@ proxyctl prune --core xray --unavailable --dry-run
 proxyctl prune --core xray --unavailable --apply
 ~~~
 
-`remove` and `restore` remain soft lifecycle operations. `remove all` requires interactive confirmation unless `--yes` is supplied; `restore all` selects deleted records only. For individual restore operations, use the deleted-row position shown as `D#` by `list --include-deleted`. Batch operations report missing and unchanged selections separately. Benchmark/report selectors accept lists and ranges; selected nodes are recorded together in one benchmark run, with individual samples persisted for each node/core target.
+`remove` and `restore` remain soft lifecycle operations. `remove all` requires interactive confirmation unless `--yes` is supplied; `restore all` selects deleted records only. For individual restore operations, use the deleted-row position shown as `D#` by `list --include-deleted`. Batch operations report missing and unchanged selections separately. Benchmark/report selectors accept lists and ranges; selected nodes are recorded together in one benchmark run, with individual attempt(s) persisted for each node/core target.
 
 ## 5. Architecture
 
@@ -460,7 +460,7 @@ Each stage should leave the default branch buildable and tested. Apply related C
 
 ## Benchmark optimization implementation status
 
-Stages 1–5 are now committed on `main`: adapters can generate independently routed multi-node configs; the process manager starts one core for a batch and waits for every loopback listener; the scheduler is core-first; real HTTP latency and direct TCP probes use persisted bounded concurrency; latency and throughput have separate persisted timeouts. Downloads are capped at the configured byte count and expose throttled byte/rate progress; early-close/read-failed outcomes retry up to three total attempts on fresh connections. If no attempt completes, the fastest partial transfer of at least 16 KiB is retained, using ureq's streaming response reader so received bytes survive later transport/framing errors. Upload timing includes request transmission and response completion. Selected multi-node runs share one run ID, handled cancellation records unattempted scheduled samples, and each run stores a sample-count summary. Throughput remains sequential and the full-mode latency gate is preserved. Stages 1–5 have been user-verified. The Stage 6 offline verification batch (formatting, focused benchmark HTTP tests, full tests, Clippy with warnings denied, and release build) was confirmed passing by the user on 2026-11-15. The subsequent coverage audit reviewed config generation/routing, native validation, process lifecycle/readiness, HTTP metrics, persistence/recovery/retention, and cancellation. The fake-executable test verifies native validation command arguments and temporary-config permissions/cleanup for all three cores; the user confirmed the focused test and full verification batch passed. Stage 6 is complete; Stage 7 real-world comparison remains user-run under the separate validation runbook. Stage 7 real-world comparison is user-run under the separate validation runbook.
+Stages 1–5 are now committed on `main`: adapters can generate independently routed multi-node configs; the process manager starts one core for a batch and waits for every loopback listener; the scheduler is core-first; real HTTP latency and direct TCP probes use persisted bounded concurrency; latency and throughput have separate persisted timeouts. Downloads are capped at the configured byte count and expose throttled byte/rate progress; early-close/read-failed outcomes retry up to three total attempts on fresh connections. If no attempt completes, the fastest partial transfer of at least 16 KiB is retained, using ureq's streaming response reader so received bytes survive later transport/framing errors. Upload timing includes request transmission and response completion. Selected multi-node runs share one run ID, handled cancellation records unattempted scheduled attempt(s), and each run stores a sample-count summary. Throughput remains sequential and the full-mode latency gate is preserved. Stages 1–5 have been user-verified. The Stage 6 offline verification batch (formatting, focused benchmark HTTP tests, full tests, Clippy with warnings denied, and release build) was confirmed passing by the user on 2026-11-15. The subsequent coverage audit reviewed config generation/routing, native validation, process lifecycle/readiness, HTTP metrics, persistence/recovery/retention, and cancellation. The fake-executable test verifies native validation command arguments and temporary-config permissions/cleanup for all three cores; the user confirmed the focused test and full verification batch passed. Stage 6 is complete; Stage 7 real-world comparison remains user-run under the separate validation runbook. Stage 7 real-world comparison is user-run under the separate validation runbook.
 
 ## 8. Open implementation details
 
@@ -551,7 +551,7 @@ Resolve these choices with evidence and document them before the affected featur
 Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listener setting. The built-in default is **10909**. The setting is stored as a small private JSON file under the Proxyctl XDG data directory, independently of benchmark state, and therefore survives terminal closure and reboot. `proxyctl config` displays the effective value; `config set listen-port PORT` validates the unprivileged port range and checks the actual 127.0.0.1 bind before saving; `config reset listen-port` returns to 10909. An occupied requested port is rejected and the effective setting falls back to the built-in default. `use --port PORT` is a one-run override and does not modify the persistent setting. Activation repeats the port preflight before it stops/replaces a managed core. The OS can still allocate the port to another process after preflight and before the core binds; that race is reported as a startup failure, never handled by silently selecting a different port. Benchmark listeners remain independently ephemeral.
 
 
-- **Metric-specific benchmark execution:** `test` now supports mutually exclusive `--latency-only`, `--download-only`, and `--upload-only` selectors. The default remains all HTTP metrics plus direct TCP ping. Each metric-only mode runs only its named HTTP metric and skips direct TCP ping. Preflight failures are persisted only for the selected metric, so a single-metric run does not create misleading outcomes for skipped metrics. Each selected HTTP metric retains three samples per supported node/core pair. In the default full-suite mode, download and upload run only after at least one successful latency sample; if all three latency samples fail, throughput is skipped with a `latency_gate` preflight outcome.
+- **Metric-specific benchmark execution:** `test` now supports mutually exclusive `--latency-only`, `--download-only`, and `--upload-only` selectors. The default remains all HTTP metrics plus direct TCP ping. Each metric-only mode runs only its named HTTP metric and skips direct TCP ping. Preflight failures are persisted only for the selected metric, so a single-metric run does not create misleading outcomes for skipped metrics. Each selected HTTP metric retains up to three attempts, stopping at the first success per supported node/core pair. In the default full-suite mode, download and upload run only after at least one successful latency sample; if all three latency attempt(s) fail, throughput is skipped with a `latency_gate` preflight outcome.
 
 
 ## Configurable result presentation
@@ -561,7 +561,7 @@ Ordinary (non-TUN) activation now uses a persistent loopback HTTP/SOCKS5 listene
 
 ## Benchmark performance optimization
 
-**Core batching and the Quick/Accurate profile implementation are committed; profile verification is pending user-run checks.** Proxyctl uses one managed core process per core batch, bounded-concurrent latency/TCP probes (maximum three workers), three samples and median aggregation, independent latency/throughput timeouts, explicit cancellation records, and persisted run summaries.
+**Core batching and the Quick/Accurate profile implementation are committed; profile verification is pending user-run checks.** Proxyctl uses one managed core process per core batch, bounded-concurrent latency/TCP probes (maximum three workers), up to three attempts, stopping at the first success and median aggregation, independent latency/throughput timeouts, explicit cancellation records, and persisted run summaries.
 
 Throughput profiles:
 - **Quick (default):** one download stream, 1 MiB aggregate cap, 5-second budget, no warm-up.
