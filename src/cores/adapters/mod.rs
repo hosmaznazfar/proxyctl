@@ -16,6 +16,31 @@ use crate::{cores::CoreId, domain::ProxyNode};
 pub use benchmark_batch::BenchmarkTarget;
 pub use shared::{Compatibility, CompatibilityStatus, GeneratedConfig};
 
+/// Socket mark used only by a core's proxy outbound during TUN operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TunOutboundMark {
+    value: u32,
+    mask: u32,
+}
+
+impl TunOutboundMark {
+    pub fn new(value: u32, mask: u32) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            value != 0 && mask != 0 && value & !mask == 0,
+            "TUN outbound socket mark must be non-zero and fit its non-zero policy mask"
+        );
+        Ok(Self { value, mask })
+    }
+
+    pub fn value(self) -> u32 {
+        self.value
+    }
+
+    pub fn mask(self) -> u32 {
+        self.mask
+    }
+}
+
 /// A core adapter must either represent every retained connection option or explain why it
 /// cannot. It must never emit a partial configuration after silently dropping an option.
 pub trait CoreAdapter {
@@ -42,6 +67,20 @@ pub trait CoreAdapter {
         node: &ProxyNode,
         listen_port: u16,
     ) -> anyhow::Result<GeneratedConfig>;
+
+    /// Generate TUN configuration with a mark applied exclusively to the proxy outbound socket.
+    /// Adapters without a proven outbound-scoped native option fail closed by default.
+    fn generate_tun_activation_config_with_mark(
+        &self,
+        _node: &ProxyNode,
+        _listen_port: u16,
+        _mark: TunOutboundMark,
+    ) -> anyhow::Result<GeneratedConfig> {
+        anyhow::bail!(
+            "{} does not have a verified proxy-outbound-only socket mark option",
+            self.core()
+        )
+    }
 
     /// Add this core's loopback-only HTTP/SOCKS benchmark listener.
     fn generate_benchmark_config(
