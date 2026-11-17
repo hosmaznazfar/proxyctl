@@ -9,7 +9,7 @@ use anyhow::{Context, bail};
 use redb::{Database as RedbDatabase, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{BenchmarkRun, BenchmarkRunStatus, BenchmarkSample, ProxyNode};
+use crate::domain::ProxyNode;
 
 const SCHEMA_VERSION: u64 = 3;
 pub(super) const METADATA: TableDefinition<&str, u64> = TableDefinition::new("metadata");
@@ -443,7 +443,7 @@ pub fn default_database_path() -> anyhow::Result<PathBuf> {
     Ok(data_home.join("proxyctl").join("proxyctl.redb"))
 }
 
-pub(super) fn unix_timestamp() -> u64 {
+pub(super) pub(super) fn unix_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
