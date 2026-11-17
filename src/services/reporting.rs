@@ -59,6 +59,8 @@ pub struct TargetReport {
 #[derive(Clone, Debug)]
 pub struct MetricSummary {
     pub metric: BenchmarkMetric,
+    /// Sanitized endpoint host/path used for this metric.
+    pub endpoint: Option<String>,
     pub successful: usize,
     /// Successful partial downloads accepted by the Quick profile.
     pub partial_successful: usize,
@@ -178,7 +180,7 @@ fn build_run_report(run: &BenchmarkRun, node_id: u64, samples: &[BenchmarkSample
                 core_version,
                 metrics: metrics
                     .into_iter()
-                    .map(|metric| summarize_metric(metric, &target_samples))
+                     .map(|metric| summarize_metric(metric, &target_samples, endpoint_for_metric(&run.settings, metric)))
                     .collect(),
             })
         })
@@ -282,9 +284,28 @@ fn comparison_for(
         core_version,
         metrics: metrics_for_target(target)
             .into_iter()
-            .map(|metric| summarize_metric(metric, &target_samples))
+             .map(|metric| summarize_metric(metric, &target_samples, endpoint_for_metric(&run.settings, metric)))
             .collect(),
     }
+}
+
+fn endpoint_for_metric(
+    settings: &crate::domain::BenchmarkSettings,
+    metric: BenchmarkMetric,
+) -> Option<String> {
+    if metric == BenchmarkMetric::TcpPing {
+        return None;
+    }
+    let raw = match metric {
+        BenchmarkMetric::Latency => &settings.latency_url,
+        BenchmarkMetric::Download => &settings.download_url,
+        BenchmarkMetric::Upload => &settings.upload_url,
+        BenchmarkMetric::TcpPing => return None,
+    };
+    let url = url::Url::parse(raw).ok()?;
+    let host = url.host_str()?;
+    let path = if url.path().is_empty() { "/" } else { url.path() };
+    Some(format!("{host}{path}"))
 }
 
 fn metrics_for_target(target: &str) -> Vec<BenchmarkMetric> {
@@ -299,7 +320,11 @@ fn metrics_for_target(target: &str) -> Vec<BenchmarkMetric> {
     }
 }
 
-fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> MetricSummary {
+fn summarize_metric(
+    metric: BenchmarkMetric,
+    samples: &[&BenchmarkSample],
+    endpoint: Option<String>,
+) -> MetricSummary {
     let metric_samples = samples
         .iter()
         .copied()
@@ -347,6 +372,7 @@ fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> Me
 
     MetricSummary {
         metric,
+        endpoint,
         successful,
         partial_successful,
         attempted: attempted_samples.len(),
@@ -460,7 +486,7 @@ mod tests {
         samples[0].partial = true;
         samples[0].transferred_bytes = Some(32 * 1024);
         let refs = samples.iter().collect::<Vec<_>>();
-        let summary = summarize_metric(BenchmarkMetric::Download, &refs);
+        let summary = summarize_metric(BenchmarkMetric::Download, &refs, None);
         assert_eq!(summary.successful, 1);
         assert_eq!(summary.partial_successful, 1);
         assert_eq!(summary.attempted, 2);
@@ -481,7 +507,7 @@ mod tests {
         failed.transferred_bytes = Some(5 * 1024 * 1024);
         failed.duration_ms = Some(20_000);
         let samples = vec![&failed];
-        let summary = summarize_metric(BenchmarkMetric::Download, &samples);
+        let summary = summarize_metric(BenchmarkMetric::Download, &samples, None);
         assert_eq!(summary.successful, 0);
         assert_eq!(summary.median, None);
         assert_eq!(summary.failed_transfers.len(), 1);
