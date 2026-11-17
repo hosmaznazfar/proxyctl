@@ -895,12 +895,29 @@ mod tests {
     fn node_purge_requires_explicit_deleted_scope_and_supports_preview_or_apply() {
         assert!(Cli::try_parse_from(["proxyctl", "nodes", "purge"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "nodes", "purge", "--deleted"]).is_ok());
-        assert!(Cli::try_parse_from([
-            "proxyctl", "nodes", "purge", "--deleted", "--older-than", "30d", "--apply"
-        ]).is_ok());
-        assert!(Cli::try_parse_from([
-            "proxyctl", "nodes", "purge", "--deleted", "--apply", "--dry-run"
-        ]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "nodes",
+                "purge",
+                "--deleted",
+                "--older-than",
+                "30d",
+                "--apply"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "nodes",
+                "purge",
+                "--deleted",
+                "--apply",
+                "--dry-run"
+            ])
+            .is_err()
+        );
     }
 
     #[test]
