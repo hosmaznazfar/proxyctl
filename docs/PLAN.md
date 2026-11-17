@@ -109,6 +109,12 @@ The schema must include a migration/version strategy from the first implementati
 
 Recommended local permissions: data/config directories 0700; database and secret-bearing files 0600, subject to platform support. Never print full credentials in diagnostics.
 
+
+
+### 3.3.1 Node retention and permanent cleanup
+
+`remove` remains a reversible soft-delete operation. `proxyctl nodes purge --deleted` previews permanent removal; `--apply` performs the atomic purge, optionally limited by `--older-than 30d`. Purging removes the node, fingerprint index, node-specific benchmark samples, and node IDs from shared run metadata while preserving data for other nodes in multi-node runs. Nodes referenced by running benchmarks are protected. A daily systemd user timer with a 30-day restore window is documented in [`docs/NODE_RETENTION.md`](NODE_RETENTION.md). Active nodes are not automatically age-purged because the current schema has no reliable last-used timestamp.
+
 ### 3.4 Protocol and core compatibility
 
 Initial URL schemes:
