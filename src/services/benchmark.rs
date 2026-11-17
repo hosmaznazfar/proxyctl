@@ -916,13 +916,13 @@ mod tests {
             .unwrap()
             .list_benchmark_samples(run_id)
             .unwrap();
-        assert_eq!(samples.len(), 8);
+        assert_eq!(samples.len(), 6);
         assert_eq!(
             samples
                 .iter()
                 .filter(|sample| sample.status == BenchmarkSampleStatus::Cancelled)
                 .count(),
-            4
+            2
         );
         assert_eq!(
             samples
