@@ -363,7 +363,6 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
