@@ -14,7 +14,9 @@ pub(super) fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSample
         MeasurementFailure::Timeout => BenchmarkSampleStatus::Timeout,
         MeasurementFailure::Unreachable => BenchmarkSampleStatus::Unreachable,
         MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
-        MeasurementFailure::IncompleteResponse | MeasurementFailure::IncompleteTransfer { .. } => BenchmarkSampleStatus::Incomplete,
+        MeasurementFailure::IncompleteResponse | MeasurementFailure::IncompleteTransfer { .. } => {
+            BenchmarkSampleStatus::Incomplete
+        },
         MeasurementFailure::Unavailable
         | MeasurementFailure::ProxyTunnelFailed
         | MeasurementFailure::TlsFailed
