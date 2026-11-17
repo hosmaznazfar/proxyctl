@@ -214,7 +214,10 @@ pub(super) fn aggregate_target_status(
     run_status_label(run_status).into()
 }
 
-pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary) -> String {
+pub(super) fn metric_summary_cell(
+    summary: &reporting::MetricSummary,
+    verbose: bool,
+) -> String {
     let mut result = if let Some(value) = summary.median {
         let formatted = if summary.metric == crate::domain::BenchmarkMetric::Download
             || summary.metric == crate::domain::BenchmarkMetric::Upload
@@ -241,36 +244,46 @@ pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary) -> String 
     } else if summary.attempted == 0 {
         "not-run".into()
     } else {
-        let mut details = summary
+        summary
             .failures
             .iter()
             .map(|failure| format!("{}×{}", sample_status_label(failure.status), failure.count))
             .collect::<Vec<_>>()
-            .join(", ");
+            .join(", ")
+    };
+
+    if verbose {
+        if !summary.median.is_none() && !summary.failures.is_empty() {
+            let failures = summary
+                .failures
+                .iter()
+                .map(|failure| format!("{}×{}", sample_status_label(failure.status), failure.count))
+                .collect::<Vec<_>>()
+                .join(", ");
+            result.push_str(&format!("; failed: {failures}"));
+        }
         if !summary.failed_transfers.is_empty() {
             let transfers = summary
                 .failed_transfers
                 .iter()
                 .map(|attempt| {
-                    let bytes = attempt.transferred_bytes
+                    let bytes = attempt
+                        .transferred_bytes
                         .map(|value| format!("{value} bytes"))
                         .unwrap_or_else(|| "bytes unknown".into());
-                    let duration = attempt.duration_ms
+                    let duration = attempt
+                        .duration_ms
                         .map(|value| format!("{:.2}s", value as f64 / 1000.0))
                         .unwrap_or_else(|| "duration unknown".into());
                     format!("#{}: {bytes} / {duration}", attempt.sample_index)
                 })
                 .collect::<Vec<_>>()
                 .join("; ");
-            if !details.is_empty() {
-                details.push_str("; ");
-            }
-            details.push_str(&transfers);
+            result.push_str(&format!("; attempts: {transfers}"));
         }
-        details
-    };
-    if let Some(endpoint) = &summary.endpoint {
-        result.push_str(&format!(" [{endpoint}]"));
+        if let Some(endpoint) = &summary.endpoint {
+            result.push_str(&format!(" [{endpoint}]"));
+        }
     }
     result
 }
@@ -285,16 +298,13 @@ pub(super) fn print_benchmark_report(
     use reporting::ReportMode;
 
     let fields = config.fields();
-    let mut builder = Builder::default();
-    builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
-    let mut found = false;
-
     if report.mode == ReportMode::Compare {
+        let mut builder = Builder::default();
+        builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
         for comparison in &report.comparisons {
             if comparison.target == "direct" && !fields.contains(&F::TcpPing) {
                 continue;
             }
-            found = true;
             builder.push_record(report_row(
                 &fields,
                 &comparison.node,
@@ -310,19 +320,46 @@ pub(super) fn print_benchmark_report(
                 },
             ));
         }
-    } else {
-        for node in &report.nodes {
-            if node.runs.is_empty() {
-                found = true;
-                builder.push_record(report_empty_node_row(&fields, &node.node, display_numbers));
-                continue;
-            }
-            for run in &node.runs {
-                for target in &run.targets {
+        if builder.count_records() == 1 {
+            println!("No completed benchmark comparisons found.");
+        } else {
+            println!("{}", builder.build().with(Style::rounded()));
+        }
+        return;
+    }
+
+    let mut found_any = false;
+    for node in &report.nodes {
+        let mut builder = Builder::default();
+        builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
+
+        if node.runs.is_empty() {
+            builder.push_record(report_empty_node_row(&fields, &node.node, display_numbers));
+        } else {
+            let mut targets = node
+                .runs
+                .iter()
+                .flat_map(|run| run.targets.iter().map(|target| target.target.clone()))
+                .collect::<Vec<_>>();
+            targets.sort_by_key(|target| match target.as_str() {
+                "sing-box" => (0, target.clone()),
+                "xray" => (1, target.clone()),
+                "mihomo" => (2, target.clone()),
+                "direct" => (3, target.clone()),
+                _ => (4, target.clone()),
+            });
+            targets.dedup();
+
+            // Keep all runs for one core adjacent, newest run first within that core.
+            for target_name in targets {
+                for run in &node.runs {
+                    let Some(target) = run.targets.iter().find(|item| item.target == target_name)
+                    else {
+                        continue;
+                    };
                     if target.target == "direct" && !fields.contains(&F::TcpPing) {
                         continue;
                     }
-                    found = true;
                     builder.push_record(report_row(
                         &fields,
                         &node.node,
@@ -340,9 +377,23 @@ pub(super) fn print_benchmark_report(
                 }
             }
         }
+
+        if builder.count_records() > 1 {
+            found_any = true;
+            let number = display_numbers
+                .get(&node.node.id)
+                .copied()
+                .unwrap_or(node.node.id as usize);
+            if report.nodes.len() > 1 {
+                println!("Node #{number}");
+            }
+            // Each node gets its own bordered table, giving history a clear separator.
+            println!("{}", builder.build().with(Style::rounded()));
+            println!();
+        }
     }
 
-    if !found {
+    if !found_any {
         println!(
             "{}",
             match report.mode {
@@ -351,9 +402,7 @@ pub(super) fn print_benchmark_report(
                 ReportMode::Compare => "No completed benchmark comparisons found.",
             }
         );
-        return;
     }
-    println!("{}", builder.build().with(Style::rounded()));
 }
 
 pub(super) fn report_empty_node_row(
@@ -421,7 +470,7 @@ fn report_row(
         .sum();
     let metric_cell = |summary: Option<&reporting::MetricSummary>| {
         summary
-            .map(metric_summary_cell)
+            .map(|summary| metric_summary_cell(summary, data.verbose))
             .unwrap_or_else(|| "not-run".into())
     };
 
