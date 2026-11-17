@@ -75,8 +75,8 @@ pub struct MetricSummary {
 #[derive(Clone, Debug)]
 pub struct FailedTransferDetail {
     pub sample_index: u8,
-    pub transferred_bytes: u64,
-    pub duration_ms: u64,
+    pub transferred_bytes: Option<u64>,
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -381,12 +381,11 @@ fn summarize_metric(
         failed_transfers: attempted_samples
             .iter()
             .filter(|sample| sample.status != BenchmarkSampleStatus::Success)
-            .filter_map(|sample| {
-                Some(FailedTransferDetail {
-                    sample_index: sample.sample_index,
-                    transferred_bytes: sample.transferred_bytes?,
-                    duration_ms: sample.duration_ms?,
-                })
+            .filter(|sample| sample.transferred_bytes.is_some() || sample.duration_ms.is_some())
+            .map(|sample| FailedTransferDetail {
+                sample_index: sample.sample_index,
+                transferred_bytes: sample.transferred_bytes,
+                duration_ms: sample.duration_ms,
             })
             .collect(),
         preflight,
@@ -512,8 +511,8 @@ mod tests {
         assert_eq!(summary.median, None);
         assert_eq!(summary.failed_transfers.len(), 1);
         assert_eq!(summary.failed_transfers[0].sample_index, 2);
-        assert_eq!(summary.failed_transfers[0].transferred_bytes, 5 * 1024 * 1024);
-        assert_eq!(summary.failed_transfers[0].duration_ms, 20_000);
+        assert_eq!(summary.failed_transfers[0].transferred_bytes, Some(5 * 1024 * 1024));
+        assert_eq!(summary.failed_transfers[0].duration_ms, Some(20_000));
     }
 
     #[test]
