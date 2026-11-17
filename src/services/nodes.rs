@@ -141,6 +141,36 @@ pub fn remove_nodes(path: &Path, ids: &[u64]) -> anyhow::Result<BatchNodeSummary
     Ok(summary)
 }
 
+/// Permanently purge soft-deleted nodes whose deletion age meets the requested duration.
+pub fn purge_deleted_nodes(
+    path: &Path,
+    older_than: &str,
+    apply: bool,
+) -> anyhow::Result<crate::database::PurgeSummary> {
+    let age_seconds = parse_age_seconds(older_than)?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
+    let cutoff = now.saturating_sub(age_seconds);
+    NodeDatabase::open(path)?.purge_deleted_nodes(cutoff, apply)
+}
+
+fn parse_age_seconds(value: &str) -> anyhow::Result<u64> {
+    let (digits, unit) = value.split_at(
+        value.find(|character: char| !character.is_ascii_digit()).unwrap_or(value.len())
+    );
+    anyhow::ensure!(!digits.is_empty(), "age must be a positive duration such as 30d");
+    let amount = digits.parse::<u64>()?;
+    anyhow::ensure!(amount > 0, "age must be greater than zero");
+    let multiplier = match unit {
+        "d" => 86_400,
+        "h" => 3_600,
+        "m" => 60,
+        _ => anyhow::bail!("unsupported age '{value}'; use a duration such as 30d, 12h, or 45m"),
+    };
+    amount.checked_mul(multiplier).context("age duration is too large")
+}
+
 pub fn restore_nodes(path: &Path, ids: &[u64]) -> anyhow::Result<BatchNodeSummary> {
     let database = NodeDatabase::open(path)?;
     let mut summary = BatchNodeSummary::default();
