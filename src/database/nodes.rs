@@ -549,6 +549,135 @@ impl NodeDatabase {
         Ok(expired_run_ids.len())
     }
 
+    /// Permanently remove soft-deleted nodes older than the supplied Unix timestamp.
+    /// The operation is atomic and removes each node's fingerprint and benchmark samples.
+    /// Shared run metadata is retained for other nodes in the same run; empty finalized runs
+    /// are removed. Nodes referenced by a running benchmark are skipped.
+    pub fn purge_deleted_nodes(
+        &self,
+        deleted_before: u64,
+        apply: bool,
+    ) -> anyhow::Result<PurgeSummary> {
+        let write_txn = self.inner.begin_write()?;
+        let node_records = {
+            let nodes = write_txn.open_table(NODES)?;
+            nodes.iter()?.map(|entry| {
+                let (key, value) = entry?;
+                let record: NodeRecord = serde_json::from_slice(value.value())?;
+                debug_assert_eq!(record.id, key.value());
+                Ok(record)
+            }).collect::<anyhow::Result<Vec<_>>>()?
+        };
+        let run_records = {
+            let runs = write_txn.open_table(BENCHMARK_RUNS)?;
+            runs.iter()?.map(|entry| {
+                let (key, value) = entry?;
+                let run: BenchmarkRun = serde_json::from_slice(value.value())?;
+                debug_assert_eq!(run.id, key.value());
+                Ok(run)
+            }).collect::<anyhow::Result<Vec<_>>>()?
+        };
+        let sample_records = {
+            let samples = write_txn.open_table(BENCHMARK_SAMPLES)?;
+            samples.iter()?.map(|entry| {
+                let (key, value) = entry?;
+                let sample: BenchmarkSample = serde_json::from_slice(value.value())?;
+                debug_assert_eq!(sample.id, key.value());
+                Ok(sample)
+            }).collect::<anyhow::Result<Vec<_>>>()?
+        };
+
+        let running_nodes = run_records.iter()
+            .filter(|run| run.status == BenchmarkRunStatus::Running)
+            .flat_map(|run| run.node_ids.iter().copied())
+            .collect::<BTreeSet<_>>();
+        let selected = node_records.iter()
+            .filter(|record| record.deleted_at.is_some_and(|deleted_at| deleted_at <= deleted_before))
+            .collect::<Vec<_>>();
+        let selected_ids = selected.iter().map(|record| record.id).collect::<BTreeSet<_>>();
+        let purge_ids = selected_ids.iter()
+            .filter(|id| !running_nodes.contains(id))
+            .copied()
+            .collect::<BTreeSet<_>>();
+
+        let mut summary = PurgeSummary {
+            eligible_nodes: selected_ids.len(),
+            skipped_running: selected_ids.iter().filter(|id| running_nodes.contains(id)).count(),
+            ..PurgeSummary::default()
+        };
+        if !apply || purge_ids.is_empty() {
+            return Ok(summary);
+        }
+
+        let removed_sample_ids = sample_records.iter()
+            .filter(|sample| purge_ids.contains(&sample.node_id))
+            .map(|sample| sample.id)
+            .collect::<Vec<_>>();
+        let removed_sample_set = removed_sample_ids.iter().copied().collect::<BTreeSet<_>>();
+        let remaining_sample_runs = sample_records.iter()
+            .filter(|sample| !removed_sample_set.contains(&sample.id))
+            .map(|sample| sample.run_id)
+            .collect::<BTreeSet<_>>();
+
+        let mut updated_runs = Vec::new();
+        let mut removed_run_ids = Vec::new();
+        for mut run in run_records {
+            if run.status == BenchmarkRunStatus::Running {
+                continue;
+            }
+            let previous_len = run.node_ids.len();
+            run.node_ids.retain(|id| !purge_ids.contains(id));
+            if run.node_ids.len() != previous_len {
+                if run.node_ids.is_empty() && !remaining_sample_runs.contains(&run.id) {
+                    removed_run_ids.push(run.id);
+                } else {
+                    updated_runs.push(run);
+                }
+            } else if !remaining_sample_runs.contains(&run.id) {
+                // Clean up any pre-existing empty finalized run encountered during purge.
+                removed_run_ids.push(run.id);
+            }
+        }
+
+        {
+            let mut nodes = write_txn.open_table(NODES)?;
+            for id in &purge_ids {
+                drop(nodes.remove(*id)?);
+            }
+        }
+        {
+            let mut fingerprints = write_txn.open_table(NODE_FINGERPRINTS)?;
+            for record in &selected {
+                if purge_ids.contains(&record.id) {
+                    let fingerprint = record.node.fingerprint();
+                    drop(fingerprints.remove(fingerprint.as_str())?);
+                }
+            }
+        }
+        {
+            let mut samples = write_txn.open_table(BENCHMARK_SAMPLES)?;
+            for id in &removed_sample_ids {
+                drop(samples.remove(*id)?);
+            }
+        }
+        {
+            let mut runs = write_txn.open_table(BENCHMARK_RUNS)?;
+            for run in &updated_runs {
+                let encoded = serde_json::to_vec(run)?;
+                runs.insert(run.id, encoded.as_slice())?;
+            }
+            for id in &removed_run_ids {
+                drop(runs.remove(*id)?);
+            }
+        }
+
+        summary.purged_nodes = purge_ids.len();
+        summary.removed_samples = removed_sample_ids.len();
+        summary.removed_runs = removed_run_ids.len();
+        write_txn.commit()?;
+        Ok(summary)
+    }
+
     pub fn soft_delete(&self, id: u64) -> anyhow::Result<bool> {
         self.update_deleted_at(id, Some(unix_timestamp()))
     }
