@@ -23,7 +23,7 @@ pub struct ProcessSocketSnapshot {
 /// Identity is checked before and after walking procfs to reject PID reuse and process-exit
 /// races. The caller must still match returned inodes against privileged INET_DIAG records and
 /// must not accept a mark unless the diagnostic record itself was successfully obtained.
-
+///
 /// Attribute marked INET diagnostic records to one stable process socket snapshot.
 ///
 /// This is deliberately candidate evidence only: inode ownership proves that a socket
@@ -161,6 +161,10 @@ mod tests {
         SocketDiagnosticRecord {
             family: super::super::socket_diag_records::SocketAddressFamily::Ipv4,
             state: 1,
+            local_address: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            local_port: 40000,
+            remote_address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(198, 51, 100, 1)),
+            remote_port: 443,
             inode,
             mark,
         }
