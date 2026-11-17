@@ -75,7 +75,7 @@ impl MeasurementFailure {
             Self::TlsFailed => "the TLS connection to the measurement endpoint failed".into(),
             Self::HttpStatus(status) => format!("the measurement endpoint returned HTTP status {status}"),
             Self::ProtocolFailed => "the measurement endpoint returned an invalid HTTP response".into(),
-            Self::IncompleteResponse => "the connection closed before the HTTP exchange completed".into(),
+            Self::IncompleteResponse => "the response ended before the expected transfer was complete".into(),
             Self::ReadFailed => "the response stream could not be read".into(),
             Self::Cancelled => "measurement cancelled by user".into(),
         }
@@ -226,7 +226,8 @@ impl BenchmarkHttpClient {
         let started = Instant::now();
         let base = max_bytes / streams as u64;
         let remainder = max_bytes % streams as u64;
-        let per_attempt_timeout = duration.min(self.request_timeout)
+        let per_attempt_timeout = duration
+            .min(self.request_timeout)
             .max(Duration::from_millis(1));
 
         let progress_callback = std::sync::Arc::new(std::sync::Mutex::new(progress));
