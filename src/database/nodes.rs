@@ -650,10 +650,7 @@ impl NodeDatabase {
             .filter(|sample| purge_ids.contains(&sample.node_id))
             .map(|sample| sample.id)
             .collect::<Vec<_>>();
-        let removed_sample_set = removed_sample_ids
-            .iter()
-            .copied()
-            .collect::<BTreeSet<_>>();
+        let removed_sample_set = removed_sample_ids.iter().copied().collect::<BTreeSet<_>>();
         let remaining_sample_runs = sample_records
             .iter()
             .filter(|sample| !removed_sample_set.contains(&sample.id))
@@ -861,12 +858,16 @@ mod tests {
         let mut run = sample_run();
         run.node_ids = vec![1, 2];
         let run_id = database.start_benchmark_run(run).unwrap();
-        database.record_benchmark_sample(sample_value(run_id)).unwrap();
+        database
+            .record_benchmark_sample(sample_value(run_id))
+            .unwrap();
         let mut second_sample = sample_value(run_id);
         second_sample.id = 0;
         second_sample.node_id = 2;
         database.record_benchmark_sample(second_sample).unwrap();
-        database.finish_benchmark_run(run_id, BenchmarkRunStatus::Completed, 2, None).unwrap();
+        database
+            .finish_benchmark_run(run_id, BenchmarkRunStatus::Completed, 2, None)
+            .unwrap();
         database.soft_delete(1).unwrap();
 
         let preview = database.purge_deleted_nodes(u64::MAX, false).unwrap();
@@ -883,7 +884,10 @@ mod tests {
         assert_eq!(database.list_all_benchmark_samples().unwrap().len(), 1);
         let retained_run = database.get_benchmark_run(run_id).unwrap().unwrap();
         assert_eq!(retained_run.node_ids, vec![2]);
-        assert_eq!(database.add_node(&sample_node()).unwrap(), AddNodeOutcome::Added(3));
+        assert_eq!(
+            database.add_node(&sample_node()).unwrap(),
+            AddNodeOutcome::Added(3)
+        );
     }
 
     #[test]
@@ -899,7 +903,10 @@ mod tests {
         assert_eq!(summary.skipped_running, 1);
         assert_eq!(summary.purged_nodes, 0);
         assert!(database.get_node(1).unwrap().is_some());
-        assert_eq!(database.get_benchmark_run(run_id).unwrap().unwrap().status, BenchmarkRunStatus::Running);
+        assert_eq!(
+            database.get_benchmark_run(run_id).unwrap().unwrap().status,
+            BenchmarkRunStatus::Running
+        );
     }
 
     #[test]
