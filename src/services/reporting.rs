@@ -354,6 +354,7 @@ fn summarize_metric(metric: BenchmarkMetric, samples: &[&BenchmarkSample]) -> Me
         failures,
         failed_transfers: attempted_samples
             .iter()
+            .filter(|sample| sample.status != BenchmarkSampleStatus::Success)
             .filter_map(|sample| {
                 Some(FailedTransferDetail {
                     sample_index: sample.sample_index,
@@ -466,6 +467,27 @@ mod tests {
         assert_eq!(summary.median, Some(8_000_000.0));
         assert_eq!(summary.failures.len(), 1);
         assert_eq!(summary.failures[0].status, BenchmarkSampleStatus::Timeout);
+    }
+
+    #[test]
+    fn report_preserves_failed_transfer_attempt_bytes_and_duration() {
+        let mut failed = sample(
+            1,
+            BenchmarkMetric::Download,
+            2,
+            BenchmarkSampleStatus::Incomplete,
+            None,
+        );
+        failed.transferred_bytes = Some(5 * 1024 * 1024);
+        failed.duration_ms = Some(20_000);
+        let samples = vec![&failed];
+        let summary = summarize_metric(BenchmarkMetric::Download, &samples);
+        assert_eq!(summary.successful, 0);
+        assert_eq!(summary.median, None);
+        assert_eq!(summary.failed_transfers.len(), 1);
+        assert_eq!(summary.failed_transfers[0].sample_index, 2);
+        assert_eq!(summary.failed_transfers[0].transferred_bytes, 5 * 1024 * 1024);
+        assert_eq!(summary.failed_transfers[0].duration_ms, 20_000);
     }
 
     #[test]
