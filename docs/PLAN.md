@@ -1,6 +1,6 @@
 # Proxyctl — Plan and Architecture Decisions
 
-> Status: approved baseline; benchmark optimization Stages 1–6 and architecture refactor Phases 1–3 are user-verified; architecture review findings are in `docs/ARCHITECTURE_REVIEW.md`; real-world runbook is in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`
+> Status: approved baseline; benchmark optimization Stages 1–6 and architecture refactor Phases 1–3 are user-verified; benchmark persistence has been extracted into its own database module (local verification pending); architecture review findings are in `docs/ARCHITECTURE_REVIEW.md`; real-world runbook is in `docs/BENCHMARK_REAL_WORLD_VALIDATION.md`
 > Repository: https://github.com/hosmaznazfar/proxyctl  
 > Last updated: 2026-11-17
 
