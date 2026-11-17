@@ -202,7 +202,12 @@ fn record_cancelled_remainder(
                     && sample.sample_index > 0
             })
             .collect::<Vec<_>>();
-        if attempts.iter().any(|sample| sample.status == BenchmarkSampleStatus::Success) {
+        if attempts.iter().any(|sample| {
+            matches!(
+                sample.status,
+                BenchmarkSampleStatus::Success | BenchmarkSampleStatus::Cancelled
+            )
+        }) {
             return Ok(());
         }
         if existing.iter().any(|sample| {
