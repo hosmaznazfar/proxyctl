@@ -156,19 +156,27 @@ pub fn purge_deleted_nodes(
 }
 
 fn parse_age_seconds(value: &str) -> anyhow::Result<u64> {
-    let (digits, unit) = value.split_at(
-        value.find(|character: char| !character.is_ascii_digit()).unwrap_or(value.len())
+    let split = value
+        .find(|character: char| !character.is_ascii_digit())
+        .unwrap_or(value.len());
+    let (digits, unit) = value.split_at(split);
+    anyhow::ensure!(
+        !digits.is_empty(),
+        "age must be a non-negative duration such as 30d or 0s"
     );
-    anyhow::ensure!(!digits.is_empty(), "age must be a positive duration such as 30d");
     let amount = digits.parse::<u64>()?;
     let multiplier = match unit {
         "d" => 86_400,
         "h" => 3_600,
         "m" => 60,
         "s" => 1,
-        _ => anyhow::bail!("unsupported age '{value}'; use a duration such as 30d, 12h, or 45m"),
+        _ => anyhow::bail!(
+            "unsupported age '{value}'; use a duration such as 30d, 12h, 45m, or 0s"
+        ),
     };
-    amount.checked_mul(multiplier).context("age duration is too large")
+    amount
+        .checked_mul(multiplier)
+        .context("age duration is too large")
 }
 
 pub fn restore_nodes(path: &Path, ids: &[u64]) -> anyhow::Result<BatchNodeSummary> {
