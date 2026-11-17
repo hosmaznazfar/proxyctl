@@ -591,3 +591,6 @@ Do not claim profile verification until the user reports formatting, Clippy, tes
 - [x] Route latency, download, and upload through the selected local protocol.
 - [x] Generate protocol-matched sing-box and Xray benchmark inbounds; retain Mihomo mixed listener.
 - [ ] Verify SOCKS5 and HTTP modes with local fake-proxy tests and user-run native-core benchmarks.
+
+
+- **Read-only marked physical-egress probe:** Linux preflight now resolves fixed IPv4 and IPv6 destinations using the planned core socket mark, requires the main table and a hardware-backed non-TUN interface with exact current ifindex evidence, and fails closed on ambiguity or missing address-family routes. Synthetic JSON and temporary-sysfs tests do not touch host networking. This does not prove the core applies `SO_MARK`; adapter configuration, privileged kernel operations, independent recovery, and live dataplane readiness remain outstanding. TUN activation remains disabled.
