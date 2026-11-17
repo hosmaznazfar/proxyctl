@@ -16,7 +16,7 @@ pub(super) fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSample
         MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
         MeasurementFailure::IncompleteResponse | MeasurementFailure::IncompleteTransfer { .. } => {
             BenchmarkSampleStatus::Incomplete
-        },
+        }
         MeasurementFailure::Unavailable
         | MeasurementFailure::ProxyTunnelFailed
         | MeasurementFailure::TlsFailed
