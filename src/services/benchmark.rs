@@ -19,7 +19,7 @@ mod samples;
 use probes::probe_chunks;
 use probes::{LatencyBatchEntry, execute_latency_batch, execute_tcp_ping_batch};
 use samples::{
-    failed_sample, install_cancellation_handler, persist_sample, record_preflight,
+    failed_sample, failed_transfer_sample, install_cancellation_handler, persist_sample, record_preflight,
     status_for_failure, successful_sample, unix_timestamp,
 };
 
@@ -570,7 +570,7 @@ fn execute_run(
                                     == crate::domain::BenchmarkProfile::Accurate
                                 && measurement.partial =>
                         {
-                            Err(MeasurementFailure::IncompleteResponse)
+                            Err(MeasurementFailure::IncompleteTransfer {\n                                transferred_bytes: measurement.transferred_bytes.unwrap_or_default(),\n                                duration_ms: u64::try_from(measurement.duration.as_millis()).unwrap_or(u64::MAX),\n                            })
                         }
                         other => other,
                     };
@@ -604,14 +604,18 @@ fn execute_run(
                         Err(error) => {
                             let reason = error.reason();
                             println!("{label}: {reason}");
-                            failed_sample(
-                                &entry.context,
-                                metric,
-                                attempt,
-                                status_for_failure(error),
-                                error.category(),
-                                &reason,
-                            )
+                            if matches!(error, MeasurementFailure::IncompleteTransfer { .. }) {
+                                failed_transfer_sample(&entry.context, metric, attempt, error)
+                            } else {
+                                failed_sample(
+                                    &entry.context,
+                                    metric,
+                                    attempt,
+                                    status_for_failure(error),
+                                    error.category(),
+                                    &reason,
+                                )
+                            }
                         }
                     };
                     completed_samples.push(sample);
