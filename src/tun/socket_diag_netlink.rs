@@ -18,8 +18,14 @@ const NLM_F_REQUEST: u16 = 0x01;
 const NLM_F_DUMP: u16 = 0x300;
 const NLM_F_DUMP_INTR: u16 = 0x10;
 
-/// Maximum records accepted from one datagram. The broker must also cap total dump bytes.
+/// Maximum records accepted from one datagram.
 pub const MAX_RECORDS_PER_DATAGRAM: usize = 4096;
+/// Maximum aggregate bytes retained for one multipart dump (4 MiB).
+pub const MAX_TOTAL_DUMP_BYTES: usize = 4 * 1024 * 1024;
+/// Maximum datagrams accepted for one multipart dump.
+pub const MAX_DUMP_DATAGRAMS: usize = 1024;
+/// Maximum aggregate socket records retained for one multipart dump.
+pub const MAX_TOTAL_DUMP_RECORDS: usize = 65_536;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SocketTransport {
@@ -157,6 +163,83 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
     }
 
     Ok(SocketDiagnosticDump { records, complete })
+}
+
+
+/// Accumulate a multipart dump while enforcing aggregate memory and message bounds.
+///
+/// The collector must still enforce receive-buffer truncation and elapsed-time limits.
+#[derive(Debug, Clone)]
+pub struct SocketDiagnosticDumpAccumulator {
+    expected_sequence: u32,
+    total_bytes: usize,
+    datagrams: usize,
+    records: Vec<SocketDiagnosticRecord>,
+    complete: bool,
+}
+
+impl SocketDiagnosticDumpAccumulator {
+    pub fn new(expected_sequence: u32) -> Result<Self> {
+        ensure!(
+            expected_sequence != 0,
+            "expected netlink sequence must be non-zero"
+        );
+        Ok(Self {
+            expected_sequence,
+            total_bytes: 0,
+            datagrams: 0,
+            records: Vec::new(),
+            complete: false,
+        })
+    }
+
+    /// Add one complete datagram. Any malformed, interrupted, oversized, or post-DONE
+    /// input is rejected; callers must discard the accumulator after an error.
+    pub fn push_datagram(&mut self, bytes: &[u8]) -> Result<()> {
+        ensure!(!self.complete, "socket diagnostic dump is already complete");
+        ensure!(!bytes.is_empty(), "socket diagnostic datagram is empty");
+        ensure!(
+            self.datagrams < MAX_DUMP_DATAGRAMS,
+            "socket diagnostic dump exceeds the datagram limit"
+        );
+        let total_bytes = self
+            .total_bytes
+            .checked_add(bytes.len())
+            .context("socket diagnostic dump byte count overflow")?;
+        ensure!(
+            total_bytes <= MAX_TOTAL_DUMP_BYTES,
+            "socket diagnostic dump exceeds the total byte limit"
+        );
+
+        let decoded = decode_datagram(bytes, self.expected_sequence)?;
+        let total_records = self
+            .records
+            .len()
+            .checked_add(decoded.records.len())
+            .context("socket diagnostic dump record count overflow")?;
+        ensure!(
+            total_records <= MAX_TOTAL_DUMP_RECORDS,
+            "socket diagnostic dump exceeds the total record limit"
+        );
+
+        self.total_bytes = total_bytes;
+        self.datagrams += 1;
+        self.records.extend(decoded.records);
+        self.complete = decoded.complete;
+        Ok(())
+    }
+
+    /// Return records only after an uninterrupted terminal NLMSG_DONE was received.
+    pub fn into_complete_dump(self) -> Result<SocketDiagnosticDump> {
+        ensure!(
+            self.complete,
+            "socket diagnostic multipart dump has no completion message"
+        );
+        Ok(SocketDiagnosticDump {
+            records: self.records,
+            complete: true,
+        })
+    }
 }
 
 fn align_netlink(length: usize) -> Result<usize> {
@@ -308,6 +391,61 @@ mod tests {
         let mut record = message(SOCK_DIAG_BY_FAMILY, 7, &marked_record(123, 1));
         record[6..8].copy_from_slice(&NLM_F_DUMP_INTR.to_ne_bytes());
         assert!(decode_datagram(&record, 7).is_err());
+    }
+
+
+    #[test]
+    fn accumulates_bounded_multipart_dump_until_done() {
+        let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
+        accumulator
+            .push_datagram(&message(
+                SOCK_DIAG_BY_FAMILY,
+                7,
+                &marked_record(123, 0x142),
+            ))
+            .unwrap();
+        assert!(accumulator.clone().into_complete_dump().is_err());
+
+        accumulator
+            .push_datagram(&message(NLMSG_DONE, 7, &[]))
+            .unwrap();
+        let dump = accumulator.into_complete_dump().unwrap();
+        assert!(dump.complete);
+        assert_eq!(dump.records.len(), 1);
+        assert_eq!(dump.records[0].inode, 123);
+    }
+
+    #[test]
+    fn accumulator_rejects_invalid_sequence_empty_and_post_done_datagrams() {
+        assert!(SocketDiagnosticDumpAccumulator::new(0).is_err());
+        let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
+        assert!(accumulator.push_datagram(&[]).is_err());
+        assert!(accumulator
+            .push_datagram(&message(NLMSG_DONE, 7, &[]))
+            .is_ok());
+        assert!(accumulator
+            .push_datagram(&message(NLMSG_DONE, 7, &[]))
+            .is_err());
+    }
+
+    #[test]
+    fn accumulator_enforces_total_byte_limit_before_decoding() {
+        let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
+        let oversized = vec![0u8; MAX_TOTAL_DUMP_BYTES + 1];
+        assert!(accumulator.push_datagram(&oversized).is_err());
+    }
+
+    #[test]
+    fn accumulator_rejects_incomplete_dump_at_finalization() {
+        let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
+        accumulator
+            .push_datagram(&message(
+                SOCK_DIAG_BY_FAMILY,
+                7,
+                &marked_record(123, 0x142),
+            ))
+            .unwrap();
+        assert!(accumulator.into_complete_dump().is_err());
     }
 
     #[test]
