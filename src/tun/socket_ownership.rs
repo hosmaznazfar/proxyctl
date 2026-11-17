@@ -5,11 +5,7 @@
 //! It does not inspect or infer socket marks; that requires the privileged sock_diag broker.
 
 use anyhow::{Context, Result, ensure};
-use std::{
-    collections::BTreeSet,
-    fs,
-    path::Path,
-};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use super::process::{ProcessHandle, ProcessIdentity};
 
@@ -57,13 +53,18 @@ pub fn inspect_process_sockets(_handle: &ProcessHandle) -> Result<ProcessSocketS
 }
 
 fn inspect_fd_directory(directory: &Path) -> Result<BTreeSet<u64>> {
-    let entries = fs::read_dir(directory)
-        .with_context(|| format!("cannot inspect process file descriptors at {}", directory.display()))?;
+    let entries = fs::read_dir(directory).with_context(|| {
+        format!(
+            "cannot inspect process file descriptors at {}",
+            directory.display()
+        )
+    })?;
     let mut inodes = BTreeSet::new();
     for entry in entries {
         let entry = entry?;
-        let target = fs::read_link(entry.path())
-            .with_context(|| format!("cannot read process descriptor {}", entry.path().display()))?;
+        let target = fs::read_link(entry.path()).with_context(|| {
+            format!("cannot read process descriptor {}", entry.path().display())
+        })?;
         if let Some(inode) = parse_socket_link(&target)? {
             inodes.insert(inode);
         }
@@ -98,15 +99,27 @@ mod tests {
 
     #[test]
     fn parses_only_valid_socket_inode_links() {
-        assert_eq!(parse_socket_link(Path::new("socket:[12345]")).unwrap(), Some(12345));
-        assert_eq!(parse_socket_link(Path::new("anon_inode:[eventpoll]")).unwrap(), None);
-        assert_eq!(parse_socket_link(Path::new("/memfd:fixture")).unwrap(), None);
+        assert_eq!(
+            parse_socket_link(Path::new("socket:[12345]")).unwrap(),
+            Some(12345)
+        );
+        assert_eq!(
+            parse_socket_link(Path::new("anon_inode:[eventpoll]")).unwrap(),
+            None
+        );
+        assert_eq!(
+            parse_socket_link(Path::new("/memfd:fixture")).unwrap(),
+            None
+        );
     }
 
     #[test]
     fn rejects_malformed_or_zero_socket_inodes() {
         for target in ["socket:[]", "socket:[0]", "socket:[abc]", "socket:[42"] {
-            assert!(parse_socket_link(Path::new(target)).is_err(), "accepted {target}");
+            assert!(
+                parse_socket_link(Path::new(target)).is_err(),
+                "accepted {target}"
+            );
         }
     }
 
@@ -117,7 +130,10 @@ mod tests {
         symlink("socket:[123]", directory.path().join("4")).unwrap();
         symlink("socket:[456]", directory.path().join("5")).unwrap();
         symlink("anon_inode:[eventpoll]", directory.path().join("6")).unwrap();
-        assert_eq!(inspect_fd_directory(directory.path()).unwrap(), BTreeSet::from([123, 456]));
+        assert_eq!(
+            inspect_fd_directory(directory.path()).unwrap(),
+            BTreeSet::from([123, 456])
+        );
     }
 
     #[test]
