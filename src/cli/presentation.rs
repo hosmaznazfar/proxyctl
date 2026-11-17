@@ -823,7 +823,7 @@ mod tests {
         let concise = metric_summary_cell(&summary, false);
         assert!(concise.contains("0.25 Mbps"));
         assert!(!concise.contains("example.test"));
-        assert!(!concise.contains("1_572_864"));
+        assert!(!concise.contains("1572864"));
 
         let verbose = metric_summary_cell(&summary, true);
         assert!(verbose.contains("timeout×2"));
