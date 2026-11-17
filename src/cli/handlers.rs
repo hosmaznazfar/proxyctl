@@ -292,6 +292,31 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             let summary = nodes::restore_nodes(&database_path, &ids)?;
             print_batch_summary("Restored", &summary, "already active");
         }
+        Command::Nodes {
+            command: NodesCommand::Purge {
+                deleted: _,
+                older_than,
+                apply,
+                ..
+            },
+        } => {
+            let summary = nodes::purge_deleted_nodes(&database_path, &older_than, apply)?;
+            if apply {
+                println!(
+                    "Permanent purge complete: {} node(s), {} benchmark sample(s), {} empty run(s) removed; {} node(s) skipped because a benchmark is running.",
+                    summary.purged_nodes,
+                    summary.removed_samples,
+                    summary.removed_runs,
+                    summary.skipped_running
+                );
+            } else {
+                println!(
+                    "Dry run: {} deleted node(s) eligible; {} protected by running benchmarks. No changes made. Use --apply to permanently remove eligible nodes and their associated benchmark samples.",
+                    summary.eligible_nodes - summary.skipped_running,
+                    summary.skipped_running
+                );
+            }
+        }
         Command::Check {
             nodes: selectors,
             core,
@@ -484,7 +509,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 },
             )?;
         }
-        Command::Cores
+        Command::Nodes { .. }
+        | Command::Cores
         | Command::Setup { .. }
         | Command::Update { .. }
         | Command::Use { .. }
