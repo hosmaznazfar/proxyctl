@@ -49,6 +49,7 @@ pub enum BenchmarkSampleStatus {
     Unsupported,
     Invalid,
     Timeout,
+    Incomplete,
     Unavailable,
     Skipped,
     Cancelled,
@@ -187,10 +188,8 @@ impl BenchmarkSample {
         if self.transferred_bytes.is_some() && !is_transfer_metric {
             return Err("transfer byte metadata is only valid for download/upload samples");
         }
-        if self.status != BenchmarkSampleStatus::Success
-            && (self.transferred_bytes.is_some() || self.partial)
-        {
-            return Err("failed samples cannot contain transfer metadata");
+        if self.partial && self.status != BenchmarkSampleStatus::Success {
+            return Err("only successful download samples can be partial");
         }
         if self.partial
             && (self.metric != BenchmarkMetric::Download
