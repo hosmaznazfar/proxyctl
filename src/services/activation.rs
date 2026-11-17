@@ -816,7 +816,7 @@ mod tests {
         // environments or test runners can terminate follow-mode tail processes,
         // which makes the identity assertion flaky before the test sends a signal.
         let mut child = Command::new("sleep")
-            .arg("60")
+            .arg("3600")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
