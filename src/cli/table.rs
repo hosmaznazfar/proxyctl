@@ -1,12 +1,6 @@
 //! Shared table layout, wrapping, and separator policy for CLI output.
-use tabled::{
-    settings::{
-        Modify, Width,
-        object::Columns,
-        style::HorizontalLine,
-        themes::Theme,
-        Style,
-    },
+use tabled::settings::{
+    Modify, Style, Width, object::Columns, style::HorizontalLine, themes::Theme,
 };
 
 #[derive(Clone, Copy)]
@@ -26,13 +20,8 @@ fn terminal_width() -> usize {
 
             let mut size = unsafe { std::mem::zeroed::<libc::winsize>() };
             // TIOCGWINSZ only writes the winsize structure supplied above.
-            let result = unsafe {
-                libc::ioctl(
-                    std::io::stdout().as_raw_fd(),
-                    libc::TIOCGWINSZ,
-                    &mut size,
-                )
-            };
+            let result =
+                unsafe { libc::ioctl(std::io::stdout().as_raw_fd(), libc::TIOCGWINSZ, &mut size) };
             if result == 0 && size.ws_col >= 60 {
                 return usize::from(size.ws_col);
             }
@@ -82,7 +71,9 @@ pub(super) fn apply_formatting(
             remaining
         } else {
             let share = content_budget.saturating_mul(*weight) / total_weight;
-            let share = share.max(1).min(remaining.saturating_sub(columns - index - 1));
+            let share = share
+                .max(1)
+                .min(remaining.saturating_sub(columns - index - 1));
             remaining = remaining.saturating_sub(share);
             share
         };

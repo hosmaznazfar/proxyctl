@@ -15,8 +15,10 @@ const SCHEMA_VERSION: u64 = 3;
 pub(super) const METADATA: TableDefinition<&str, u64> = TableDefinition::new("metadata");
 pub(super) const NODES: TableDefinition<u64, &[u8]> = TableDefinition::new("nodes");
 const NODE_FINGERPRINTS: TableDefinition<&str, u64> = TableDefinition::new("node_fingerprints");
-pub(super) const BENCHMARK_RUNS: TableDefinition<u64, &[u8]> = TableDefinition::new("benchmark_runs");
-pub(super) const BENCHMARK_SAMPLES: TableDefinition<u64, &[u8]> = TableDefinition::new("benchmark_samples");
+pub(super) const BENCHMARK_RUNS: TableDefinition<u64, &[u8]> =
+    TableDefinition::new("benchmark_runs");
+pub(super) const BENCHMARK_SAMPLES: TableDefinition<u64, &[u8]> =
+    TableDefinition::new("benchmark_samples");
 
 /// A persisted node and its lifecycle metadata.
 #[derive(Clone, Debug, Deserialize, Serialize)]

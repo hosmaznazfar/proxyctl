@@ -12,8 +12,8 @@ use crate::{
     },
 };
 
-use super::*;
 use super::table::{self, Separator};
+use super::*;
 
 pub(super) fn print_display_config(config: &crate::services::display_config::DisplayConfig) {
     use crate::services::display_config::DisplayProfile;
@@ -180,7 +180,10 @@ pub(super) fn print_node_results(
         return;
     }
     let mut table_view = builder.build();
-    let widths = fields.iter().map(|field| report_column_width(*field)).collect::<Vec<_>>();
+    let widths = fields
+        .iter()
+        .map(|field| report_column_width(*field))
+        .collect::<Vec<_>>();
     table::apply_formatting(&mut table_view, &widths, &[]);
     println!("{table_view}");
 }
@@ -274,7 +277,10 @@ pub(super) fn metric_summary_cell(summary: &reporting::MetricSummary, verbose: b
                 .duration_ms
                 .map(|value| format!("{:.1}s", value as f64 / 1000.0))
                 .unwrap_or_else(|| "time unknown".into());
-            parts.push(format!("attempt {}: {bytes} in {duration}", attempt.sample_index));
+            parts.push(format!(
+                "attempt {}: {bytes} in {duration}",
+                attempt.sample_index
+            ));
         }
         if let Some(endpoint) = &summary.endpoint {
             parts.push(format!("via {}", endpoint_label(endpoint)));
@@ -320,9 +326,17 @@ pub(super) fn print_benchmark_report(
     if report.mode == ReportMode::Compare {
         let mut comparisons = report.comparisons.iter().collect::<Vec<_>>();
         comparisons.sort_by(|left, right| {
-            let left_number = display_numbers.get(&left.node.id).copied().unwrap_or(left.node.id as usize);
-            let right_number = display_numbers.get(&right.node.id).copied().unwrap_or(right.node.id as usize);
-            left_number.cmp(&right_number).then_with(|| report_target_order(&left.target).cmp(&report_target_order(&right.target)))
+            let left_number = display_numbers
+                .get(&left.node.id)
+                .copied()
+                .unwrap_or(left.node.id as usize);
+            let right_number = display_numbers
+                .get(&right.node.id)
+                .copied()
+                .unwrap_or(right.node.id as usize);
+            left_number.cmp(&right_number).then_with(|| {
+                report_target_order(&left.target).cmp(&report_target_order(&right.target))
+            })
         });
         for comparison in comparisons {
             if comparison.target == "direct" && !fields.contains(&F::TcpPing) {
@@ -349,7 +363,12 @@ pub(super) fn print_benchmark_report(
         }
     } else {
         let mut nodes = report.nodes.iter().collect::<Vec<_>>();
-        nodes.sort_by_key(|node| display_numbers.get(&node.node.id).copied().unwrap_or(node.node.id as usize));
+        nodes.sort_by_key(|node| {
+            display_numbers
+                .get(&node.node.id)
+                .copied()
+                .unwrap_or(node.node.id as usize)
+        });
         let mut separators = Vec::new();
 
         for (node_index, node) in nodes.iter().enumerate() {
@@ -362,7 +381,9 @@ pub(super) fn print_benchmark_report(
                     .iter()
                     .flat_map(|run| run.targets.iter().map(|target| target.target.clone()))
                     .collect::<Vec<_>>();
-                targets.sort_by(|left, right| report_target_order(left).cmp(&report_target_order(right)));
+                targets.sort_by(|left, right| {
+                    report_target_order(left).cmp(&report_target_order(right))
+                });
                 targets.dedup();
                 if !fields.contains(&F::TcpPing) {
                     targets.retain(|target| target != "direct");
@@ -372,7 +393,8 @@ pub(super) fn print_benchmark_report(
                 let target_count = targets.len();
                 for (target_index, target_name) in targets.into_iter().enumerate() {
                     for run in &node.runs {
-                        let Some(target) = run.targets.iter().find(|item| item.target == target_name)
+                        let Some(target) =
+                            run.targets.iter().find(|item| item.target == target_name)
                         else {
                             continue;
                         };
@@ -421,14 +443,20 @@ pub(super) fn print_benchmark_report(
         }
 
         let mut table_view = builder.build();
-        let widths = fields.iter().map(|field| report_column_width(*field)).collect::<Vec<_>>();
+        let widths = fields
+            .iter()
+            .map(|field| report_column_width(*field))
+            .collect::<Vec<_>>();
         table::apply_formatting(&mut table_view, &widths, &separators);
         println!("{table_view}");
         return;
     }
 
     let mut table_view = builder.build();
-    let widths = fields.iter().map(|field| report_column_width(*field)).collect::<Vec<_>>();
+    let widths = fields
+        .iter()
+        .map(|field| report_column_width(*field))
+        .collect::<Vec<_>>();
     table::apply_formatting(&mut table_view, &widths, &[]);
     println!("{table_view}");
 }
@@ -460,7 +488,6 @@ fn report_column_width(field: crate::services::display_config::DisplayField) -> 
         F::Latency | F::TcpPing | F::Download | F::Upload => 18,
     }
 }
-
 
 pub(super) fn report_empty_node_row(
     fields: &[crate::services::display_config::DisplayField],
@@ -693,7 +720,12 @@ pub(super) fn print_node_list(
             record.node.protocol.to_string(),
             safe_field(&record.node.server, usize::MAX),
             record.node.port.to_string(),
-            record.node.name.as_deref().map(|name| safe_field(name, usize::MAX)).unwrap_or_else(|| "-".to_owned()),
+            record
+                .node
+                .name
+                .as_deref()
+                .map(|name| safe_field(name, usize::MAX))
+                .unwrap_or_else(|| "-".to_owned()),
         ]);
     }
 
@@ -720,7 +752,16 @@ pub(super) fn print_sorted_node_list(
         .unwrap_or_default()
         .max("CORE(S)".len());
     let mut builder = Builder::default();
-    builder.push_record(["RANK", "NO.", "PROTOCOL", "SERVER", "PORT", metric.label(), "CORE(S)", "NAME"]);
+    builder.push_record([
+        "RANK",
+        "NO.",
+        "PROTOCOL",
+        "SERVER",
+        "PORT",
+        metric.label(),
+        "CORE(S)",
+        "NAME",
+    ]);
     for (index, record) in records.iter().enumerate() {
         let value = match record.value {
             Some(value) if record.unit == "ms" => format!("{value:.2} ms"),
@@ -728,7 +769,11 @@ pub(super) fn print_sorted_node_list(
             None => "unmeasured".to_owned(),
         };
         builder.push_record([
-            if record.value.is_some() { (index + 1).to_string() } else { "-".into() },
+            if record.value.is_some() {
+                (index + 1).to_string()
+            } else {
+                "-".into()
+            },
             if record.node.is_deleted() {
                 format!(
                     "D{}",
@@ -749,7 +794,13 @@ pub(super) fn print_sorted_node_list(
             record.node.node.port.to_string(),
             value,
             safe_field(&record.cores, usize::MAX),
-            record.node.node.name.as_deref().map(|name| safe_field(name, usize::MAX)).unwrap_or_else(|| "-".to_owned()),
+            record
+                .node
+                .node
+                .name
+                .as_deref()
+                .map(|name| safe_field(name, usize::MAX))
+                .unwrap_or_else(|| "-".to_owned()),
         ]);
     }
 
