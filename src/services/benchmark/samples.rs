@@ -14,7 +14,7 @@ pub(super) fn status_for_failure(failure: MeasurementFailure) -> BenchmarkSample
         MeasurementFailure::Timeout => BenchmarkSampleStatus::Timeout,
         MeasurementFailure::Unreachable => BenchmarkSampleStatus::Unreachable,
         MeasurementFailure::InvalidResponse => BenchmarkSampleStatus::Invalid,
-        MeasurementFailure::IncompleteResponse => BenchmarkSampleStatus::Incomplete,
+        MeasurementFailure::IncompleteResponse | MeasurementFailure::IncompleteTransfer { .. } => BenchmarkSampleStatus::Incomplete,
         MeasurementFailure::Unavailable
         | MeasurementFailure::ProxyTunnelFailed
         | MeasurementFailure::TlsFailed
@@ -77,6 +77,31 @@ pub(super) fn failed_sample(
         transferred_bytes: None,
         partial: false,
     }
+}
+
+pub(super) fn failed_transfer_sample(
+    context: &SampleContext,
+    metric: BenchmarkMetric,
+    sample_index: u8,
+    failure: MeasurementFailure,
+) -> BenchmarkSample {
+    let mut sample = failed_sample(
+        context,
+        metric,
+        sample_index,
+        status_for_failure(failure),
+        failure.category(),
+        &failure.reason(),
+    );
+    if let MeasurementFailure::IncompleteTransfer {
+        transferred_bytes,
+        duration_ms,
+    } = failure
+    {
+        sample.transferred_bytes = Some(transferred_bytes);
+        sample.duration_ms = Some(duration_ms);
+    }
+    sample
 }
 
 pub(super) fn record_preflight(
