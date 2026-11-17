@@ -45,7 +45,9 @@ pub(super) fn execute_latency_batch(
             let (sender, receiver) = mpsc::channel();
             thread::scope(|scope| {
                 for (local_index, entry) in chunk.iter().enumerate() {
-                    if succeeded[offset + local_index] { continue; }
+                    if succeeded[offset + local_index] {
+                        continue;
+                    }
                     let sender = sender.clone();
                     scope.spawn(move || {
                         let result =
@@ -56,7 +58,11 @@ pub(super) fn execute_latency_batch(
                     });
                 }
                 drop(sender);
-                let expected = chunk.iter().enumerate().filter(|(local, _)| !succeeded[offset + *local]).count();
+                let expected = chunk
+                    .iter()
+                    .enumerate()
+                    .filter(|(local, _)| !succeeded[offset + *local])
+                    .count();
                 let mut received = 0;
                 let mut stopped = false;
                 while received < expected {
@@ -152,7 +158,9 @@ pub(super) fn execute_tcp_ping_batch(
             let batch_samples = thread::scope(|scope| {
                 let (sender, receiver) = mpsc::channel();
                 for record in chunk {
-                    if succeeded.contains(&record.id) { continue; }
+                    if succeeded.contains(&record.id) {
+                        continue;
+                    }
                     let sender = sender.clone();
                     scope.spawn(move || {
                         let result =
@@ -161,7 +169,10 @@ pub(super) fn execute_tcp_ping_batch(
                     });
                 }
                 drop(sender);
-                let expected = chunk.iter().filter(|record| !succeeded.contains(&record.id)).count();
+                let expected = chunk
+                    .iter()
+                    .filter(|record| !succeeded.contains(&record.id))
+                    .count();
                 let mut batch_samples = Vec::with_capacity(expected);
                 for _ in 0..expected {
                     if let Ok((node_id, result)) = receiver.recv() {
