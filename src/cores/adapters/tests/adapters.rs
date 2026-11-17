@@ -105,13 +105,14 @@ fn activation_configs_share_one_loopback_port_for_socks5_and_http() {
 }
 
 #[test]
-fn tun_activation_configs_keep_mixed_listener_and_disable_dns_firewall_redirects() {
+fn tun_activation_configs_require_outbound_mark_and_fail_closed_for_mihomo() {
     let node =
         parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+    let mark = crate::cores::adapters::TunOutboundMark::new(0x100, 0xffff).unwrap();
 
-    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+    for core in [CoreId::SingBox, CoreId::Xray] {
         let generated = adapter(core)
-            .generate_tun_activation_config(&node, 43129)
+            .generate_tun_activation_config(&node, 43129, mark)
             .unwrap();
         let document: Value = serde_json::from_slice(&generated.content).unwrap();
 
@@ -140,19 +141,15 @@ fn tun_activation_configs_keep_mixed_listener_and_disable_dns_firewall_redirects
                     false
                 );
             }
-            CoreId::Mihomo => {
-                assert_eq!(document["mixed-port"], 43129);
-                assert_eq!(document["bind-address"], "127.0.0.1");
-                assert_eq!(document["allow-lan"], false);
-                assert_eq!(document["tun"]["stack"], "system");
-                assert_eq!(document["tun"]["auto-route"], false);
-                assert_eq!(document["tun"]["auto-detect-interface"], true);
-                assert_eq!(document["tun"]["auto-redirect"], false);
-                assert_eq!(document["tun"]["dns-mode"], "disabled");
-                assert!(document["tun"]["dns-hijack"].as_array().unwrap().is_empty());
-            }
+            CoreId::Mihomo => unreachable!("Mihomo is excluded from marked TUN generation"),
         }
     }
+
+    assert!(
+        adapter(CoreId::Mihomo)
+            .generate_tun_activation_config(&node, 43129, mark)
+            .is_err()
+    );
 }
 
 #[test]
