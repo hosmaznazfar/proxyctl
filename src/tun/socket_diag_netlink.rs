@@ -76,7 +76,10 @@ pub struct SocketDiagnosticDump {
 /// Decode one netlink datagram. NLMSG_DONE marks completion; NLMSG_ERROR is always an error.
 /// A multipart dump may contain multiple data datagrams before its terminal DONE message.
 pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDiagnosticDump> {
-    ensure!(expected_sequence != 0, "expected netlink sequence must be non-zero");
+    ensure!(
+        expected_sequence != 0,
+        "expected netlink sequence must be non-zero"
+    );
     let mut offset = 0usize;
     let mut records = Vec::new();
     let mut complete = false;
@@ -104,18 +107,32 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
             NLMSG_ERROR => {
                 ensure!(payload.len() >= 4, "netlink error payload is truncated");
                 let error = i32::from_ne_bytes(payload[..4].try_into()?);
-                ensure!(error == 0, "kernel rejected socket diagnostic request: errno {}", error.saturating_abs());
+                ensure!(
+                    error == 0,
+                    "kernel rejected socket diagnostic request: errno {}",
+                    error.saturating_abs()
+                );
             }
             NLMSG_DONE => {
-                ensure!(!complete, "netlink dump contains duplicate completion messages");
+                ensure!(
+                    !complete,
+                    "netlink dump contains duplicate completion messages"
+                );
                 if payload.len() >= 4 {
                     let error = i32::from_ne_bytes(payload[..4].try_into()?);
-                    ensure!(error == 0, "socket diagnostic dump failed: errno {}", error.saturating_abs());
+                    ensure!(
+                        error == 0,
+                        "socket diagnostic dump failed: errno {}",
+                        error.saturating_abs()
+                    );
                 }
                 complete = true;
             }
             SOCK_DIAG_BY_FAMILY => {
-                ensure!(!complete, "socket diagnostic record appeared after dump completion");
+                ensure!(
+                    !complete,
+                    "socket diagnostic record appeared after dump completion"
+                );
                 ensure!(
                     records.len() < MAX_RECORDS_PER_DATAGRAM,
                     "socket diagnostic datagram exceeds the record limit"
@@ -229,16 +246,22 @@ mod tests {
 
     #[test]
     fn rejects_invalid_request_family_and_sequence() {
-        assert!(build_dump_request(SocketDiagnosticRequest {
-            family: 0,
-            transport: SocketTransport::Tcp,
-            sequence: 1,
-        }).is_err());
-        assert!(build_dump_request(SocketDiagnosticRequest {
-            family: libc::AF_INET as u8,
-            transport: SocketTransport::Tcp,
-            sequence: 0,
-        }).is_err());
+        assert!(
+            build_dump_request(SocketDiagnosticRequest {
+                family: 0,
+                transport: SocketTransport::Tcp,
+                sequence: 1,
+            })
+            .is_err()
+        );
+        assert!(
+            build_dump_request(SocketDiagnosticRequest {
+                family: libc::AF_INET as u8,
+                transport: SocketTransport::Tcp,
+                sequence: 0,
+            })
+            .is_err()
+        );
     }
 
     #[test]
