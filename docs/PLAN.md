@@ -519,7 +519,7 @@ Resolve these choices with evidence and document them before the affected featur
 - **Loopback readiness enforcement:** dataplane readiness now accepts only IPv4/IPv6 loopback listener addresses and rejects wildcard or LAN exposure. This is an offline evidence check; live listener probing is still outstanding.
 
 
-- **Core mark validation:** routing-policy planning rejects a zero socket mark because it could match unmarked traffic and bypass the TUN table. This is pure validation; per-core socket-mark configuration and live route-loop verification remain outstanding.
+- **Core mark validation and readiness:** routing-policy planning rejects zero marks; the adapter API now requires a non-zero mark/mask for TUN config, with outbound-scoped generation for sing-box and Xray only. The readiness evaluator also requires an observed proxy-outbound socket mark matching the policy mask. Runtime mark collection, Mihomo support, native validation against pinned binaries, live marked-egress verification, and the production kernel/recovery backends remain outstanding.
 
 
 - Cleanup completion is now gated on an empty conflict list from every exact-resource deletion. If a resource changes after preflight, the supervisor retains the CleanupPending manifest for a later recovery attempt; it does not discard ownership evidence or treat a partial cleanup as success.
