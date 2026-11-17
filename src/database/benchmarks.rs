@@ -11,7 +11,8 @@ use redb::{ReadableDatabase, ReadableTable};
 use crate::domain::{BenchmarkRun, BenchmarkRunStatus, BenchmarkSample};
 
 use super::{
-    BENCHMARK_RUNS, BENCHMARK_SAMPLES, METADATA, NODES, NodeDatabase, unix_timestamp,
+    NodeDatabase,
+    nodes::{BENCHMARK_RUNS, BENCHMARK_SAMPLES, METADATA, NODES, unix_timestamp},
 };
 
 impl NodeDatabase {
@@ -34,7 +35,7 @@ impl NodeDatabase {
         let write_txn = self.inner.begin_write()?;
         let id = {
             let mut metadata = write_txn.open_table(METADATA)?;
-            let next_id = metadata
+            let next_id: u64 = metadata
                 .get("next_benchmark_run_id")?
                 .map(|value| value.value())
                 .unwrap_or(1);
@@ -91,7 +92,7 @@ impl NodeDatabase {
         }
         let id = {
             let mut metadata = write_txn.open_table(METADATA)?;
-            let next_id = metadata
+            let next_id: u64 = metadata
                 .get("next_benchmark_sample_id")?
                 .map(|value| value.value())
                 .unwrap_or(1);
