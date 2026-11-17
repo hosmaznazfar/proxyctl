@@ -253,7 +253,7 @@ pub(super) fn metric_summary_cell(
     };
 
     if verbose {
-        if !summary.median.is_none() && !summary.failures.is_empty() {
+        if summary.median.is_some() && !summary.failures.is_empty() {
             let failures = summary
                 .failures
                 .iter()
@@ -788,4 +788,46 @@ pub(super) fn safe_field(value: &str, max_chars: usize) -> String {
         .filter(|character| !character.is_control())
         .take(max_chars)
         .collect()
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        domain::{BenchmarkMetric, BenchmarkSampleStatus},
+        services::reporting::{FailedTransferDetail, FailureCount, MetricSummary},
+    };
+
+    #[test]
+    fn verbose_metric_cell_keeps_failed_attempts_alongside_successes() {
+        let summary = MetricSummary {
+            metric: BenchmarkMetric::Download,
+            endpoint: Some("example.test/download".into()),
+            successful: 1,
+            partial_successful: 1,
+            attempted: 3,
+            median: Some(250_000.0),
+            failures: vec![FailureCount {
+                status: BenchmarkSampleStatus::Timeout,
+                count: 2,
+            }],
+            failed_transfers: vec![FailedTransferDetail {
+                sample_index: 2,
+                transferred_bytes: Some(1_572_864),
+                duration_ms: Some(20_000),
+            }],
+            preflight: None,
+        };
+
+        let concise = metric_summary_cell(&summary, false);
+        assert!(concise.contains("0.25 Mbps"));
+        assert!(!concise.contains("example.test"));
+        assert!(!concise.contains("1_572_864"));
+
+        let verbose = metric_summary_cell(&summary, true);
+        assert!(verbose.contains("timeout×2"));
+        assert!(verbose.contains("#2: 1572864 bytes / 20.00s"));
+        assert!(verbose.contains("[example.test/download]"));
+    }
 }
