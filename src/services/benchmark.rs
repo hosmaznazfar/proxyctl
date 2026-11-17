@@ -19,8 +19,8 @@ mod samples;
 use probes::probe_chunks;
 use probes::{LatencyBatchEntry, execute_latency_batch, execute_tcp_ping_batch};
 use samples::{
-    failed_sample, failed_transfer_sample, install_cancellation_handler, persist_sample, record_preflight,
-    status_for_failure, successful_sample, unix_timestamp,
+    failed_sample, failed_transfer_sample, install_cancellation_handler, persist_sample,
+    record_preflight, status_for_failure, successful_sample, unix_timestamp,
 };
 
 use crate::{
@@ -564,8 +564,9 @@ fn execute_run(
                     let measurement_started = std::time::Instant::now();
                     let outcome =
                         measure_interruptibly(&client, metric, settings, &mut process, &label);
-                    let failed_duration_ms = u64::try_from(measurement_started.elapsed().as_millis())
-                        .unwrap_or(u64::MAX);
+                    let failed_duration_ms =
+                        u64::try_from(measurement_started.elapsed().as_millis())
+                            .unwrap_or(u64::MAX);
                     let outcome = match outcome {
                         Ok(measurement)
                             if metric == BenchmarkMetric::Download
@@ -574,7 +575,9 @@ fn execute_run(
                                 && measurement.partial =>
                         {
                             Err(MeasurementFailure::IncompleteTransfer {
-                                transferred_bytes: measurement.transferred_bytes.unwrap_or_default(),
+                                transferred_bytes: measurement
+                                    .transferred_bytes
+                                    .unwrap_or_default(),
                                 duration_ms: u64::try_from(measurement.duration.as_millis())
                                     .unwrap_or(u64::MAX),
                             })
@@ -611,18 +614,19 @@ fn execute_run(
                         Err(error) => {
                             let reason = error.reason();
                             println!("{label}: {reason}");
-                            let mut sample = if matches!(error, MeasurementFailure::IncompleteTransfer { .. }) {
-                                failed_transfer_sample(&entry.context, metric, attempt, error)
-                            } else {
-                                failed_sample(
-                                    &entry.context,
-                                    metric,
-                                    attempt,
-                                    status_for_failure(error),
-                                    error.category(),
-                                    &reason,
-                                )
-                            };
+                            let mut sample =
+                                if matches!(error, MeasurementFailure::IncompleteTransfer { .. }) {
+                                    failed_transfer_sample(&entry.context, metric, attempt, error)
+                                } else {
+                                    failed_sample(
+                                        &entry.context,
+                                        metric,
+                                        attempt,
+                                        status_for_failure(error),
+                                        error.category(),
+                                        &reason,
+                                    )
+                                };
                             if metric == BenchmarkMetric::Upload {
                                 sample.duration_ms = Some(failed_duration_ms);
                             }
