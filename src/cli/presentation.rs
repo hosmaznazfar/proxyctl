@@ -400,42 +400,8 @@ pub(super) fn print_benchmark_report(
             return;
         }
 
-        let terminal_width = std::env::var("COLUMNS")
-            .ok()
-            .and_then(|value| value.parse::<usize>().ok())
-            .filter(|width| *width >= 60)
-            .unwrap_or(100);
-        let metric_columns = fields
-            .iter()
-            .enumerate()
-            .filter(|(_, field)| matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
-            .map(|(index, _)| index)
-            .collect::<Vec<_>>();
-        let fixed_width = fields
-            .iter()
-            .filter(|field| !matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
-            .map(|field| report_column_width(*field))
-            .sum::<usize>();
-        let border_width = fields.len().saturating_mul(3).saturating_add(1);
-        let metric_width = if metric_columns.is_empty() {
-            24
-        } else {
-            terminal_width
-                .saturating_sub(fixed_width + border_width)
-                .checked_div(metric_columns.len())
-                .unwrap_or(18)
-                .clamp(12, 36)
-        };
-
         let mut table = builder.build();
-        for (index, field) in fields.iter().enumerate() {
-            let width = if matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload) {
-                metric_width
-            } else {
-                report_column_width(*field)
-            };
-            table.with(Modify::new(Columns::single(index)).with(Width::wrap(width).keep_words(false)));
-        }
+        apply_report_column_widths(&mut table, &fields);
 
         let mut theme = Theme::from_style(Style::rounded());
         for row in separator_rows {
@@ -485,11 +451,39 @@ fn apply_report_column_widths(
 ) {
     use crate::services::display_config::DisplayField as F;
     use tabled::settings::{Modify, Width, object::Columns};
+
+    let terminal_width = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|width| *width >= 60)
+        .unwrap_or(100);
+    let metric_columns = fields
+        .iter()
+        .filter(|field| matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
+        .count();
+    let fixed_width = fields
+        .iter()
+        .filter(|field| !matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload))
+        .map(|field| report_column_width(*field))
+        .sum::<usize>();
+    let border_width = fields.len().saturating_mul(3).saturating_add(1);
+    let metric_width = if metric_columns == 0 {
+        18
+    } else {
+        terminal_width
+            .saturating_sub(fixed_width + border_width)
+            .checked_div(metric_columns)
+            .unwrap_or(18)
+            .clamp(10, 36)
+    };
+
     for (index, field) in fields.iter().enumerate() {
-        table.with(Modify::new(Columns::single(index)).with(Width::wrap(report_column_width(*field)).keep_words(false)));
-        if matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload) {
-            table.with(Modify::new(Columns::single(index)).with(Width::wrap(18).keep_words(false)));
-        }
+        let width = if matches!(field, F::Latency | F::TcpPing | F::Download | F::Upload) {
+            metric_width
+        } else {
+            report_column_width(*field)
+        };
+        table.with(Modify::new(Columns::single(index)).with(Width::wrap(width).keep_words(false)));
     }
 }
 
@@ -885,6 +879,15 @@ mod tests {
         domain::{BenchmarkMetric, BenchmarkSampleStatus},
         services::reporting::{FailedTransferDetail, FailureCount, MetricSummary},
     };
+
+    #[test]
+    fn report_core_order_groups_each_nodes_history_consistently() {
+        let mut targets = ["mihomo", "direct", "xray", "sing-box", "other"]
+            .into_iter()
+            .collect::<Vec<_>>();
+        targets.sort_by_key(|target| report_target_order(target));
+        assert_eq!(targets, ["sing-box", "xray", "mihomo", "direct", "other"]);
+    }
 
     #[test]
     fn verbose_metric_cell_keeps_failed_attempts_alongside_successes() {
