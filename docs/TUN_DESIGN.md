@@ -341,3 +341,8 @@ The journal recovery classifier now distinguishes unresolved intent, applied res
 - **Typed journal resource identities:** journal validation now binds each operation kind to a constrained key format: interface creation keys carry a validated interface name, route keys carry address family/table/destination, and rule keys carry family/priority. Mismatched or malformed identities are rejected before recovery planning.
 
 - Journal validation also enforces canonical operation order: at most one interface-create intent first, followed by routes, then rules. This makes reverse-order recovery deterministic and rejects reordered or duplicated interface operations.
+
+
+## Marked physical-egress preflight evidence
+
+A Linux read-only probe now resolves fixed IPv4 and IPv6 destinations with the planned core socket mark using bounded `ip -j route get` invocations. It accepts only one unambiguous result per family, requires the main routing table, resolves the output interface to the current sysfs name/ifindex inventory, rejects the planned TUN interface, loopback, TUN-kind links, and interfaces without a sysfs hardware-device association. The evidence records the mark/mask, destination, gateway, interface name/index, and table. This is a preflight snapshot only: it neither sends traffic nor proves that a core actually applies `SO_MARK`. Core adapter mark configuration and live end-to-end readiness remain separate mandatory gates. IPv4 or IPv6 lookup failure blocks readiness; no family is silently skipped. Tests use synthetic JSON and temporary sysfs fixtures only.
