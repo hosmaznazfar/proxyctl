@@ -110,7 +110,7 @@ pub(super) fn print_node_results(
                         .sum();
                     let metric_cell = |summary: Option<&reporting::MetricSummary>| {
                         summary
-                            .map(|summary| metric_summary_cell(summary, verbose))
+                            .map(|summary| metric_summary_cell(summary, false))
                             .unwrap_or_else(|| "not-run".into())
                     };
                     builder.push_record(
