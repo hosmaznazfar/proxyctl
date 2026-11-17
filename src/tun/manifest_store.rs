@@ -10,6 +10,7 @@ pub use super::journal::{
     JournalRecoveryDecision, TransactionJournal, plan_journal_recovery, recovery_action,
 };
 use super::manifest_fs::*;
+use super::journal_store::JournalStore;
 #[cfg(target_os = "linux")]
 use super::process::ProcessIdentity;
 use super::{
@@ -210,26 +211,13 @@ impl ManifestStore {
     }
 
     pub fn journal_path(&self) -> PathBuf {
-        self.directory.join(JOURNAL_FILE)
+        JournalStore::from_directory(self.directory.clone()).path()
     }
 
     /// Create the write-ahead journal before the first kernel mutation.
-    ///
-    /// The caller must hold the process-wide lifecycle lock across journal creation and every
-    /// subsequent update. This store deliberately does not acquire a second lock internally.
     pub fn create_transaction_journal(&self, activation_id: &str, generation: u64) -> Result<()> {
-        let journal = TransactionJournal {
-            schema_version: 1,
-            activation_id: activation_id.to_owned(),
-            generation,
-            operations: Vec::new(),
-        };
-        journal.validate()?;
-        ensure!(
-            self.load_transaction_journal()?.is_none(),
-            "an existing TUN transaction journal must be recovered first"
-        );
-        self.write_journal(&journal)
+        JournalStore::from_directory(self.directory.clone())
+            .create_transaction_journal(activation_id, generation)
     }
 
     /// Persist an operation intent before attempting its kernel mutation.
@@ -240,38 +228,8 @@ impl ManifestStore {
         kind: JournalOperationKind,
         resource_key: &str,
     ) -> Result<()> {
-        let mut journal = self
-            .load_transaction_journal()?
-            .ok_or_else(|| anyhow::anyhow!("no TUN transaction journal exists"))?;
-        ensure!(
-            journal.activation_id == activation_id && journal.generation == generation,
-            "journal activation or generation mismatch"
-        );
-        ensure!(
-            journal.operations.len() < MAX_JOURNAL_OPERATIONS,
-            "too many journal operations"
-        );
-        ensure!(
-            !resource_key.is_empty()
-                && resource_key.len() <= 512
-                && !resource_key.chars().any(char::is_control),
-            "invalid journal resource key"
-        );
-        ensure!(
-            !journal
-                .operations
-                .iter()
-                .any(|operation| operation.resource_key == resource_key),
-            "journal resource already exists"
-        );
-        journal.operations.push(JournalOperation {
-            sequence: journal.operations.len() as u32,
-            kind,
-            resource_key: resource_key.to_owned(),
-            state: JournalOperationState::Intent,
-            fingerprint: None,
-        });
-        self.write_journal(&journal)
+        JournalStore::from_directory(self.directory.clone())
+            .record_operation_intent(activation_id, generation, kind, resource_key)
     }
 
     pub fn mark_operation_applied(
@@ -281,21 +239,8 @@ impl ManifestStore {
         resource_key: &str,
         fingerprint: &str,
     ) -> Result<()> {
-        ensure!(
-            !fingerprint.is_empty()
-                && fingerprint.len() <= 16 * 1024
-                && !fingerprint.chars().any(char::is_control),
-            "invalid journal fingerprint"
-        );
-        self.update_journal_operation(activation_id, generation, resource_key, |operation| {
-            ensure!(
-                operation.state == JournalOperationState::Intent,
-                "only an intended operation can become applied"
-            );
-            operation.state = JournalOperationState::Applied;
-            operation.fingerprint = Some(fingerprint.to_owned());
-            Ok(())
-        })
+        JournalStore::from_directory(self.directory.clone())
+            .mark_operation_applied(activation_id, generation, resource_key, fingerprint)
     }
 
     /// Mark cleanup only after compare-and-delete confirms removal or absence.
@@ -305,68 +250,12 @@ impl ManifestStore {
         generation: u64,
         resource_key: &str,
     ) -> Result<()> {
-        self.update_journal_operation(activation_id, generation, resource_key, |operation| {
-            ensure!(
-                operation.state == JournalOperationState::Applied,
-                "only an applied operation can become removed"
-            );
-            operation.state = JournalOperationState::Removed;
-            Ok(())
-        })
-    }
-
-    fn update_journal_operation(
-        &self,
-        activation_id: &str,
-        generation: u64,
-        resource_key: &str,
-        update: impl FnOnce(&mut JournalOperation) -> Result<()>,
-    ) -> Result<()> {
-        let mut journal = self
-            .load_transaction_journal()?
-            .ok_or_else(|| anyhow::anyhow!("no TUN transaction journal exists"))?;
-        ensure!(
-            journal.activation_id == activation_id && journal.generation == generation,
-            "journal activation or generation mismatch"
-        );
-        let operation = journal
-            .operations
-            .iter_mut()
-            .find(|operation| operation.resource_key == resource_key)
-            .ok_or_else(|| anyhow::anyhow!("journal operation does not exist"))?;
-        update(operation)?;
-        self.write_journal(&journal)
+        JournalStore::from_directory(self.directory.clone())
+            .mark_operation_removed(activation_id, generation, resource_key)
     }
 
     pub fn load_transaction_journal(&self) -> Result<Option<TransactionJournal>> {
-        let file = match open_private_file(&self.journal_path()) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => {
-                return Err(error).context("cannot securely open TUN transaction journal");
-            }
-        };
-        let metadata = file.metadata()?;
-        ensure!(
-            metadata.len() <= MAX_JOURNAL_BYTES,
-            "TUN transaction journal exceeds size limit"
-        );
-        ensure!(
-            metadata.file_type().is_file(),
-            "TUN transaction journal is not a regular file"
-        );
-        verify_owner(&metadata)?;
-        verify_private_file(&metadata)?;
-        let mut bytes = Vec::with_capacity(metadata.len() as usize);
-        file.take(MAX_JOURNAL_BYTES + 1).read_to_end(&mut bytes)?;
-        ensure!(
-            bytes.len() as u64 <= MAX_JOURNAL_BYTES,
-            "TUN transaction journal exceeds size limit"
-        );
-        let journal: TransactionJournal =
-            serde_json::from_slice(&bytes).context("TUN transaction journal is malformed")?;
-        journal.validate()?;
-        Ok(Some(journal))
+        JournalStore::from_directory(self.directory.clone()).load_transaction_journal()
     }
 
     /// Resolve an intent as absent only after exact kernel inspection proves no resource exists.
@@ -376,14 +265,8 @@ impl ManifestStore {
         generation: u64,
         resource_key: &str,
     ) -> Result<()> {
-        self.update_journal_operation(activation_id, generation, resource_key, |operation| {
-            ensure!(
-                operation.state == JournalOperationState::Intent,
-                "only an unresolved intent can be confirmed absent"
-            );
-            operation.state = JournalOperationState::Absent;
-            Ok(())
-        })
+        JournalStore::from_directory(self.directory.clone())
+            .mark_intent_absent(activation_id, generation, resource_key)
     }
 
     pub fn remove_completed_transaction_journal(
@@ -391,53 +274,8 @@ impl ManifestStore {
         activation_id: &str,
         generation: u64,
     ) -> Result<()> {
-        let Some(journal) = self.load_transaction_journal()? else {
-            return Ok(());
-        };
-        ensure!(
-            journal.activation_id == activation_id && journal.generation == generation,
-            "refusing to remove another transaction journal"
-        );
-        ensure!(
-            journal.operations.iter().all(|operation| matches!(
-                operation.state,
-                JournalOperationState::Removed | JournalOperationState::Absent
-            )),
-            "refusing to remove an incomplete transaction journal"
-        );
-        match fs::remove_file(self.journal_path()) {
-            Ok(()) => sync_directory(&self.directory),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error.into()),
-        }
-    }
-
-    fn write_journal(&self, journal: &TransactionJournal) -> Result<()> {
-        journal.validate()?;
-        let destination = self.journal_path();
-        if let Ok(metadata) = fs::symlink_metadata(&destination) {
-            ensure!(
-                metadata.file_type().is_file(),
-                "TUN transaction journal path is not a regular file"
-            );
-            verify_owner(&metadata)?;
-            verify_private_file(&metadata)?;
-        }
-        let bytes = serde_json::to_vec_pretty(journal)?;
-        ensure!(
-            bytes.len() as u64 <= MAX_JOURNAL_BYTES,
-            "TUN transaction journal exceeds size limit"
-        );
-        let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)
-            .context("cannot create private TUN transaction journal")?;
-        set_private_file(temporary.as_file())?;
-        temporary.write_all(&bytes)?;
-        temporary.as_file().sync_all()?;
-        temporary
-            .persist(&destination)
-            .context("cannot atomically replace TUN transaction journal")?;
-        sync_directory(&self.directory)?;
-        Ok(())
+        JournalStore::from_directory(self.directory.clone())
+            .remove_completed_transaction_journal(activation_id, generation)
     }
 
     /// Remove only the exact activation after its cleanup phase has completed.

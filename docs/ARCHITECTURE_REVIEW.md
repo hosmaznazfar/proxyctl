@@ -27,7 +27,7 @@ No critical SOLID violation was found that justifies a broad rewrite before real
 
 **Remaining concentration points**
 1. `database/nodes.rs` owns node CRUD, schema initialization/migration, benchmark run/sample persistence, history retention, and deletion state. This is the clearest remaining SRP concern. A future behavior-preserving extraction should move benchmark persistence into a sibling database module while keeping a single database handle/transaction boundary.
-2. `tun/manifest_store.rs` persists two distinct durable records: the lifecycle manifest and the write-ahead transaction journal. The operations share directory ownership and atomic-file guarantees, but their storage APIs can be separated into manifest and journal stores over shared private-file primitives. This is a medium-priority cleanup because the journal lifecycle is already independently modeled.
+2. `tun/manifest_store.rs` owns lifecycle manifest persistence, while `tun/journal_store.rs` owns the generation-scoped write-ahead operation journal. Both reuse `tun/manifest_fs.rs` for private ownership, permissions, no-follow opens, atomic replacement, and directory fsync. The existing ManifestStore journal methods remain compatibility delegates while callers migrate to the dedicated store.
 3. `cli/mod.rs` still combines Clap command definitions with shell-completion generation/install helpers and interactive prompts. Parsing definitions can remain centralized; completion installation and prompt workflows should move to a focused CLI support module when touched next.
 4. `services/activation.rs` still owns the activation orchestration, runtime lock/state persistence, and process launch/stop flow. These are related lifecycle responsibilities, but state serialization and atomic state-file operations are a plausible future extraction if the module grows further.
 
@@ -68,7 +68,7 @@ No critical SOLID violation was found that justifies a broad rewrite before real
 | Priority | Area | Recommended action | Timing |
 |---|---|---|---|
 | P1 | Database | **Completed 2026-11-17:** benchmark run/sample/history persistence moved to `database/benchmarks.rs`; public API, schema, and transaction behavior preserved | Verified by user-run checks pending |
-| P2 | TUN storage | Separate journal persistence API from manifest lifecycle storage; reuse the existing secure file primitives | Before implementing live TUN recovery |
+| P2 | TUN kernel backend | Implement privileged exact-identity rtnetlink operations and compare-and-delete using the journal store | Before enabling TUN |
 | P2 | CLI | Move completion generation/installation and interactive prompts out of command-definition module | When next changing CLI completion/setup |
 | P3 | Activation | Consider extracting persisted runtime-state encoding/atomic writes if more activation features are added | Before expanding activation |
 | P3 | Benchmark | Keep current HTTP client cohesive; split only if a new transport backend or independent measurement policy is introduced | No immediate change |
@@ -77,7 +77,7 @@ No critical SOLID violation was found that justifies a broad rewrite before real
 ## Recommended next work
 
 1. Complete any remaining real-world benchmark comparison using the separate validation runbook; keep it user-run and isolated from the offline test suite.
-2. Separate TUN journal persistence from manifest lifecycle storage before implementing live TUN recovery.
+2. Implement a concrete Linux kernel backend that can inspect and mutate only exact Proxyctl-owned resources, using durable journal intents and atomic compare-and-delete.
 3. Move shell-completion installation/generation and interactive prompts out of `cli/mod.rs` when that CLI support area is next changed.
 4. Keep activation runtime-state extraction deferred until activation grows; do not broaden the current database refactor.
 
