@@ -206,7 +206,7 @@ mod tests {
         bytes[4..6].copy_from_slice(&kind.to_ne_bytes());
         bytes[8..12].copy_from_slice(&sequence.to_ne_bytes());
         bytes[NLMSG_HEADER_LEN..].copy_from_slice(payload);
-        while bytes.len() % 4 != 0 {
+        while !bytes.len().is_multiple_of(4) {
             bytes.push(0);
         }
         bytes
