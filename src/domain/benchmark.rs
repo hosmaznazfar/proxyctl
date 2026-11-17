@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn transfer_byte_metadata_is_restricted_to_successful_transfer_samples() {
+    fn transfer_byte_metadata_is_allowed_for_failed_transfer_attempts() {
         let mut latency = sample(BenchmarkSampleStatus::Success, Some(12.0));
         latency.transferred_bytes = Some(1024);
         assert_eq!(
@@ -339,10 +339,7 @@ mod tests {
         failed_download.failure_category = Some("timeout".into());
         failed_download.failure_reason = Some("request timed out".into());
         failed_download.transferred_bytes = Some(1024);
-        assert_eq!(
-            failed_download.validate(),
-            Err("failed samples cannot contain transfer metadata")
-        );
+        assert_eq!(failed_download.validate(), Ok(()));
     }
 
     #[test]
