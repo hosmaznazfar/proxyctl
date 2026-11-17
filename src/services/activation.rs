@@ -201,7 +201,9 @@ pub fn activate(
         validate_listen_port(port)?;
         ensure_port_available(port)?;
         let generated = if tun_enabled {
-            adapter.generate_tun_activation_config(&node, port)
+            anyhow::bail!(
+                "TUN activation is disabled until a runtime-assigned outbound mark and live readiness evidence are available"
+            );
         } else {
             adapter.generate_activation_config(&node, port)
         }
