@@ -276,6 +276,7 @@ impl CoreAdapter for XrayAdapter {
         &self,
         node: &ProxyNode,
         listen_port: u16,
+        mark: super::TunOutboundMark,
     ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
@@ -303,6 +304,15 @@ impl CoreAdapter for XrayAdapter {
     ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_tun_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        let outbounds = document
+            .get_mut("outbounds")
+            .and_then(serde_json::Value::as_array_mut)
+            .ok_or_else(|| anyhow::anyhow!("Xray TUN config must contain an outbound array"))?;
+        anyhow::ensure!(
+            outbounds.len() == 1 && outbounds[0]["tag"] == "proxy",
+            "Xray TUN config must contain exactly the tagged proxy outbound"
+        );
+        outbounds[0]["streamSettings"]["sockopt"]["mark"] = json!(mark.value());
         let outbounds = document
             .get_mut("outbounds")
             .and_then(serde_json::Value::as_array_mut)
@@ -443,7 +453,7 @@ mod config_contract_tests {
 
         let tun: serde_json::Value = serde_json::from_slice(
             &XrayAdapter
-                .generate_tun_activation_config(&node, 43128)
+                .generate_tun_activation_config(&node, 43128, super::super::TunOutboundMark::new(0x42, 0xff).unwrap())
                 .unwrap()
                 .content,
         )
@@ -461,17 +471,9 @@ mod config_contract_tests {
             false
         );
 
-        let mark = super::super::TunOutboundMark::new(0x42, 0xff).unwrap();
-        let marked: serde_json::Value = serde_json::from_slice(
-            &XrayAdapter
-                .generate_tun_activation_config_with_mark(&node, 43128, mark)
-                .unwrap()
-                .content,
-        )
-        .unwrap();
-        assert_eq!(marked["outbounds"][0]["streamSettings"]["sockopt"]["mark"], 0x42);
-        assert!(marked["inbounds"][0].get("sockopt").is_none());
-        assert!(marked["inbounds"][1].get("streamSettings").is_none());
+        assert_eq!(tun["outbounds"][0]["streamSettings"]["sockopt"]["mark"], 0x42);
+        assert!(tun["inbounds"][0].get("sockopt").is_none());
+        assert!(tun["inbounds"][1].get("streamSettings").is_none());
         assert!(activation["outbounds"][0]["streamSettings"].get("sockopt").is_none());
     }
 }
