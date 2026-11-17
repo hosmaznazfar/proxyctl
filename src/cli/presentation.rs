@@ -1,7 +1,7 @@
 //! CLI output formatting and tabular presentation.
 use std::collections::HashMap;
 
-use tabled::{builder::Builder, settings::Style};
+use tabled::builder::Builder;
 
 use crate::{
     cores::CoreId,
@@ -297,11 +297,6 @@ pub(super) fn print_benchmark_report(
 ) {
     use crate::services::display_config::DisplayField as F;
     use reporting::ReportMode;
-    use tabled::settings::{
-        style::{HorizontalLine, Style},
-        themes::Theme,
-    };
-
     let fields = config.fields();
     let mut builder = Builder::default();
     builder.push_record(fields.iter().map(ToString::to_string).collect::<Vec<_>>());
@@ -822,7 +817,9 @@ pub(super) fn print_node_details(records: &[NodeRecord], display_numbers: &HashM
         ]);
     }
 
-    println!("{}", builder.build().with(Style::rounded()));
+    let mut table_view = builder.build();
+    table::apply_formatting(&mut table_view, &[6, 12, 24, 6, 20, 8, 10, 10, 24], &[]);
+    println!("{table_view}");
 }
 
 pub(super) fn safe_field(value: &str, max_chars: usize) -> String {
