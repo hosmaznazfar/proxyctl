@@ -439,8 +439,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 "accurate" => crate::domain::BenchmarkProfile::Accurate,
                 _ => unreachable!("clap validates benchmark profile"),
             };
-            let mut settings =
-                crate::services::benchmark::default_settings_for(selected_profile);
+            let mut settings = crate::services::benchmark::default_settings_for(selected_profile);
             settings.proxy_type = match proxy_type.as_str() {
                 "socks5" => crate::domain::BenchmarkProxyType::Socks5,
                 "http" => crate::domain::BenchmarkProxyType::Http,

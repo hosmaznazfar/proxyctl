@@ -45,7 +45,9 @@ pub(super) const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub(super) const MAX_PROBE_CONCURRENCY: usize = 3;
 
 mod options;
-pub use options::{BenchmarkMetricSelection, BenchmarkOptions, METHODOLOGY, default_settings, default_settings_for};
+pub use options::{
+    BenchmarkMetricSelection, BenchmarkOptions, METHODOLOGY, default_settings, default_settings_for,
+};
 
 /// Run the requested benchmark scope and persist each node/core sample batch after its core exits.
 pub fn run_benchmark(database_path: &Path, options: BenchmarkOptions) -> anyhow::Result<u64> {

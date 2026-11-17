@@ -282,7 +282,11 @@ impl BenchmarkHttpClient {
             }
             handles
                 .into_iter()
-                .map(|handle| handle.join().unwrap_or(Err(MeasurementFailure::Unavailable)))
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or(Err(MeasurementFailure::Unavailable))
+                })
                 .collect::<Vec<_>>()
         });
 
@@ -695,9 +699,9 @@ mod tests {
             latency_url: Url::parse(&format!("https://127.0.0.1:{}/ping", address.port())).unwrap(),
             download_url: Url::parse("https://127.0.0.1/download").unwrap(),
             upload_url: Url::parse("https://127.0.0.1/upload").unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
 
         assert_eq!(client.latency().unwrap_err(), MeasurementFailure::TlsFailed);
         let _ = server.join();
@@ -789,9 +793,9 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
 
         assert!(client.latency().unwrap().value >= 0.0);
         let mut progress = Vec::new();
@@ -868,9 +872,9 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
 
         assert!(client.latency().is_ok());
         server.join().unwrap();
@@ -925,13 +929,9 @@ mod tests {
 
         let mut progress = Vec::new();
         let result = client
-            .download_profile(
-                96 * 1024,
-                Duration::from_secs(6),
-                3,
-                1024,
-                |snapshot| progress.push(snapshot),
-            )
+            .download_profile(96 * 1024, Duration::from_secs(6), 3, 1024, |snapshot| {
+                progress.push(snapshot)
+            })
             .unwrap();
         assert_eq!(result.transferred_bytes, Some(96 * 1024));
         assert!(!result.partial);
@@ -980,9 +980,9 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
 
         let measurement = client.download(64 * 1024, |_| {}).unwrap();
         assert_eq!(measurement.transferred_bytes, Some(32 * 1024));
@@ -1026,9 +1026,9 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
         assert_eq!(
             client.download(8, |_| {}),
             Err(MeasurementFailure::IncompleteResponse)
@@ -1068,9 +1068,9 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
 
         assert_eq!(
             client.download(8, |_| {}),
@@ -1119,9 +1119,9 @@ mod tests {
             latency_url: Url::parse("http://measurement.invalid/ping").unwrap(),
             download_url: Url::parse("http://measurement.invalid/download").unwrap(),
             upload_url: Url::parse("http://measurement.invalid/upload").unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
 
         assert_eq!(client.upload(8), Err(MeasurementFailure::HttpStatus(500)));
         server.join().unwrap();
@@ -1191,9 +1191,9 @@ mod tests {
             latency_url: Url::parse(&format!("{endpoint}/ping")).unwrap(),
             download_url: Url::parse(&format!("{endpoint}/download")).unwrap(),
             upload_url: Url::parse(&format!("{endpoint}/upload")).unwrap(),
-        proxy_url: String::new(),
-        request_timeout: Duration::from_secs(2),
-};
+            proxy_url: String::new(),
+            request_timeout: Duration::from_secs(2),
+        };
 
         let measurement = client.download(32 * 1024, |_| {}).unwrap();
         assert_eq!(measurement.transferred_bytes, Some(32 * 1024));

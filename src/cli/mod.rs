@@ -743,16 +743,17 @@ mod tests {
             Some(Command::Test { ref profile, download_bytes: None, upload_bytes: None, .. })
                 if profile == "quick"
         ));
-        let accurate = Cli::try_parse_from([
-            "proxyctl", "test", "--all-cores", "--profile", "accurate"
-        ]).unwrap();
+        let accurate =
+            Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--profile", "accurate"])
+                .unwrap();
         assert!(matches!(
             accurate.command,
             Some(Command::Test { ref profile, .. }) if profile == "accurate"
         ));
-        assert!(Cli::try_parse_from([
-            "proxyctl", "test", "--all-cores", "--profile", "invalid"
-        ]).is_err());
+        assert!(
+            Cli::try_parse_from(["proxyctl", "test", "--all-cores", "--profile", "invalid"])
+                .is_err()
+        );
     }
 
     #[test]

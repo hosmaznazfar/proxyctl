@@ -229,9 +229,7 @@ fn generate_benchmark_runtime_config(
     targets: &[adapters::BenchmarkTarget<'_>],
 ) -> anyhow::Result<adapters::GeneratedConfig> {
     let adapter = adapters::adapter(core);
-    if targets.len() == 1
-        && targets[0].proxy_type == BenchmarkProxyType::Http
-    {
+    if targets.len() == 1 && targets[0].proxy_type == BenchmarkProxyType::Http {
         let target = &targets[0];
         adapter.generate_benchmark_config(target.node, target.listen_port)
     } else {
@@ -616,8 +614,7 @@ exec sleep 30
 
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             let generated = generate_benchmark_runtime_config(core, &[target]).unwrap();
-            let document: serde_json::Value =
-                serde_json::from_slice(&generated.content).unwrap();
+            let document: serde_json::Value = serde_json::from_slice(&generated.content).unwrap();
             match core {
                 CoreId::SingBox => {
                     assert_eq!(document["inbounds"][0]["type"], "http");
@@ -653,8 +650,7 @@ exec sleep 30
 
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
             let generated = generate_benchmark_runtime_config(core, &[target]).unwrap();
-            let document: serde_json::Value =
-                serde_json::from_slice(&generated.content).unwrap();
+            let document: serde_json::Value = serde_json::from_slice(&generated.content).unwrap();
             match core {
                 CoreId::SingBox => assert_eq!(document["inbounds"][0]["type"], "socks"),
                 CoreId::Xray => assert_eq!(document["inbounds"][0]["protocol"], "mixed"),
