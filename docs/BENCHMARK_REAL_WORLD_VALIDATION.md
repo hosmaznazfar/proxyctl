@@ -45,7 +45,7 @@ The selected endpoint URLs are persisted in benchmark settings. They may disclos
 | Warm-up | None | Best-effort 64 KiB, excluded from timing |
 | Upload | 1 MiB, sequential | Same |
 
-Download cap can be overridden with `--download-max-bytes` (hard maximum 32 MiB). Upload can be overridden with `--upload-bytes` (hard maximum 1 MiB). The upload measurement requires the complete synthetic request body and a successful HTTP response; partial uploads are not scored. Each metric retains up to three attempts, stopping at the first success, and reports use successful attempts only. A useful partial download is explicitly marked and is never presented as a complete transfer.
+Download cap can be overridden with `--download-max-bytes` (hard maximum 32 MiB). Upload can be overridden with `--upload-bytes` (hard maximum 1 MiB). The upload measurement requires the complete synthetic request body and a successful HTTP response; partial uploads are not scored. Each metric retains up to three attempts, stopping at the first success, and reports retain each actual attempt. Quick partial downloads are marked partial; Accurate retries until the byte cap is reached or all three attempts fail.
 
 Use the same endpoint URLs, payload sizes, profile, and timeout values for every client in a comparison. Do not assume unrelated speed-test services produce directly comparable results. A custom upload URL must accept the documented HTTP POST body and return a successful HTTP status.
 
