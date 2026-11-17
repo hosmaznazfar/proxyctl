@@ -150,6 +150,20 @@ pub(crate) fn json_config(value: Value) -> anyhow::Result<GeneratedConfig> {
 }
 
 #[cfg(test)]
+mod tun_mark_tests {
+    use super::TunOutboundMark;
+
+    #[test]
+    fn outbound_mark_must_be_nonzero_and_fit_the_policy_mask() {
+        assert_eq!(TunOutboundMark::new(0x42, 0xff).unwrap().value(), 0x42);
+        assert_eq!(TunOutboundMark::new(0x42, 0xff).unwrap().mask(), 0xff);
+        assert!(TunOutboundMark::new(0, 0xff).is_err());
+        assert!(TunOutboundMark::new(0x42, 0).is_err());
+        assert!(TunOutboundMark::new(0x100, 0xff).is_err());
+    }
+}
+
+#[cfg(test)]
 mod tests;
 
 #[cfg(test)]
