@@ -61,16 +61,9 @@ pub trait CoreAdapter {
         listen_port: u16,
     ) -> anyhow::Result<GeneratedConfig>;
 
-    /// Add this core's native TUN inbound. Activation remains gated by the TUN lifecycle.
+    /// Generate a marked TUN config. The mark is mandatory so an unmarked TUN config
+    /// cannot accidentally be selected by a future activation path. Unsupported adapters fail closed.
     fn generate_tun_activation_config(
-        &self,
-        node: &ProxyNode,
-        listen_port: u16,
-    ) -> anyhow::Result<GeneratedConfig>;
-
-    /// Generate TUN configuration with a mark applied exclusively to the proxy outbound socket.
-    /// Adapters without a proven outbound-scoped native option fail closed by default.
-    fn generate_tun_activation_config_with_mark(
         &self,
         _node: &ProxyNode,
         _listen_port: u16,
