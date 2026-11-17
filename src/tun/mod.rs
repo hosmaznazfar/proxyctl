@@ -26,6 +26,7 @@ pub mod service_manager;
 #[cfg(target_os = "linux")]
 pub mod socket_diag_netlink;
 pub mod socket_diag_records;
+pub mod socket_peer;
 #[cfg(target_os = "linux")]
 pub mod socket_ownership;
 #[cfg(target_os = "linux")]
