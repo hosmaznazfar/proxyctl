@@ -541,7 +541,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_apply_rolls_back_in_reverse_and_finalizes_only_after_success() {
+    fn failed_apply_preserves_ambiguous_resources_and_journal() {
         let mut backend = FakeBackend {
             fail_add_at: Some(4),
             ..Default::default()
@@ -554,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn every_route_and_rule_apply_boundary_rolls_back_cleanly() {
+    fn every_route_and_rule_error_preserves_the_write_ahead_journal() {
         // Exercise each of the four route/rule mutation boundaries. The fake backend
         // records the write-ahead contract and proves rollback is reverse-safe at each
         // point without opening a netlink socket or touching host networking.
@@ -600,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn finalization_failure_requires_confirmed_journal_retention() {
+    fn ambiguous_add_failure_requires_confirmed_journal_retention() {
         let mut backend = FakeBackend {
             fail_add_at: Some(3),
             fail_finalize: true,
@@ -615,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn rollback_conflict_preserves_foreign_resource_and_recovery_journal() {
+    fn ambiguous_add_error_never_attempts_unverified_rollback() {
         let key = "route:v4:42420:0.0.0.0/0".to_owned();
         let mut backend = FakeBackend {
             fail_add_at: Some(4),
