@@ -551,3 +551,8 @@ Route resource keys now validate their address family, IP address syntax, and pr
 ### Recovery observation ownership validation
 
 The pure recovery planner now rejects observations for resource keys not present in the transaction journal and rejects empty, oversized, or control-character fingerprints. Missing observations remain conservative conflicts rather than being treated as absence. This narrows the accepted evidence to the exact journal-owned resource set and still performs no mutation.
+
+
+### Reverse-order recovery planner regression coverage
+
+Added a focused recovery-planner test proving that decisions are emitted in reverse resource-creation order and that a changed route fingerprint is isolated as a conflict without changing the decisions for independently matching resources. This tests planning only; it does not imply that an atomic kernel compare-and-delete backend exists.
