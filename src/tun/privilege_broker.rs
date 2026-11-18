@@ -82,6 +82,73 @@ fn is_executable_file(_path: &Path) -> bool {
     false
 }
 
+/// Kernel-authenticated credentials of a connected Unix-domain socket peer.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BrokerPeerCredentials {
+    pub pid: u32,
+    pub uid: u32,
+    pub gid: u32,
+}
+
+/// Read SO_PEERCRED from an already accepted Unix stream socket.
+///
+/// Credentials are supplied by the kernel for the process that established the connection;
+/// they are not accepted from serialized request data.
+#[cfg(target_os = "linux")]
+pub fn read_broker_peer_credentials(
+    stream: &std::os::unix::net::UnixStream,
+) -> Result<BrokerPeerCredentials> {
+    use std::os::fd::AsRawFd;
+
+    let mut credentials = std::mem::MaybeUninit::<libc::ucred>::zeroed();
+    let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    let result = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            credentials.as_mut_ptr().cast(),
+            &mut length,
+        )
+    };
+    ensure!(result == 0, "cannot authenticate broker IPC peer credentials");
+    ensure!(
+        length as usize == std::mem::size_of::<libc::ucred>(),
+        "broker IPC peer credentials have an unexpected size"
+    );
+    // SAFETY: getsockopt succeeded and returned exactly sizeof(struct ucred).
+    let credentials = unsafe { credentials.assume_init() };
+    ensure!(
+        credentials.pid > 0,
+        "broker IPC peer has an invalid process ID"
+    );
+    Ok(BrokerPeerCredentials {
+        pid: credentials.pid as u32,
+        uid: credentials.uid,
+        gid: credentials.gid,
+    })
+}
+
+/// Enforce same-user ownership before a helper inspects the requested managed process.
+///
+/// The helper must obtain target_uid from procfs only after pinning and verifying the
+/// requested ProcessIdentity. This pure policy check never trusts a UID in the request.
+#[cfg(target_os = "linux")]
+pub fn authorize_socket_mark_request(
+    request: &SocketMarkBrokerRequest,
+    peer: BrokerPeerCredentials,
+    target_uid: u32,
+) -> Result<()> {
+    request.validate()?;
+    ensure!(peer.pid > 0, "broker IPC peer process ID is invalid");
+    ensure!(
+        peer.uid == target_uid,
+        "broker may inspect only processes owned by the authenticated caller"
+    );
+    Ok(())
+}
+
 /// Maximum serialized socket-mark broker request size (16 KiB).
 pub const MAX_SOCKET_MARK_REQUEST_BYTES: usize = 16 * 1024;
 
@@ -265,6 +332,37 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::{ffi::OsString, fs};
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn broker_peer_credentials_come_from_kernel_socket_metadata() {
+        use std::{os::unix::net::UnixStream, thread};
+
+        let (client, server) = UnixStream::pair().unwrap();
+        let expected_uid = unsafe { libc::getuid() };
+        let expected_gid = unsafe { libc::getgid() };
+        let expected_pid = std::process::id();
+        let credentials = read_broker_peer_credentials(&server).unwrap();
+        assert_eq!(credentials.uid, expected_uid);
+        assert_eq!(credentials.gid, expected_gid);
+        assert_eq!(credentials.pid, expected_pid);
+        drop(client);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn broker_authorization_allows_only_same_user_processes() {
+        let request = socket_mark_request();
+        let peer = BrokerPeerCredentials {
+            pid: 100,
+            uid: 1000,
+            gid: 1000,
+        };
+        assert!(authorize_socket_mark_request(&request, peer, 1000).is_ok());
+        assert!(authorize_socket_mark_request(&request, peer, 1001).is_err());
+        let invalid_peer = BrokerPeerCredentials { pid: 0, ..peer };
+        assert!(authorize_socket_mark_request(&request, invalid_peer, 1000).is_err());
+    }
 
     #[cfg(target_os = "linux")]
     fn socket_mark_request() -> SocketMarkBrokerRequest {
