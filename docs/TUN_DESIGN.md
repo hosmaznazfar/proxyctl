@@ -438,3 +438,8 @@ The broker protocol now has a Unix-stream reader for exactly one length-prefixed
 #### Private Unix broker listener binding
 
 A Linux listener-binding primitive now accepts only an absolute socket path beneath an existing real directory owned by the effective user and inaccessible to group/other users. It refuses symlink parents and any pre-existing or uninspectable socket path, binds without unlinking stale paths, sets the socket to mode 0600, and verifies socket type, owner, mode, and link count before returning the listener. The helper does not create directories or take ownership of existing paths. This is not yet an accept loop or installed service; accepted peers still require SO_PEERCRED authentication, pidfd-bound target ownership checks, bounded one-frame reads, and a narrowly packaged capability policy. TUN activation remains disabled.
+
+
+#### Pidfd-bound broker authorization
+
+A request authorization entry point now binds the serialized process identity to an already-open ProcessHandle, verifies that exact process is live, reads its owner UID through the pidfd-bound procfs helper, applies the kernel-authenticated SO_PEERCRED same-user policy, and rechecks identity/liveness after authorization. Synthetic coverage exercises the current process, mismatched start-time identity, and a different peer UID. This remains authorization only: it does not collect diagnostics, start a helper, acquire capabilities, or enable TUN.
