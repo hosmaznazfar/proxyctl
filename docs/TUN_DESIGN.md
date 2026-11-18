@@ -674,3 +674,8 @@ The Linux kernel snapshot now records an independent interface-record count from
 ### Linux snapshot fixture compatibility
 
 The independent NETLINK_ROUTE interface count is a Linux-only field on the kernel snapshot. Offline test fixtures now initialize it explicitly to zero; this keeps synthetic snapshots deterministic without opening a netlink socket. Production Linux snapshots still obtain the count from the live read-only RTM_GETLINK dump. No network mutation or TUN activation is introduced.
+
+
+### Final unpadded netlink message handling
+
+The NETLINK_ROUTE parser now distinguishes a valid final message whose declared payload ends exactly at the datagram boundary from a message whose required alignment bytes are truncated. It uses checked alignment arithmetic and never advances beyond the received buffer. A regression test covers a non-four-byte-aligned final message without padding. Multipart messages still require their inter-message alignment bytes. This is parser hardening only.
