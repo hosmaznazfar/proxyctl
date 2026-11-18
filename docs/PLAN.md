@@ -679,3 +679,6 @@ The broker request/response path now has isolated server-side and client-side tr
 - [ ] Only after all offline gates pass, perform separately approved controlled real-network validation. No real TUN activation is authorized by this implementation task.
 
 Do not mark TUN complete or enable activation while any item above remains unchecked.
+
+
+- [x] Harden supervisor identity validation against relative paths, parent traversal, embedded NUL, and oversized manifest paths; retain filesystem ownership and no-follow checks as the authoritative boundary.
