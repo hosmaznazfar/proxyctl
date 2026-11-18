@@ -653,3 +653,6 @@ The bounded transport now verifies that every response datagram is sent by kerne
 ### Read-only NETLINK_ROUTE link probe
 
 The transport now has a narrow typed public diagnostic, `tun::rtnetlink::inspect_link_count()`. It issues only `RTM_GETLINK` with dump flags, validates returned message kinds and minimum link-record framing, and reports a count. It does not expose raw netlink requests to callers, acquire capabilities, or mutate links. The existing iproute2/sysfs snapshot remains the richer source of interface metadata until a fully decoded netlink inventory is implemented.
+
+
+The transport tests now cover a final unpadded `NLMSG_DONE`, reject malformed alignment padding, and pin the diagnostic request to `RTM_GETLINK` dump semantics. The request length is computed before mutably writing its header.
