@@ -53,7 +53,8 @@ cleanup_staging() {
         rm -f -- "$STAGING"
     fi
 }
-trap cleanup_staging EXIT HUP INT TERM
+trap cleanup_staging EXIT
+trap 'exit 1' HUP INT TERM
 
 install -o root -g root -m 0755 "$SOURCE" "$STAGING"
 if ! setcap cap_net_admin=ep "$STAGING"; then
