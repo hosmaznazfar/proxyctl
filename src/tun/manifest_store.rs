@@ -720,11 +720,12 @@ mod tests {
         assert!(store.remove_completed_transaction_journal(id, 21).is_err());
         store.mark_intent_absent(id, 21, "rule:v6:42420").unwrap();
         let journal = store.load_transaction_journal().unwrap().unwrap();
-        assert_eq!(journal.operations[0].state, JournalOperationState::Absent);
+        assert_eq!(journal.operations[1].state, JournalOperationState::Absent);
         assert_eq!(
-            recovery_action(&journal.operations[0]),
+            recovery_action(&journal.operations[1]),
             JournalRecoveryAction::SkipAlreadyRemoved
         );
+        store.mark_operation_removed(id, 21, "interface:tun-proxyctl").unwrap();
         store.remove_completed_transaction_journal(id, 21).unwrap();
     }
 
