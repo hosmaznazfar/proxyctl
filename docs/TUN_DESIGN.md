@@ -571,3 +571,6 @@ If interface creation reports an error, the executor now explicitly asks the bac
 ### Ambiguous route/rule mutation failures
 
 A route or policy-rule backend error can occur after the kernel accepted the mutation but before its exact fingerprint was durably returned. The executor now retains the journal and stops immediately for this boundary instead of rolling back known resources and deleting the journal while the failed operation may remain in the kernel. Recovery must inspect the unresolved intent against fresh exact kernel inventory. Fake-backend fault injection covers post-mutation route and rule errors.
+
+
+The fake transaction backend now injects failures after each of the four route/rule mutations have been applied in memory. Each case asserts that the ambiguous resource remains untouched, the journal is retained, and transaction finalization is not attempted. These tests do not open netlink sockets or mutate host networking.
