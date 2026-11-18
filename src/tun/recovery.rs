@@ -98,7 +98,7 @@ impl SupervisorIdentity {
                     .any(|byte| byte == 0 || byte.is_ascii_control())
                 && matches!(components.next(), Some(std::path::Component::RootDir))
                 && components.all(|component| matches!(component, std::path::Component::Normal(_)))
-                && manifest_path.file_name().is_some(),
+                && manifest_path.file_name().is_some_and(|name| name == "tun-manifest.json"),
             "supervisor manifest path must be a bounded, normalized absolute file path"
         );
         ensure!(
@@ -199,6 +199,9 @@ mod tests {
         assert!(invalid.validate().is_err());
         let mut invalid = valid.clone();
         invalid.manifest_path = "/run/proxyctl/manifest.json\\n".into();
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.manifest_path = "/run/proxyctl/other-manifest.json".into();
         assert!(invalid.validate().is_err());
         let mut invalid = valid;
         invalid.generation = 0;
