@@ -492,10 +492,12 @@ A separate `proxyctl-tun-helper` binary now exposes only one operation: accept o
 
 The broker request/response path now has isolated server-side and client-side transport/execution primitives, but this does not close the TUN implementation. The following production gates remain intentionally open:
 
-- [ ] Package and install a dedicated helper with a reviewed, narrowly scoped privilege policy; prove that the ordinary Proxyctl process never receives CAP_NET_ADMIN.
+- [x] Add a separate diagnostic-only helper binary with a fixed one-request protocol, exact CAP_NET_ADMIN capability-set checks, no_new_privs, no setuid path, and explicit install/remove scripts; add a controller launcher pinned to the root-owned installed path.
+- [ ] Produce and review distribution-native packages and a narrowly scoped installation/update policy; independently audit that the ordinary Proxyctl process never receives CAP_NET_ADMIN and that the helper cannot be used as a privilege trampoline.
 - [ ] Implement the concrete Linux kernel mutator against rtnetlink/TUN ioctls, with exact live fingerprints, durable intent-before-mutation journaling, atomic compare-and-delete, and rollback. The current kernel backend remains a planner/trait, not a mutator.
 - [ ] Implement detached recovery supervisors and service-manager backends. Init-system detection and lifecycle state transitions are not a recovery service; all backend kinds currently report unimplemented.
-- [ ] Connect runtime mark allocation, supported core-specific outbound marking, broker-observed socket marks, and physical-egress route verification into a single readiness decision. A matching diagnostic socket alone is not end-to-end readiness.
+- [x] Implement controller-side launch of the diagnostic helper and strict conversion of matching process-owned exact-peer socket records into a validated observed-mark value.
+- [ ] Connect runtime mark allocation, supported core-specific outbound marking, broker-observed socket marks, physical-egress route verification, route-policy/interface evidence, and end-to-end proxied-traffic checks into one live readiness decision. The current mark probe is not yet wired into activation, and a matching diagnostic socket alone is not end-to-end readiness.
 - [ ] Integrate the kernel transaction, broker, supervisor, core lifecycle, and readiness gate into the CLI while preserving the existing unconditional TUN activation block until every prerequisite is present.
 - [x] Extend fake-backend transaction coverage across each of the four route/rule apply failure boundaries, asserting reverse rollback, interface removal, and journal finalization without host kernel access.
 - [ ] Add end-to-end offline fault-injection coverage for process crashes at every durable journal boundary, controller/core termination, broker failure, partial kernel apply, rollback conflicts, and recovery restart.
