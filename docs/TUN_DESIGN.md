@@ -478,6 +478,10 @@ Added a one-response Unix-stream transport with a two-second maximum monotonic d
 - **Broker client exchange:** added the controller-side one-request Unix-stream exchange. It checks the connected helper's kernel-reported UID against an explicit expected UID, writes one validated bounded request, shuts down the request write side, and reads one bounded validated response. The socket path remains caller-supplied and must already be anchored in the private runtime directory; no helper discovery or execution is inferred from sudo/doas presence. This is transport groundwork only and is not wired into activation. The response reader now also requires EOF immediately after the single length-prefixed frame, rejecting appended bytes or a peer that keeps the response stream open past the bounded read deadline. This closes the one-frame boundary rather than merely decoding a valid prefix.
 
 
+### Read-only recovery status reporting
+
+`proxyctl tun status` now reports the detected PID 1 service manager, whether its recovery backend is actually implemented, and the explicit TUN activation gate. Detection is informational only: it does not invoke service-manager commands, install units, start a supervisor, or change host state. Every current backend remains reported as not implemented, so the command cannot imply recovery readiness.
+
 ## Remaining implementation gates (not yet complete)
 
 The broker request/response path now has isolated server-side and client-side transport/execution primitives, but this does not close the TUN implementation. The following production gates remain intentionally open:
