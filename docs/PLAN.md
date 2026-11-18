@@ -648,3 +648,6 @@ This remains a tested primitive rather than an active IPC service. A private lis
 
 
 - **Bounded broker request stream:** added a one-request Unix-stream reader with pre-allocation length validation, a 16 KiB payload ceiling, and a two-second monotonic deadline covering the complete frame. Truncated, oversized, malformed, and slow-trickle requests fail closed. Listener lifecycle, response framing, helper packaging, and readiness integration remain outstanding; TUN is disabled.
+
+
+- **Private broker listener boundary:** added Linux Unix-socket binding restricted to an existing caller-owned private directory and a newly created mode-0600 socket. Symlink parents, shared directories, pre-existing paths, and unsafe socket metadata are rejected. No stale path is unlinked, no helper/service is launched, and TUN remains disabled.
