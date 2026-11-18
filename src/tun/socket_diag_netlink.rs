@@ -252,6 +252,11 @@ impl SocketDiagnosticDumpAccumulator {
         Ok(())
     }
 
+    /// Whether an uninterrupted terminal NLMSG_DONE has been accepted.
+    pub fn is_complete(&self) -> bool {
+        self.complete
+    }
+
     /// Return records only after an uninterrupted terminal NLMSG_DONE was received.
     pub fn into_complete_dump(self) -> Result<SocketDiagnosticDump> {
         ensure!(
