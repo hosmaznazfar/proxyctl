@@ -465,3 +465,8 @@ The private Unix listener now has a single-client accept primitive with a bounde
 Added an isolated Linux broker transaction executor. It validates the narrow request, opens a pidfd for the exact requested process, authenticates the kernel-supplied Unix peer credentials, enforces same-UID ownership, and snapshots process socket inodes before opening the NETLINK_SOCK_DIAG transport. It then collects all four IPv4/IPv6 TCP/UDP dumps under the existing per-dump deadline, snapshots the process again, rechecks pidfd identity/liveness, and returns only exact peer/mark candidates. Any failed authorization, partial dump, process race, or attribution ambiguity aborts the transaction.
 
 The executor is deliberately not connected to the CLI, does not launch a helper, and does not grant capabilities. It is intended to run only inside a separately packaged, narrowly privileged helper after its policy and lifecycle are implemented. Socket candidates remain diagnostic evidence, not proof of successful application traffic. TUN activation remains disabled.
+
+
+### Bounded broker response stream
+
+Added a one-response Unix-stream transport with a two-second maximum monotonic deadline, a 256 KiB pre-allocation frame ceiling, exact length validation, and the existing strict response schema/peer/mark/inode checks. Reads and writes recalculate the remaining deadline after partial progress; truncated and malformed frames fail closed. The transport does not authenticate peers itself and is only to be used on the private listener after the caller has authenticated the connection. The helper lifecycle and CLI remain disconnected, and TUN activation remains disabled.
