@@ -36,15 +36,27 @@ impl ProcessIdentity {
     }
 
     pub fn validate(&self) -> Result<()> {
-        ensure!(self.pid > 0, "process ID must be non-zero");
+        ensure!(
+            self.pid > 0 && self.pid <= libc::pid_t::MAX as u32,
+            "process ID is outside the Linux pid_t range"
+        );
         ensure!(self.start_ticks > 0, "process start time must be non-zero");
+        let executable_text = self
+            .executable
+            .to_str()
+            .context("process executable identity is not valid UTF-8")?;
         ensure!(
             self.executable.is_absolute()
                 && self.executable.file_name().is_some()
+                && !executable_text.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
+                && executable_text
+                    .split('/')
+                    .skip(1)
+                    .all(|component| !component.is_empty() && component != "." && component != "..")
                 && self.executable.components().all(|component| {
-                    !matches!(
+                    matches!(
                         component,
-                        std::path::Component::CurDir | std::path::Component::ParentDir
+                        std::path::Component::RootDir | std::path::Component::Normal(_)
                     )
                 }),
             "process executable identity must be a normalized absolute file path"
@@ -260,6 +272,21 @@ mod tests {
         child.kill().unwrap();
         child.wait().unwrap();
         assert!(!identity.verify().unwrap());
+    }
+
+    #[test]
+    fn rejects_pid_values_outside_linux_pid_t_range() {
+        let mut invalid = ProcessIdentity {
+            pid: u32::MAX,
+            start_ticks: 1,
+            executable: PathBuf::from("/usr/bin/sleep"),
+        };
+        assert!(invalid.validate().is_err());
+        invalid.pid = 1;
+        invalid.executable = PathBuf::from("/usr/bin/./sleep");
+        assert!(invalid.validate().is_err());
+        invalid.executable = PathBuf::from("/usr/bin/../bin/sleep");
+        assert!(invalid.validate().is_err());
     }
 
     #[test]
