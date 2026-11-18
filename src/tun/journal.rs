@@ -256,6 +256,9 @@ fn valid_journal_activation_id(value: &str) -> bool {
 
 fn valid_route_destination(key: &str, destination: &str) -> bool {
     let family = key.split(':').nth(1);
+    if destination == "default" {
+        return true;
+    }
     let Some((address, prefix)) = destination.split_once('/') else {
         return false;
     };
@@ -330,8 +333,8 @@ mod validation_tests {
             sequence,
             kind,
             resource_key: key.into(),
-            state: JournalOperationState::Intent,
-            fingerprint: None,
+            state: JournalOperationState::Applied,
+            fingerprint: Some("fixture-fingerprint".into()),
         }
     }
 
@@ -463,7 +466,7 @@ mod validation_tests {
         assert!(plan_journal_recovery(&value, &malformed).is_err());
 
         let incomplete =
-            std::collections::BTreeMap::from([("interface:tun-proxyctl".to_owned(), None)]);
+            std::collections::BTreeMap::from([("interface:tun-proxyctl".to_owned(), Some("foreign-interface".to_owned()))]);
         let decisions = plan_journal_recovery(&value, &incomplete).unwrap();
         assert_eq!(
             decisions[1].1,
