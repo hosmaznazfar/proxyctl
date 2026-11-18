@@ -591,3 +591,12 @@ Journal fixtures now represent valid transaction histories: interface creation p
 Kernel transaction tests now reflect the fail-closed mutation contract: an add error is ambiguous even when a fake backend fails before inserting a resource, so the executor retains the journal and does not attempt rollback or finalization. Recovery fixtures use separate transactions when an interface creation intent is conclusively absent; they do not append routes to an absent interface transaction. The managed activation lifecycle fixture uses a bounded `sleep` process instead of `tail -f`.
 
 These are offline regression and fixture corrections only. They do not implement a production kernel mutator or recovery supervisor, and TUN activation remains disabled.
+
+
+### Follow-up journal, transaction-test, and Clippy fixes
+
+The journal route-key parser now splits only the fixed route-family and table components, then treats the remaining destination as an opaque string for IP parsing. This preserves IPv6 destinations containing colons. The journal state test now clears the fingerprint when marking an operation Absent, matching the persisted-state invariant.
+
+Transaction tests again assert that invalid preflight input causes zero backend calls. The ambiguous-add test checks the actual contextual error emitted by the executor. Broker test child processes are explicitly killed and waited on after failed identity acquisition attempts, and broker response tests use borrowed one-element slices to satisfy Clippy without cloning records.
+
+All changes are offline test/validation corrections. No privileged operation, host-network mutation, or TUN activation was performed.
