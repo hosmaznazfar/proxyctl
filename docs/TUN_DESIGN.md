@@ -746,3 +746,5 @@ The diagnostic helper now owns its bound Unix socket through an inode-checked gu
 
 The fixed-argument kernel operation plan now has an explicit validation pass before any future privileged handoff. It requires the guarded TUN creation to be the first operation, rejects empty/control-character arguments, validates the interface deletion guard, rejects duplicate cleanup identities, and ensures every planned route cleanup targets the guarded interface. This remains a plan-integrity check only: it does not execute operations, establish ownership, or replace live fingerprint comparison and durable write-ahead journaling.
 
+The plan-validation contract is covered by offline tests for a valid generated plan, foreign-interface route cleanup, and duplicate cleanup identities. These tests validate the plan boundary only; live kernel ownership still requires a concrete backend and exact compare-before-delete.
+
