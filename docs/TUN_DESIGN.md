@@ -556,3 +556,8 @@ The pure recovery planner now rejects observations for resource keys not present
 ### Reverse-order recovery planner regression coverage
 
 Added a focused recovery-planner test proving that decisions are emitted in reverse resource-creation order and that a changed route fingerprint is isolated as a conflict without changing the decisions for independently matching resources. This tests planning only; it does not imply that an atomic kernel compare-and-delete backend exists.
+
+
+### Kernel transaction fingerprint bounds
+
+The transaction executor now validates every route/rule fingerprint immediately when returned by a backend: values must be non-empty, no larger than 16 KiB, and free of control characters. Invalid evidence retains the recovery journal and prevents further mutation or manifest promotion. The concrete backend remains unimplemented.
