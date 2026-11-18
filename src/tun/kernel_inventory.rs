@@ -168,7 +168,10 @@ fn inspect_interfaces(root: &Path) -> Result<Vec<KernelInterfaceRecord>> {
     let mut interfaces = Vec::new();
     for entry in fs::read_dir(root).with_context(|| format!("cannot inspect {}", root.display()))? {
         let entry = entry?;
-        let name = entry.file_name().to_string_lossy().into_owned();
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| anyhow::anyhow!("kernel interface name is not valid UTF-8"))?;
         ensure!(
             !name.is_empty() && !name.contains('/'),
             "kernel interface has an invalid name"
@@ -419,6 +422,19 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn rejects_non_utf8_interface_names_instead_of_lossy_aliasing() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let invalid_name = std::ffi::OsString::from_vec(vec![b'e', b't', b'h', 0xff]);
+        let interface = directory.path().join(invalid_name);
+        fs::create_dir_all(&interface).unwrap();
+        fs::write(interface.join("ifindex"), "2").unwrap();
+        assert!(inspect_interfaces(directory.path()).is_err());
     }
 
     #[cfg(target_os = "linux")]
