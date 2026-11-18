@@ -77,7 +77,7 @@ This is a storage-boundary improvement only. It does not add a privileged execut
 
 ## Recovery and lifecycle
 
-A serialized operation coordinator uses activation generations to prevent concurrent start/stop/switch races. The recovery supervisor is independent of the CLI and monitors the exact core process instance (PID plus start time/pidfd and canonical executable). Opening a pidfd is race-aware: if the pinned pidfd is already readable, the process has exited and recovery may proceed; otherwise the PID start-time and executable must still match. A PID reused by a live replacement is never accepted. Core exit triggers cleanup.
+A serialized operation coordinator uses activation generations to prevent concurrent start/stop/switch races. The recovery supervisor is independent of the CLI and monitors the exact core process instance (PID plus start time/pidfd and canonical executable). Opening a pidfd is race-aware: if the pinned pidfd is already readable, the process has exited and recovery may proceed; otherwise the PID start-time and executable must still match. A PID reused by a live replacement is never accepted. If the process disappears between procfs inspection and pidfd opening, missing-process errors in the contextual error chain are treated as stale identity; permission, parsing, and other inspection failures remain hard errors. Core exit triggers cleanup.
 
 The recovery path must not depend solely on the CLI receiving SIGINT/SIGTERM. It must cover CLI SIGKILL, core SIGKILL, supervisor failure, and machine reboot. Kernel teardown of a non-persistent TUN device should be used as a safety net; routing rules must be designed so an orphaned rule with an empty table falls through safely. At next Proxyctl startup, reconcile only stale resources whose exact ownership markers match a valid Proxyctl manifest. Never sweep a priority range or table based only on a numeric range.
 
@@ -600,3 +600,8 @@ The journal route-key parser now splits only the fixed route-family and table co
 Transaction tests again assert that invalid preflight input causes zero backend calls. The ambiguous-add test checks the actual contextual error emitted by the executor. Broker test child processes are explicitly killed and waited on after failed identity acquisition attempts, and broker response tests use borrowed one-element slices to satisfy Clippy without cloning records.
 
 All changes are offline test/validation corrections. No privileged operation, host-network mutation, or TUN activation was performed.
+
+
+### Compressed IPv6 journal-key regression
+
+The route journal key uses a colon separator before the destination, so an IPv6 destination beginning with compression syntax (for example `::/0`) places adjacent colons at that boundary. Validation restores the consumed leading compression colon for IPv6 before parsing and canonical-address checks. The family, table, address, and prefix checks remain strict; malformed and cross-family destinations are still rejected. This is parser validation only and does not change kernel route construction or TUN activation.
