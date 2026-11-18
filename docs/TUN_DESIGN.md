@@ -755,3 +755,7 @@ A supervisor identity now accepts only a normalized absolute manifest file path:
 ### Re-entrant recovery cleanup
 
 A supervisor that observes core exit while already in CleanupPending now emits the cleanup action again instead of treating the repeated event as a no-op. This supports supervisor restart and event replay: cleanup must tolerate already-removed resources, while any ownership mismatch remains a conflict that preserves the manifest. The transition function remains pure and does not itself perform cleanup.
+
+### Atomic helper installation
+
+The helper installer now stages the new executable inside the root-owned libexec directory, applies and verifies the exact CAP_NET_ADMIN file capability on that staged file, and only then atomically renames it over the installed helper. Failures before the rename preserve the previous helper instead of deleting or leaving it partially replaced. Signal handling removes only the staging file. The installer still creates no service, sudoers rule, setuid fallback, or automatic startup.
