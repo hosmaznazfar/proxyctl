@@ -654,3 +654,6 @@ This remains a tested primitive rather than an active IPC service. A private lis
 
 
 - **Socket-mark broker protocol groundwork:** added pidfd-bound same-user request authorization, strict bounded response serialization (1,024 records / 256 KiB), stable process-inode plus exact proxy-peer response assembly, and bounded Unix-listener acceptance with SO_PEERCRED authentication and one-frame reads. These are isolated primitives with synthetic tests; there is still no privileged helper, capability grant, production request executor, or readiness integration. TUN activation remains disabled.
+
+
+- **TUN broker execution groundwork:** added a single-request Linux broker server path that authenticates the Unix peer, pins and authorizes the exact same-user target, snapshots process socket ownership around four bounded dual-stack diagnostic dumps, and returns only exact upstream peer/mark candidates through a bounded response frame. This remains a helper-side API only: no helper binary, privilege policy, service-manager supervisor, kernel mutation backend, or CLI activation path is installed. TUN activation stays disabled pending the remaining recovery/kernel/readiness integration and local verification.
