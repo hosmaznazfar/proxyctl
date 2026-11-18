@@ -81,8 +81,13 @@ impl SupervisorIdentity {
             "invalid supervisor service identity"
         );
         ensure!(
-            !self.manifest_path.is_empty(),
-            "supervisor manifest path is empty"
+            self.manifest_path.len() <= 4096
+                && self.manifest_path.starts_with('/')
+                && !self.manifest_path.as_bytes().contains(&0)
+                && std::path::Path::new(&self.manifest_path)
+                    .components()
+                    .all(|component| !matches!(component, std::path::Component::ParentDir)),
+            "supervisor manifest path must be a bounded absolute path without parent traversal"
         );
         ensure!(
             self.generation > 0,
@@ -148,6 +153,12 @@ mod tests {
         valid.validate().unwrap();
         let mut invalid = valid.clone();
         invalid.service_name = "proxyctl-tun-x;stop".into();
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.manifest_path = "/run/proxyctl/../foreign/manifest.json".into();
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.manifest_path = "relative/manifest.json".into();
         assert!(invalid.validate().is_err());
         let mut invalid = valid;
         invalid.generation = 0;
