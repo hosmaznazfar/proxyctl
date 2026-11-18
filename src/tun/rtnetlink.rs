@@ -268,11 +268,16 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
             );
             let error =
                 i32::from_ne_bytes(message[NETLINK_HEADER_LEN..NETLINK_HEADER_LEN + 4].try_into()?);
-            ensure!(
-                error == 0,
-                "kernel rejected NETLINK_ROUTE request: {}",
-                io::Error::from_raw_os_error(-error)
-            );
+            if error != 0 {
+                let errno = error
+                    .checked_neg()
+                    .context("invalid positive or overflowing netlink error code")?;
+                ensure!(errno > 0, "invalid netlink error code");
+                anyhow::bail!(
+                    "kernel rejected NETLINK_ROUTE request: {}",
+                    io::Error::from_raw_os_error(errno)
+                );
+            }
             terminal = true;
         } else if kind == NLMSG_DONE {
             terminal = true;
@@ -323,6 +328,14 @@ mod tests {
         let (messages, terminal) = parse_datagram(&bytes, 7).unwrap();
         assert!(messages.is_empty());
         assert!(terminal);
+    }
+
+    #[test]
+    fn rejects_unrepresentable_netlink_error_code_without_panicking() {
+        for error in [i32::MIN, 1] {
+            let bytes = message(NLMSG_ERROR, 7, &error.to_ne_bytes());
+            assert!(parse_datagram(&bytes, 7).is_err());
+        }
     }
 
     #[test]
