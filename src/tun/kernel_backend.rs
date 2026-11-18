@@ -93,10 +93,9 @@ impl KernelCommandPlan {
                         "tun"
                     ]
                 && creation[6] == "user"
-                && creation[7].bytes().all(|byte| byte.is_ascii_digit())
+                && creation[7].parse::<u32>().is_ok_and(|uid| uid.to_string() == creation[7])
                 && creation[8] == "group"
-                && !creation[9].is_empty()
-                && creation[9].bytes().all(|byte| byte.is_ascii_digit()),
+                && creation[9].parse::<u32>().is_ok_and(|gid| gid.to_string() == creation[9]),
             "kernel plan must begin with an exact guarded TUN creation command"
         );
         anyhow::ensure!(
@@ -572,6 +571,16 @@ mod tests {
         let mut altered_apply = plan.clone();
         altered_apply.apply[2].arguments.push("onlink".into());
         assert!(altered_apply.validate().is_err());
+
+        for position in [7, 9] {
+            let mut invalid_owner = plan.clone();
+            invalid_owner.apply[0].arguments[position].clear();
+            assert!(invalid_owner.validate().is_err());
+            invalid_owner.apply[0].arguments[position] = "01".into();
+            assert!(invalid_owner.validate().is_err());
+            invalid_owner.apply[0].arguments[position] = "4294967296".into();
+            assert!(invalid_owner.validate().is_err());
+        }
 
         let mut duplicate_cleanup = plan;
         let first_cleanup = duplicate_cleanup.cleanup[0].clone();
