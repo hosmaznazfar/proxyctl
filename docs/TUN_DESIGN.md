@@ -541,3 +541,8 @@ A transaction journal now rejects route or policy-rule operations unless the TUN
 ### Journal state progression
 
 Journal validation now enforces the transaction's monotonic state progression: an unresolved intent can exist only as the final operation, applied resources cannot appear after cleanup has started, and removed/confirmed-absent operations form a reverse-cleanup suffix. This rejects impossible or reordered persisted states before recovery planning. Ambiguous final intents still require fresh kernel inspection and never authorize deletion by themselves.
+
+
+### Route journal-key validation
+
+Route resource keys now validate their address family, IP address syntax, and prefix-length range instead of accepting any non-whitespace destination string. IPv4 keys require IPv4 addresses and prefixes no greater than 32; IPv6 keys require IPv6 addresses and prefixes no greater than 128. This prevents malformed persisted route identities from reaching a future kernel recovery adapter.
