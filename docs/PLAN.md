@@ -688,3 +688,5 @@ Do not mark TUN complete or enable activation while any item above remains unche
 - [x] Strengthen diagnostic helper trust checks with canonical private-runtime path validation and root-owned, non-writable helper-directory validation; retain packaging audit as an open gate.
 
 - [x] Make manual helper installation fail closed by clearing capabilities and removing the copied helper when capability setup or exact verification fails.
+
+- [x] Require a broker socket-mark response to contain one consistent full mark across all returned records, with a regression test for mixed marks that share the same mask.
