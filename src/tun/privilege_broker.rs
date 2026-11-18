@@ -281,7 +281,10 @@ pub fn accept_socket_mark_request(
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         ensure!(!remaining.is_zero(), "broker client accept timed out");
-        let millis = remaining.as_millis().saturating_add(1).min(i32::MAX as u128) as i32;
+        let millis = remaining
+            .as_millis()
+            .saturating_add(1)
+            .min(i32::MAX as u128) as i32;
         let result = unsafe { libc::poll(&mut descriptor, 1, millis) };
         if result < 0 {
             let error = std::io::Error::last_os_error();
@@ -301,7 +304,10 @@ pub fn accept_socket_mark_request(
     let (mut stream, _) = listener.accept().context("cannot accept broker client")?;
     let peer = read_broker_peer_credentials(&stream)?;
     let remaining = deadline.saturating_duration_since(Instant::now());
-    ensure!(!remaining.is_zero(), "broker client accept deadline expired");
+    ensure!(
+        !remaining.is_zero(),
+        "broker client accept deadline expired"
+    );
     let request_timeout = remaining.min(MAX_BROKER_REQUEST_READ_TIMEOUT);
     let request = read_socket_mark_request(&mut stream, request_timeout)?;
     Ok((stream, peer, request))
@@ -438,8 +444,7 @@ pub fn build_socket_mark_broker_response(
     records: &[super::socket_diag_records::SocketDiagnosticRecord],
 ) -> Result<SocketMarkBrokerResponse> {
     use super::{
-        socket_diag_netlink::SocketTransport,
-        socket_ownership::attribute_process_socket_marks,
+        socket_diag_netlink::SocketTransport, socket_ownership::attribute_process_socket_marks,
         socket_peer::classify_proxy_peer_sockets,
     };
 
@@ -504,7 +509,10 @@ impl SocketMarkBrokerResponse {
     pub fn validate(&self) -> Result<()> {
         use super::socket_diag_records::SocketAddressFamily;
 
-        ensure!(self.version == BROKER_REQUEST_VERSION, "unsupported socket-mark broker response version");
+        ensure!(
+            self.version == BROKER_REQUEST_VERSION,
+            "unsupported socket-mark broker response version"
+        );
         ensure!(
             !self.expected_peer.ip().is_unspecified()
                 && !self.expected_peer.ip().is_multicast()
@@ -528,7 +536,10 @@ impl SocketMarkBrokerResponse {
         };
         let mut inodes = std::collections::BTreeSet::new();
         for record in &self.records {
-            ensure!(record.inode > 0 && inodes.insert(record.inode), "broker response contains a zero or duplicate socket inode");
+            ensure!(
+                record.inode > 0 && inodes.insert(record.inode),
+                "broker response contains a zero or duplicate socket inode"
+            );
             ensure!(
                 record.family == expected_family
                     && record.remote_address == self.expected_peer.ip()
@@ -536,9 +547,15 @@ impl SocketMarkBrokerResponse {
                     && record.mark & self.mark_mask == self.expected_mark,
                 "broker response contains a record outside the requested peer or mark policy"
             );
-            ensure!(record.local_port > 0, "broker response contains an invalid local socket port");
+            ensure!(
+                record.local_port > 0,
+                "broker response contains an invalid local socket port"
+            );
             if self.transport == BrokerSocketTransport::Tcp {
-                ensure!(record.state == 1, "broker TCP response contains a non-established socket");
+                ensure!(
+                    record.state == 1,
+                    "broker TCP response contains a non-established socket"
+                );
             }
         }
         Ok(())
@@ -551,7 +568,10 @@ impl SocketMarkBrokerResponse {
 pub fn encode_socket_mark_response(response: &SocketMarkBrokerResponse) -> Result<Vec<u8>> {
     response.validate()?;
     let payload = serde_json::to_vec(response)?;
-    ensure!(!payload.is_empty() && payload.len() <= MAX_SOCKET_MARK_RESPONSE_BYTES, "socket-mark broker response exceeds the frame limit");
+    ensure!(
+        !payload.is_empty() && payload.len() <= MAX_SOCKET_MARK_RESPONSE_BYTES,
+        "socket-mark broker response exceeds the frame limit"
+    );
     let length = u32::try_from(payload.len())?;
     let mut frame = Vec::with_capacity(4 + payload.len());
     frame.extend_from_slice(&length.to_le_bytes());
@@ -562,10 +582,19 @@ pub fn encode_socket_mark_response(response: &SocketMarkBrokerResponse) -> Resul
 /// Decode exactly one response frame and reject unknown fields, trailing data, and invalid records.
 #[cfg(target_os = "linux")]
 pub fn decode_socket_mark_response(frame: &[u8]) -> Result<SocketMarkBrokerResponse> {
-    ensure!(frame.len() >= 4, "socket-mark broker response header is truncated");
+    ensure!(
+        frame.len() >= 4,
+        "socket-mark broker response header is truncated"
+    );
     let length = u32::from_le_bytes(frame[..4].try_into()?) as usize;
-    ensure!(length > 0 && length <= MAX_SOCKET_MARK_RESPONSE_BYTES, "socket-mark broker response frame length is invalid");
-    ensure!(frame.len() == 4 + length, "socket-mark broker response frame length does not match its payload");
+    ensure!(
+        length > 0 && length <= MAX_SOCKET_MARK_RESPONSE_BYTES,
+        "socket-mark broker response frame length is invalid"
+    );
+    ensure!(
+        frame.len() == 4 + length,
+        "socket-mark broker response frame length does not match its payload"
+    );
     let response: SocketMarkBrokerResponse = serde_json::from_slice(&frame[4..])?;
     response.validate()?;
     Ok(response)
@@ -765,7 +794,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
         let listener = bind_private_broker_listener(&directory.path().join("broker.sock")).unwrap();
-        assert!(accept_socket_mark_request(&listener, std::time::Duration::from_millis(10)).is_err());
+        assert!(
+            accept_socket_mark_request(&listener, std::time::Duration::from_millis(10)).is_err()
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -819,7 +850,10 @@ mod tests {
         mismatched.process.start_ticks += 1;
         assert!(authorize_socket_mark_request_for_process(&mismatched, peer, &target).is_err());
 
-        let other_user = BrokerPeerCredentials { uid: peer.uid.wrapping_add(1), ..peer };
+        let other_user = BrokerPeerCredentials {
+            uid: peer.uid.wrapping_add(1),
+            ..peer
+        };
         assert!(authorize_socket_mark_request_for_process(&request, other_user, &target).is_err());
     }
 
@@ -895,16 +929,21 @@ mod tests {
             inode: 77,
             mark: request.expected_mark,
         };
-        let response = build_socket_mark_broker_response(
-            &request, &snapshot, &snapshot, &[record.clone()]
-        ).unwrap();
+        let response =
+            build_socket_mark_broker_response(&request, &snapshot, &snapshot, &[record.clone()])
+                .unwrap();
         assert_eq!(response.records, [record]);
 
         let changed = ProcessSocketSnapshot {
-            process: ProcessIdentity { start_ticks: request.process.start_ticks + 1, ..request.process.clone() },
+            process: ProcessIdentity {
+                start_ticks: request.process.start_ticks + 1,
+                ..request.process.clone()
+            },
             ..snapshot.clone()
         };
-        assert!(build_socket_mark_broker_response(&request, &snapshot, &changed, &[record]).is_err());
+        assert!(
+            build_socket_mark_broker_response(&request, &snapshot, &changed, &[record]).is_err()
+        );
     }
 
     #[cfg(target_os = "linux")]
