@@ -330,7 +330,7 @@ pub fn bind_created_interface(
     let interface = interfaces
         .iter()
         .find(|interface| interface.name == policy.interface_name)
-        .expect("verified interface must exist");
+        .ok_or_else(|| anyhow::anyhow!("verified TUN interface disappeared from inventory"))?;
     policy.bind_interface_index(interface.index)
 }
 
