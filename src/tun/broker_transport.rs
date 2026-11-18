@@ -15,8 +15,9 @@ use std::{
 
 #[cfg(target_os = "linux")]
 use super::privilege_broker::{
-    MAX_SOCKET_MARK_RESPONSE_BYTES, SocketMarkBrokerResponse, decode_socket_mark_response,
-    encode_socket_mark_response,
+    MAX_SOCKET_MARK_REQUEST_BYTES, MAX_SOCKET_MARK_RESPONSE_BYTES, SocketMarkBrokerRequest,
+    SocketMarkBrokerResponse, decode_socket_mark_response, encode_socket_mark_request,
+    encode_socket_mark_response, read_broker_peer_credentials,
 };
 
 #[cfg(target_os = "linux")]
@@ -62,6 +63,81 @@ pub fn write_socket_mark_response(
     }
     stream.flush().context("cannot flush broker response frame")?;
     Ok(())
+}
+
+/// Send exactly one validated request frame with a monotonic deadline.
+#[cfg(target_os = "linux")]
+pub fn write_socket_mark_request(
+    stream: &mut UnixStream,
+    request: &SocketMarkBrokerRequest,
+    timeout: Duration,
+) -> Result<()> {
+    ensure!(
+        !timeout.is_zero() && timeout <= MAX_BROKER_RESPONSE_IO_TIMEOUT,
+        "broker request write timeout is outside the permitted bound"
+    );
+    let frame = encode_socket_mark_request(request)?;
+    ensure!(
+        frame.len() >= 4 && frame.len() <= 4 + MAX_SOCKET_MARK_REQUEST_BYTES,
+        "broker request frame length is invalid"
+    );
+    let deadline = Instant::now()
+        .checked_add(timeout)
+        .context("broker request write deadline overflow")?;
+    let mut remaining_bytes = frame.as_slice();
+    while !remaining_bytes.is_empty() {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        ensure!(!remaining.is_zero(), "broker request write exceeded its deadline");
+        stream.set_write_timeout(Some(remaining))?;
+        match stream.write(remaining_bytes) {
+            Ok(0) => anyhow::bail!("broker request stream closed during write"),
+            Ok(count) => remaining_bytes = &remaining_bytes[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                anyhow::bail!("broker request write exceeded its deadline")
+            }
+            Err(error) => return Err(error).context("cannot write broker request frame"),
+        }
+    }
+    stream.flush().context("cannot flush broker request frame")?;
+    Ok(())
+}
+
+/// Connect to a caller-selected private broker socket and perform one authenticated exchange.
+///
+/// The expected helper UID is explicit; the client never assumes that a discovered sudo/doas
+/// executable is a valid broker. The caller must ensure the socket path belongs to the
+/// intended private runtime directory before invoking this function.
+#[cfg(target_os = "linux")]
+pub fn request_socket_mark_diagnostics(
+    socket_path: &std::path::Path,
+    request: &SocketMarkBrokerRequest,
+    expected_broker_uid: u32,
+    timeout: Duration,
+) -> Result<SocketMarkBrokerResponse> {
+    use std::os::unix::net::Shutdown;
+
+    ensure!(
+        !timeout.is_zero() && timeout <= MAX_BROKER_RESPONSE_IO_TIMEOUT,
+        "broker client timeout is outside the permitted bound"
+    );
+    let mut stream = UnixStream::connect(socket_path)
+        .context("cannot connect to the configured private broker socket")?;
+    let peer = read_broker_peer_credentials(&stream)?;
+    ensure!(
+        peer.uid == expected_broker_uid,
+        "connected broker UID does not match the configured helper identity"
+    );
+    write_socket_mark_request(&mut stream, request, timeout)?;
+    stream
+        .shutdown(Shutdown::Write)
+        .context("cannot finish broker request stream")?;
+    read_socket_mark_response(&mut stream, timeout)
 }
 
 /// Read exactly one bounded response frame before a monotonic deadline.
