@@ -682,3 +682,5 @@ Do not mark TUN complete or enable activation while any item above remains unche
 
 
 - [x] Harden supervisor identity validation against relative paths, parent traversal, embedded NUL, and oversized manifest paths; retain filesystem ownership and no-follow checks as the authoritative boundary.
+
+- [x] Restrict persisted TUN interface names to bounded Linux-safe ASCII characters and cover separators, whitespace, and control-character rejection.
