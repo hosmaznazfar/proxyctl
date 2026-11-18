@@ -149,6 +149,71 @@ pub fn authorize_socket_mark_request(
     Ok(())
 }
 
+/// Maximum time allowed to receive one complete broker request frame.
+#[cfg(target_os = "linux")]
+pub const MAX_BROKER_REQUEST_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Read exactly one bounded request frame from an accepted private Unix stream.
+///
+/// The monotonic deadline applies to the whole frame, not each individual read, so a
+/// peer cannot keep the helper occupied indefinitely by trickling bytes. The caller
+/// must close the connection after this one request; pipelining is not supported.
+#[cfg(target_os = "linux")]
+pub fn read_socket_mark_request(
+    stream: &mut std::os::unix::net::UnixStream,
+    timeout: std::time::Duration,
+) -> Result<SocketMarkBrokerRequest> {
+    use std::io::Read;
+    use std::time::Instant;
+
+    ensure!(
+        !timeout.is_zero() && timeout <= MAX_BROKER_REQUEST_READ_TIMEOUT,
+        "broker request read timeout is outside the permitted bound"
+    );
+    let deadline = Instant::now()
+        .checked_add(timeout)
+        .context("broker request deadline overflow")?;
+    let mut header = [0u8; 4];
+    read_exact_before_deadline(stream, &mut header, deadline)?;
+    let payload_length = u32::from_le_bytes(header) as usize;
+    ensure!(
+        payload_length > 0 && payload_length <= MAX_SOCKET_MARK_REQUEST_BYTES,
+        "broker request frame length is invalid"
+    );
+    let mut frame = Vec::with_capacity(4 + payload_length);
+    frame.extend_from_slice(&header);
+    frame.resize(4 + payload_length, 0);
+    read_exact_before_deadline(stream, &mut frame[4..], deadline)?;
+    decode_socket_mark_request(&frame)
+}
+
+#[cfg(target_os = "linux")]
+fn read_exact_before_deadline(
+    stream: &mut std::os::unix::net::UnixStream,
+    mut buffer: &mut [u8],
+    deadline: std::time::Instant,
+) -> Result<()> {
+    use std::io::{ErrorKind, Read};
+
+    while !buffer.is_empty() {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "broker request frame exceeded its deadline");
+        stream.set_read_timeout(Some(remaining))?;
+        match stream.read(buffer) {
+            Ok(0) => anyhow::bail!("broker request frame ended before completion"),
+            Ok(count) => buffer = &mut buffer[count..],
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error)
+                if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
+                anyhow::bail!("broker request frame exceeded its deadline")
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
 /// Maximum serialized socket-mark broker request size (16 KiB).
 pub const MAX_SOCKET_MARK_REQUEST_BYTES: usize = 16 * 1024;
 
@@ -379,6 +444,49 @@ mod tests {
             expected_mark: 0x142,
             mark_mask: 0xffff,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn stream_reader_accepts_one_complete_bounded_request() {
+        use std::{io::Write, os::unix::net::UnixStream, thread};
+
+        let request = socket_mark_request();
+        let frame = encode_socket_mark_request(&request).unwrap();
+        let (mut reader, mut writer) = UnixStream::pair().unwrap();
+        let sender = thread::spawn(move || writer.write_all(&frame).unwrap());
+        let decoded = read_socket_mark_request(
+            &mut reader,
+            std::time::Duration::from_secs(1),
+        )
+        .unwrap();
+        sender.join().unwrap();
+        assert_eq!(decoded, request);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn stream_reader_rejects_partial_and_oversized_frames() {
+        use std::{io::Write, os::unix::net::UnixStream, thread};
+
+        let (mut reader, mut writer) = UnixStream::pair().unwrap();
+        writer.write_all(&[8, 0]).unwrap();
+        drop(writer);
+        assert!(read_socket_mark_request(
+            &mut reader,
+            std::time::Duration::from_secs(1),
+        )
+        .is_err());
+
+        let (mut reader, mut writer) = UnixStream::pair().unwrap();
+        let oversized = (MAX_SOCKET_MARK_REQUEST_BYTES as u32 + 1).to_le_bytes();
+        writer.write_all(&oversized).unwrap();
+        let _sender = thread::spawn(move || drop(writer));
+        assert!(read_socket_mark_request(
+            &mut reader,
+            std::time::Duration::from_secs(1),
+        )
+        .is_err());
     }
 
     #[cfg(target_os = "linux")]
