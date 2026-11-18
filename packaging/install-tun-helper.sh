@@ -17,6 +17,15 @@ if ! command -v setcap >/dev/null 2>&1 || ! command -v getcap >/dev/null 2>&1; t
     exit 2
 fi
 
+MAIN_BINARY=${2:-target/release/proxyctl}
+if [ -e "$MAIN_BINARY" ]; then
+    MAIN_CAPABILITIES=$(getcap "$MAIN_BINARY")
+    if [ -n "$MAIN_CAPABILITIES" ]; then
+        echo "The ordinary Proxyctl executable has file capabilities; refusing helper installation: $MAIN_CAPABILITIES" >&2
+        exit 1
+    fi
+fi
+
 install -D -o root -g root -m 0755 "$SOURCE" "$DESTINATION"
 setcap cap_net_admin=ep "$DESTINATION"
 ACTUAL=$(getcap "$DESTINATION")
