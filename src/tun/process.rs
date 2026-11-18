@@ -168,8 +168,14 @@ impl ProcessHandle {
 /// deliberately rejected by the broker's same-user policy.
 pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
     let identity = handle.identity();
-    ensure!(identity.verify()?, "process identity changed before owner inspection");
-    ensure!(!handle.is_exited()?, "process exited before owner inspection");
+    ensure!(
+        identity.verify()?,
+        "process identity changed before owner inspection"
+    );
+    ensure!(
+        !handle.is_exited()?,
+        "process exited before owner inspection"
+    );
     let status = fs::read_to_string(format!("/proc/{}/status", identity.pid))
         .context("cannot inspect pinned process credentials")?;
     let uid_line = status
@@ -181,13 +187,22 @@ pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
         .map(str::parse::<u32>)
         .collect::<std::result::Result<Vec<_>, _>>()
         .context("process status contains invalid UID credentials")?;
-    ensure!(values.len() == 4, "process status has an unexpected UID field count");
+    ensure!(
+        values.len() == 4,
+        "process status has an unexpected UID field count"
+    );
     ensure!(
         values.iter().all(|uid| *uid == values[0]),
         "process has divergent real/effective/saved/filesystem UIDs"
     );
-    ensure!(identity.verify()?, "process identity changed during owner inspection");
-    ensure!(!handle.is_exited()?, "process exited during owner inspection");
+    ensure!(
+        identity.verify()?,
+        "process identity changed during owner inspection"
+    );
+    ensure!(
+        !handle.is_exited()?,
+        "process exited during owner inspection"
+    );
     Ok(values[0])
 }
 
@@ -227,7 +242,9 @@ mod tests {
     fn reads_owner_uid_only_from_a_live_pinned_process() {
         let child = child();
         let (_identity, handle) = pin_live_child(&child);
-        assert_eq!(read_process_owner_uid(&handle).unwrap(), unsafe { libc::getuid() });
+        assert_eq!(read_process_owner_uid(&handle).unwrap(), unsafe {
+            libc::getuid()
+        });
         drop(handle);
         drop(child);
     }

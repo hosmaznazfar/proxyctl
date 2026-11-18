@@ -93,7 +93,10 @@ pub fn bind_private_broker_listener(
     use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
     use std::os::unix::net::UnixListener;
 
-    ensure!(socket_path.is_absolute(), "broker socket path must be absolute");
+    ensure!(
+        socket_path.is_absolute(),
+        "broker socket path must be absolute"
+    );
     let parent = socket_path
         .parent()
         .context("broker socket path has no parent directory")?;
@@ -113,8 +116,7 @@ pub fn bind_private_broker_listener(
     );
     let effective_uid = unsafe { libc::geteuid() };
     ensure!(
-        parent_metadata.uid() == effective_uid
-            && parent_metadata.permissions().mode() & 0o077 == 0,
+        parent_metadata.uid() == effective_uid && parent_metadata.permissions().mode() & 0o077 == 0,
         "broker socket parent must be caller-owned and inaccessible to group/other users"
     );
     ensure!(
@@ -125,12 +127,12 @@ pub fn bind_private_broker_listener(
         "broker socket path already exists or cannot be safely inspected"
     );
 
-    let listener = UnixListener::bind(socket_path)
-        .context("cannot bind private broker Unix socket")?;
+    let listener =
+        UnixListener::bind(socket_path).context("cannot bind private broker Unix socket")?;
     std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))
         .context("cannot restrict broker socket permissions")?;
-    let socket_metadata = std::fs::symlink_metadata(socket_path)
-        .context("cannot verify private broker socket")?;
+    let socket_metadata =
+        std::fs::symlink_metadata(socket_path).context("cannot verify private broker socket")?;
     ensure!(
         socket_metadata.file_type().is_socket()
             && socket_metadata.uid() == effective_uid
@@ -171,7 +173,10 @@ pub fn read_broker_peer_credentials(
             &mut length,
         )
     };
-    ensure!(result == 0, "cannot authenticate broker IPC peer credentials");
+    ensure!(
+        result == 0,
+        "cannot authenticate broker IPC peer credentials"
+    );
     ensure!(
         length as usize == std::mem::size_of::<libc::ucred>(),
         "broker IPC peer credentials have an unexpected size"
@@ -255,15 +260,16 @@ fn read_exact_before_deadline(
 
     while !buffer.is_empty() {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        ensure!(!remaining.is_zero(), "broker request frame exceeded its deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "broker request frame exceeded its deadline"
+        );
         stream.set_read_timeout(Some(remaining))?;
         match stream.read(buffer) {
             Ok(0) => anyhow::bail!("broker request frame ended before completion"),
             Ok(count) => buffer = &mut buffer[count..],
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-            Err(error)
-                if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
-            {
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
                 anyhow::bail!("broker request frame exceeded its deadline")
             }
             Err(error) => return Err(error.into()),
@@ -544,11 +550,8 @@ mod tests {
         let frame = encode_socket_mark_request(&request).unwrap();
         let (mut reader, mut writer) = UnixStream::pair().unwrap();
         let sender = thread::spawn(move || writer.write_all(&frame).unwrap());
-        let decoded = read_socket_mark_request(
-            &mut reader,
-            std::time::Duration::from_secs(1),
-        )
-        .unwrap();
+        let decoded =
+            read_socket_mark_request(&mut reader, std::time::Duration::from_secs(1)).unwrap();
         sender.join().unwrap();
         assert_eq!(decoded, request);
     }
@@ -561,21 +564,13 @@ mod tests {
         let (mut reader, mut writer) = UnixStream::pair().unwrap();
         writer.write_all(&[8, 0]).unwrap();
         drop(writer);
-        assert!(read_socket_mark_request(
-            &mut reader,
-            std::time::Duration::from_secs(1),
-        )
-        .is_err());
+        assert!(read_socket_mark_request(&mut reader, std::time::Duration::from_secs(1),).is_err());
 
         let (mut reader, mut writer) = UnixStream::pair().unwrap();
         let oversized = (MAX_SOCKET_MARK_REQUEST_BYTES as u32 + 1).to_le_bytes();
         writer.write_all(&oversized).unwrap();
         let _sender = thread::spawn(move || drop(writer));
-        assert!(read_socket_mark_request(
-            &mut reader,
-            std::time::Duration::from_secs(1),
-        )
-        .is_err());
+        assert!(read_socket_mark_request(&mut reader, std::time::Duration::from_secs(1),).is_err());
     }
 
     #[cfg(target_os = "linux")]
