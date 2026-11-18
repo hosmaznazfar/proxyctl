@@ -779,3 +779,5 @@ The post-creation interface check now has a single binding helper: it validates 
 Transaction-journal route table IDs and rule priorities now require canonical positive `u32` decimal strings. Zero, overflow, and leading-zero aliases are rejected, ensuring one textual resource key maps to one numeric kernel identity during recovery and compare-delete.
 
 Transaction journals and privilege-broker requests now require canonical lowercase hexadecimal activation UUIDs. Uppercase aliases are rejected consistently at both boundaries, and focused tests cover journal and broker validation so a single activation has one textual identity across persisted state and helper requests.
+
+Privilege-broker requests now apply lexical manifest-path validation before `Path` component normalization. They reject interior `.`/`..` segments, repeated or trailing separators, backslashes, non-UTF-8 paths, and control bytes, in addition to requiring the exact manifest filename. This keeps the helper's path identity consistent with the recovery-supervisor contract.
