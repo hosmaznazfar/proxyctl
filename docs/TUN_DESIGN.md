@@ -579,3 +579,6 @@ The fake transaction backend now injects failures after each of the four route/r
 ### Recovery-journal retention failure coverage
 
 Additional fault-injection cases cover the case where both a kernel mutation and the attempt to retain its recovery journal fail. The executor returns an explicit error and does not claim finalization or success. Such a condition is unrecoverable automatically without external inspection and remains a hard stop; no fallback deletion is attempted.
+
+
+The post-mutation fault-injection assertion accounts for all successful earlier mutations plus the one ambiguous failing mutation at each boundary, rather than assuming only one resource exists at every step.
