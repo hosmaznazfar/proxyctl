@@ -595,7 +595,9 @@ mod tests {
         name_value.push(0);
         let mut attributes = rtattr(IFLA_IFNAME, &name_value);
         if let Some(kind) = kind {
-            let kind_attr = rtattr(IFLA_INFO_KIND, kind);
+            let mut kind_value = kind.to_vec();
+            kind_value.push(0);
+            let kind_attr = rtattr(IFLA_INFO_KIND, &kind_value);
             let link_info = rtattr(IFLA_LINKINFO, &kind_attr);
             attributes.extend(link_info);
         }
