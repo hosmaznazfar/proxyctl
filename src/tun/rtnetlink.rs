@@ -15,6 +15,8 @@ use std::{
 
 const NETLINK_HEADER_LEN: usize = 16;
 const MAX_NETLINK_DATAGRAM: usize = 1024 * 1024;
+const MAX_NETLINK_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_NETLINK_RESPONSE_MESSAGES: usize = 16_384;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
 const NLMSG_ERROR: u16 = 2;
 const NLMSG_DONE: u16 = 3;
@@ -150,6 +152,14 @@ impl RouteNetlink {
             );
             buffer.truncate(received as usize);
             let (batch, terminal) = parse_datagram(&buffer, sequence)?;
+            let added_bytes = batch.iter().try_fold(0usize, |total, item| total.checked_add(item.len()))
+                .context("NETLINK_ROUTE response size overflow")?;
+            let current_bytes = messages.iter().try_fold(0usize, |total, item: &Vec<u8>| total.checked_add(item.len()))
+                .context("NETLINK_ROUTE response size overflow")?;
+            ensure!(current_bytes.checked_add(added_bytes).is_some_and(|size| size <= MAX_NETLINK_RESPONSE_BYTES),
+                "NETLINK_ROUTE response exceeds the aggregate size limit");
+            ensure!(messages.len().checked_add(batch.len()).is_some_and(|count| count <= MAX_NETLINK_RESPONSE_MESSAGES),
+                "NETLINK_ROUTE response contains too many messages");
             messages.extend(batch);
             if terminal {
                 return Ok(messages);
