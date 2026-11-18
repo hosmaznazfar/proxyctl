@@ -13,7 +13,7 @@ use std::{
 };
 
 #[cfg(target_os = "linux")]
-use super::process::ProcessIdentity;
+use super::process::{ProcessHandle, ProcessIdentity};
 
 pub const BROKER_REQUEST_VERSION: u32 = 1;
 
@@ -216,6 +216,35 @@ pub fn authorize_socket_mark_request(
     ensure!(
         peer.uid == target_uid,
         "broker may inspect only processes owned by the authenticated caller"
+    );
+    Ok(())
+}
+
+/// Authenticate a request against the kernel peer credentials and a pidfd-pinned target.
+///
+/// The target handle must have been opened from the request identity. Ownership is read
+/// only after that identity and pidfd liveness are checked, then both are checked again
+/// after the policy decision. This function performs no socket diagnostics.
+#[cfg(target_os = "linux")]
+pub fn authorize_socket_mark_request_for_process(
+    request: &SocketMarkBrokerRequest,
+    peer: BrokerPeerCredentials,
+    target: &ProcessHandle,
+) -> Result<()> {
+    request.validate()?;
+    ensure!(
+        target.identity() == &request.process,
+        "pinned broker target does not match the requested process identity"
+    );
+    ensure!(
+        target.identity().verify()? && !target.is_exited()?,
+        "broker target process is no longer the requested live process"
+    );
+    let target_uid = super::process::read_process_owner_uid(target)?;
+    authorize_socket_mark_request(request, peer, target_uid)?;
+    ensure!(
+        target.identity().verify()? && !target.is_exited()?,
+        "broker target process changed or exited during authorization"
     );
     Ok(())
 }
@@ -532,6 +561,30 @@ mod tests {
         assert!(authorize_socket_mark_request(&request, peer, 1001).is_err());
         let invalid_peer = BrokerPeerCredentials { pid: 0, ..peer };
         assert!(authorize_socket_mark_request(&request, invalid_peer, 1000).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn request_authorization_is_bound_to_the_exact_pidfd_target() {
+        use super::super::process::{ProcessHandle, ProcessIdentity};
+
+        let identity = ProcessIdentity::capture(std::process::id()).unwrap();
+        let target = ProcessHandle::open(identity.clone()).unwrap();
+        let mut request = socket_mark_request();
+        request.process = identity;
+        let peer = BrokerPeerCredentials {
+            pid: std::process::id(),
+            uid: unsafe { libc::getuid() },
+            gid: unsafe { libc::getgid() },
+        };
+        authorize_socket_mark_request_for_process(&request, peer, &target).unwrap();
+
+        let mut mismatched = request.clone();
+        mismatched.process.start_ticks += 1;
+        assert!(authorize_socket_mark_request_for_process(&mismatched, peer, &target).is_err());
+
+        let other_user = BrokerPeerCredentials { uid: peer.uid.wrapping_add(1), ..peer };
+        assert!(authorize_socket_mark_request_for_process(&request, other_user, &target).is_err());
     }
 
     #[cfg(target_os = "linux")]
