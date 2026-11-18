@@ -453,6 +453,7 @@ mod validation_tests {
                 "route:v4:42420:0.0.0.0/0",
             ),
             operation(2, JournalOperationKind::AddRoute, "route:v6:42420::/0"),
+            operation(3, JournalOperationKind::AddRoute, "route:v6:42420::1/128"),
         ]);
         valid.validate().unwrap();
     }
