@@ -791,3 +791,8 @@ Ownership manifests and kernel transaction requests now enforce the same canonic
 ### Fallible kernel-assigned interface binding
 
 The helper that binds a routing policy to the kernel-assigned TUN ifindex no longer relies on an internal panic after validation. It now reports an ordinary error if the interface cannot be found in the supplied inventory, preserving fail-closed behavior even if the inventory changes or a future refactor weakens the preceding invariant. No interface or route operation is performed by this helper.
+
+
+### Canonical recovery manifest filename
+
+The recovery-supervisor identity now requires the exact `tun-manifest.json` filename used by `ManifestStore`, not merely any final path component. This aligns service-manager identity validation with the broker and durable-store contract, preventing a syntactically valid supervisor request from naming a different file. Parent-directory ownership and no-follow checks remain the storage layer's responsibility.
