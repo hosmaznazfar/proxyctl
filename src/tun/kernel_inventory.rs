@@ -45,12 +45,23 @@ fn inspect_snapshot_with_interface_path(interface_path: &Path) -> Result<KernelS
     let mut snapshot =
         parse_detailed_snapshot(&ipv4_routes, &ipv6_routes, &ipv4_rules, &ipv6_rules)?;
     snapshot.interfaces = inspect_interfaces(interface_path)?;
-    snapshot.netlink_interface_count = super::rtnetlink::inspect_link_count()
-        .context("cannot capture the read-only NETLINK_ROUTE interface count")?;
+    let netlink_links = super::rtnetlink::inspect_links()
+        .context("cannot capture exact read-only NETLINK_ROUTE link identities")?;
+    snapshot.netlink_interface_count = netlink_links.len();
     ensure!(
         snapshot.netlink_interface_count == snapshot.interfaces.len(),
         "sysfs and NETLINK_ROUTE interface inventories disagree; retry the read-only snapshot"
     );
+    for (sysfs, netlink) in snapshot.interfaces.iter().zip(&netlink_links) {
+        ensure!(
+            sysfs.name == netlink.name && sysfs.index == netlink.index,
+            "sysfs and NETLINK_ROUTE interface identities disagree; retry the read-only snapshot"
+        );
+        ensure!(
+            sysfs.is_tun == (netlink.kind.as_deref() == Some("tun")),
+            "sysfs and NETLINK_ROUTE TUN link kinds disagree; retry the read-only snapshot"
+        );
+    }
     Ok(snapshot)
 }
 
