@@ -80,16 +80,33 @@ impl KernelCommandPlan {
             !self.apply.is_empty(),
             "kernel plan has no interface creation step"
         );
+        let creation = &self.apply[0].arguments;
         anyhow::ensure!(
-            self.apply[0].arguments.starts_with(&[
-                "tuntap".to_owned(),
-                "add".to_owned(),
-                "dev".to_owned(),
-                self.interface_cleanup.interface_name.clone(),
-                "mode".to_owned(),
-                "tun".to_owned()
-            ]),
-            "kernel plan must begin by creating its guarded TUN interface"
+            creation.len() == 10
+                && creation[..6]
+                    == [
+                        "tuntap",
+                        "add",
+                        "dev",
+                        self.interface_cleanup.interface_name.as_str(),
+                        "mode",
+                        "tun"
+                    ]
+                && creation[6] == "user"
+                && creation[7].bytes().all(|byte| byte.is_ascii_digit())
+                && creation[8] == "group"
+                && !creation[9].is_empty()
+                && creation[9].bytes().all(|byte| byte.is_ascii_digit()),
+            "kernel plan must begin with an exact guarded TUN creation command"
+        );
+        anyhow::ensure!(
+            self.apply[1].arguments
+                == ["link", "set", "dev", self.interface_cleanup.interface_name.as_str(), "up"],
+            "kernel plan must bring up only its guarded TUN interface"
+        );
+        anyhow::ensure!(
+            self.apply.len() == self.cleanup.len() + 2,
+            "kernel plan apply and cleanup resource counts do not match"
         );
         anyhow::ensure!(
             self.apply.iter().all(|command| {
@@ -103,6 +120,16 @@ impl KernelCommandPlan {
             }),
             "kernel plan contains an empty or unsafe argument"
         );
+        for (command, target) in self.apply[2..].iter().zip(self.cleanup.iter().rev()) {
+            let expected = match target {
+                CleanupTarget::Rule(rule) => rule_add(rule),
+                CleanupTarget::Route(route) => route_add(route)?,
+            };
+            anyhow::ensure!(
+                command == &expected,
+                "kernel plan apply command does not match its typed resource identity"
+            );
+        }
         let mut cleanup_keys = std::collections::BTreeSet::new();
         for target in &self.cleanup {
             let key = match target {
