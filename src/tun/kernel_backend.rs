@@ -252,6 +252,8 @@ mod tests {
             routes: Vec::new(),
             rules: Vec::new(),
             interfaces,
+            #[cfg(target_os = "linux")]
+            netlink_interface_count: 0,
         }
     }
 
