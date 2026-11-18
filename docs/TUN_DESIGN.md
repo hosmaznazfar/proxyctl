@@ -684,3 +684,8 @@ The NETLINK_ROUTE parser now distinguishes a valid final message whose declared 
 ### Cross-checking Linux interface inventory sources
 
 A live Linux snapshot now requires the sysfs interface count and the independent RTM_GETLINK record count to agree. If interfaces are created or removed between the two read-only observations, the snapshot fails closed and asks the caller to retry rather than presenting a mixed-time inventory as authoritative. This is a consistency check, not a lock on kernel state; every future destructive operation still needs an immediate exact identity/fingerprint comparison.
+
+
+### Terminal netlink response framing
+
+The netlink datagram parser now rejects any record following NLMSG_DONE or a successful NLMSG_ERROR acknowledgement. A terminal response cannot be followed by additional payload records in the same datagram; accepting such a sequence would make completion ambiguous. A regression test pins this fail-closed behavior. No kernel mutation is involved.
