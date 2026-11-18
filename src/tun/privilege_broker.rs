@@ -163,7 +163,6 @@ pub fn read_socket_mark_request(
     stream: &mut std::os::unix::net::UnixStream,
     timeout: std::time::Duration,
 ) -> Result<SocketMarkBrokerRequest> {
-    use std::io::Read;
     use std::time::Instant;
 
     ensure!(
