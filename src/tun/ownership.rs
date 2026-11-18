@@ -7,6 +7,11 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use super::route_policy::{
+    RPDB_PRIORITY_MIN_PROXYCTL, RT_TABLE_DEFAULT, RT_TABLE_LOCAL, RT_TABLE_MAIN,
+    RT_TABLE_MIN_PROXYCTL,
+};
+
 pub const MANIFEST_VERSION: u32 = 1;
 const MAX_OWNED_RESOURCES: usize = 256;
 const MAX_RESOURCE_KEY_BYTES: usize = 512;
@@ -39,10 +44,14 @@ impl RouteManifest {
             valid_activation_id(&self.activation_id),
             "invalid activation identity"
         );
-        ensure!(self.table_id > 0, "routing table ID must be non-zero");
         ensure!(
-            self.rule_priority > 0,
-            "policy-rule priority must be non-zero"
+            self.table_id >= RT_TABLE_MIN_PROXYCTL
+                && ![RT_TABLE_DEFAULT, RT_TABLE_MAIN, RT_TABLE_LOCAL].contains(&self.table_id),
+            "manifest routing table is reserved or below the Proxyctl allocation floor"
+        );
+        ensure!(
+            self.rule_priority >= RPDB_PRIORITY_MIN_PROXYCTL,
+            "manifest policy-rule priority is below the Proxyctl allocation floor"
         );
         ensure!(
             !self.interface_name.is_empty()
@@ -236,6 +245,18 @@ mod tests {
         let mut invalid = original;
         invalid.resources.push(invalid.resources[0].clone());
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn manifest_rejects_reserved_or_low_routing_allocations() {
+        for table_id in [0, RT_TABLE_DEFAULT, RT_TABLE_MAIN, RT_TABLE_LOCAL, 9_999] {
+            let mut value = manifest();
+            value.table_id = table_id;
+            assert!(value.validate().is_err(), "accepted table {table_id}");
+        }
+        let mut value = manifest();
+        value.rule_priority = RPDB_PRIORITY_MIN_PROXYCTL - 1;
+        assert!(value.validate().is_err());
     }
 
     #[test]
