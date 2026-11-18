@@ -536,3 +536,8 @@ The broker response validator now requires every returned peer-matched socket re
 ### Journal dependency ordering
 
 A transaction journal now rejects route or policy-rule operations unless the TUN interface creation intent is already the first operation. This mirrors the only supported apply order and prevents a malformed or edited journal from authorizing cleanup decisions for policy resources without the owning interface operation being represented. It remains validation/planning only; no kernel mutation is performed.
+
+
+### Journal state progression
+
+Journal validation now enforces the transaction's monotonic state progression: an unresolved intent can exist only as the final operation, applied resources cannot appear after cleanup has started, and removed/confirmed-absent operations form a reverse-cleanup suffix. This rejects impossible or reordered persisted states before recovery planning. Ambiguous final intents still require fresh kernel inspection and never authorize deletion by themselves.
