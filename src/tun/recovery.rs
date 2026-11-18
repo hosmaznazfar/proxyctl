@@ -82,6 +82,9 @@ impl SupervisorIdentity {
                 && self.manifest_path.starts_with('/')
                 && !self.manifest_path.ends_with('/')
                 && !self.manifest_path.contains("//")
+                // Backslashes are rejected so paths remain unambiguous across
+                // service-manager configuration and escaping conventions.
+                && !self.manifest_path.contains('\\')
                 // Path::components() normalizes interior "." segments away, so
                 // reject them lexically before relying on the parsed components.
                 && self
