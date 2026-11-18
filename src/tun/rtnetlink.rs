@@ -197,6 +197,36 @@ pub fn inspect_link_count() -> Result<usize> {
     Ok(count)
 }
 
+fn validate_alignment_padding(
+    datagram: &[u8],
+    offset: usize,
+    message_length: usize,
+    aligned_length: usize,
+    remaining: usize,
+) -> Result<()> {
+    if aligned_length > remaining {
+        ensure!(
+            message_length == remaining,
+            "truncated netlink alignment padding"
+        );
+        return Ok(());
+    }
+
+    let padding_start = offset
+        .checked_add(message_length)
+        .context("netlink padding offset overflow")?;
+    let padding_end = offset
+        .checked_add(aligned_length)
+        .context("netlink padding end overflow")?;
+    ensure!(
+        datagram[padding_start..padding_end]
+            .iter()
+            .all(|byte| *byte == 0),
+        "non-zero netlink alignment padding"
+    );
+    Ok(())
+}
+
 fn validate_response_budget(current: &[Vec<u8>], incoming: &[Vec<u8>]) -> Result<()> {
     let current_bytes = current
         .iter()
@@ -293,14 +323,7 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
             aligned_length <= remaining || length == remaining,
             "truncated netlink alignment padding"
         );
-        if aligned_length <= remaining {
-            ensure!(
-                bytes[offset + length..offset + aligned_length]
-                    .iter()
-                    .all(|byte| *byte == 0),
-                "non-zero netlink alignment padding"
-            );
-        }
+        validate_alignment_padding(bytes, offset, length, aligned_length, remaining)?;
         offset = offset
             .checked_add(if aligned_length <= remaining {
                 aligned_length
