@@ -465,8 +465,10 @@ mod validation_tests {
         )]);
         assert!(plan_journal_recovery(&value, &malformed).is_err());
 
-        let incomplete =
-            std::collections::BTreeMap::from([("interface:tun-proxyctl".to_owned(), Some("foreign-interface".to_owned()))]);
+        let incomplete = std::collections::BTreeMap::from([(
+            "interface:tun-proxyctl".to_owned(),
+            Some("foreign-interface".to_owned()),
+        )]);
         let decisions = plan_journal_recovery(&value, &incomplete).unwrap();
         assert_eq!(
             decisions[1].1,

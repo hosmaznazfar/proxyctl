@@ -552,7 +552,12 @@ mod tests {
                 expected_fingerprint: "route-fp".into()
             }
         );
-        assert_eq!(plan[2].1, JournalRecoveryDecision::CompareAndDelete { expected_fingerprint: "interface-fp".into() });
+        assert_eq!(
+            plan[2].1,
+            JournalRecoveryDecision::CompareAndDelete {
+                expected_fingerprint: "interface-fp".into()
+            }
+        );
     }
 
     #[test]
@@ -586,8 +591,14 @@ mod tests {
             ],
         };
         let observed = std::collections::BTreeMap::from([
-            ("interface:tun-proxyctl".into(), Some("foreign-interface".into())),
-            ("route:v4:42420:default".into(), Some("possibly-foreign".into())),
+            (
+                "interface:tun-proxyctl".into(),
+                Some("foreign-interface".into()),
+            ),
+            (
+                "route:v4:42420:default".into(),
+                Some("possibly-foreign".into()),
+            ),
             ("rule:v4:42421".into(), Some("changed".into())),
         ]);
         let plan = plan_journal_recovery(&journal, &observed).unwrap();
@@ -712,8 +723,17 @@ mod tests {
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         let id = "12345678-1234-4234-8234-123456789abc";
         store.create_transaction_journal(id, 21).unwrap();
-        store.record_operation_intent(id, 21, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
-        store.mark_operation_applied(id, 21, "interface:tun-proxyctl", "sha256:interface").unwrap();
+        store
+            .record_operation_intent(
+                id,
+                21,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            )
+            .unwrap();
+        store
+            .mark_operation_applied(id, 21, "interface:tun-proxyctl", "sha256:interface")
+            .unwrap();
         store
             .record_operation_intent(id, 21, JournalOperationKind::AddRule, "rule:v6:42420")
             .unwrap();
@@ -725,7 +745,9 @@ mod tests {
             recovery_action(&journal.operations[1]),
             JournalRecoveryAction::SkipAlreadyRemoved
         );
-        store.mark_operation_removed(id, 21, "interface:tun-proxyctl").unwrap();
+        store
+            .mark_operation_removed(id, 21, "interface:tun-proxyctl")
+            .unwrap();
         store.remove_completed_transaction_journal(id, 21).unwrap();
     }
 
@@ -736,8 +758,17 @@ mod tests {
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         let id = "12345678-1234-4234-8234-123456789abc";
         store.create_transaction_journal(id, 18).unwrap();
-        store.record_operation_intent(id, 18, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
-        store.mark_operation_applied(id, 18, "interface:tun-proxyctl", "sha256:interface").unwrap();
+        store
+            .record_operation_intent(
+                id,
+                18,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            )
+            .unwrap();
+        store
+            .mark_operation_applied(id, 18, "interface:tun-proxyctl", "sha256:interface")
+            .unwrap();
         store
             .record_operation_intent(
                 id,
@@ -753,7 +784,9 @@ mod tests {
         store
             .mark_operation_removed(id, 18, "route:v4:42420:default")
             .unwrap();
-        store.mark_operation_removed(id, 18, "interface:tun-proxyctl").unwrap();
+        store
+            .mark_operation_removed(id, 18, "interface:tun-proxyctl")
+            .unwrap();
         store.remove_completed_transaction_journal(id, 18).unwrap();
         assert!(store.load_transaction_journal().unwrap().is_none());
     }
@@ -765,8 +798,17 @@ mod tests {
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         let id = "12345678-1234-4234-8234-123456789abc";
         store.create_transaction_journal(id, 19).unwrap();
-        store.record_operation_intent(id, 19, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
-        store.mark_operation_applied(id, 19, "interface:tun-proxyctl", "sha256:interface").unwrap();
+        store
+            .record_operation_intent(
+                id,
+                19,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            )
+            .unwrap();
+        store
+            .mark_operation_applied(id, 19, "interface:tun-proxyctl", "sha256:interface")
+            .unwrap();
         store
             .record_operation_intent(id, 19, JournalOperationKind::AddRule, "rule:v4:42410")
             .unwrap();

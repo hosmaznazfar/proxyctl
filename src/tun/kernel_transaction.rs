@@ -565,7 +565,11 @@ mod tests {
             };
             let error = apply(&transaction(), &mut backend).unwrap_err();
             assert!(format!("{error:#}").contains("failed"));
-            assert_eq!(backend.resources.len(), failed_step - 1, "step {failed_step}");
+            assert_eq!(
+                backend.resources.len(),
+                failed_step - 1,
+                "step {failed_step}"
+            );
             assert!(backend.interface.is_some(), "step {failed_step}");
             assert!(!backend.finalized, "step {failed_step}");
             assert!(backend.journal_retained, "step {failed_step}");
@@ -627,7 +631,10 @@ mod tests {
         assert!(!backend.finalized);
         // Add errors are ambiguous: rollback must not touch resources that may have
         // changed after the backend returned its error.
-        assert_ne!(backend.resources.get(&key).map(String::as_str), Some("foreign-replacement"));
+        assert_ne!(
+            backend.resources.get(&key).map(String::as_str),
+            Some("foreign-replacement")
+        );
     }
 
     #[test]

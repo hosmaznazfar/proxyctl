@@ -346,13 +346,29 @@ mod tests {
         store
             .mark_intent_absent(activation, 19, "interface:tun-proxyctl")
             .unwrap();
-        store.remove_completed_transaction_journal(activation, 19).unwrap();
+        store
+            .remove_completed_transaction_journal(activation, 19)
+            .unwrap();
         drop(store); // The absent interface transaction is complete and removed.
 
         let store = JournalStore::from_directory(directory.path().to_path_buf());
         store.create_transaction_journal(activation, 20).unwrap();
-        store.record_operation_intent(activation, 20, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
-        store.mark_operation_applied(activation, 20, "interface:tun-proxyctl", "interface-fingerprint").unwrap();
+        store
+            .record_operation_intent(
+                activation,
+                20,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            )
+            .unwrap();
+        store
+            .mark_operation_applied(
+                activation,
+                20,
+                "interface:tun-proxyctl",
+                "interface-fingerprint",
+            )
+            .unwrap();
         store
             .record_operation_intent(
                 activation,
@@ -374,10 +390,15 @@ mod tests {
         let store = JournalStore::from_directory(directory.path().to_path_buf());
         let applied = store.load_transaction_journal().unwrap().unwrap();
         let exact = BTreeMap::from([
-            ("interface:tun-proxyctl".to_owned(), Some("interface-fingerprint".to_owned())),
-            ("route:v4:42420:0.0.0.0/0".to_owned(),
-            Some("canonical-route-fingerprint".to_owned()),
-        )]);
+            (
+                "interface:tun-proxyctl".to_owned(),
+                Some("interface-fingerprint".to_owned()),
+            ),
+            (
+                "route:v4:42420:0.0.0.0/0".to_owned(),
+                Some("canonical-route-fingerprint".to_owned()),
+            ),
+        ]);
         assert_eq!(
             plan_journal_recovery(&applied, &exact).unwrap()[0].1,
             JournalRecoveryDecision::CompareAndDelete {
@@ -385,10 +406,15 @@ mod tests {
             },
         );
         let changed = BTreeMap::from([
-            ("interface:tun-proxyctl".to_owned(), Some("interface-fingerprint".to_owned())),
-            ("route:v4:42420:0.0.0.0/0".to_owned(),
-            Some("foreign-route-fingerprint".to_owned()),
-        )]);
+            (
+                "interface:tun-proxyctl".to_owned(),
+                Some("interface-fingerprint".to_owned()),
+            ),
+            (
+                "route:v4:42420:0.0.0.0/0".to_owned(),
+                Some("foreign-route-fingerprint".to_owned()),
+            ),
+        ]);
         assert_eq!(
             plan_journal_recovery(&applied, &changed).unwrap()[0].1,
             JournalRecoveryDecision::PreserveAndReportConflict,
