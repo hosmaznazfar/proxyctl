@@ -428,3 +428,8 @@ Tests use a local UnixStream pair to verify the kernel-reported credentials and 
 #### Pidfd-bound process owner inspection
 
 The Linux process layer now reads the target's four procfs UID values only through an already-open ProcessHandle. It checks the exact start-time/executable identity and pidfd liveness before and after reading, requires real/effective/saved/filesystem UIDs to agree, and returns no request-supplied ownership data. This is a same-user authorization primitive, not a broker service; setuid or credential-divergent targets are rejected. No privilege is acquired, no socket diagnostics are run, and TUN activation remains disabled.
+
+
+#### Bounded broker request stream framing
+
+The broker protocol now has a Unix-stream reader for exactly one length-prefixed socket-mark request. It validates the four-byte length before allocation, caps payloads at 16 KiB, and enforces a single monotonic two-second deadline across header and payload reads to prevent slow-trickle clients. Truncated, oversized, timed-out, malformed, and invalid requests are rejected. The accepted connection must be closed after this one request; pipelining is not supported. This is only a framing primitive: no listener, helper process, response channel, or capability policy is installed, and TUN remains disabled.
