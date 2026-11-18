@@ -394,10 +394,13 @@ mod tests {
             JournalRecoveryDecision::PreserveAndReportConflict,
         );
         store
-            .mark_operation_removed(activation, 19, "route:v4:42420:0.0.0.0/0")
+            .mark_operation_removed(activation, 20, "route:v4:42420:0.0.0.0/0")
             .unwrap();
         store
-            .remove_completed_transaction_journal(activation, 19)
+            .mark_operation_removed(activation, 20, "interface:tun-proxyctl")
+            .unwrap();
+        store
+            .remove_completed_transaction_journal(activation, 20)
             .unwrap();
         assert!(store.load_transaction_journal().unwrap().is_none());
     }
