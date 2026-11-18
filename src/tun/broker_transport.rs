@@ -177,7 +177,27 @@ pub fn read_socket_mark_response(
     frame.extend_from_slice(&header);
     frame.resize(4 + length, 0);
     read_exact_before_deadline(stream, &mut frame[4..], deadline)?;
+    ensure_stream_eof_before_deadline(stream, deadline)?;
     decode_socket_mark_response(&frame)
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_stream_eof_before_deadline(stream: &mut UnixStream, deadline: Instant) -> Result<()> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    ensure!(!remaining.is_zero(), "broker response read exceeded its deadline");
+    stream.set_read_timeout(Some(remaining))?;
+    let mut trailing = [0u8; 1];
+    match stream.read(&mut trailing) {
+        Ok(0) => Ok(()),
+        Ok(_) => anyhow::bail!("broker response contains trailing frame data"),
+        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+            ensure_stream_eof_before_deadline(stream, deadline)
+        }
+        Err(error) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
+            anyhow::bail!("broker response stream did not close before its deadline")
+        }
+        Err(error) => Err(error).context("cannot verify broker response frame boundary"),
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -275,6 +295,19 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_trailing_bytes_after_response_frame() {
+        let (mut writer, mut reader) = UnixStream::pair().unwrap();
+        let frame = encode_socket_mark_response(&response()).unwrap();
+        let sender = thread::spawn(move || {
+            writer.write_all(&frame).unwrap();
+            writer.write_all(&[0xaa]).unwrap();
+            writer.shutdown(std::net::Shutdown::Write).unwrap();
+        });
+        assert!(read_socket_mark_response(&mut reader, Duration::from_secs(1)).is_err());
+        sender.join().unwrap();
     }
 
     #[test]
