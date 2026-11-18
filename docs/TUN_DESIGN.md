@@ -679,3 +679,8 @@ The independent NETLINK_ROUTE interface count is a Linux-only field on the kerne
 ### Final unpadded netlink message handling
 
 The NETLINK_ROUTE parser now distinguishes a valid final message whose declared payload ends exactly at the datagram boundary from a message whose required alignment bytes are truncated. It uses checked alignment arithmetic and never advances beyond the received buffer. A regression test covers a non-four-byte-aligned final message without padding. Multipart messages still require their inter-message alignment bytes. This is parser hardening only.
+
+
+### Cross-checking Linux interface inventory sources
+
+A live Linux snapshot now requires the sysfs interface count and the independent RTM_GETLINK record count to agree. If interfaces are created or removed between the two read-only observations, the snapshot fails closed and asks the caller to retry rather than presenting a mixed-time inventory as authoritative. This is a consistency check, not a lock on kernel state; every future destructive operation still needs an immediate exact identity/fingerprint comparison.
