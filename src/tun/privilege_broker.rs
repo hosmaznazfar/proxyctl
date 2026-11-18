@@ -249,6 +249,64 @@ pub fn authorize_socket_mark_request_for_process(
     Ok(())
 }
 
+/// Accept one broker client with a bounded wait, authenticate its kernel credentials,
+/// and read exactly one bounded request frame.
+///
+/// The listener remains owned by the caller. This function neither spawns a helper nor
+/// performs target-process inspection; the caller must invoke the pidfd-bound authorization
+/// function before opening NETLINK_SOCK_DIAG.
+#[cfg(target_os = "linux")]
+pub fn accept_socket_mark_request(
+    listener: &std::os::unix::net::UnixListener,
+    timeout: std::time::Duration,
+) -> Result<(
+    std::os::unix::net::UnixStream,
+    BrokerPeerCredentials,
+    SocketMarkBrokerRequest,
+)> {
+    use std::{os::fd::AsRawFd, time::Instant};
+
+    ensure!(
+        !timeout.is_zero() && timeout <= MAX_BROKER_REQUEST_READ_TIMEOUT,
+        "broker accept timeout is outside the permitted bound"
+    );
+    let deadline = Instant::now()
+        .checked_add(timeout)
+        .context("broker accept deadline overflow")?;
+    let mut descriptor = libc::pollfd {
+        fd: listener.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        ensure!(!remaining.is_zero(), "broker client accept timed out");
+        let millis = remaining.as_millis().saturating_add(1).min(i32::MAX as u128) as i32;
+        let result = unsafe { libc::poll(&mut descriptor, 1, millis) };
+        if result < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error).context("cannot wait for broker client");
+        }
+        ensure!(result > 0, "broker client accept timed out");
+        ensure!(
+            descriptor.revents & libc::POLLIN != 0,
+            "broker listener returned an unexpected poll event"
+        );
+        break;
+    }
+
+    let (mut stream, _) = listener.accept().context("cannot accept broker client")?;
+    let peer = read_broker_peer_credentials(&stream)?;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    ensure!(!remaining.is_zero(), "broker client accept deadline expired");
+    let request_timeout = remaining.min(MAX_BROKER_REQUEST_READ_TIMEOUT);
+    let request = read_socket_mark_request(&mut stream, request_timeout)?;
+    Ok((stream, peer, request))
+}
+
 /// Maximum time allowed to receive one complete broker request frame.
 #[cfg(target_os = "linux")]
 pub const MAX_BROKER_REQUEST_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
@@ -675,6 +733,39 @@ mod tests {
         let link = target.path().join("linked");
         std::os::unix::fs::symlink(directory.path(), &link).unwrap();
         assert!(bind_private_broker_listener(&link.join("broker.sock")).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn listener_accepts_one_bounded_request_and_returns_kernel_peer_identity() {
+        use std::{io::Write, os::unix::net::UnixStream, thread, time::Duration};
+
+        let directory = tempfile::tempdir().unwrap();
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let path = directory.path().join("broker.sock");
+        let listener = bind_private_broker_listener(&path).unwrap();
+        let request = socket_mark_request();
+        let frame = encode_socket_mark_request(&request).unwrap();
+        let client_path = path.clone();
+        let sender = thread::spawn(move || {
+            let mut client = UnixStream::connect(client_path).unwrap();
+            client.write_all(&frame).unwrap();
+        });
+        let (_stream, peer, decoded) =
+            accept_socket_mark_request(&listener, Duration::from_secs(1)).unwrap();
+        sender.join().unwrap();
+        assert_eq!(decoded, request);
+        assert_eq!(peer.pid, std::process::id());
+        assert_eq!(peer.uid, unsafe { libc::getuid() });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn listener_accept_times_out_without_a_client() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        let listener = bind_private_broker_listener(&directory.path().join("broker.sock")).unwrap();
+        assert!(accept_socket_mark_request(&listener, std::time::Duration::from_millis(10)).is_err());
     }
 
     #[cfg(target_os = "linux")]
