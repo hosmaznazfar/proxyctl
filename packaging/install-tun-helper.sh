@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+
+SOURCE=${1:-target/release/proxyctl-tun-helper}
+DESTINATION=/usr/libexec/proxyctl-tun-helper
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Run this installer as root (for example: sudo $0 [built-helper-path])." >&2
+    exit 2
+fi
+if [ ! -f "$SOURCE" ] || [ ! -x "$SOURCE" ]; then
+    echo "Built helper not found or not executable: $SOURCE" >&2
+    exit 2
+fi
+if ! command -v setcap >/dev/null 2>&1 || ! command -v getcap >/dev/null 2>&1; then
+    echo "libcap tools (setcap/getcap) are required; no fallback to setuid is allowed." >&2
+    exit 2
+fi
+
+install -D -o root -g root -m 0755 "$SOURCE" "$DESTINATION"
+setcap cap_net_admin=ep "$DESTINATION"
+ACTUAL=$(getcap "$DESTINATION")
+case "$ACTUAL" in
+    "$DESTINATION cap_net_admin=ep") ;;
+    *)
+        setcap -r "$DESTINATION" || true
+        echo "Unexpected helper file capabilities: $ACTUAL" >&2
+        exit 1
+        ;;
+esac
+
+echo "Installed $DESTINATION with only cap_net_admin=ep."
+echo "The helper is diagnostic-only and accepts one same-UID socket-mark request."
+echo "No setuid bit, service, sudoers rule, or automatic startup was installed."
