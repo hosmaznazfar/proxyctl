@@ -152,14 +152,7 @@ impl RouteNetlink {
             );
             buffer.truncate(received as usize);
             let (batch, terminal) = parse_datagram(&buffer, sequence)?;
-            let added_bytes = batch.iter().try_fold(0usize, |total, item| total.checked_add(item.len()))
-                .context("NETLINK_ROUTE response size overflow")?;
-            let current_bytes = messages.iter().try_fold(0usize, |total, item: &Vec<u8>| total.checked_add(item.len()))
-                .context("NETLINK_ROUTE response size overflow")?;
-            ensure!(current_bytes.checked_add(added_bytes).is_some_and(|size| size <= MAX_NETLINK_RESPONSE_BYTES),
-                "NETLINK_ROUTE response exceeds the aggregate size limit");
-            ensure!(messages.len().checked_add(batch.len()).is_some_and(|count| count <= MAX_NETLINK_RESPONSE_MESSAGES),
-                "NETLINK_ROUTE response contains too many messages");
+            validate_response_budget(&messages, &batch)?;
             messages.extend(batch);
             if terminal {
                 return Ok(messages);
@@ -189,6 +182,22 @@ pub fn inspect_link_count() -> Result<usize> {
         count = count.checked_add(1).context("link inventory count overflow")?;
     }
     Ok(count)
+}
+
+fn validate_response_budget(current: &[Vec<u8>], incoming: &[Vec<u8>]) -> Result<()> {
+    let current_bytes = current.iter().try_fold(0usize, |total, item| total.checked_add(item.len()))
+        .context("NETLINK_ROUTE response size overflow")?;
+    let incoming_bytes = incoming.iter().try_fold(0usize, |total, item| total.checked_add(item.len()))
+        .context("NETLINK_ROUTE response size overflow")?;
+    ensure!(
+        current_bytes.checked_add(incoming_bytes).is_some_and(|size| size <= MAX_NETLINK_RESPONSE_BYTES),
+        "NETLINK_ROUTE response exceeds the aggregate size limit"
+    );
+    ensure!(
+        current.len().checked_add(incoming.len()).is_some_and(|count| count <= MAX_NETLINK_RESPONSE_MESSAGES),
+        "NETLINK_ROUTE response contains too many messages"
+    );
+    Ok(())
 }
 
 fn validate_request(bytes: &[u8]) -> Result<()> {
@@ -310,6 +319,16 @@ mod tests {
         let mut truncated = message(NLMSG_DONE, 7, &[1]);
         truncated.pop();
         assert!(parse_datagram(&truncated, 7).is_err());
+    }
+
+    #[test]
+    fn aggregate_response_budget_rejects_byte_and_record_overflow() {
+        let oversized = vec![vec![0u8; MAX_NETLINK_RESPONSE_BYTES + 1]];
+        assert!(validate_response_budget(&[], &oversized).is_err());
+        let too_many = vec![Vec::new(); MAX_NETLINK_RESPONSE_MESSAGES + 1];
+        assert!(validate_response_budget(&[], &too_many).is_err());
+        let within_limit = vec![vec![0u8; 64], vec![0u8; 64]];
+        validate_response_budget(&[], &within_limit).unwrap();
     }
 
     #[test]
