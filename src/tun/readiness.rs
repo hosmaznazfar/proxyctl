@@ -156,7 +156,9 @@ mod tests {
     #[test]
     fn readiness_can_only_accept_a_mark_from_a_valid_broker_response() {
         use crate::tun::{
-            privilege_broker::{BROKER_REQUEST_VERSION, BrokerSocketTransport, SocketMarkBrokerResponse},
+            privilege_broker::{
+                BROKER_REQUEST_VERSION, BrokerSocketTransport, SocketMarkBrokerResponse,
+            },
             socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord},
         };
         use std::net::{IpAddr, Ipv4Addr};
@@ -187,23 +189,28 @@ mod tests {
             BrokerSocketTransport::Tcp,
         )
         .unwrap();
-        assert!(verify_readiness_with_socket_mark(
-            &expected(),
-            &evidence,
-            &response,
-            "198.51.100.9:443".parse().unwrap(),
-            BrokerSocketTransport::Tcp,
-        ).is_err());
+        assert!(
+            verify_readiness_with_socket_mark(
+                &expected(),
+                &evidence,
+                &response,
+                "198.51.100.9:443".parse().unwrap(),
+                BrokerSocketTransport::Tcp,
+            )
+            .is_err()
+        );
         let mut empty = response;
         empty.records.clear();
-        assert!(verify_readiness_with_socket_mark(
+        assert!(
+            verify_readiness_with_socket_mark(
                 &expected(),
                 &evidence,
                 &empty,
                 "198.51.100.8:443".parse().unwrap(),
                 BrokerSocketTransport::Tcp,
             )
-            .is_err());
+            .is_err()
+        );
     }
 
     #[test]

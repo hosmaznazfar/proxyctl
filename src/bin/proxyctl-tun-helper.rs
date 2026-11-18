@@ -28,7 +28,10 @@ fn main() -> anyhow::Result<()> {
         socket_path.as_os_str().as_encoded_bytes().len() <= MAX_RUNTIME_PATH,
         "broker socket path exceeds the safety limit"
     );
-    ensure!(socket_path.is_absolute(), "broker socket path must be absolute");
+    ensure!(
+        socket_path.is_absolute(),
+        "broker socket path must be absolute"
+    );
 
     // Do not permit a file-capability helper to be used as a general-purpose
     // privilege trampoline. No child process is ever spawned by this executable.
@@ -48,9 +51,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
     ensure!(
-        effective == Some(capability)
-            && permitted == Some(capability)
-            && inheritable == Some(0),
+        effective == Some(capability) && permitted == Some(capability) && inheritable == Some(0),
         "helper must have exactly CAP_NET_ADMIN effective/permitted and no inheritable capabilities"
     );
     let no_new_privileges = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
@@ -67,8 +68,8 @@ fn main() -> anyhow::Result<()> {
     );
 
     let parent = socket_path.parent().context("socket path has no parent")?;
-    let metadata = std::fs::symlink_metadata(parent)
-        .context("cannot inspect caller runtime directory")?;
+    let metadata =
+        std::fs::symlink_metadata(parent).context("cannot inspect caller runtime directory")?;
     ensure!(
         metadata.is_dir()
             && metadata.uid() == unsafe { libc::geteuid() }

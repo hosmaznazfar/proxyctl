@@ -203,8 +203,8 @@ fn validate_activation_id(value: &str) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn validate_runtime_directory(path: &Path) -> Result<()> {
-    let metadata = std::fs::symlink_metadata(path)
-        .context("cannot inspect private TUN runtime directory")?;
+    let metadata =
+        std::fs::symlink_metadata(path).context("cannot inspect private TUN runtime directory")?;
     ensure!(
         metadata.file_type().is_dir()
             && metadata.uid() == unsafe { libc::geteuid() }
@@ -220,8 +220,8 @@ fn validate_helper(path: &Path) -> Result<()> {
         path == Path::new(INSTALLED_HELPER_PATH),
         "diagnostic helper path is not the fixed installed path"
     );
-    let metadata = std::fs::symlink_metadata(path)
-        .context("dedicated diagnostic helper is not installed")?;
+    let metadata =
+        std::fs::symlink_metadata(path).context("dedicated diagnostic helper is not installed")?;
     ensure!(
         metadata.file_type().is_file()
             && metadata.uid() == 0
@@ -264,7 +264,9 @@ mod tests {
     #[test]
     fn readiness_mark_requires_a_matching_nonempty_consistent_observation() {
         use crate::tun::{
-            privilege_broker::{BROKER_REQUEST_VERSION, BrokerSocketTransport, SocketMarkBrokerResponse},
+            privilege_broker::{
+                BROKER_REQUEST_VERSION, BrokerSocketTransport, SocketMarkBrokerResponse,
+            },
             socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord},
         };
         use std::net::{IpAddr, Ipv4Addr};
@@ -285,7 +287,10 @@ mod tests {
                 mark: 0x42,
             }],
         };
-        assert_eq!(observed_proxy_outbound_mark(&response, 0x42, 0xff).unwrap(), 0x42);
+        assert_eq!(
+            observed_proxy_outbound_mark(&response, 0x42, 0xff).unwrap(),
+            0x42
+        );
         assert!(observed_proxy_outbound_mark(&response, 0x43, 0xff).is_err());
         assert!(observed_proxy_outbound_mark(&response, 0, 0xff).is_err());
         let mut empty = response.clone();

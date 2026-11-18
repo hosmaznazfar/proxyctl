@@ -308,26 +308,31 @@ mod tests {
 
     #[test]
     fn journal_recovery_boundaries_survive_store_reopen_and_never_delete_unresolved_intents() {
-        use std::collections::BTreeMap;
         use super::super::journal::{
             JournalRecoveryAction, JournalRecoveryDecision, plan_journal_recovery, recovery_action,
         };
+        use std::collections::BTreeMap;
 
         let directory = tempdir().unwrap();
         let activation = "12345678-1234-4234-8234-123456789abc";
         let store = JournalStore::from_directory(directory.path().to_path_buf());
         store.create_transaction_journal(activation, 19).unwrap();
-        store.record_operation_intent(
-            activation,
-            19,
-            JournalOperationKind::CreateInterface,
-            "interface:tun-proxyctl",
-        ).unwrap();
+        store
+            .record_operation_intent(
+                activation,
+                19,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            )
+            .unwrap();
         drop(store); // Simulate controller termination after durable intent.
 
         let store = JournalStore::from_directory(directory.path().to_path_buf());
         let intent = store.load_transaction_journal().unwrap().unwrap();
-        assert_eq!(recovery_action(&intent.operations[0]), JournalRecoveryAction::InspectAmbiguousIntent);
+        assert_eq!(
+            recovery_action(&intent.operations[0]),
+            JournalRecoveryAction::InspectAmbiguousIntent
+        );
         let no_inventory = BTreeMap::new();
         assert_eq!(
             plan_journal_recovery(&intent, &no_inventory).unwrap()[0].1,
@@ -338,22 +343,28 @@ mod tests {
             plan_journal_recovery(&intent, &proven_absent).unwrap()[0].1,
             JournalRecoveryDecision::MarkAbsent,
         );
-        store.mark_intent_absent(activation, 19, "interface:tun-proxyctl").unwrap();
+        store
+            .mark_intent_absent(activation, 19, "interface:tun-proxyctl")
+            .unwrap();
         drop(store); // Simulate termination after recording exact absence.
 
         let store = JournalStore::from_directory(directory.path().to_path_buf());
-        store.record_operation_intent(
-            activation,
-            19,
-            JournalOperationKind::AddRoute,
-            "route:v4:42420:0.0.0.0/0",
-        ).unwrap();
-        store.mark_operation_applied(
-            activation,
-            19,
-            "route:v4:42420:0.0.0.0/0",
-            "canonical-route-fingerprint",
-        ).unwrap();
+        store
+            .record_operation_intent(
+                activation,
+                19,
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+            )
+            .unwrap();
+        store
+            .mark_operation_applied(
+                activation,
+                19,
+                "route:v4:42420:0.0.0.0/0",
+                "canonical-route-fingerprint",
+            )
+            .unwrap();
         drop(store); // Simulate termination after the kernel mutation and durable fingerprint.
 
         let store = JournalStore::from_directory(directory.path().to_path_buf());
@@ -376,8 +387,12 @@ mod tests {
             plan_journal_recovery(&applied, &changed).unwrap()[0].1,
             JournalRecoveryDecision::PreserveAndReportConflict,
         );
-        store.mark_operation_removed(activation, 19, "route:v4:42420:0.0.0.0/0").unwrap();
-        store.remove_completed_transaction_journal(activation, 19).unwrap();
+        store
+            .mark_operation_removed(activation, 19, "route:v4:42420:0.0.0.0/0")
+            .unwrap();
+        store
+            .remove_completed_transaction_journal(activation, 19)
+            .unwrap();
         assert!(store.load_transaction_journal().unwrap().is_none());
     }
 
