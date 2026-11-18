@@ -786,3 +786,8 @@ Privilege-broker requests now apply lexical manifest-path validation before `Pat
 ### Canonical activation identity across manifests and transactions
 
 Ownership manifests and kernel transaction requests now enforce the same canonical lowercase hexadecimal UUID spelling already required by journals, broker requests, and recovery identities. This prevents case-variant aliases for one activation from crossing storage and execution boundaries. Focused tests reject uppercase UUID aliases; this validation does not enable kernel mutation.
+
+
+### Fallible kernel-assigned interface binding
+
+The helper that binds a routing policy to the kernel-assigned TUN ifindex no longer relies on an internal panic after validation. It now reports an ordinary error if the interface cannot be found in the supplied inventory, preserving fail-closed behavior even if the inventory changes or a future refactor weakens the preceding invariant. No interface or route operation is performed by this helper.
