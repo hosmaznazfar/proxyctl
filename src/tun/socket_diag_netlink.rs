@@ -170,7 +170,6 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
     Ok(SocketDiagnosticDump { records, complete })
 }
 
-
 /// Accumulate a multipart dump while enforcing aggregate memory and message bounds.
 ///
 /// The collector must still enforce receive-buffer truncation and elapsed-time limits.
@@ -421,16 +420,11 @@ mod tests {
         assert!(decode_datagram(&record, 7).is_err());
     }
 
-
     #[test]
     fn accumulates_bounded_multipart_dump_until_done() {
         let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
         accumulator
-            .push_datagram(&message(
-                SOCK_DIAG_BY_FAMILY,
-                7,
-                &marked_record(123, 0x142),
-            ))
+            .push_datagram(&message(SOCK_DIAG_BY_FAMILY, 7, &marked_record(123, 0x142)))
             .unwrap();
         assert!(accumulator.clone().into_complete_dump().is_err());
 
@@ -448,12 +442,16 @@ mod tests {
         assert!(SocketDiagnosticDumpAccumulator::new(0).is_err());
         let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
         assert!(accumulator.push_datagram(&[]).is_err());
-        assert!(accumulator
-            .push_datagram(&message(NLMSG_DONE, 7, &[]))
-            .is_ok());
-        assert!(accumulator
-            .push_datagram(&message(NLMSG_DONE, 7, &[]))
-            .is_err());
+        assert!(
+            accumulator
+                .push_datagram(&message(NLMSG_DONE, 7, &[]))
+                .is_ok()
+        );
+        assert!(
+            accumulator
+                .push_datagram(&message(NLMSG_DONE, 7, &[]))
+                .is_err()
+        );
     }
 
     #[test]
@@ -467,11 +465,13 @@ mod tests {
     fn received_datagrams_require_kernel_sender_and_no_truncation() {
         let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
         let done = message(NLMSG_DONE, 7, &[]);
-        assert!(accumulator.push_received_datagram(12, false, &done).is_err());
+        assert!(
+            accumulator
+                .push_received_datagram(12, false, &done)
+                .is_err()
+        );
         assert!(accumulator.push_received_datagram(0, true, &done).is_err());
-        accumulator
-            .push_received_datagram(0, false, &done)
-            .unwrap();
+        accumulator.push_received_datagram(0, false, &done).unwrap();
         assert!(accumulator.into_complete_dump().unwrap().complete);
     }
 
@@ -496,11 +496,7 @@ mod tests {
     fn accumulator_rejects_incomplete_dump_at_finalization() {
         let mut accumulator = SocketDiagnosticDumpAccumulator::new(7).unwrap();
         accumulator
-            .push_datagram(&message(
-                SOCK_DIAG_BY_FAMILY,
-                7,
-                &marked_record(123, 0x142),
-            ))
+            .push_datagram(&message(SOCK_DIAG_BY_FAMILY, 7, &marked_record(123, 0x142)))
             .unwrap();
         assert!(accumulator.into_complete_dump().is_err());
     }

@@ -108,9 +108,14 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
 }
 
 fn parse_address(family: SocketAddressFamily, bytes: &[u8]) -> Result<IpAddr> {
-    ensure!(bytes.len() == 16, "socket diagnostic address has an invalid length");
+    ensure!(
+        bytes.len() == 16,
+        "socket diagnostic address has an invalid length"
+    );
     Ok(match family {
-        SocketAddressFamily::Ipv4 => IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3])),
+        SocketAddressFamily::Ipv4 => {
+            IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]))
+        }
         SocketAddressFamily::Ipv6 => IpAddr::V6(Ipv6Addr::from(<[u8; 16]>::try_from(bytes)?)),
     })
 }
@@ -154,12 +159,26 @@ mod tests {
             assert_eq!(parsed.mark, 0x142);
             assert_eq!(parsed.local_port, 443);
             assert_eq!(parsed.remote_port, 8443);
-            assert_eq!(parsed.local_address, if expected == SocketAddressFamily::Ipv4 {
-                IpAddr::V4(Ipv4Addr::new(192, 0, 2, 10))
-            } else { IpAddr::V6(Ipv6Addr::from([192, 0, 2, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])) });
-            assert_eq!(parsed.remote_address, if expected == SocketAddressFamily::Ipv4 {
-                IpAddr::V4(Ipv4Addr::new(198, 51, 100, 20))
-            } else { IpAddr::V6(Ipv6Addr::from([198, 51, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])) });
+            assert_eq!(
+                parsed.local_address,
+                if expected == SocketAddressFamily::Ipv4 {
+                    IpAddr::V4(Ipv4Addr::new(192, 0, 2, 10))
+                } else {
+                    IpAddr::V6(Ipv6Addr::from([
+                        192, 0, 2, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    ]))
+                }
+            );
+            assert_eq!(
+                parsed.remote_address,
+                if expected == SocketAddressFamily::Ipv4 {
+                    IpAddr::V4(Ipv4Addr::new(198, 51, 100, 20))
+                } else {
+                    IpAddr::V6(Ipv6Addr::from([
+                        198, 51, 100, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    ]))
+                }
+            );
         }
     }
 

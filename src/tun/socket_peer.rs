@@ -110,18 +110,35 @@ mod tests {
         ];
         let owned = [10, 11, 12, 13].into_iter().collect();
         let found = classify_proxy_peer_sockets(
-            &records, &owned, peer(), SocketTransport::Tcp, 0x142, 0xffff,
-        ).unwrap();
-        assert_eq!(found.iter().map(|item| item.inode).collect::<Vec<_>>(), [10]);
+            &records,
+            &owned,
+            peer(),
+            SocketTransport::Tcp,
+            0x142,
+            0xffff,
+        )
+        .unwrap();
+        assert_eq!(
+            found.iter().map(|item| item.inode).collect::<Vec<_>>(),
+            [10]
+        );
     }
 
     #[test]
     fn rejects_matching_peer_when_inode_is_not_owned_by_core() {
         let records = [record(10, 0x142, 443, TCP_STATE_ESTABLISHED)];
         let owned = BTreeSet::new();
-        assert!(classify_proxy_peer_sockets(
-            &records, &owned, peer(), SocketTransport::Tcp, 0x142, 0xffff,
-        ).is_err());
+        assert!(
+            classify_proxy_peer_sockets(
+                &records,
+                &owned,
+                peer(),
+                SocketTransport::Tcp,
+                0x142,
+                0xffff,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -131,21 +148,40 @@ mod tests {
             record(10, 0x142, 443, TCP_STATE_ESTABLISHED),
         ];
         let owned = [10].into_iter().collect();
-        assert!(classify_proxy_peer_sockets(
-            &duplicate, &owned, peer(), SocketTransport::Tcp, 0x142, 0xffff,
-        ).is_err());
+        assert!(
+            classify_proxy_peer_sockets(
+                &duplicate,
+                &owned,
+                peer(),
+                SocketTransport::Tcp,
+                0x142,
+                0xffff,
+            )
+            .is_err()
+        );
         let one = [record(10, 0x142, 443, TCP_STATE_ESTABLISHED)];
-        assert!(classify_proxy_peer_sockets(
-            &one, &owned, peer(), SocketTransport::Tcp, 0x100, 0x0f,
-        ).is_err());
+        assert!(
+            classify_proxy_peer_sockets(&one, &owned, peer(), SocketTransport::Tcp, 0x100, 0x0f,)
+                .is_err()
+        );
     }
 
     #[test]
     fn accepts_connected_udp_peer_without_assuming_tcp_state_semantics() {
         let records = [record(10, 0x142, 443, 0)];
         let owned = [10].into_iter().collect();
-        assert_eq!(classify_proxy_peer_sockets(
-            &records, &owned, peer(), SocketTransport::Udp, 0x142, 0xffff,
-        ).unwrap().len(), 1);
+        assert_eq!(
+            classify_proxy_peer_sockets(
+                &records,
+                &owned,
+                peer(),
+                SocketTransport::Udp,
+                0x142,
+                0xffff,
+            )
+            .unwrap()
+            .len(),
+            1
+        );
     }
 }
