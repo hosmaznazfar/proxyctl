@@ -96,7 +96,7 @@ pub fn serve_one_socket_mark_request(
     diagnostic_timeout_per_dump: Duration,
     response_timeout: Duration,
 ) -> Result<()> {
-    use std::os::unix::net::Shutdown;
+    use std::net::Shutdown;
 
     ensure!(
         !accept_timeout.is_zero()
