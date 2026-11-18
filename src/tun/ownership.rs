@@ -306,9 +306,14 @@ mod tests {
 
     #[test]
     fn cleanup_rejects_malformed_live_fingerprints_before_mutation() {
-        for fingerprint in ["", "bad\\nfingerprint", &"x".repeat(MAX_RESOURCE_FINGERPRINT_BYTES + 1)] {
+        let invalid_fingerprints = [
+            String::new(),
+            "bad\nfingerprint".to_owned(),
+            "x".repeat(MAX_RESOURCE_FINGERPRINT_BYTES + 1),
+        ];
+        for fingerprint in invalid_fingerprints {
             let mut backend = backend();
-            backend.fingerprint_override = Some(fingerprint.to_owned());
+            backend.fingerprint_override = Some(fingerprint);
             assert!(cleanup(&manifest(), &mut backend).is_err());
             assert!(backend.resources.contains_key("route:v4-default"));
             assert!(backend.resources.contains_key("rule:v4-proxyctl"));
