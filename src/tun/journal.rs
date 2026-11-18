@@ -129,6 +129,8 @@ impl TransactionJournal {
         let mut keys = std::collections::BTreeSet::new();
         let mut interface_seen = false;
         let mut rules_started = false;
+        let mut unresolved_intent_seen = false;
+        let mut cleanup_started = false;
         for (index, operation) in self.operations.iter().enumerate() {
             match operation.kind {
                 JournalOperationKind::CreateInterface => {
@@ -171,23 +173,53 @@ impl TransactionJournal {
                 "duplicate journal resource key"
             );
             match operation.state {
-                JournalOperationState::Intent => ensure!(
-                    operation.fingerprint.is_none(),
-                    "intent cannot contain a fingerprint"
-                ),
-                JournalOperationState::Applied | JournalOperationState::Removed => ensure!(
-                    operation
-                        .fingerprint
-                        .as_ref()
-                        .is_some_and(|value| !value.is_empty()
-                            && value.len() <= 16 * 1024
-                            && !value.chars().any(char::is_control)),
-                    "applied journal operation requires a valid fingerprint"
-                ),
-                JournalOperationState::Absent => ensure!(
-                    operation.fingerprint.is_none(),
-                    "absent journal operation cannot contain a fingerprint"
-                ),
+                JournalOperationState::Intent => {
+                    ensure!(
+                        index + 1 == self.operations.len()
+                            && !unresolved_intent_seen
+                            && !cleanup_started,
+                        "only the final journal operation may remain an unresolved intent"
+                    );
+                    unresolved_intent_seen = true;
+                    ensure!(
+                        operation.fingerprint.is_none(),
+                        "intent cannot contain a fingerprint"
+                    );
+                }
+                JournalOperationState::Applied => {
+                    ensure!(
+                        !unresolved_intent_seen && !cleanup_started,
+                        "applied operations cannot follow an unresolved intent or cleanup"
+                    );
+                    ensure!(
+                        operation
+                            .fingerprint
+                            .as_ref()
+                            .is_some_and(|value| !value.is_empty()
+                                && value.len() <= 16 * 1024
+                                && !value.chars().any(char::is_control)),
+                        "applied journal operation requires a valid fingerprint"
+                    );
+                }
+                JournalOperationState::Removed => {
+                    cleanup_started = true;
+                    ensure!(
+                        operation
+                            .fingerprint
+                            .as_ref()
+                            .is_some_and(|value| !value.is_empty()
+                                && value.len() <= 16 * 1024
+                                && !value.chars().any(char::is_control)),
+                        "removed journal operation requires its original fingerprint"
+                    );
+                }
+                JournalOperationState::Absent => {
+                    cleanup_started = true;
+                    ensure!(
+                        operation.fingerprint.is_none(),
+                        "absent journal operation cannot contain a fingerprint"
+                    );
+                }
             }
         }
         Ok(())
@@ -287,4 +319,33 @@ mod validation_tests {
         ]);
         complete.validate().unwrap();
     }
+    #[test]
+    fn journal_states_follow_apply_then_reverse_cleanup_order() {
+        let mut valid = journal(vec![
+            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(2, JournalOperationKind::AddRule, "rule:v4:42410"),
+        ]);
+        valid.operations[0].state = JournalOperationState::Applied;
+        valid.operations[0].fingerprint = Some("ifindex:77".into());
+        valid.operations[1].state = JournalOperationState::Removed;
+        valid.operations[1].fingerprint = Some("route-fingerprint".into());
+        valid.operations[2].state = JournalOperationState::Absent;
+        valid.validate().unwrap();
+
+        let mut invalid = valid.clone();
+        invalid.operations.swap(0, 2);
+        for (index, item) in invalid.operations.iter_mut().enumerate() {
+            item.sequence = index as u32;
+        }
+        assert!(invalid.validate().is_err());
+
+        let mut invalid = valid;
+        invalid.operations[2].state = JournalOperationState::Intent;
+        invalid.operations[2].fingerprint = None;
+        invalid.operations[1].state = JournalOperationState::Applied;
+        invalid.operations[1].fingerprint = Some("route-fingerprint".into());
+        assert!(invalid.validate().is_err());
+    }
+
 }
