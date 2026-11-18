@@ -178,6 +178,10 @@ mod tests {
             {
                 return (child, identity, handle);
             }
+            // A failed identity/handle attempt abandons this child. Reap it before
+            // retrying so every spawned test process has an explicit wait path.
+            let _ = child.kill();
+            let _ = child.wait();
             thread::sleep(Duration::from_millis(5));
         }
     }
