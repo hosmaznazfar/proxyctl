@@ -227,8 +227,7 @@ A missing resource is reported as already absent; duplicate identities, changed 
 ## Read-only interface identity snapshot
 
 The bounded Linux kernel snapshot now also inventories every interface from
-`/sys/class/net`, retaining its exact name, numeric ifindex, and whether the
-kernel exposes TUN flags. Missing or malformed ifindex data and duplicate
+`/sys/class/net`, retaining its exact name, numeric ifindex, and whether thekernel exposes TUN flags. Missing or malformed ifindex data and duplicate
 indices fail the snapshot closed. The manifest comparator checks the recorded
 interface name and ifindex together and requires the interface to be a TUN
 device; a missing interface is treated as already absent, while a reused name,
@@ -458,7 +457,6 @@ A response assembly function now composes the existing before/after socket-inode
 #### Bounded broker listener acceptance
 
 The private Unix listener now has a single-client accept primitive with a bounded poll deadline. It obtains SO_PEERCRED immediately after accept, then reads exactly one bounded request frame within the remaining deadline and returns the stream, kernel credentials, and validated request. Timeout, unexpected poll events, credential errors, malformed frames, and slow clients fail closed. The caller is still responsible for pidfd-bound target authorization before any diagnostic socket is opened. No helper process, capability, privileged collection, network mutation, or TUN activation is introduced.
-
 
 ### Authenticated diagnostic transaction executor
 
@@ -693,7 +691,7 @@ The netlink datagram parser now rejects any record following NLMSG_DONE or a suc
 
 ### Netlink alignment-padding validation
 
-The NETLINK_ROUTE parser now verifies that every present alignment-padding byte is zero before advancing to the next message. A final message may still end exactly at its declared length without optional trailing alignment bytes; when padding is present, non-zero bytes are rejected. Truncated required inter-message padding remains an error. This closes a framing-validation gap without changing the read-only nature of the transport.
+Alignment validation is isolated in a dedicated checked helper and invoked for every parsed message. It verifies each present padding byte is zero before the parser advances, while permitting a final message to end exactly at its declared length without optional trailing padding. Missing required inter-message padding and non-zero padding are rejected. Regression coverage exercises both malformed forms and the valid unpadded-final-message case. This is framing validation only; the transport remains read-only.
 
 ### Netlink acknowledgement error-code validation
 
