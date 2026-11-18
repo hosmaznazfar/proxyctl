@@ -149,8 +149,17 @@ pub fn cleanup<B: OwnedResourceBackend>(
     for resource in &manifest.resources {
         match backend.fingerprint(&resource.key)? {
             None => {}
-            Some(current) if current == resource.fingerprint => {}
-            Some(_) => report.conflicts.push(resource.key.clone()),
+            Some(current) => {
+                ensure!(
+                    !current.is_empty()
+                        && current.len() <= MAX_RESOURCE_FINGERPRINT_BYTES
+                        && !current.chars().any(char::is_control),
+                    "backend returned an invalid live resource fingerprint"
+                );
+                if current != resource.fingerprint {
+                    report.conflicts.push(resource.key.clone());
+                }
+            }
         }
     }
     ensure!(
@@ -180,11 +189,15 @@ mod tests {
     struct FakeBackend {
         resources: BTreeMap<String, String>,
         fail_once: Option<String>,
+        fingerprint_override: Option<String>,
     }
 
     impl OwnedResourceBackend for FakeBackend {
         fn fingerprint(&mut self, key: &str) -> Result<Option<String>> {
-            Ok(self.resources.get(key).cloned())
+            Ok(self
+                .fingerprint_override
+                .clone()
+                .or_else(|| self.resources.get(key).cloned()))
         }
 
         fn remove_if_matches(&mut self, key: &str, expected: &str) -> Result<ResourceState> {
@@ -232,6 +245,7 @@ mod tests {
                 ("foreign:docker-route".into(), "foreign-fp".into()),
             ]),
             fail_once: None,
+            fingerprint_override: None,
         }
     }
 
@@ -288,6 +302,17 @@ mod tests {
             backend.resources.get("foreign:docker-route").unwrap(),
             "foreign-fp"
         );
+    }
+
+    #[test]
+    fn cleanup_rejects_malformed_live_fingerprints_before_mutation() {
+        for fingerprint in ["", "bad\\nfingerprint", &"x".repeat(MAX_RESOURCE_FINGERPRINT_BYTES + 1)] {
+            let mut backend = backend();
+            backend.fingerprint_override = Some(fingerprint.to_owned());
+            assert!(cleanup(&manifest(), &mut backend).is_err());
+            assert!(backend.resources.contains_key("route:v4-default"));
+            assert!(backend.resources.contains_key("rule:v4-proxyctl"));
+        }
     }
 
     #[test]
