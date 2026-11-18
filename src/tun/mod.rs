@@ -36,6 +36,8 @@ pub mod socket_diag_records;
 pub mod socket_ownership;
 pub mod socket_peer;
 #[cfg(target_os = "linux")]
+pub mod socket_mark_probe;
+#[cfg(target_os = "linux")]
 pub mod supervisor;
 
 #[cfg(target_os = "linux")]
