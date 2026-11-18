@@ -642,3 +642,6 @@ This does not launch a privilege helper or perform IPC. The executor must authen
 A Linux SO_PEERCRED reader now extracts PID, UID, and GID from an accepted Unix stream socket using kernel-provided credentials. The authorization policy requires a valid peer PID and exact same-UID ownership of the requested target process. The future helper must obtain the target UID from procfs only after pidfd-pinning and verifying the requested process identity; the request cannot assert its own owner UID.
 
 This remains a tested primitive rather than an active IPC service. A private listener, socket filesystem permissions, target-owner inspection, pidfd-bound request handling, response framing, helper lifecycle, and end-to-end isolation tests are still outstanding. No TUN activation is enabled.
+
+
+- **Pidfd-bound broker target ownership:** added a Linux procfs reader that obtains all four target UID values only after opening a pidfd and validating the exact process identity. It rejects UID divergence, rechecks identity/liveness around the read, and never trusts an owner UID from the IPC request. This is an offline authorization primitive only; no helper is launched and TUN remains disabled.
