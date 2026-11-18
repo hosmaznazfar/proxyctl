@@ -506,3 +506,8 @@ The broker request/response path now has isolated server-side and client-side tr
 - [ ] Only after all offline gates pass, perform separately approved controlled real-network validation. No real TUN activation is authorized by this implementation task.
 
 Do not mark TUN complete or enable activation while any item above remains unchecked.
+
+
+### Supervisor identity path validation
+
+Supervisor identities now reject relative manifest paths, parent-directory traversal, embedded NUL bytes, and paths longer than the platform-independent 4096-byte bound. This validation is intentionally syntactic; the manifest store still performs the authoritative owner, directory, symlink, and file-mode checks when opening the path. This does not make a recovery backend operational.
