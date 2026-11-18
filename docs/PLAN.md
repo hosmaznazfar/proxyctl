@@ -686,3 +686,5 @@ Do not mark TUN complete or enable activation while any item above remains unche
 - [x] Restrict persisted TUN interface names to bounded Linux-safe ASCII characters and cover separators, whitespace, and control-character rejection.
 
 - [x] Strengthen diagnostic helper trust checks with canonical private-runtime path validation and root-owned, non-writable helper-directory validation; retain packaging audit as an open gate.
+
+- [x] Make manual helper installation fail closed by clearing capabilities and removing the copied helper when capability setup or exact verification fails.
