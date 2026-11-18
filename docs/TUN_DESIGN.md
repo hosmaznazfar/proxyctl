@@ -458,3 +458,10 @@ A response assembly function now composes the existing before/after socket-inode
 #### Bounded broker listener acceptance
 
 The private Unix listener now has a single-client accept primitive with a bounded poll deadline. It obtains SO_PEERCRED immediately after accept, then reads exactly one bounded request frame within the remaining deadline and returns the stream, kernel credentials, and validated request. Timeout, unexpected poll events, credential errors, malformed frames, and slow clients fail closed. The caller is still responsible for pidfd-bound target authorization before any diagnostic socket is opened. No helper process, capability, privileged collection, network mutation, or TUN activation is introduced.
+
+
+### Authenticated diagnostic transaction executor
+
+Added an isolated Linux broker transaction executor. It validates the narrow request, opens a pidfd for the exact requested process, authenticates the kernel-supplied Unix peer credentials, enforces same-UID ownership, and snapshots process socket inodes before opening the NETLINK_SOCK_DIAG transport. It then collects all four IPv4/IPv6 TCP/UDP dumps under the existing per-dump deadline, snapshots the process again, rechecks pidfd identity/liveness, and returns only exact peer/mark candidates. Any failed authorization, partial dump, process race, or attribution ambiguity aborts the transaction.
+
+The executor is deliberately not connected to the CLI, does not launch a helper, and does not grant capabilities. It is intended to run only inside a separately packaged, narrowly privileged helper after its policy and lifecycle are implemented. Socket candidates remain diagnostic evidence, not proof of successful application traffic. TUN activation remains disabled.
