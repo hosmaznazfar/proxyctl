@@ -1,0 +1,192 @@
+//! Bounded Linux NETLINK_ROUTE transport primitives.
+//!
+//! This module owns no policy and exposes no public mutation API. Higher-level operations
+//! must build and validate typed requests, journal intent before calling this transport, and
+//! verify kernel acknowledgements plus a fresh exact inventory afterwards.
+
+#![cfg(target_os = "linux")]
+
+use anyhow::{Context, Result, ensure};
+use std::{
+    io,
+    os::fd::{AsRawFd, FromRawFd, OwnedFd},
+    time::Duration,
+};
+
+const NETLINK_HEADER_LEN: usize = 16;
+const MAX_NETLINK_DATAGRAM: usize = 1024 * 1024;
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
+const NLMSG_ERROR: u16 = 2;
+const NLMSG_DONE: u16 = 3;
+
+#[derive(Debug)]
+pub(crate) struct RouteNetlink {
+    fd: OwnedFd,
+    sequence: u32,
+}
+
+impl RouteNetlink {
+    pub(crate) fn open() -> Result<Self> {
+        // SAFETY: socket has no pointer arguments and returns a new owned descriptor.
+        let raw = unsafe {
+            libc::socket(
+                libc::AF_NETLINK,
+                libc::SOCK_RAW | libc::SOCK_CLOEXEC,
+                libc::NETLINK_ROUTE,
+            )
+        };
+        ensure!(raw >= 0, "cannot open NETLINK_ROUTE socket: {}", io::Error::last_os_error());
+        // SAFETY: raw is a newly-created descriptor and ownership is transferred exactly once.
+        let fd = unsafe { OwnedFd::from_raw_fd(raw) };
+        // SAFETY: zero is a valid initial representation for sockaddr_nl.
+        let mut address: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
+        address.nl_family = libc::AF_NETLINK as u16;
+        // SAFETY: address is initialized and the pointer/length match sockaddr_nl.
+        let result = unsafe {
+            libc::bind(
+                fd.as_raw_fd(),
+                (&address as *const libc::sockaddr_nl).cast(),
+                std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
+            )
+        };
+        ensure!(result == 0, "cannot bind NETLINK_ROUTE socket: {}", io::Error::last_os_error());
+        Ok(Self { fd, sequence: 0 })
+    }
+
+    /// Send one already-encoded request and collect its matching multipart response.
+    /// Callers must not expose arbitrary caller-provided bytes across the privilege boundary.
+    pub(crate) fn transact(&mut self, request: &[u8], timeout: Duration) -> Result<Vec<Vec<u8>>> {
+        validate_request(request)?;
+        self.sequence = self.sequence.checked_add(1).context("netlink sequence exhausted")?;
+        let sequence = self.sequence;
+        let mut request = request.to_vec();
+        request[8..12].copy_from_slice(&sequence.to_ne_bytes());
+
+        // SAFETY: zero is a valid initial representation for sockaddr_nl.
+        let mut kernel: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
+        kernel.nl_family = libc::AF_NETLINK as u16;
+        // SAFETY: request and destination remain alive for the duration of sendto.
+        let sent = unsafe {
+            libc::sendto(
+                self.fd.as_raw_fd(),
+                request.as_ptr().cast(),
+                request.len(),
+                0,
+                (&kernel as *const libc::sockaddr_nl).cast(),
+                std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
+            )
+        };
+        ensure!(sent == request.len() as isize, "short NETLINK_ROUTE send: {}", io::Error::last_os_error());
+
+        let deadline = std::time::Instant::now() + timeout.min(DEFAULT_TIMEOUT);
+        let mut messages = Vec::new();
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            ensure!(!remaining.is_zero(), "NETLINK_ROUTE response timed out");
+            let millis = remaining.as_millis().clamp(1, i32::MAX as u128) as i32;
+            let mut pollfd = libc::pollfd { fd: self.fd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+            // SAFETY: pollfd points to one initialized poll descriptor.
+            let ready = unsafe { libc::poll(&mut pollfd, 1, millis) };
+            ensure!(ready >= 0, "NETLINK_ROUTE poll failed: {}", io::Error::last_os_error());
+            ensure!(ready > 0, "NETLINK_ROUTE response timed out");
+            ensure!(pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0, "NETLINK_ROUTE socket reported an error");
+
+            let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
+            // SAFETY: buffer is writable for its full length and recvfrom has valid optional peer storage.
+            let received = unsafe {
+                libc::recv(
+                    self.fd.as_raw_fd(),
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    libc::MSG_TRUNC,
+                )
+            };
+            ensure!(received >= 0, "NETLINK_ROUTE receive failed: {}", io::Error::last_os_error());
+            ensure!(received as usize <= buffer.len(), "NETLINK_ROUTE datagram exceeded the size limit");
+            buffer.truncate(received as usize);
+            let (batch, terminal) = parse_datagram(&buffer, sequence)?;
+            messages.extend(batch);
+            if terminal {
+                return Ok(messages);
+            }
+        }
+    }
+}
+
+fn validate_request(bytes: &[u8]) -> Result<()> {
+    ensure!(bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM, "invalid netlink request length");
+    let declared = u32::from_ne_bytes(bytes[0..4].try_into()?);
+    ensure!(declared as usize == bytes.len(), "netlink request length does not match its header");
+    Ok(())
+}
+
+fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>, bool)> {
+    let mut offset = 0usize;
+    let mut messages = Vec::new();
+    let mut terminal = false;
+    while offset < bytes.len() {
+        ensure!(bytes.len() - offset >= NETLINK_HEADER_LEN, "truncated netlink message header");
+        let header = &bytes[offset..offset + NETLINK_HEADER_LEN];
+        let length = u32::from_ne_bytes(header[0..4].try_into()?) as usize;
+        let kind = u16::from_ne_bytes(header[4..6].try_into()?);
+        let sequence = u32::from_ne_bytes(header[8..12].try_into()?);
+        ensure!(length >= NETLINK_HEADER_LEN && length <= bytes.len() - offset, "invalid netlink message length");
+        ensure!(sequence == expected_sequence, "unexpected NETLINK_ROUTE sequence");
+        let message = &bytes[offset..offset + length];
+        if kind == NLMSG_ERROR {
+            ensure!(length >= NETLINK_HEADER_LEN + 4, "truncated netlink acknowledgement");
+            let error = i32::from_ne_bytes(message[NETLINK_HEADER_LEN..NETLINK_HEADER_LEN + 4].try_into()?);
+            ensure!(error == 0, "kernel rejected NETLINK_ROUTE request: {}", io::Error::from_raw_os_error(-error));
+            terminal = true;
+        } else if kind == NLMSG_DONE {
+            terminal = true;
+        } else {
+            messages.push(message.to_vec());
+        }
+        offset = offset.checked_add((length + 3) & !3).context("netlink offset overflow")?;
+    }
+    ensure!(offset == bytes.len() || bytes[offset..].iter().all(|byte| *byte == 0), "invalid netlink alignment padding");
+    Ok((messages, terminal))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn message(kind: u16, sequence: u32, payload: &[u8]) -> Vec<u8> {
+        let length = NETLINK_HEADER_LEN + payload.len();
+        let mut bytes = vec![0; (length + 3) & !3];
+        bytes[0..4].copy_from_slice(&(length as u32).to_ne_bytes());
+        bytes[4..6].copy_from_slice(&kind.to_ne_bytes());
+        bytes[8..12].copy_from_slice(&sequence.to_ne_bytes());
+        bytes[NETLINK_HEADER_LEN..length].copy_from_slice(payload);
+        bytes
+    }
+
+    #[test]
+    fn accepts_matching_ack_as_terminal() {
+        let bytes = message(NLMSG_ERROR, 7, &0i32.to_ne_bytes());
+        let (messages, terminal) = parse_datagram(&bytes, 7).unwrap();
+        assert!(messages.is_empty());
+        assert!(terminal);
+    }
+
+    #[test]
+    fn rejects_kernel_error_ack() {
+        let bytes = message(NLMSG_ERROR, 7, &(-libc::EPERM).to_ne_bytes());
+        assert!(parse_datagram(&bytes, 7).is_err());
+    }
+
+    #[test]
+    fn rejects_wrong_sequence_and_truncated_headers() {
+        assert!(parse_datagram(&message(NLMSG_DONE, 8, &[]), 7).is_err());
+        assert!(parse_datagram(&[1, 2, 3], 7).is_err());
+    }
+
+    #[test]
+    fn validates_request_declared_length() {
+        let mut bytes = message(16, 1, &[]);
+        bytes[0..4].copy_from_slice(&99u32.to_ne_bytes());
+        assert!(validate_request(&bytes).is_err());
+    }
+}
