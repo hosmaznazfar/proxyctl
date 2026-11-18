@@ -45,6 +45,8 @@ fn inspect_snapshot_with_interface_path(interface_path: &Path) -> Result<KernelS
     let mut snapshot =
         parse_detailed_snapshot(&ipv4_routes, &ipv6_routes, &ipv4_rules, &ipv6_rules)?;
     snapshot.interfaces = inspect_interfaces(interface_path)?;
+    snapshot.netlink_interface_count = super::rtnetlink::inspect_link_count()
+        .context("cannot capture the read-only NETLINK_ROUTE interface count")?;
     Ok(snapshot)
 }
 
@@ -161,6 +163,9 @@ pub struct KernelSnapshot {
     pub routes: Vec<KernelRouteRecord>,
     pub rules: Vec<KernelRuleRecord>,
     pub interfaces: Vec<KernelInterfaceRecord>,
+    /// Independent interface-record count from a bounded RTM_GETLINK dump.
+    #[cfg(target_os = "linux")]
+    pub netlink_interface_count: usize,
 }
 
 #[cfg(target_os = "linux")]
