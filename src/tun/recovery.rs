@@ -80,6 +80,8 @@ impl SupervisorIdentity {
         ensure!(
             self.manifest_path.len() <= 4096
                 && self.manifest_path.starts_with('/')
+                && !self.manifest_path.ends_with('/')
+                && !self.manifest_path.contains("//")
                 && !self.manifest_path.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
                 && matches!(components.next(), Some(std::path::Component::RootDir))
                 && components.all(|component| matches!(component, std::path::Component::Normal(_)))
@@ -171,6 +173,15 @@ mod tests {
         assert!(invalid.validate().is_err());
         let mut invalid = valid.clone();
         invalid.manifest_path = "relative/manifest.json".into();
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.manifest_path = "/run/proxyctl/./manifest.json".into();
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.manifest_path = "/run//proxyctl/manifest.json".into();
+        assert!(invalid.validate().is_err());
+        let mut invalid = valid.clone();
+        invalid.manifest_path = "/run/proxyctl/manifest.json\\n".into();
         assert!(invalid.validate().is_err());
         let mut invalid = valid;
         invalid.generation = 0;
