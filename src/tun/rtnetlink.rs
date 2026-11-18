@@ -27,6 +27,7 @@ const IFLA_IFNAME: u16 = 3;
 const IFLA_LINKINFO: u16 = 18;
 const IFLA_INFO_KIND: u16 = 1;
 const IFLA_F_NESTED: u16 = 1 << 15;
+const IFLA_F_NET_BYTEORDER: u16 = 1 << 14;
 const RTATTR_HEADER_LEN: usize = 4;
 const IFINFO_MESSAGE_LEN: usize = 16;
 const NLM_F_REQUEST: u16 = 0x01;
@@ -276,6 +277,10 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
         let value = &attributes[offset + RTATTR_HEADER_LEN..offset + length];
         match attribute_kind {
             IFLA_IFNAME => {
+                ensure!(
+                    raw_kind == IFLA_IFNAME,
+                    "IFLA_IFNAME contains unsupported attribute flags"
+                );
                 ensure!(name.is_none(), "duplicate IFLA_IFNAME attribute");
                 let nul = value
                     .iter()
@@ -297,6 +302,10 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
                 name = Some(parsed.to_owned());
             }
             IFLA_LINKINFO => {
+                ensure!(
+                    raw_kind == IFLA_LINKINFO || raw_kind == IFLA_LINKINFO | IFLA_F_NESTED,
+                    "IFLA_LINKINFO contains unsupported attribute flags"
+                );
                 ensure!(!link_info_seen, "duplicate IFLA_LINKINFO attribute");
                 link_info_seen = true;
                 kind = parse_link_kind(value)?;
@@ -344,6 +353,10 @@ fn parse_link_kind(attributes: &[u8]) -> Result<Option<String>> {
             "invalid IFLA_LINKINFO attribute length"
         );
         if attribute_kind == IFLA_INFO_KIND {
+            ensure!(
+                raw_kind == IFLA_INFO_KIND,
+                "IFLA_INFO_KIND contains unsupported attribute flags"
+            );
             ensure!(kind.is_none(), "duplicate IFLA_INFO_KIND attribute");
             let value = &attributes[offset + RTATTR_HEADER_LEN..offset + length];
             let nul = value
@@ -602,6 +615,24 @@ mod tests {
                 kind: Some("tun".into())
             }
         );
+    }
+
+    #[test]
+    fn rejects_unsupported_flags_on_identity_attributes() {
+        let mut flagged_name = link_message(2, b"eth0", None);
+        let name_offset = NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN;
+        flagged_name[name_offset + 2..name_offset + 4]
+            .copy_from_slice(&(IFLA_IFNAME | IFLA_F_NET_BYTEORDER).to_ne_bytes());
+        assert!(parse_link_message(&flagged_name).is_err());
+
+        let mut flagged_kind = link_message(2, b"tun0", Some(b"tun"));
+        let link_info_offset = NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN
+            + rtattr(IFLA_IFNAME, b"tun0\0").len();
+        let nested_kind_offset = link_info_offset + RTATTR_HEADER_LEN;
+        let info_kind_offset = nested_kind_offset + RTATTR_HEADER_LEN;
+        flagged_kind[info_kind_offset + 2..info_kind_offset + 4]
+            .copy_from_slice(&(IFLA_INFO_KIND | IFLA_F_NET_BYTEORDER).to_ne_bytes());
+        assert!(parse_link_message(&flagged_kind).is_err());
     }
 
     #[test]
