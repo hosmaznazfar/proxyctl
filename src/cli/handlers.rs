@@ -39,7 +39,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     format!("{} (not implemented)", backend.as_str())
                 }
             );
-            println!("TUN activation: disabled until the privileged kernel backend, independent recovery, and readiness gates are implemented.");
+            println!(
+                "TUN activation: disabled until the privileged kernel backend, independent recovery, and readiness gates are implemented."
+            );
             return Ok(());
         }
         Command::Cores => {

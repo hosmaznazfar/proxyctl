@@ -184,7 +184,10 @@ pub fn read_socket_mark_response(
 #[cfg(target_os = "linux")]
 fn ensure_stream_eof_before_deadline(stream: &mut UnixStream, deadline: Instant) -> Result<()> {
     let remaining = deadline.saturating_duration_since(Instant::now());
-    ensure!(!remaining.is_zero(), "broker response read exceeded its deadline");
+    ensure!(
+        !remaining.is_zero(),
+        "broker response read exceeded its deadline"
+    );
     stream.set_read_timeout(Some(remaining))?;
     let mut trailing = [0u8; 1];
     match stream.read(&mut trailing) {
@@ -193,7 +196,12 @@ fn ensure_stream_eof_before_deadline(stream: &mut UnixStream, deadline: Instant)
         Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
             ensure_stream_eof_before_deadline(stream, deadline)
         }
-        Err(error) if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ) =>
+        {
             anyhow::bail!("broker response stream did not close before its deadline")
         }
         Err(error) => Err(error).context("cannot verify broker response frame boundary"),
