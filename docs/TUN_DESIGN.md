@@ -696,3 +696,7 @@ Alignment validation is isolated in a dedicated checked helper and invoked for e
 ### Netlink acknowledgement error-code validation
 
 Successful NLMSG_ERROR acknowledgements remain terminal. Non-zero error payloads are now required to be valid negative errno values and are converted with checked arithmetic; positive values and i32::MIN are rejected without risking integer-negation overflow. This hardens malformed-response handling in the read-only transport and does not change kernel state.
+
+### Exact NETLINK_ROUTE link identity inventory
+
+The read-only RTM_GETLINK path now decodes each RTM_NEWLINK record into its exact interface name, positive ifindex, and optional IFLA_INFO_KIND. Attribute framing, NUL termination, UTF-8, name bounds, duplicate identity attributes, alignment, and duplicate names/indices are validated. The production snapshot cross-checks every decoded name/index against sysfs and verifies TUN kind against the sysfs tun_flags marker. A disagreement fails the snapshot closed. This replaces a count-only cross-check with per-interface identity evidence; it remains read-only and does not create or delete links.
