@@ -721,3 +721,8 @@ The exact link decoder now rejects unsupported netlink attribute flags on interf
 ### Service-manager identity precedence
 
 Service-manager detection now treats a recognized PID 1 executable as authoritative. Runtime marker directories are consulted only when PID 1 is the generic `init` process, preventing stale or bind-mounted markers from selecting the wrong recovery integration. A regression test covers conflicting OpenRC PID 1 identity and a stale systemd marker. Detection remains read-only; no init service is installed, started, or modified.
+
+
+### Activation-bound recovery service identity
+
+The recovery supervisor identity now requires its deterministic service name to include the first eight characters of the exact activation UUID. This prevents a valid but unrelated service name from being paired with another activation's manifest and generation. The validation is pure and covered by a mismatch regression test; no service files or services are created.
