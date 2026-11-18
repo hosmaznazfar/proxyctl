@@ -665,7 +665,8 @@ mod tests {
         assert!(parse_link_message(&link_message(2, b"bad/name", None)).is_err());
 
         let mut missing_name = vec![0u8; NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN];
-        missing_name[0..4].copy_from_slice(&(missing_name.len() as u32).to_ne_bytes());
+        let missing_name_length = missing_name.len() as u32;
+        missing_name[0..4].copy_from_slice(&missing_name_length.to_ne_bytes());
         missing_name[4..6].copy_from_slice(&RTM_NEWLINK.to_ne_bytes());
         assert!(parse_link_message(&missing_name).is_err());
     }
