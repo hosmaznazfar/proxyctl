@@ -708,3 +708,7 @@ The link decoder additionally binds each decoded record to an RTM_NEWLINK header
 ### Interrupted NETLINK_ROUTE dump handling
 
 Multipart NETLINK_ROUTE parsing now rejects the kernel's NLM_F_DUMP_INTR indication and checks the optional integer status carried by NLMSG_DONE. Non-zero valid negative errno statuses, positive or overflowing status values, and truncated status payloads fail the snapshot rather than being mistaken for a complete inventory. This prevents a partial route/link dump from being used as authoritative ownership evidence. No mutation is performed.
+
+### Link inventory consistency test boundary
+
+The sysfs/NETLINK_ROUTE reconciliation is now an isolated validation function. It requires equal inventory sizes, unique netlink names, matching name-to-ifindex identities, and matching TUN kind evidence. Focused tests cover the matching case and name, index, kind, and missing-record disagreements without requiring a live network namespace. Production collection still performs both read-only observations and fails closed on any mismatch.
