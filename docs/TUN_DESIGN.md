@@ -796,3 +796,8 @@ The helper that binds a routing policy to the kernel-assigned TUN ifindex no lon
 ### Canonical recovery manifest filename
 
 The recovery-supervisor identity now requires the exact `tun-manifest.json` filename used by `ManifestStore`, not merely any final path component. This aligns service-manager identity validation with the broker and durable-store contract, preventing a syntactically valid supervisor request from naming a different file. Parent-directory ownership and no-follow checks remain the storage layer's responsibility.
+
+
+### Pidfd target identity input validation
+
+Persisted process identities now reject PIDs outside Linux's signed `pid_t` range before the value can be cast into a pidfd syscall argument. Executable paths are also checked lexically before `Path` normalization, rejecting dot segments, parent traversal, control bytes, and non-UTF-8 representations. This prevents malformed recovery state from aliasing another PID or executable path; live pidfd and start-time verification remain required.
