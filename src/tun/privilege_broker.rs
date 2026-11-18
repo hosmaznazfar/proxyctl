@@ -932,7 +932,7 @@ mod tests {
         let response =
             build_socket_mark_broker_response(&request, &snapshot, &snapshot, &[record.clone()])
                 .unwrap();
-        assert_eq!(response.records, [record]);
+        assert_eq!(response.records, [record.clone()]);
 
         let changed = ProcessSocketSnapshot {
             process: ProcessIdentity {
