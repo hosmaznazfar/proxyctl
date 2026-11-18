@@ -630,3 +630,8 @@ Manifest cleanup now validates fingerprints returned by the backend before compa
 ### Kernel interface-name identity decoding
 
 The sysfs interface inventory now rejects names that are not valid UTF-8 instead of converting them lossily. Lossy conversion can make distinct kernel names collapse to the same replacement-character string, which is unsuitable for exact name/ifindex ownership comparisons. The inspector remains read-only and now fails closed when an interface identity cannot be represented exactly by the current string model.
+
+
+### Interface inventory preflight consistency
+
+Kernel-command planning now validates the complete supplied interface snapshot before accepting a free-name preflight or a created-interface identity. Every record must have a valid bounded Linux interface name and non-zero ifindex, and names and indices must both be unique. This also protects callers that construct snapshots outside the live sysfs collector; malformed or ambiguous snapshots cannot be used as ownership evidence.
