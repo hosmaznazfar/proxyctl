@@ -6,6 +6,7 @@
 //! Runtime service-manager discovery is also read-only and distro-agnostic.
 
 pub mod broker_executor;
+pub mod broker_transport;
 pub mod egress_probe;
 pub mod journal;
 pub mod journal_store;
