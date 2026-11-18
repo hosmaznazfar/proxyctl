@@ -511,6 +511,25 @@ mod tests {
     }
 
     #[test]
+    fn every_route_and_rule_apply_boundary_rolls_back_cleanly() {
+        // Exercise each of the four route/rule mutation boundaries. The fake backend
+        // records the write-ahead contract and proves rollback is reverse-safe at each
+        // point without opening a netlink socket or touching host networking.
+        for failed_step in 1..=4 {
+            let mut backend = FakeBackend {
+                fail_add_at: Some(failed_step),
+                ..Default::default()
+            };
+            let error = apply(&transaction(), &mut backend).unwrap_err();
+            assert!(format!("{error:#}").contains("failed"));
+            assert!(backend.resources.is_empty(), "step {failed_step}");
+            assert!(backend.interface.is_none(), "step {failed_step}");
+            assert!(backend.finalized, "step {failed_step}");
+            assert!(!backend.journal_retained, "step {failed_step}");
+        }
+    }
+
+    #[test]
     fn failed_rollback_retains_recovery_journal_and_preserves_resources() {
         let mut backend = FakeBackend {
             fail_add_at: Some(3),
