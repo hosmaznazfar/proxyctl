@@ -741,3 +741,8 @@ The helper remover now refuses symlinks, non-regular paths, and files not owned 
 ### Helper socket cleanup on every exit path
 
 The diagnostic helper now owns its bound Unix socket through an inode-checked guard. The guard removes the socket on normal return and error unwinding, but only when the path still identifies the same socket device/inode and owner captured immediately after binding. If the path is replaced, cleanup leaves the replacement untouched. This closes the stale-socket failure path without broadening the helper's diagnostic-only privilege contract.
+
+### Kernel plan validation boundary
+
+The fixed-argument kernel operation plan now has an explicit validation pass before any future privileged handoff. It requires the guarded TUN creation to be the first operation, rejects empty/control-character arguments, validates the interface deletion guard, rejects duplicate cleanup identities, and ensures every planned route cleanup targets the guarded interface. This remains a plan-integrity check only: it does not execute operations, establish ownership, or replace live fingerprint comparison and durable write-ahead journaling.
+
