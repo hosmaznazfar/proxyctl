@@ -116,8 +116,15 @@ pub fn bind_private_broker_listener(
     );
     let effective_uid = unsafe { libc::geteuid() };
     ensure!(
-        parent_metadata.uid() == effective_uid && parent_metadata.permissions().mode() & 0o077 == 0,
-        "broker socket parent must be caller-owned and inaccessible to group/other users"
+        parent_metadata.uid() == effective_uid,
+        "broker socket parent must be owned by the effective user (owner uid {}, effective uid {})",
+        parent_metadata.uid(),
+        effective_uid
+    );
+    ensure!(
+        parent_metadata.permissions().mode() & 0o077 == 0,
+        "broker socket parent must be inaccessible to group/other users (mode {:o})",
+        parent_metadata.permissions().mode() & 0o777
     );
     ensure!(
         matches!(
@@ -468,6 +475,9 @@ mod tests {
         use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 
         let directory = tempfile::tempdir().unwrap();
+        // Make the test's security precondition explicit instead of relying on the
+        // temporary-directory implementation's default mode.
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
         let socket = directory.path().join("broker.sock");
         let listener = bind_private_broker_listener(&socket).unwrap();
         let metadata = fs::symlink_metadata(&socket).unwrap();
