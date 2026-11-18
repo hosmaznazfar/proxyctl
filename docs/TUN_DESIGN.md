@@ -433,3 +433,8 @@ The Linux process layer now reads the target's four procfs UID values only throu
 #### Bounded broker request stream framing
 
 The broker protocol now has a Unix-stream reader for exactly one length-prefixed socket-mark request. It validates the four-byte length before allocation, caps payloads at 16 KiB, and enforces a single monotonic two-second deadline across header and payload reads to prevent slow-trickle clients. Truncated, oversized, timed-out, malformed, and invalid requests are rejected. The accepted connection must be closed after this one request; pipelining is not supported. This is only a framing primitive: no listener, helper process, response channel, or capability policy is installed, and TUN remains disabled.
+
+
+#### Private Unix broker listener binding
+
+A Linux listener-binding primitive now accepts only an absolute socket path beneath an existing real directory owned by the effective user and inaccessible to group/other users. It refuses symlink parents and any pre-existing or uninspectable socket path, binds without unlinking stale paths, sets the socket to mode 0600, and verifies socket type, owner, mode, and link count before returning the listener. The helper does not create directories or take ownership of existing paths. This is not yet an accept loop or installed service; accepted peers still require SO_PEERCRED authentication, pidfd-bound target ownership checks, bounded one-frame reads, and a narrowly packaged capability policy. TUN activation remains disabled.
