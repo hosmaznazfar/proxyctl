@@ -27,13 +27,19 @@ if [ -e "$MAIN_BINARY" ]; then
 fi
 
 install -D -o root -g root -m 0755 "$SOURCE" "$DESTINATION"
-setcap cap_net_admin=ep "$DESTINATION"
+if ! setcap cap_net_admin=ep "$DESTINATION"; then
+    setcap -r "$DESTINATION" 2>/dev/null || true
+    rm -f "$DESTINATION"
+    echo "Could not apply the required file capability; removed the incomplete helper installation." >&2
+    exit 1
+fi
 ACTUAL=$(getcap "$DESTINATION")
 case "$ACTUAL" in
     "$DESTINATION cap_net_admin=ep") ;;
     *)
-        setcap -r "$DESTINATION" || true
-        echo "Unexpected helper file capabilities: $ACTUAL" >&2
+        setcap -r "$DESTINATION" 2>/dev/null || true
+        rm -f "$DESTINATION"
+        echo "Unexpected helper file capabilities: $ACTUAL; removed the incomplete helper installation." >&2
         exit 1
         ;;
 esac
