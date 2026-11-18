@@ -690,3 +690,12 @@ Do not mark TUN complete or enable activation while any item above remains unche
 - [x] Make manual helper installation fail closed by clearing capabilities and removing the copied helper when capability setup or exact verification fails.
 
 - [x] Require a broker socket-mark response to contain one consistent full mark across all returned records, with a regression test for mixed marks that share the same mask.
+
+
+- [x] Require a journaled interface-creation intent before any route or policy-rule operation.
+- [x] Validate journal state progression: only the final operation may remain an unresolved intent, and cleanup states must form a reverse-order suffix.
+- [x] Validate route journal keys against their declared IP family, address syntax, and prefix-length bounds.
+- [x] Reject recovery observations for unjournaled resources and malformed fingerprints; incomplete observations remain conflicts.
+- [x] Cover reverse-order recovery decisions and prove that one resource fingerprint conflict does not authorize or suppress deletion decisions for unrelated exact matches.
+
+These five items strengthen the offline journal/recovery planner only. They do not implement the concrete rtnetlink/TUN mutator, atomic kernel compare-and-delete, detached service-manager recovery, live readiness collection, or CLI activation integration. TUN activation remains disabled.
