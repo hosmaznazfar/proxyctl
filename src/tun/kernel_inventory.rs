@@ -48,20 +48,7 @@ fn inspect_snapshot_with_interface_path(interface_path: &Path) -> Result<KernelS
     let netlink_links = super::rtnetlink::inspect_links()
         .context("cannot capture exact read-only NETLINK_ROUTE link identities")?;
     snapshot.netlink_interface_count = netlink_links.len();
-    ensure!(
-        snapshot.netlink_interface_count == snapshot.interfaces.len(),
-        "sysfs and NETLINK_ROUTE interface inventories disagree; retry the read-only snapshot"
-    );
-    for (sysfs, netlink) in snapshot.interfaces.iter().zip(&netlink_links) {
-        ensure!(
-            sysfs.name == netlink.name && sysfs.index == netlink.index,
-            "sysfs and NETLINK_ROUTE interface identities disagree; retry the read-only snapshot"
-        );
-        ensure!(
-            sysfs.is_tun == (netlink.kind.as_deref() == Some("tun")),
-            "sysfs and NETLINK_ROUTE TUN link kinds disagree; retry the read-only snapshot"
-        );
-    }
+    validate_link_inventory(&snapshot.interfaces, &netlink_links)?;
     Ok(snapshot)
 }
 
@@ -181,6 +168,39 @@ pub struct KernelSnapshot {
     /// Independent interface-record count from a bounded RTM_GETLINK dump.
     #[cfg(target_os = "linux")]
     pub netlink_interface_count: usize,
+}
+
+#[cfg(target_os = "linux")]
+fn validate_link_inventory(
+    sysfs: &[KernelInterfaceRecord],
+    netlink: &[super::rtnetlink::NetlinkLinkRecord],
+) -> Result<()> {
+    ensure!(
+        sysfs.len() == netlink.len(),
+        "sysfs and NETLINK_ROUTE interface inventories disagree; retry the read-only snapshot"
+    );
+    let by_name = netlink
+        .iter()
+        .map(|link| (link.name.as_str(), link))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    ensure!(
+        by_name.len() == netlink.len(),
+        "NETLINK_ROUTE interface inventory contains duplicate names"
+    );
+    for interface in sysfs {
+        let link = by_name
+            .get(interface.name.as_str())
+            .context("sysfs and NETLINK_ROUTE interface names disagree; retry the read-only snapshot")?;
+        ensure!(
+            interface.index == link.index,
+            "sysfs and NETLINK_ROUTE interface indices disagree; retry the read-only snapshot"
+        );
+        ensure!(
+            interface.is_tun == (link.kind.as_deref() == Some("tun")),
+            "sysfs and NETLINK_ROUTE TUN link kinds disagree; retry the read-only snapshot"
+        );
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -412,6 +432,52 @@ mod tests {
     fn captures_command_output_to_file_without_pipe_backpressure() {
         let output = run_ip_command("printf", &["[{}]\\n"], Duration::from_secs(1)).unwrap();
         assert_eq!(output, b"[{}]\n");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cross_checks_sysfs_and_netlink_interface_identity_and_kind() {
+        use crate::tun::rtnetlink::NetlinkLinkRecord;
+
+        let sysfs = [
+            KernelInterfaceRecord {
+                name: "eth0".into(),
+                index: 2,
+                is_tun: false,
+            },
+            KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                is_tun: true,
+            },
+        ];
+        let netlink = [
+            NetlinkLinkRecord {
+                name: "eth0".into(),
+                index: 2,
+                kind: None,
+            },
+            NetlinkLinkRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                kind: Some("tun".into()),
+            },
+        ];
+        validate_link_inventory(&sysfs, &netlink).unwrap();
+
+        let mut changed_index = netlink.clone();
+        changed_index[1].index = 78;
+        assert!(validate_link_inventory(&sysfs, &changed_index).is_err());
+
+        let mut changed_kind = netlink.clone();
+        changed_kind[1].kind = Some("dummy".into());
+        assert!(validate_link_inventory(&sysfs, &changed_kind).is_err());
+
+        let mut changed_name = netlink.clone();
+        changed_name[1].name = "tun-foreign".into();
+        assert!(validate_link_inventory(&sysfs, &changed_name).is_err());
+
+        assert!(validate_link_inventory(&sysfs, &netlink[..1]).is_err());
     }
 
     #[cfg(target_os = "linux")]
