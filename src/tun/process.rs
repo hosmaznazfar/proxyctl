@@ -56,13 +56,7 @@ impl ProcessIdentity {
         self.validate()?;
         let start_ticks = match read_start_ticks(self.pid) {
             Ok(value) => value,
-            Err(error)
-                if error
-                    .downcast_ref::<std::io::Error>()
-                    .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
-            {
-                return Ok(false);
-            }
+            Err(error) if is_process_gone(&error) => return Ok(false),
             Err(error) => return Err(error),
         };
         if start_ticks != self.start_ticks {
@@ -204,6 +198,14 @@ pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
         "process exited during owner inspection"
     );
     Ok(values[0])
+}
+
+fn is_process_gone(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound)
+    })
 }
 
 fn read_start_ticks(pid: u32) -> Result<u64> {
