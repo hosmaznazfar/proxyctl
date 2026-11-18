@@ -510,6 +510,22 @@ mod tests {
     }
 
     #[test]
+    fn complete_kernel_plan_passes_validation_and_foreign_route_cleanup_fails() {
+        let plan = KernelCommandPlan::from_policy(&policy(), 1000, 1000).unwrap();
+        plan.validate().unwrap();
+
+        let mut foreign_route = plan.clone();
+        if let Some(CleanupTarget::Route(route)) = foreign_route.cleanup.last_mut() {
+            route.interface_name = "eth0".into();
+        }
+        assert!(foreign_route.validate().is_err());
+
+        let mut duplicate_cleanup = plan;
+        duplicate_cleanup.cleanup.push(duplicate_cleanup.cleanup[0].clone());
+        assert!(duplicate_cleanup.validate().is_err());
+    }
+
+    #[test]
     fn interface_cleanup_guard_rejects_missing_or_invalid_identity() {
         let mut guard = InterfaceDeleteGuard {
             interface_name: "tun-proxyctl".into(),
