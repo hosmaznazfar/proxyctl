@@ -582,3 +582,12 @@ Additional fault-injection cases cover the case where both a kernel mutation and
 
 
 The post-mutation fault-injection assertion accounts for all successful earlier mutations plus the one ambiguous failing mutation at each boundary, rather than assuming only one resource exists at every step.
+
+
+### Journal and ambiguous-mutation regression corrections
+
+Journal fixtures now represent valid transaction histories: interface creation precedes routes and rules, completed earlier operations carry their applied fingerprints, and only the final operation may remain an unresolved intent. The route-key validator accepts the canonical `default` destination used by the existing manifest store while continuing to validate explicit CIDR destinations against their declared address family.
+
+Kernel transaction tests now reflect the fail-closed mutation contract: an add error is ambiguous even when a fake backend fails before inserting a resource, so the executor retains the journal and does not attempt rollback or finalization. Recovery fixtures use separate transactions when an interface creation intent is conclusively absent; they do not append routes to an absent interface transaction. The managed activation lifecycle fixture uses a bounded `sleep` process instead of `tail -f`.
+
+These are offline regression and fixture corrections only. They do not implement a production kernel mutator or recovery supervisor, and TUN activation remains disabled.
