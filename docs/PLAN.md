@@ -645,3 +645,6 @@ This remains a tested primitive rather than an active IPC service. A private lis
 
 
 - **Pidfd-bound broker target ownership:** added a Linux procfs reader that obtains all four target UID values only after opening a pidfd and validating the exact process identity. It rejects UID divergence, rechecks identity/liveness around the read, and never trusts an owner UID from the IPC request. This is an offline authorization primitive only; no helper is launched and TUN remains disabled.
+
+
+- **Bounded broker request stream:** added a one-request Unix-stream reader with pre-allocation length validation, a 16 KiB payload ceiling, and a two-second monotonic deadline covering the complete frame. Truncated, oversized, malformed, and slow-trickle requests fail closed. Listener lifecycle, response framing, helper packaging, and readiness integration remain outstanding; TUN is disabled.
