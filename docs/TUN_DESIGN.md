@@ -748,3 +748,7 @@ The fixed-argument kernel operation plan now has an explicit validation pass bef
 
 The plan-validation contract is covered by offline tests for a valid generated plan, foreign-interface route cleanup, and duplicate cleanup identities. These tests validate the plan boundary only; live kernel ownership still requires a concrete backend and exact compare-before-delete.
 
+### Recovery identity path validation
+
+A supervisor identity now accepts only a normalized absolute manifest file path: the path must begin at the root, contain only normal path components, have a filename, and contain no duplicate separators, trailing separator, NUL, or control characters. This prevents ambiguous path spellings from crossing the future service-manager boundary. It does not grant the supervisor authority to open or modify the path; owner, mode, no-follow, and activation-lock checks remain mandatory at the storage layer.
+
