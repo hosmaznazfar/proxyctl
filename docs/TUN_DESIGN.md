@@ -700,3 +700,7 @@ Successful NLMSG_ERROR acknowledgements remain terminal. Non-zero error payloads
 ### Exact NETLINK_ROUTE link identity inventory
 
 The read-only RTM_GETLINK path now decodes each RTM_NEWLINK record into its exact interface name, positive ifindex, and optional IFLA_INFO_KIND. Attribute framing, NUL termination, UTF-8, name bounds, duplicate identity attributes, alignment, and duplicate names/indices are validated. The production snapshot cross-checks every decoded name/index against sysfs and verifies TUN kind against the sysfs tun_flags marker. A disagreement fails the snapshot closed. This replaces a count-only cross-check with per-interface identity evidence; it remains read-only and does not create or delete links.
+
+### NETLINK_ROUTE link-record validation follow-up
+
+The link decoder additionally binds each decoded record to an RTM_NEWLINK header whose declared length exactly matches the received message. It rejects duplicate outer link-info attributes and requires interface-name and link-kind strings to contain exactly one terminal NUL, rather than accepting embedded terminators followed by extra payload. These checks keep malformed kernel records from being promoted to interface ownership evidence. The snapshot remains read-only.
