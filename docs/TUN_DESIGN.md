@@ -731,3 +731,8 @@ The recovery supervisor identity now requires its deterministic service name to 
 ### Privileged helper installation path checks
 
 The helper installer now rejects a symlinked source or destination, requires the system `/usr/libexec` directory to be a real root-owned directory, and refuses group- or world-writable installation directories. These checks protect the set-capability executable from path redirection and unprivileged replacement. The installer still grants only `cap_net_admin=ep` to the separate diagnostic helper and does not install a service or enable TUN activation.
+
+
+### Privileged helper removal checks
+
+The helper remover now refuses symlinks, non-regular paths, and files not owned by root before clearing capabilities or unlinking the helper. This avoids following or deleting an unexpected replacement path during package removal. It does not stop services or alter any other Proxyctl or system executable.
