@@ -336,7 +336,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn broker_peer_credentials_come_from_kernel_socket_metadata() {
-        use std::{os::unix::net::UnixStream, thread};
+        use std::os::unix::net::UnixStream;
 
         let (client, server) = UnixStream::pair().unwrap();
         let expected_uid = unsafe { libc::getuid() };
