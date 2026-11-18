@@ -777,3 +777,5 @@ Kernel command-plan validation parses the TUN owner UID and GID as bounded `u32`
 The post-creation interface check now has a single binding helper: it validates a fresh link inventory, confirms the named device is a TUN interface with a unique non-zero ifindex, and returns a cloned routing policy whose interface and every planned route use that kernel-assigned index. Route planning must use this bound policy, not the constructor's placeholder index.
 
 Transaction-journal route table IDs and rule priorities now require canonical positive `u32` decimal strings. Zero, overflow, and leading-zero aliases are rejected, ensuring one textual resource key maps to one numeric kernel identity during recovery and compare-delete.
+
+Transaction journals and privilege-broker requests now require canonical lowercase hexadecimal activation UUIDs. Uppercase aliases are rejected consistently at both boundaries, and focused tests cover journal and broker validation so a single activation has one textual identity across persisted state and helper requests.
