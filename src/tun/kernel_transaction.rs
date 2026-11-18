@@ -741,4 +741,32 @@ mod tests {
         }
     }
 
+    #[test]
+    fn ambiguous_interface_creation_and_journal_retention_failure_is_reported() {
+        let mut backend = FakeBackend {
+            fail_create_after_intent: true,
+            fail_retain: true,
+            ..Default::default()
+        };
+        let error = apply(&transaction(), &mut backend).unwrap_err();
+        assert!(format!("{error:#}").contains("recovery journal could not be retained"));
+        assert!(!backend.journal_retained);
+        assert!(!backend.finalized);
+        assert!(backend.interface.is_some());
+    }
+
+    #[test]
+    fn ambiguous_route_add_and_journal_retention_failure_is_reported() {
+        let mut backend = FakeBackend {
+            fail_add_after_mutation_at: Some(1),
+            fail_retain: true,
+            ..Default::default()
+        };
+        let error = apply(&transaction(), &mut backend).unwrap_err();
+        assert!(format!("{error:#}").contains("recovery journal could not be retained"));
+        assert!(!backend.journal_retained);
+        assert!(!backend.finalized);
+        assert_eq!(backend.resources.len(), 1);
+    }
+
 }
