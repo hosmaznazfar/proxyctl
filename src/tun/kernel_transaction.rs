@@ -134,14 +134,22 @@ pub fn apply<B: KernelTransactionBackend>(
     let activation_id = &transaction.activation_id;
     let policy = &transaction.policy;
 
-    let interface = backend
-        .create_owned_interface(
-            activation_id,
-            &policy.interface_name,
-            transaction.owner_uid,
-            transaction.owner_gid,
-        )
-        .context("failed to create and journal the owned TUN interface")?;
+    let interface = match backend.create_owned_interface(
+        activation_id,
+        &policy.interface_name,
+        transaction.owner_uid,
+        transaction.owner_gid,
+    ) {
+        Ok(interface) => interface,
+        Err(error) => {
+            backend
+                .retain_recovery_journal(activation_id)
+                .context("interface creation failed and recovery journal could not be retained")?;
+            return Err(error).context(
+                "failed to create and journal the owned TUN interface; recovery journal retained",
+            );
+        }
+    };
 
     if interface.name != policy.interface_name || interface.index == 0 || !interface.is_tun {
         backend.retain_recovery_journal(activation_id).context(
@@ -323,6 +331,7 @@ mod tests {
         empty_fingerprint_at: Option<usize>,
         foreign_on_remove: Option<String>,
         assigned_interface_index: Option<u32>,
+        fail_create_after_intent: bool,
         route_interface_indexes: Vec<u32>,
     }
 
@@ -339,6 +348,10 @@ mod tests {
                 index: self.assigned_interface_index.unwrap_or(77),
                 is_tun: true,
             };
+            if self.fail_create_after_intent {
+                self.interface = Some(interface);
+                anyhow::bail!("injected failure after interface creation intent");
+            }
             self.interface = Some(interface.clone());
             Ok(interface)
         }
@@ -675,4 +688,18 @@ mod tests {
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.0.resources.is_empty());
     }
+    #[test]
+    fn ambiguous_interface_creation_failure_retains_the_journal() {
+        let mut backend = FakeBackend {
+            fail_create_after_intent: true,
+            ..Default::default()
+        };
+        let error = apply(&transaction(), &mut backend).unwrap_err();
+        assert!(format!("{error:#}").contains("recovery journal retained"));
+        assert!(backend.journal_retained);
+        assert!(!backend.finalized);
+        assert!(backend.interface.is_some());
+        assert!(backend.resources.is_empty());
+    }
+
 }
