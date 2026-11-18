@@ -22,6 +22,12 @@ const NLMSG_ERROR: u16 = 2;
 const NLMSG_DONE: u16 = 3;
 const RTM_NEWLINK: u16 = 16;
 const RTM_GETLINK: u16 = 18;
+const IFLA_IFNAME: u16 = 3;
+const IFLA_LINKINFO: u16 = 18;
+const IFLA_INFO_KIND: u16 = 1;
+const IFLA_F_NESTED: u16 = 1 << 15;
+const RTATTR_HEADER_LEN: usize = 4;
+const IFINFO_MESSAGE_LEN: usize = 16;
 const NLM_F_REQUEST: u16 = 0x01;
 const NLM_F_DUMP: u16 = 0x300;
 
@@ -195,6 +201,181 @@ pub fn inspect_link_count() -> Result<usize> {
             .context("link inventory count overflow")?;
     }
     Ok(count)
+}
+
+/// Exact link identity decoded from a kernel RTM_GETLINK dump.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetlinkLinkRecord {
+    pub name: String,
+    pub index: u32,
+    pub kind: Option<String>,
+}
+
+/// Capture and decode every link using a bounded, read-only RTM_GETLINK dump.
+pub fn inspect_links() -> Result<Vec<NetlinkLinkRecord>> {
+    let mut request = vec![0u8; NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN];
+    let request_len = request.len() as u32;
+    request[0..4].copy_from_slice(&request_len.to_ne_bytes());
+    request[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+    request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+
+    let mut socket = RouteNetlink::open()?;
+    let messages = socket.transact(&request, DEFAULT_TIMEOUT)?;
+    let mut links = Vec::with_capacity(messages.len());
+    let mut names = std::collections::BTreeSet::new();
+    let mut indices = std::collections::BTreeSet::new();
+    for message in messages {
+        ensure!(
+            u16::from_ne_bytes(message[4..6].try_into()?) == RTM_NEWLINK,
+            "unexpected message in NETLINK_ROUTE link dump"
+        );
+        let link = parse_link_message(&message)?;
+        ensure!(
+            names.insert(link.name.clone()) && indices.insert(link.index),
+            "NETLINK_ROUTE link dump contains duplicate names or indices"
+        );
+        links.push(link);
+    }
+    links.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(links)
+}
+
+fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
+    ensure!(
+        message.len() >= NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN,
+        "truncated RTM_NEWLINK ifinfomsg"
+    );
+    let payload = &message[NETLINK_HEADER_LEN..];
+    let raw_index = i32::from_ne_bytes(payload[4..8].try_into()?);
+    ensure!(raw_index > 0, "RTM_NEWLINK has a non-positive interface index");
+    let index = u32::try_from(raw_index).context("interface index exceeds u32")?;
+    let attributes = &payload[IFINFO_MESSAGE_LEN..];
+    let mut name = None;
+    let mut kind = None;
+    let mut offset = 0usize;
+    while offset < attributes.len() {
+        ensure!(
+            attributes.len() - offset >= RTATTR_HEADER_LEN,
+            "truncated RTM_NEWLINK attribute header"
+        );
+        let length = u16::from_ne_bytes(attributes[offset..offset + 2].try_into()?) as usize;
+        let raw_kind = u16::from_ne_bytes(attributes[offset + 2..offset + 4].try_into()?);
+        let attribute_kind = raw_kind & !IFLA_F_NESTED;
+        ensure!(
+            length >= RTATTR_HEADER_LEN && length <= attributes.len() - offset,
+            "invalid RTM_NEWLINK attribute length"
+        );
+        let value = &attributes[offset + RTATTR_HEADER_LEN..offset + length];
+        match attribute_kind {
+            IFLA_IFNAME => {
+                ensure!(name.is_none(), "duplicate IFLA_IFNAME attribute");
+                let nul = value
+                    .iter()
+                    .position(|byte| *byte == 0)
+                    .context("IFLA_IFNAME is not NUL terminated")?;
+                ensure!(
+                    nul > 0 && value[nul + 1..].iter().all(|byte| *byte == 0),
+                    "invalid IFLA_IFNAME payload"
+                );
+                let parsed = std::str::from_utf8(&value[..nul])
+                    .context("interface name is not valid UTF-8")?;
+                ensure!(
+                    parsed.len() <= 15
+                        && parsed.bytes().all(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':')
+                        }),
+                    "kernel returned an invalid interface name"
+                );
+                name = Some(parsed.to_owned());
+            }
+            IFLA_LINKINFO => {
+                ensure!(kind.is_none(), "duplicate IFLA_LINKINFO attribute");
+                kind = parse_link_kind(value)?;
+            }
+            _ => {}
+        }
+        let aligned = length
+            .checked_add(3)
+            .map(|value| value & !3)
+            .context("RTM_NEWLINK attribute alignment overflow")?;
+        let remaining = attributes.len() - offset;
+        ensure!(
+            aligned <= remaining || length == remaining,
+            "truncated RTM_NEWLINK attribute padding"
+        );
+        if aligned <= remaining {
+            ensure!(
+                attributes[offset + length..offset + aligned]
+                    .iter()
+                    .all(|byte| *byte == 0),
+                "non-zero RTM_NEWLINK attribute padding"
+            );
+        }
+        offset = offset
+            .checked_add(if aligned <= remaining { aligned } else { length })
+            .context("RTM_NEWLINK attribute offset overflow")?;
+    }
+    let name = name.context("RTM_NEWLINK is missing IFLA_IFNAME")?;
+    Ok(NetlinkLinkRecord { name, index, kind })
+}
+
+fn parse_link_kind(attributes: &[u8]) -> Result<Option<String>> {
+    let mut kind = None;
+    let mut offset = 0usize;
+    while offset < attributes.len() {
+        ensure!(
+            attributes.len() - offset >= RTATTR_HEADER_LEN,
+            "truncated IFLA_LINKINFO attribute header"
+        );
+        let length = u16::from_ne_bytes(attributes[offset..offset + 2].try_into()?) as usize;
+        let attribute_kind =
+            u16::from_ne_bytes(attributes[offset + 2..offset + 4].try_into()?) & !IFLA_F_NESTED;
+        ensure!(
+            length >= RTATTR_HEADER_LEN && length <= attributes.len() - offset,
+            "invalid IFLA_LINKINFO attribute length"
+        );
+        if attribute_kind == IFLA_INFO_KIND {
+            ensure!(kind.is_none(), "duplicate IFLA_INFO_KIND attribute");
+            let value = &attributes[offset + RTATTR_HEADER_LEN..offset + length];
+            let nul = value
+                .iter()
+                .position(|byte| *byte == 0)
+                .context("IFLA_INFO_KIND is not NUL terminated")?;
+            ensure!(
+                nul > 0 && value[nul + 1..].iter().all(|byte| *byte == 0),
+                "invalid IFLA_INFO_KIND payload"
+            );
+            let parsed = std::str::from_utf8(&value[..nul])
+                .context("link kind is not valid UTF-8")?;
+            ensure!(
+                parsed.len() <= 32
+                    && parsed.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
+                "invalid kernel link kind"
+            );
+            kind = Some(parsed.to_owned());
+        }
+        let aligned = length
+            .checked_add(3)
+            .map(|value| value & !3)
+            .context("IFLA_LINKINFO alignment overflow")?;
+        let remaining = attributes.len() - offset;
+        ensure!(
+            aligned <= remaining || length == remaining,
+            "truncated IFLA_LINKINFO padding"
+        );
+        if aligned <= remaining {
+            ensure!(
+                attributes[offset + length..offset + aligned]
+                    .iter()
+                    .all(|byte| *byte == 0),
+                "non-zero IFLA_LINKINFO padding"
+            );
+        }
+        offset = offset
+            .checked_add(if aligned <= remaining { aligned } else { length })
+            .context("IFLA_LINKINFO offset overflow")?;
+    }
+    Ok(kind)
 }
 
 fn validate_alignment_padding(
