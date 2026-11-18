@@ -534,6 +534,57 @@ mod tests {
         bytes
     }
 
+    fn rtattr(kind: u16, value: &[u8]) -> Vec<u8> {
+        let length = RTATTR_HEADER_LEN + value.len();
+        let mut bytes = vec![0u8; (length + 3) & !3];
+        bytes[..2].copy_from_slice(&(length as u16).to_ne_bytes());
+        bytes[2..4].copy_from_slice(&kind.to_ne_bytes());
+        bytes[4..length].copy_from_slice(value);
+        bytes
+    }
+
+    fn link_message(index: i32, name: &[u8], kind: Option<&[u8]>) -> Vec<u8> {
+        let mut payload = vec![0u8; IFINFO_MESSAGE_LEN];
+        payload[4..8].copy_from_slice(&index.to_ne_bytes());
+        let mut name_value = name.to_vec();
+        name_value.push(0);
+        let mut attributes = rtattr(IFLA_IFNAME, &name_value);
+        if let Some(kind) = kind {
+            let kind_attr = rtattr(IFLA_INFO_KIND, kind);
+            let link_info = rtattr(IFLA_LINKINFO, &kind_attr);
+            attributes.extend(link_info);
+        }
+        payload.extend(attributes);
+        message(RTM_NEWLINK, 7, &payload)
+    }
+
+    #[test]
+    fn decodes_exact_link_name_index_and_tun_kind() {
+        let bytes = link_message(77, b"tun-proxyctl", Some(b"tun"));
+        let parsed = parse_link_message(&bytes).unwrap();
+        assert_eq!(
+            parsed,
+            NetlinkLinkRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                kind: Some("tun".into())
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_link_identity_attributes() {
+        assert!(parse_link_message(&link_message(0, b"eth0", None)).is_err());
+        assert!(parse_link_message(&link_message(2, b"", None)).is_err());
+        assert!(parse_link_message(&link_message(2, &[0xff], None)).is_err());
+        assert!(parse_link_message(&link_message(2, b"bad/name", None)).is_err());
+
+        let mut missing_name = vec![0u8; NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN];
+        missing_name[0..4].copy_from_slice(&(missing_name.len() as u32).to_ne_bytes());
+        missing_name[4..6].copy_from_slice(&RTM_NEWLINK.to_ne_bytes());
+        assert!(parse_link_message(&missing_name).is_err());
+    }
+
     #[test]
     fn accepts_matching_ack_as_terminal() {
         let bytes = message(NLMSG_ERROR, 7, &0i32.to_ne_bytes());
