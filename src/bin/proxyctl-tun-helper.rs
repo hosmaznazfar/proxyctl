@@ -5,6 +5,52 @@
 //! The caller owns the private runtime directory and the helper exits after one request.
 
 #[cfg(target_os = "linux")]
+struct OwnedBrokerSocket {
+    listener: std::os::unix::net::UnixListener,
+    path: std::path::PathBuf,
+    device: u64,
+    inode: u64,
+    uid: u32,
+}
+
+#[cfg(target_os = "linux")]
+impl OwnedBrokerSocket {
+    fn bind(path: std::path::PathBuf) -> anyhow::Result<Self> {
+        use anyhow::Context;
+        use std::os::unix::fs::MetadataExt;
+
+        let listener = proxyctl::tun::privilege_broker::bind_private_broker_listener(&path)?;
+        let metadata = std::fs::symlink_metadata(&path)
+            .context("cannot capture private broker socket identity")?;
+        Ok(Self {
+            listener,
+            path,
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            uid: metadata.uid(),
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for OwnedBrokerSocket {
+    fn drop(&mut self) {
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+        // Remove only the exact socket inode this helper created. If another actor
+        // replaced the path, leave that object untouched.
+        if let Ok(metadata) = std::fs::symlink_metadata(&self.path)
+            && metadata.file_type().is_socket()
+            && metadata.dev() == self.device
+            && metadata.ino() == self.inode
+            && metadata.uid() == self.uid
+        {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn main() -> anyhow::Result<()> {
     use anyhow::{Context, ensure};
     use std::{
@@ -77,15 +123,14 @@ fn main() -> anyhow::Result<()> {
         "runtime directory must be a real caller-owned 0700-or-stricter directory"
     );
 
-    let listener = proxyctl::tun::privilege_broker::bind_private_broker_listener(&socket_path)?;
+    let socket = OwnedBrokerSocket::bind(socket_path)?;
     proxyctl::tun::broker_executor::serve_one_socket_mark_request(
-        &listener,
+        &socket.listener,
         ACCEPT_TIMEOUT,
         DIAGNOSTIC_TIMEOUT_PER_DUMP,
         RESPONSE_TIMEOUT,
     )?;
-    drop(listener);
-    std::fs::remove_file(&socket_path).context("cannot remove helper-owned broker socket")?;
+    drop(socket);
     Ok(())
 }
 
