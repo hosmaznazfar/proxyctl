@@ -75,14 +75,16 @@ impl SupervisorIdentity {
             self.service_name == format!("proxyctl-tun-{}", &self.activation_id[..8]),
             "supervisor service identity does not match its activation"
         );
+        let manifest_path = std::path::Path::new(&self.manifest_path);
+        let mut components = manifest_path.components();
         ensure!(
             self.manifest_path.len() <= 4096
                 && self.manifest_path.starts_with('/')
-                && !self.manifest_path.as_bytes().contains(&0)
-                && std::path::Path::new(&self.manifest_path)
-                    .components()
-                    .all(|component| !matches!(component, std::path::Component::ParentDir)),
-            "supervisor manifest path must be a bounded absolute path without parent traversal"
+                && !self.manifest_path.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
+                && matches!(components.next(), Some(std::path::Component::RootDir))
+                && components.all(|component| matches!(component, std::path::Component::Normal(_)))
+                && manifest_path.file_name().is_some(),
+            "supervisor manifest path must be a bounded, normalized absolute file path"
         );
         ensure!(
             self.generation > 0,
