@@ -72,13 +72,8 @@ impl SupervisorIdentity {
             "invalid supervisor activation identity"
         );
         ensure!(
-            self.service_name.starts_with("proxyctl-tun-")
-                && self.service_name.len() <= 64
-                && self
-                    .service_name
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-'),
-            "invalid supervisor service identity"
+            self.service_name == format!("proxyctl-tun-{}", &self.activation_id[..8]),
+            "supervisor service identity does not match its activation"
         );
         ensure!(
             self.manifest_path.len() <= 4096
@@ -140,6 +135,21 @@ mod tests {
                 "detection must not be mistaken for a working recovery backend"
             );
         }
+    }
+
+    #[test]
+    fn supervisor_service_identity_is_bound_to_activation_id() {
+        let identity = SupervisorIdentity {
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            service_name: "proxyctl-tun-12345678".into(),
+            manifest_path: "/private/runtime/tun-manifest.json".into(),
+            generation: 1,
+        };
+        identity.validate().unwrap();
+
+        let mut mismatched = identity;
+        mismatched.service_name = "proxyctl-tun-87654321".into();
+        assert!(mismatched.validate().is_err());
     }
 
     #[test]
