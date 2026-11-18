@@ -318,6 +318,22 @@ pub fn verify_created_interface(
     Ok(())
 }
 
+/// Verify the kernel-created TUN device and return a policy bound to its actual ifindex.
+///
+/// The input policy carries only a non-zero planning placeholder. This function must be called
+/// with a fresh complete link inventory after creation and before route command generation.
+pub fn bind_created_interface(
+    policy: &RoutingPolicyPlan,
+    interfaces: &[KernelInterfaceRecord],
+) -> Result<RoutingPolicyPlan> {
+    verify_created_interface(policy, interfaces)?;
+    let interface = interfaces
+        .iter()
+        .find(|interface| interface.name == policy.interface_name)
+        .expect("verified interface must exist");
+    policy.bind_interface_index(interface.index)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,7 +442,7 @@ mod tests {
         .unwrap();
 
         // Any non-zero kernel-assigned ifindex is accepted; it is bound to the plan later.
-        verify_created_interface(
+        let bound = bind_created_interface(
             &policy,
             &[KernelInterfaceRecord {
                 name: "tun-proxyctl".into(),
@@ -435,6 +451,8 @@ mod tests {
             }],
         )
         .unwrap();
+        assert_eq!(bound.interface_index, 143);
+        assert!(bound.routes.iter().all(|route| route.interface_index == 143));
 
         for invalid in [
             vec![KernelInterfaceRecord {
