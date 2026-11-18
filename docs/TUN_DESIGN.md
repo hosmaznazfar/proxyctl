@@ -546,3 +546,8 @@ Journal validation now enforces the transaction's monotonic state progression: a
 ### Route journal-key validation
 
 Route resource keys now validate their address family, IP address syntax, and prefix-length range instead of accepting any non-whitespace destination string. IPv4 keys require IPv4 addresses and prefixes no greater than 32; IPv6 keys require IPv6 addresses and prefixes no greater than 128. This prevents malformed persisted route identities from reaching a future kernel recovery adapter.
+
+
+### Recovery observation ownership validation
+
+The pure recovery planner now rejects observations for resource keys not present in the transaction journal and rejects empty, oversized, or control-character fingerprints. Missing observations remain conservative conflicts rather than being treated as absence. This narrows the accepted evidence to the exact journal-owned resource set and still performs no mutation.
