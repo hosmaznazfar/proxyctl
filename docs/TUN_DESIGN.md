@@ -526,3 +526,8 @@ The controller-side socket-mark probe now requires the supplied private runtime 
 ### Helper installation rollback
 
 The manual helper installer now removes the copied helper if applying `cap_net_admin=ep` fails or if `getcap` reports any capability set other than the exact expected value. It attempts to clear file capabilities before removal and never leaves a knowingly incomplete helper installation behind. This does not install the helper or authorize its use; package integration and security review remain open.
+
+
+### Consistent socket-mark response records
+
+The broker response validator now requires every returned peer-matched socket record to carry the same full observed mark, not merely a value that matches the requested mask. This prevents a single response from mixing different mark values that happen to select the same policy rule. The readiness bridge still validates the response against the exact requested peer, transport, mark, and mask. Socket diagnostics remain supporting evidence rather than proof of proxied end-to-end traffic.
