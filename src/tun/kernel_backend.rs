@@ -77,8 +77,8 @@ impl KernelCommandPlan {
     pub fn validate(&self) -> Result<()> {
         self.interface_cleanup.validate()?;
         anyhow::ensure!(
-            !self.apply.is_empty(),
-            "kernel plan has no interface creation step"
+            self.apply.len() >= 2,
+            "kernel plan must include interface creation and link-up steps"
         );
         let creation = &self.apply[0].arguments;
         anyhow::ensure!(
