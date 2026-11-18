@@ -269,7 +269,7 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
         );
         let length = u16::from_ne_bytes(attributes[offset..offset + 2].try_into()?) as usize;
         let raw_kind = u16::from_ne_bytes(attributes[offset + 2..offset + 4].try_into()?);
-        let attribute_kind = raw_kind & !IFLA_F_NESTED;
+        let attribute_kind = raw_kind & !(IFLA_F_NESTED | IFLA_F_NET_BYTEORDER);
         ensure!(
             length >= RTATTR_HEADER_LEN && length <= attributes.len() - offset,
             "invalid RTM_NEWLINK attribute length"
@@ -346,8 +346,8 @@ fn parse_link_kind(attributes: &[u8]) -> Result<Option<String>> {
             "truncated IFLA_LINKINFO attribute header"
         );
         let length = u16::from_ne_bytes(attributes[offset..offset + 2].try_into()?) as usize;
-        let attribute_kind =
-            u16::from_ne_bytes(attributes[offset + 2..offset + 4].try_into()?) & !IFLA_F_NESTED;
+        let raw_kind = u16::from_ne_bytes(attributes[offset + 2..offset + 4].try_into()?);
+        let attribute_kind = raw_kind & !(IFLA_F_NESTED | IFLA_F_NET_BYTEORDER);
         ensure!(
             length >= RTATTR_HEADER_LEN && length <= attributes.len() - offset,
             "invalid IFLA_LINKINFO attribute length"
