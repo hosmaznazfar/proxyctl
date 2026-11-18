@@ -491,7 +491,8 @@ The broker request/response path now has isolated server-side and client-side tr
 - [ ] Implement detached recovery supervisors and service-manager backends. Init-system detection and lifecycle state transitions are not a recovery service; all backend kinds currently report unimplemented.
 - [ ] Connect runtime mark allocation, supported core-specific outbound marking, broker-observed socket marks, and physical-egress route verification into a single readiness decision. A matching diagnostic socket alone is not end-to-end readiness.
 - [ ] Integrate the kernel transaction, broker, supervisor, core lifecycle, and readiness gate into the CLI while preserving the existing unconditional TUN activation block until every prerequisite is present.
-- [ ] Add end-to-end offline fault-injection coverage for crashes at every journal boundary, controller/core termination, broker failure, partial kernel apply, rollback conflicts, and recovery restart.
+- [x] Extend fake-backend transaction coverage across each of the four route/rule apply failure boundaries, asserting reverse rollback, interface removal, and journal finalization without host kernel access.
+- [ ] Add end-to-end offline fault-injection coverage for process crashes at every durable journal boundary, controller/core termination, broker failure, partial kernel apply, rollback conflicts, and recovery restart.
 - [ ] Complete local formatting, Clippy, tests, release build, and native adapter validation. These checks have not been run for this change set.
 - [ ] Only after all offline gates pass, perform separately approved controlled real-network validation. No real TUN activation is authorized by this implementation task.
 
