@@ -629,8 +629,7 @@ mod tests {
         let link_info_offset = NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN
             + rtattr(IFLA_IFNAME, b"tun0\0").len();
         let nested_kind_offset = link_info_offset + RTATTR_HEADER_LEN;
-        let info_kind_offset = nested_kind_offset + RTATTR_HEADER_LEN;
-        flagged_kind[info_kind_offset + 2..info_kind_offset + 4]
+        flagged_kind[nested_kind_offset + 2..nested_kind_offset + 4]
             .copy_from_slice(&(IFLA_INFO_KIND | IFLA_F_NET_BYTEORDER).to_ne_bytes());
         assert!(parse_link_message(&flagged_kind).is_err());
     }
