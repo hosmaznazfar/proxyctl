@@ -249,7 +249,7 @@ fn valid_journal_activation_id(value: &str) -> bool {
             if [8, 13, 18, 23].contains(&index) {
                 byte == b'-'
             } else {
-                byte.is_ascii_hexdigit()
+                byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
             }
         })
 }
