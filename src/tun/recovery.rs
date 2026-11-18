@@ -66,7 +66,7 @@ impl SupervisorIdentity {
                     if [8, 13, 18, 23].contains(&index) {
                         byte == b'-'
                     } else {
-                        byte.is_ascii_hexdigit()
+                        byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
                     }
                 }),
             "invalid supervisor activation identity"
@@ -178,6 +178,10 @@ mod tests {
             generation: 1,
         };
         valid.validate().unwrap();
+        let mut invalid = valid.clone();
+        invalid.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
+        invalid.service_name = "proxyctl-tun-12345678".into();
+        assert!(invalid.validate().is_err());
         let mut invalid = valid.clone();
         invalid.service_name = "proxyctl-tun-x;stop".into();
         assert!(invalid.validate().is_err());
