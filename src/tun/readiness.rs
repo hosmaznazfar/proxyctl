@@ -34,6 +34,26 @@ pub struct ReadinessExpectation<'a> {
     pub core_mark_mask: u32,
 }
 
+/// Verify readiness using the actual broker response rather than a caller-supplied mark.
+///
+/// The remaining evidence fields must come from independent live probes. This function
+/// binds the diagnostic result to the expected mark policy before invoking the common gate.
+#[cfg(target_os = "linux")]
+pub fn verify_readiness_with_socket_mark(
+    expected: &ReadinessExpectation<'_>,
+    evidence: &ReadinessEvidence,
+    response: &super::privilege_broker::SocketMarkBrokerResponse,
+) -> Result<()> {
+    let observed_mark = super::socket_mark_probe::observed_proxy_outbound_mark(
+        response,
+        expected.core_mark,
+        expected.core_mark_mask,
+    )?;
+    let mut complete_evidence = evidence.clone();
+    complete_evidence.core_outbound_socket_mark = Some(observed_mark);
+    verify_readiness(expected, &complete_evidence)
+}
+
 pub fn verify_readiness(
     expected: &ReadinessExpectation<'_>,
     evidence: &ReadinessEvidence,
@@ -124,6 +144,39 @@ mod tests {
             dns_unchanged: true,
             firewall_unchanged: true,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn readiness_can_only_accept_a_mark_from_a_valid_broker_response() {
+        use crate::tun::{
+            privilege_broker::{BROKER_REQUEST_VERSION, BrokerSocketTransport, SocketMarkBrokerResponse},
+            socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord},
+        };
+        use std::net::{IpAddr, Ipv4Addr};
+        let response = SocketMarkBrokerResponse {
+            version: BROKER_REQUEST_VERSION,
+            expected_peer: "198.51.100.8:443".parse().unwrap(),
+            transport: BrokerSocketTransport::Tcp,
+            expected_mark: 0x42,
+            mark_mask: 0xff,
+            records: vec![SocketDiagnosticRecord {
+                family: SocketAddressFamily::Ipv4,
+                state: 1,
+                local_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
+                local_port: 40000,
+                remote_address: IpAddr::V4(Ipv4Addr::new(198, 51, 100, 8)),
+                remote_port: 443,
+                inode: 9,
+                mark: 0x42,
+            }],
+        };
+        let mut evidence = healthy();
+        evidence.core_outbound_socket_mark = None;
+        verify_readiness_with_socket_mark(&expected(), &evidence, &response).unwrap();
+        let mut empty = response;
+        empty.records.clear();
+        assert!(verify_readiness_with_socket_mark(&expected(), &evidence, &empty).is_err());
     }
 
     #[test]
