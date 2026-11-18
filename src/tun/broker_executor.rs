@@ -15,8 +15,10 @@ use std::time::Duration;
 use super::{
     privilege_broker::{
         BrokerPeerCredentials, SocketMarkBrokerRequest, SocketMarkBrokerResponse,
-        authorize_socket_mark_request_for_process, build_socket_mark_broker_response,
+        accept_socket_mark_request, authorize_socket_mark_request_for_process,
+        build_socket_mark_broker_response,
     },
+    broker_transport::write_socket_mark_response,
     process::{ProcessHandle, ProcessIdentity},
     socket_diag_collector::{MAX_DUMP_TIMEOUT, collect_all},
     socket_diag_linux::LinuxSocketDiagnosticIo,
@@ -80,6 +82,31 @@ pub fn collect_authorized_socket_mark_response(
         .collect::<Vec<_>>();
     build_socket_mark_broker_response(request, &before, &after, &records)
         .context("cannot assemble stable exact-peer socket-mark response")
+}
+
+/// Accept, authenticate, execute, and answer exactly one broker request.
+///
+/// This is the complete one-connection server boundary for a separately launched helper.
+/// It intentionally does not spawn the helper, change capabilities, or install a service.
+/// On any error the connection is dropped without sending partial or success-shaped output.
+#[cfg(target_os = "linux")]
+pub fn serve_one_socket_mark_request(
+    listener: &std::os::unix::net::UnixListener,
+    accept_timeout: Duration,
+    diagnostic_timeout_per_dump: Duration,
+    response_timeout: Duration,
+) -> Result<()> {
+    use std::os::unix::net::Shutdown;
+
+    let (mut stream, peer, request) =
+        accept_socket_mark_request(listener, accept_timeout)?;
+    let response =
+        collect_authorized_socket_mark_response(&request, peer, diagnostic_timeout_per_dump)?;
+    write_socket_mark_response(&mut stream, &response, response_timeout)?;
+    stream
+        .shutdown(Shutdown::Write)
+        .context("cannot close broker response write side")?;
+    Ok(())
 }
 
 /// A testable identity check for callers that already own a pidfd handle.
