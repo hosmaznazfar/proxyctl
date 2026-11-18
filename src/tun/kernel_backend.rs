@@ -565,6 +565,14 @@ mod tests {
         }
         assert!(stale_interface_index.validate().is_err());
 
+        let mut extra_apply = plan.clone();
+        extra_apply.apply.push(IpCommand::new(["route", "add", "default"]));
+        assert!(extra_apply.validate().is_err());
+
+        let mut altered_apply = plan.clone();
+        altered_apply.apply[2].arguments.push("onlink".into());
+        assert!(altered_apply.validate().is_err());
+
         let mut duplicate_cleanup = plan;
         let first_cleanup = duplicate_cleanup.cleanup[0].clone();
         duplicate_cleanup.cleanup.push(first_cleanup);
