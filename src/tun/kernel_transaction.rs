@@ -63,7 +63,7 @@ fn valid_activation_id(value: &str) -> bool {
             if [8, 13, 18, 23].contains(&index) {
                 byte == b'-'
             } else {
-                byte.is_ascii_hexdigit()
+                byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
             }
         })
 }
@@ -483,6 +483,13 @@ mod tests {
             owner_uid: 1000,
             owner_gid: 1000,
         }
+    }
+
+    #[test]
+    fn transaction_activation_id_requires_canonical_lowercase_hex() {
+        let mut transaction = transaction();
+        transaction.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
+        assert!(transaction.validate().is_err());
     }
 
     #[test]
