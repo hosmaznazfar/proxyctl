@@ -47,6 +47,10 @@ fn inspect_snapshot_with_interface_path(interface_path: &Path) -> Result<KernelS
     snapshot.interfaces = inspect_interfaces(interface_path)?;
     snapshot.netlink_interface_count = super::rtnetlink::inspect_link_count()
         .context("cannot capture the read-only NETLINK_ROUTE interface count")?;
+    ensure!(
+        snapshot.netlink_interface_count == snapshot.interfaces.len(),
+        "sysfs and NETLINK_ROUTE interface inventories disagree; retry the read-only snapshot"
+    );
     Ok(snapshot)
 }
 
