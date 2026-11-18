@@ -53,6 +53,13 @@ impl KernelTransaction {
     }
 }
 
+
+fn valid_backend_fingerprint(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 16 * 1024
+        && !value.chars().any(char::is_control)
+}
+
 fn valid_activation_id(value: &str) -> bool {
     value.len() == 36
         && value.bytes().enumerate().all(|(index, byte)| {
@@ -165,9 +172,9 @@ pub fn apply<B: KernelTransactionBackend>(
             let fingerprint = backend
                 .add_owned_route(activation_id, route)
                 .context("failed to add and journal an owned TUN route")?;
-            if fingerprint.is_empty() {
+            if !valid_backend_fingerprint(&fingerprint) {
                 invalid_fingerprint = true;
-                anyhow::bail!("route backend returned an empty fingerprint");
+                anyhow::bail!("route backend returned an invalid fingerprint");
             }
             resources.push(super::ownership::OwnedResource {
                 key: route_key(route),
@@ -178,9 +185,9 @@ pub fn apply<B: KernelTransactionBackend>(
             let fingerprint = backend
                 .add_owned_rule(activation_id, rule)
                 .context("failed to add and journal an owned policy rule")?;
-            if fingerprint.is_empty() {
+            if !valid_backend_fingerprint(&fingerprint) {
                 invalid_fingerprint = true;
-                anyhow::bail!("rule backend returned an empty fingerprint");
+                anyhow::bail!("rule backend returned an invalid fingerprint");
             }
             resources.push(super::ownership::OwnedResource {
                 key: rule_key(rule),
