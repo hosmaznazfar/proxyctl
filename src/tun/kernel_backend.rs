@@ -69,6 +69,49 @@ pub struct KernelCommandPlan {
 }
 
 impl KernelCommandPlan {
+    /// Validate the complete plan before it crosses any future privileged boundary.
+    ///
+    /// This checks that every command is a fixed, non-empty argument vector and that
+    /// cleanup identities are unique and refer to the same interface as the guard.
+    /// It does not authorize execution or prove kernel ownership.
+    pub fn validate(&self) -> Result<()> {
+        self.interface_cleanup.validate()?;
+        anyhow::ensure!(!self.apply.is_empty(), "kernel plan has no interface creation step");
+        anyhow::ensure!(
+            self.apply[0].arguments.starts_with(&[
+                "tuntap".to_owned(), "add".to_owned(), "dev".to_owned(),
+                self.interface_cleanup.interface_name.clone(), "mode".to_owned(),
+                "tun".to_owned()
+            ]),
+            "kernel plan must begin by creating its guarded TUN interface"
+        );
+        anyhow::ensure!(
+            self.apply.iter().all(|command| {
+                !command.arguments.is_empty()
+                    && command.arguments.iter().all(|argument| {
+                        !argument.is_empty()
+                            && !argument.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
+                    })
+            }),
+            "kernel plan contains an empty or unsafe argument"
+        );
+        let mut cleanup_keys = std::collections::BTreeSet::new();
+        for target in &self.cleanup {
+            let key = match target {
+                CleanupTarget::Rule(rule) => format!("rule:{rule:?}"),
+                CleanupTarget::Route(route) => {
+                    anyhow::ensure!(
+                        route.interface_name == self.interface_cleanup.interface_name,
+                        "cleanup route does not belong to the guarded TUN interface"
+                    );
+                    format!("route:{route:?}")
+                }
+            };
+            anyhow::ensure!(cleanup_keys.insert(key), "kernel plan contains duplicate cleanup identities");
+        }
+        Ok(())
+    }
+
     /// Build a fixed-argument plan from a validated policy. Commands are not executed.
     pub fn from_policy(policy: &RoutingPolicyPlan, owner_uid: u32, owner_gid: u32) -> Result<Self> {
         policy.validate()?;
