@@ -699,3 +699,12 @@ Do not mark TUN complete or enable activation while any item above remains unche
 - [x] Cover reverse-order recovery decisions and prove that one resource fingerprint conflict does not authorize or suppress deletion decisions for unrelated exact matches.
 
 These five items strengthen the offline journal/recovery planner only. They do not implement the concrete rtnetlink/TUN mutator, atomic kernel compare-and-delete, detached service-manager recovery, live readiness collection, or CLI activation integration. TUN activation remains disabled.
+
+
+- [x] Validate route/rule fingerprints immediately at the transaction boundary, including size and control-character limits.
+- [x] Retain the write-ahead journal when interface creation returns an ambiguous error.
+- [x] Retain the journal and stop without rollback/finalization when a route or policy-rule add returns an ambiguous post-mutation error.
+- [x] Fault-inject failures after each route/rule mutation and assert that ambiguous resources and their journal are preserved.
+- [x] Cover failure to retain the recovery journal itself; surface the hard failure without claiming cleanup or success.
+
+These transaction-executor safeguards remain fake-backend/offline only. No production rtnetlink/TUN mutator or detached recovery supervisor is present, and TUN activation remains disabled.
