@@ -8,8 +8,12 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
+    net::SocketAddr,
     path::{Component, Path, PathBuf},
 };
+
+#[cfg(target_os = "linux")]
+use super::process::ProcessIdentity;
 
 pub const BROKER_REQUEST_VERSION: u32 = 1;
 
@@ -76,6 +80,98 @@ fn is_executable_file(path: &Path) -> bool {
 #[cfg(not(unix))]
 fn is_executable_file(_path: &Path) -> bool {
     false
+}
+
+
+/// Maximum serialized socket-mark broker request size (16 KiB).
+pub const MAX_SOCKET_MARK_REQUEST_BYTES: usize = 16 * 1024;
+
+/// Transport requested for the narrowly scoped socket-mark diagnostic operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrokerSocketTransport {
+    Tcp,
+    Udp,
+}
+
+/// Read-only request to inspect marked sockets owned by one exact managed process.
+///
+/// The future helper must authenticate the caller using its IPC peer credentials, require
+/// the target process to belong to that caller, pin it with pidfd, and recheck identity
+/// before and after collection. The request grants no authority to inspect arbitrary
+/// processes or mutate networking.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SocketMarkBrokerRequest {
+    pub version: u32,
+    pub process: ProcessIdentity,
+    pub expected_peer: SocketAddr,
+    pub transport: BrokerSocketTransport,
+    pub expected_mark: u32,
+    pub mark_mask: u32,
+}
+
+#[cfg(target_os = "linux")]
+impl SocketMarkBrokerRequest {
+    pub fn validate(&self) -> Result<()> {
+        ensure!(
+            self.version == BROKER_REQUEST_VERSION,
+            "unsupported socket-mark broker request version"
+        );
+        self.process.validate()?;
+        ensure!(
+            !self.expected_peer.ip().is_unspecified()
+                && !self.expected_peer.ip().is_multicast()
+                && self.expected_peer.port() != 0,
+            "socket-mark broker peer must be a unicast endpoint with a non-zero port"
+        );
+        ensure!(
+            self.expected_mark > 0
+                && self.expected_mark <= i32::MAX as u32
+                && self.mark_mask > 0
+                && self.expected_mark & !self.mark_mask == 0,
+            "socket-mark broker policy is invalid"
+        );
+        Ok(())
+    }
+}
+
+/// Encode one length-prefixed JSON request for a future private broker channel.
+///
+/// The frame is bounded and contains no command string, executable path, or arbitrary
+/// kernel operation. This codec does not open IPC sockets or execute a helper.
+#[cfg(target_os = "linux")]
+pub fn encode_socket_mark_request(request: &SocketMarkBrokerRequest) -> Result<Vec<u8>> {
+    request.validate()?;
+    let payload = serde_json::to_vec(request)?;
+    ensure!(
+        !payload.is_empty() && payload.len() <= MAX_SOCKET_MARK_REQUEST_BYTES,
+        "socket-mark broker request exceeds the frame limit"
+    );
+    let length = u32::try_from(payload.len())?;
+    let mut frame = Vec::with_capacity(4 + payload.len());
+    frame.extend_from_slice(&length.to_le_bytes());
+    frame.extend_from_slice(&payload);
+    Ok(frame)
+}
+
+/// Decode exactly one complete request frame; trailing bytes and oversized frames fail closed.
+#[cfg(target_os = "linux")]
+pub fn decode_socket_mark_request(frame: &[u8]) -> Result<SocketMarkBrokerRequest> {
+    ensure!(frame.len() >= 4, "socket-mark broker frame header is truncated");
+    let length = u32::from_le_bytes(frame[..4].try_into()?) as usize;
+    ensure!(
+        length > 0 && length <= MAX_SOCKET_MARK_REQUEST_BYTES,
+        "socket-mark broker frame length is invalid"
+    );
+    ensure!(
+        frame.len() == 4 + length,
+        "socket-mark broker frame length does not match its payload"
+    );
+    let request: SocketMarkBrokerRequest = serde_json::from_slice(&frame[4..])?;
+    request.validate()?;
+    Ok(request)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -167,6 +263,92 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::{ffi::OsString, fs};
+
+
+    #[cfg(target_os = "linux")]
+    fn socket_mark_request() -> SocketMarkBrokerRequest {
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+        SocketMarkBrokerRequest {
+            version: BROKER_REQUEST_VERSION,
+            process: ProcessIdentity {
+                pid: 4242,
+                start_ticks: 987654,
+                executable: "/opt/proxyctl/cores/sing-box".into(),
+            },
+            expected_peer: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(198, 51, 100, 8)), 443),
+            transport: BrokerSocketTransport::Tcp,
+            expected_mark: 0x142,
+            mark_mask: 0xffff,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn socket_mark_request_round_trips_in_one_bounded_frame() {
+        let request = socket_mark_request();
+        let frame = encode_socket_mark_request(&request).unwrap();
+        assert_eq!(
+            decode_socket_mark_request(&frame).unwrap(),
+            request
+        );
+        assert_eq!(
+            u32::from_le_bytes(frame[..4].try_into().unwrap()) as usize,
+            frame.len() - 4
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn socket_mark_request_rejects_invalid_identity_peer_and_mark_policy() {
+        let mut invalid = socket_mark_request();
+        invalid.process.pid = 0;
+        assert!(invalid.validate().is_err());
+
+        let mut invalid = socket_mark_request();
+        invalid.expected_peer.set_port(0);
+        assert!(invalid.validate().is_err());
+
+        let mut invalid = socket_mark_request();
+        invalid.expected_mark = 0;
+        assert!(invalid.validate().is_err());
+
+        let mut invalid = socket_mark_request();
+        invalid.expected_mark = 0x100;
+        invalid.mark_mask = 0x0f;
+        assert!(invalid.validate().is_err());
+
+        let mut invalid = socket_mark_request();
+        invalid.expected_mark = i32::MAX as u32 + 1;
+        assert!(invalid.validate().is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn socket_mark_frame_rejects_truncation_oversize_and_trailing_data() {
+        let frame = encode_socket_mark_request(&socket_mark_request()).unwrap();
+        assert!(decode_socket_mark_request(&frame[..3]).is_err());
+
+        let mut truncated = frame.clone();
+        truncated.pop();
+        assert!(decode_socket_mark_request(&truncated).is_err());
+
+        let mut trailing = frame.clone();
+        trailing.push(0);
+        assert!(decode_socket_mark_request(&trailing).is_err());
+
+        let oversized = (MAX_SOCKET_MARK_REQUEST_BYTES as u32 + 1).to_le_bytes();
+        assert!(decode_socket_mark_request(&oversized).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn socket_mark_frame_rejects_unknown_request_fields() {
+        let payload = br#"{"version":1,"process":{"pid":4242,"start_ticks":987654,"executable":"/opt/proxyctl/cores/sing-box"},"expected_peer":"198.51.100.8:443","transport":"tcp","expected_mark":322,"mark_mask":65535,"command":"ip route add"}"#;
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        frame.extend_from_slice(payload);
+        assert!(decode_socket_mark_request(&frame).is_err());
+    }
 
     fn request() -> BrokerRequest {
         BrokerRequest {
