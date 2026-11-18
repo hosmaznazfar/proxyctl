@@ -448,3 +448,8 @@ A request authorization entry point now binds the serialized process identity to
 #### Bounded socket-mark broker response protocol
 
 Socket diagnostic records now support strict serde serialization, and the broker defines a versioned response carrying only the requested peer/transport/mark policy plus candidate records. Response validation caps the collection at 1,024 records and the framed JSON payload at 256 KiB, rejects unknown fields, duplicate/zero inodes, wrong address family, peer, port, mark, invalid local ports, and non-established TCP records. The decoder requires exactly one complete frame. These are transport/data-integrity guarantees only; a response is not proof of successful proxied traffic, and no helper or privileged collector is running.
+
+
+#### Stable process-to-peer response assembly
+
+A response assembly function now composes the existing before/after socket-inode reconciliation with exact configured peer, transport, and masked-mark classification. It requires both snapshots to match the request's complete process identity, rejects socket-set races and unrelated inodes, and validates the resulting bounded response before serialization. Tests use synthetic records and identities only. This is still offline candidate assembly: it does not execute netlink collection, establish successful traffic, populate readiness, or enable TUN.
