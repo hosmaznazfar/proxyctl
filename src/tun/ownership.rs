@@ -109,7 +109,7 @@ fn valid_activation_id(value: &str) -> bool {
             if [8, 13, 18, 23].contains(&index) {
                 byte == b'-'
             } else {
-                byte.is_ascii_hexdigit()
+                byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
             }
         })
 }
@@ -347,6 +347,13 @@ mod tests {
         let report = cleanup(&manifest(), &mut backend).unwrap();
         assert!(report.removed.len() <= 2);
         assert!(backend.resources.contains_key("foreign:docker-route"));
+    }
+
+    #[test]
+    fn manifest_activation_id_requires_canonical_lowercase_hex() {
+        let mut invalid = manifest();
+        invalid.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
+        assert!(invalid.validate().is_err());
     }
 
     #[test]
