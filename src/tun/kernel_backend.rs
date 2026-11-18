@@ -521,7 +521,8 @@ mod tests {
         assert!(foreign_route.validate().is_err());
 
         let mut duplicate_cleanup = plan;
-        duplicate_cleanup.cleanup.push(duplicate_cleanup.cleanup[0].clone());
+        let first_cleanup = duplicate_cleanup.cleanup[0].clone();
+        duplicate_cleanup.cleanup.push(first_cleanup);
         assert!(duplicate_cleanup.validate().is_err());
     }
 
