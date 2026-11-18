@@ -28,6 +28,18 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             command: TunCommand::Status,
         } => {
             crate::tun::inspect()?.print();
+            let manager = crate::tun::service_manager::ServiceManager::detect();
+            let backend = crate::tun::recovery::RecoveryBackendKind::for_manager(manager);
+            println!("Init/service manager: {}", manager.as_str());
+            println!(
+                "Crash-recovery supervisor: {}",
+                if backend.is_implemented() {
+                    format!("{} (implemented)", backend.as_str())
+                } else {
+                    format!("{} (not implemented)", backend.as_str())
+                }
+            );
+            println!("TUN activation: disabled until the privileged kernel backend, independent recovery, and readiness gates are implemented.");
             return Ok(());
         }
         Command::Cores => {
