@@ -138,6 +138,41 @@ pub fn observe_proxy_outbound_mark(
 }
 
 #[cfg(target_os = "linux")]
+pub fn observed_proxy_outbound_mark(
+    response: &SocketMarkBrokerResponse,
+    expected_mark: u32,
+    mark_mask: u32,
+) -> Result<u32> {
+    ensure!(
+        expected_mark != 0
+            && expected_mark <= i32::MAX as u32
+            && mark_mask != 0
+            && expected_mark & !mark_mask == 0,
+        "expected proxy outbound mark policy is invalid"
+    );
+    ensure!(
+        !response.records.is_empty(),
+        "no process-owned proxy outbound socket with the expected peer and mark was observed"
+    );
+    let mut observed = None;
+    for record in &response.records {
+        ensure!(
+            record.mark & mark_mask == expected_mark,
+            "observed proxy outbound socket mark does not match the configured policy"
+        );
+        if let Some(previous) = observed {
+            ensure!(
+                previous == record.mark,
+                "proxy outbound sockets have inconsistent observed marks"
+            );
+        } else {
+            observed = Some(record.mark);
+        }
+    }
+    observed.context("socket-mark response did not contain a mark")
+}
+
+#[cfg(target_os = "linux")]
 fn validate_activation_id(value: &str) -> Result<()> {
     ensure!(
         value.len() == 36
@@ -210,6 +245,39 @@ mod tests {
         for invalid in ["", "../helper", "12345678-1234-1234-1234-123456789abc;id"] {
             assert!(validate_activation_id(invalid).is_err());
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn readiness_mark_requires_a_matching_nonempty_consistent_observation() {
+        use crate::tun::{
+            privilege_broker::{BROKER_REQUEST_VERSION, BrokerSocketTransport, SocketMarkBrokerResponse},
+            socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord},
+        };
+        use std::net::{IpAddr, Ipv4Addr};
+        let response = SocketMarkBrokerResponse {
+            version: BROKER_REQUEST_VERSION,
+            expected_peer: "198.51.100.8:443".parse().unwrap(),
+            transport: BrokerSocketTransport::Tcp,
+            expected_mark: 0x42,
+            mark_mask: 0xff,
+            records: vec![SocketDiagnosticRecord {
+                family: SocketAddressFamily::Ipv4,
+                state: 1,
+                local_address: IpAddr::V4(Ipv4Addr::LOCALHOST),
+                local_port: 40000,
+                remote_address: IpAddr::V4(Ipv4Addr::new(198, 51, 100, 8)),
+                remote_port: 443,
+                inode: 7,
+                mark: 0x42,
+            }],
+        };
+        assert_eq!(observed_proxy_outbound_mark(&response, 0x42, 0xff).unwrap(), 0x42);
+        assert!(observed_proxy_outbound_mark(&response, 0x43, 0xff).is_err());
+        assert!(observed_proxy_outbound_mark(&response, 0, 0xff).is_err());
+        let mut empty = response.clone();
+        empty.records.clear();
+        assert!(observed_proxy_outbound_mark(&empty, 0x42, 0xff).is_err());
     }
 
     #[cfg(target_os = "linux")]
