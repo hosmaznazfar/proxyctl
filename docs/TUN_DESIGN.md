@@ -610,3 +610,8 @@ The route journal key uses a colon separator before the destination, so an IPv6 
 ### IPv6 canonicalization follow-up
 
 The compressed-IPv6 route-key validator now compares the parsed address against the restored, normalized destination text. This is important because the key separator consumes one colon before parsing: comparing against the unnormalized suffix incorrectly rejects valid leading-compression forms such as `::/0` and `::1/128`. The family and prefix bounds remain enforced, and the parser still rejects non-canonical or cross-family addresses. This is a pure journal-validation correction; it adds no kernel mutation or activation capability.
+
+
+### Kernel inventory record-shape validation
+
+The read-only route/rule inventory parser now requires every JSON array entry to be an object before interpreting or retaining it. Scalars, nulls, and nested arrays are rejected rather than being accepted as incomplete route records with an implicit main-table identity. This prevents malformed command output from becoming apparently valid inventory evidence. No command behavior or kernel state is changed.
