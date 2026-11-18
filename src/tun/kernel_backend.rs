@@ -162,6 +162,27 @@ fn route_add(route: &PlannedRoute) -> Result<IpCommand> {
     ]))
 }
 
+fn validate_interface_inventory(interfaces: &[KernelInterfaceRecord]) -> Result<()> {
+    let mut names = std::collections::BTreeSet::new();
+    let mut indices = std::collections::BTreeSet::new();
+    for interface in interfaces {
+        anyhow::ensure!(
+            !interface.name.is_empty()
+                && interface.name.len() <= 15
+                && interface.name.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+                })
+                && interface.index > 0,
+            "kernel interface inventory contains an invalid identity"
+        );
+        anyhow::ensure!(
+            names.insert(interface.name.as_str()) && indices.insert(interface.index),
+            "kernel interface inventory contains duplicate names or indices"
+        );
+    }
+    Ok(())
+}
+
 /// Validate that a planned TUN interface name and the expected ifindex are both free
 /// before creating the interface. Route/rule table and priority collisions are checked
 /// against the same read-only snapshot. This is a preflight only; callers must re-inspect
@@ -170,6 +191,7 @@ pub fn validate_interface_preflight(
     policy: &RoutingPolicyPlan,
     snapshot: &KernelSnapshot,
 ) -> Result<()> {
+    validate_interface_inventory(&snapshot.interfaces)?;
     policy.validate_against(&snapshot.inventory)?;
     anyhow::ensure!(
         !snapshot
@@ -190,6 +212,7 @@ pub fn verify_created_interface(
     interfaces: &[KernelInterfaceRecord],
 ) -> Result<()> {
     policy.validate()?;
+    validate_interface_inventory(interfaces)?;
     let by_name = interfaces
         .iter()
         .filter(|interface| interface.name == policy.interface_name)
@@ -250,6 +273,25 @@ mod tests {
             is_tun: false,
         }]);
         validate_interface_preflight(&policy, &placeholder_index).unwrap();
+    }
+
+    #[test]
+    fn preflight_rejects_ambiguous_interface_inventory() {
+        let policy = policy();
+        for interfaces in [
+            vec![
+                KernelInterfaceRecord { name: "eth0".into(), index: 2, is_tun: false },
+                KernelInterfaceRecord { name: "eth0".into(), index: 3, is_tun: false },
+            ],
+            vec![
+                KernelInterfaceRecord { name: "eth0".into(), index: 2, is_tun: false },
+                KernelInterfaceRecord { name: "eth1".into(), index: 2, is_tun: false },
+            ],
+            vec![KernelInterfaceRecord { name: "eth0".into(), index: 0, is_tun: false }],
+            vec![KernelInterfaceRecord { name: "bad/name".into(), index: 2, is_tun: false }],
+        ] {
+            assert!(validate_interface_preflight(&policy, &snapshot(interfaces)).is_err());
+        }
     }
 
     #[test]
