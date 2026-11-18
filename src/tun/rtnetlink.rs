@@ -18,6 +18,10 @@ const MAX_NETLINK_DATAGRAM: usize = 1024 * 1024;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
 const NLMSG_ERROR: u16 = 2;
 const NLMSG_DONE: u16 = 3;
+const RTM_NEWLINK: u16 = 16;
+const RTM_GETLINK: u16 = 18;
+const NLM_F_REQUEST: u16 = 0x01;
+const NLM_F_DUMP: u16 = 0x300;
 
 #[derive(Debug)]
 pub(crate) struct RouteNetlink {
@@ -152,6 +156,28 @@ impl RouteNetlink {
             }
         }
     }
+}
+
+/// Perform a bounded, read-only NETLINK_ROUTE link dump and return its record count.
+/// This diagnostic is safe without privileges and never changes interface state.
+pub fn inspect_link_count() -> Result<usize> {
+    let mut request = vec![0u8; NETLINK_HEADER_LEN + 16];
+    request[0..4].copy_from_slice(&(request.len() as u32).to_ne_bytes());
+    request[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+    request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+    // ifinfomsg is zeroed: AF_UNSPEC, all interfaces, no filters.
+    let mut socket = RouteNetlink::open()?;
+    let messages = socket.transact(&request, DEFAULT_TIMEOUT)?;
+    let mut count = 0usize;
+    for message in messages {
+        ensure!(
+            u16::from_ne_bytes(message[4..6].try_into()?) == RTM_NEWLINK,
+            "unexpected message in NETLINK_ROUTE link dump"
+        );
+        ensure!(message.len() >= NETLINK_HEADER_LEN + 16, "truncated link record");
+        count = count.checked_add(1).context("link inventory count overflow")?;
+    }
+    Ok(count)
 }
 
 fn validate_request(bytes: &[u8]) -> Result<()> {
