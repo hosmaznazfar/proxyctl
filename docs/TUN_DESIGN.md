@@ -508,7 +508,7 @@ Do not mark TUN complete or enable activation while any item above remains unche
 
 ### Supervisor identity path validation
 
-Supervisor identities now reject relative manifest paths, parent-directory traversal, embedded NUL bytes, and paths longer than the platform-independent 4096-byte bound. This validation is intentionally syntactic; the manifest store still performs the authoritative owner, directory, symlink, and file-mode checks when opening the path. This does not make a recovery backend operational.
+Supervisor identities now reject relative manifest paths, parent-directory traversal, interior dot segments, repeated separators, backslashes, embedded NUL/control bytes, and paths longer than the platform-independent 4096-byte bound. Lexical checks run before `Path` component parsing so normalization cannot hide a dot segment. This validation is intentionally syntactic; the manifest store still performs the authoritative owner, directory, symlink, and file-mode checks when opening the path. This does not make a recovery backend operational.
 
 
 ### Manifest interface-name validation
