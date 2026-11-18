@@ -651,3 +651,6 @@ This remains a tested primitive rather than an active IPC service. A private lis
 
 
 - **Private broker listener boundary:** added Linux Unix-socket binding restricted to an existing caller-owned private directory and a newly created mode-0600 socket. Symlink parents, shared directories, pre-existing paths, and unsafe socket metadata are rejected. No stale path is unlinked, no helper/service is launched, and TUN remains disabled.
+
+
+- **Socket-mark broker protocol groundwork:** added pidfd-bound same-user request authorization, strict bounded response serialization (1,024 records / 256 KiB), stable process-inode plus exact proxy-peer response assembly, and bounded Unix-listener acceptance with SO_PEERCRED authentication and one-frame reads. These are isolated primitives with synthetic tests; there is still no privileged helper, capability grant, production request executor, or readiness integration. TUN activation remains disabled.
