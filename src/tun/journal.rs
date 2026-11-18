@@ -285,8 +285,7 @@ fn valid_route_destination(key: &str, destination: &str) -> bool {
             prefix <= 32 && address.to_string() == address_text(&normalized_destination)
         }
         (Some("v6"), std::net::IpAddr::V6(address)) => {
-            prefix <= 128
-                && address.to_string() == destination.split('/').next().unwrap_or_default()
+            prefix <= 128 && address.to_string() == address_text(&normalized_destination)
         }
         _ => false,
     }
