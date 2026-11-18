@@ -368,6 +368,59 @@ impl SocketMarkBrokerRequest {
     }
 }
 
+/// Build a response only after stable pidfd socket attribution and exact peer classification.
+///
+/// The snapshots must describe the request's exact process identity. This pure stage does
+/// not perform netlink I/O and cannot establish successful application-level traffic.
+#[cfg(target_os = "linux")]
+pub fn build_socket_mark_broker_response(
+    request: &SocketMarkBrokerRequest,
+    before: &super::socket_ownership::ProcessSocketSnapshot,
+    after: &super::socket_ownership::ProcessSocketSnapshot,
+    records: &[super::socket_diag_records::SocketDiagnosticRecord],
+) -> Result<SocketMarkBrokerResponse> {
+    use super::{
+        socket_diag_netlink::SocketTransport,
+        socket_ownership::attribute_process_socket_marks,
+        socket_peer::classify_proxy_peer_sockets,
+    };
+
+    request.validate()?;
+    ensure!(
+        before.process == request.process && after.process == request.process,
+        "socket ownership snapshots do not match the requested process"
+    );
+    let attributed = attribute_process_socket_marks(
+        before,
+        after,
+        records,
+        request.expected_mark,
+        request.mark_mask,
+    )?;
+    let transport = match request.transport {
+        BrokerSocketTransport::Tcp => SocketTransport::Tcp,
+        BrokerSocketTransport::Udp => SocketTransport::Udp,
+    };
+    let candidates = classify_proxy_peer_sockets(
+        &attributed,
+        &before.socket_inodes,
+        request.expected_peer,
+        transport,
+        request.expected_mark,
+        request.mark_mask,
+    )?;
+    let response = SocketMarkBrokerResponse {
+        version: BROKER_REQUEST_VERSION,
+        expected_peer: request.expected_peer,
+        transport: request.transport,
+        expected_mark: request.expected_mark,
+        mark_mask: request.mark_mask,
+        records: candidates,
+    };
+    response.validate()?;
+    Ok(response)
+}
+
 /// Maximum serialized broker response size (256 KiB).
 #[cfg(target_os = "linux")]
 pub const MAX_SOCKET_MARK_RESPONSE_BYTES: usize = 256 * 1024;
@@ -726,6 +779,41 @@ mod tests {
         writer.write_all(&oversized).unwrap();
         let _sender = thread::spawn(move || drop(writer));
         assert!(read_socket_mark_request(&mut reader, std::time::Duration::from_secs(1),).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn response_builder_requires_stable_request_owned_peer_sockets() {
+        use super::super::{
+            process::ProcessIdentity,
+            socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord},
+            socket_ownership::ProcessSocketSnapshot,
+        };
+        let request = socket_mark_request();
+        let snapshot = ProcessSocketSnapshot {
+            process: request.process.clone(),
+            socket_inodes: [77u64, 88].into_iter().collect(),
+        };
+        let record = SocketDiagnosticRecord {
+            family: SocketAddressFamily::Ipv4,
+            state: 1,
+            local_address: "192.0.2.2".parse().unwrap(),
+            local_port: 40000,
+            remote_address: request.expected_peer.ip(),
+            remote_port: request.expected_peer.port(),
+            inode: 77,
+            mark: request.expected_mark,
+        };
+        let response = build_socket_mark_broker_response(
+            &request, &snapshot, &snapshot, &[record.clone()]
+        ).unwrap();
+        assert_eq!(response.records, [record]);
+
+        let changed = ProcessSocketSnapshot {
+            process: ProcessIdentity { start_ticks: request.process.start_ticks + 1, ..request.process.clone() },
+            ..snapshot.clone()
+        };
+        assert!(build_socket_mark_broker_response(&request, &snapshot, &changed, &[record]).is_err());
     }
 
     #[cfg(target_os = "linux")]
