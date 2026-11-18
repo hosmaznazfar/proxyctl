@@ -293,15 +293,18 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
         }
         JournalOperationKind::AddRoute => {
-            let mut parts = key.splitn(4, ':');
-            matches!(parts.next(), Some("route"))
-                && matches!(parts.next(), Some("v4" | "v6"))
-                && parts
-                    .next()
-                    .is_some_and(|table| table.parse::<u32>().is_ok_and(|value| value > 0))
-                && parts
-                    .next()
-                    .is_some_and(|destination| valid_route_destination(key, destination))
+            let Some(rest) = key.strip_prefix("route:") else {
+                return false;
+            };
+            let Some((family, rest)) = rest.split_once(':') else {
+                return false;
+            };
+            let Some((table, destination)) = rest.split_once(':') else {
+                return false;
+            };
+            matches!(family, "v4" | "v6")
+                && table.parse::<u32>().is_ok_and(|value| value > 0)
+                && valid_route_destination(key, destination)
         }
         JournalOperationKind::AddRule => {
             let mut parts = key.split(':');
@@ -389,6 +392,7 @@ mod validation_tests {
         valid.operations[1].state = JournalOperationState::Removed;
         valid.operations[1].fingerprint = Some("route-fingerprint".into());
         valid.operations[2].state = JournalOperationState::Absent;
+        valid.operations[2].fingerprint = None;
         valid.validate().unwrap();
 
         let mut invalid = valid.clone();
