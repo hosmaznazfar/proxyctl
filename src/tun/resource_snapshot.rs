@@ -288,6 +288,8 @@ mod tests {
                     canonical_attributes: ipv6_route.into(),
                 },
             ],
+            #[cfg(target_os = "linux")]
+            netlink_interface_count: 0,
             interfaces: vec![KernelInterfaceRecord {
                 name: "tun-proxyctl".into(),
                 index: 77,
