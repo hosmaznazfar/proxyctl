@@ -399,10 +399,10 @@ mod validation_tests {
         assert!(invalid.validate().is_err());
 
         let mut invalid = valid;
-        invalid.operations[2].state = JournalOperationState::Intent;
-        invalid.operations[2].fingerprint = None;
-        invalid.operations[1].state = JournalOperationState::Applied;
-        invalid.operations[1].fingerprint = Some("route-fingerprint".into());
+        invalid.operations[1].state = JournalOperationState::Intent;
+        invalid.operations[1].fingerprint = None;
+        invalid.operations[2].state = JournalOperationState::Applied;
+        invalid.operations[2].fingerprint = Some("rule-fingerprint".into());
         assert!(invalid.validate().is_err());
     }
 
