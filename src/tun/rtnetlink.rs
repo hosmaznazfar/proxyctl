@@ -106,11 +106,10 @@ impl RouteNetlink {
             };
             // SAFETY: pollfd points to one initialized poll descriptor.
             let ready = unsafe { libc::poll(&mut pollfd, 1, millis) };
-            ensure!(
-                ready >= 0,
-                "NETLINK_ROUTE poll failed: {}",
-                io::Error::last_os_error()
-            );
+            if ready < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            ensure!(ready >= 0, "NETLINK_ROUTE poll failed: {}", io::Error::last_os_error());
             ensure!(ready > 0, "NETLINK_ROUTE response timed out");
             ensure!(
                 pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0,
@@ -118,19 +117,28 @@ impl RouteNetlink {
             );
 
             let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
-            // SAFETY: buffer is writable for its full length and recvfrom has valid optional peer storage.
+            // SAFETY: buffer and sender storage are writable for their declared lengths.
+            let mut sender: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
+            let mut sender_len = std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t;
             let received = unsafe {
-                libc::recv(
+                libc::recvfrom(
                     self.fd.as_raw_fd(),
                     buffer.as_mut_ptr().cast(),
                     buffer.len(),
                     libc::MSG_TRUNC,
+                    (&mut sender as *mut libc::sockaddr_nl).cast(),
+                    &mut sender_len,
                 )
             };
+            if received < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            ensure!(received >= 0, "NETLINK_ROUTE receive failed: {}", io::Error::last_os_error());
             ensure!(
-                received >= 0,
-                "NETLINK_ROUTE receive failed: {}",
-                io::Error::last_os_error()
+                sender_len as usize >= std::mem::size_of::<libc::sockaddr_nl>()
+                    && sender.nl_family == libc::AF_NETLINK as u16
+                    && sender.nl_pid == 0,
+                "NETLINK_ROUTE response did not originate from the kernel"
             );
             ensure!(
                 received as usize <= buffer.len(),
