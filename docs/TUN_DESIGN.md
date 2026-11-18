@@ -615,3 +615,8 @@ The compressed-IPv6 route-key validator now compares the parsed address against 
 ### Kernel inventory record-shape validation
 
 The read-only route/rule inventory parser now requires every JSON array entry to be an object before interpreting or retaining it. Scalars, nulls, and nested arrays are rejected rather than being accepted as incomplete route records with an implicit main-table identity. This prevents malformed command output from becoming apparently valid inventory evidence. No command behavior or kernel state is changed.
+
+
+### Manifest routing-allocation validation
+
+Persisted ownership manifests now enforce the same private allocation floor as the routing-policy planner: table IDs must be at least `10_000` and cannot name Linux's reserved default, main, or local tables; policy-rule priorities must also be in the Proxyctl private range. This rejects edited, stale, or malformed manifests that could otherwise describe cleanup targets in shared system routing namespaces. Existing valid private allocations remain unchanged.
