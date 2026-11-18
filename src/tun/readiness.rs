@@ -43,7 +43,13 @@ pub fn verify_readiness_with_socket_mark(
     expected: &ReadinessExpectation<'_>,
     evidence: &ReadinessEvidence,
     response: &super::privilege_broker::SocketMarkBrokerResponse,
+    expected_peer: SocketAddr,
+    expected_transport: super::privilege_broker::BrokerSocketTransport,
 ) -> Result<()> {
+    ensure!(
+        response.expected_peer == expected_peer && response.transport == expected_transport,
+        "socket-mark response peer or transport does not match the readiness target"
+    );
     let observed_mark = super::socket_mark_probe::observed_proxy_outbound_mark(
         response,
         expected.core_mark,
@@ -173,10 +179,31 @@ mod tests {
         };
         let mut evidence = healthy();
         evidence.core_outbound_socket_mark = None;
-        verify_readiness_with_socket_mark(&expected(), &evidence, &response).unwrap();
+        verify_readiness_with_socket_mark(
+            &expected(),
+            &evidence,
+            &response,
+            "198.51.100.8:443".parse().unwrap(),
+            BrokerSocketTransport::Tcp,
+        )
+        .unwrap();
+        assert!(verify_readiness_with_socket_mark(
+            &expected(),
+            &evidence,
+            &response,
+            "198.51.100.9:443".parse().unwrap(),
+            BrokerSocketTransport::Tcp,
+        ).is_err());
         let mut empty = response;
         empty.records.clear();
-        assert!(verify_readiness_with_socket_mark(&expected(), &evidence, &empty).is_err());
+        assert!(verify_readiness_with_socket_mark(
+                &expected(),
+                &evidence,
+                &empty,
+                "198.51.100.8:443".parse().unwrap(),
+                BrokerSocketTransport::Tcp,
+            )
+            .is_err());
     }
 
     #[test]
