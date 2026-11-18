@@ -53,11 +53,8 @@ impl KernelTransaction {
     }
 }
 
-
 fn valid_backend_fingerprint(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 16 * 1024
-        && !value.chars().any(char::is_control)
+    !value.is_empty() && value.len() <= 16 * 1024 && !value.chars().any(char::is_control)
 }
 
 fn valid_activation_id(value: &str) -> bool {
@@ -182,7 +179,8 @@ pub fn apply<B: KernelTransactionBackend>(
                 Ok(fingerprint) => fingerprint,
                 Err(error) => {
                     ambiguous_mutation_error = true;
-                    return Err(error).context("route add failed with an unresolved write-ahead intent");
+                    return Err(error)
+                        .context("route add failed with an unresolved write-ahead intent");
                 }
             };
             if !valid_backend_fingerprint(&fingerprint) {
@@ -199,7 +197,8 @@ pub fn apply<B: KernelTransactionBackend>(
                 Ok(fingerprint) => fingerprint,
                 Err(error) => {
                     ambiguous_mutation_error = true;
-                    return Err(error).context("rule add failed with an unresolved write-ahead intent");
+                    return Err(error)
+                        .context("rule add failed with an unresolved write-ahead intent");
                 }
             };
             if !valid_backend_fingerprint(&fingerprint) {
@@ -768,5 +767,4 @@ mod tests {
         assert!(!backend.finalized);
         assert_eq!(backend.resources.len(), 1);
     }
-
 }
