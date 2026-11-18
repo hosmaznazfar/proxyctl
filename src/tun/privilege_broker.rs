@@ -727,7 +727,7 @@ fn valid_activation_id(value: &str) -> bool {
             if [8, 13, 18, 23].contains(&index) {
                 byte == b'-'
             } else {
-                byte.is_ascii_hexdigit()
+                byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
             }
         })
 }
@@ -1095,6 +1095,9 @@ mod tests {
     #[test]
     fn request_accepts_only_versioned_generation_scoped_manifest_actions() {
         request().validate().unwrap();
+        let mut uppercase_id = request();
+        uppercase_id.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
+        assert!(uppercase_id.validate().is_err());
         let mut invalid = request();
         invalid.generation = 0;
         assert!(invalid.validate().is_err());
