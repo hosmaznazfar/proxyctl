@@ -656,3 +656,8 @@ The transport now has a narrow typed public diagnostic, `tun::rtnetlink::inspect
 
 
 The transport tests now cover a final unpadded `NLMSG_DONE`, reject malformed alignment padding, and pin the diagnostic request to `RTM_GETLINK` dump semantics. The request length is computed before mutably writing its header.
+
+
+### Aggregate netlink response bounds
+
+NETLINK_ROUTE transactions now enforce both per-datagram and aggregate response budgets (4 MiB and 16,384 records). This prevents a multipart kernel dump from growing memory without bound even when every individual datagram is within the 1 MiB transport limit. The operation remains read-only at this stage.
