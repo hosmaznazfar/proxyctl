@@ -736,3 +736,8 @@ The helper installer now rejects a symlinked source or destination, requires the
 ### Privileged helper removal checks
 
 The helper remover now refuses symlinks, non-regular paths, and files not owned by root before clearing capabilities or unlinking the helper. This avoids following or deleting an unexpected replacement path during package removal. It does not stop services or alter any other Proxyctl or system executable.
+
+
+### Helper socket cleanup on every exit path
+
+The diagnostic helper now owns its bound Unix socket through an inode-checked guard. The guard removes the socket on normal return and error unwinding, but only when the path still identifies the same socket device/inode and owner captured immediately after binding. If the path is replaced, cleanup leaves the replacement untouched. This closes the stale-socket failure path without broadening the helper's diagnostic-only privilege contract.
