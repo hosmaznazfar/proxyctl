@@ -771,3 +771,5 @@ Recovery supervisor activation identifiers must use the canonical lowercase hexa
 The helper remover now applies the same `/usr/libexec` trust checks as installation: the directory must be a real root-owned directory and must not be group- or world-writable. It refuses to follow a symlinked or substituted parent before inspecting or removing the helper. This narrows the privileged filesystem boundary for uninstall as well as install.
 
 The NETLINK_ROUTE receive path now accepts responses only from the exact kernel unicast endpoint: sockaddr length must match exactly, family must be AF_NETLINK, sender port ID must be zero, and multicast groups must be zero. This prevents a userspace netlink peer or multicast sender from being mistaken for the kernel's reply. The sender predicate has focused negative tests; the transport remains read-only.
+
+Kernel command-plan validation parses the TUN owner UID and GID as bounded `u32` values and requires their canonical decimal spelling. Empty values, overflow, and alternate spellings such as leading-zero numbers are rejected before any future privileged executor can consume the plan.
