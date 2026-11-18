@@ -120,7 +120,7 @@ pub fn request_socket_mark_diagnostics(
     expected_broker_uid: u32,
     timeout: Duration,
 ) -> Result<SocketMarkBrokerResponse> {
-    use std::os::unix::net::Shutdown;
+    use std::net::Shutdown;
 
     ensure!(
         !timeout.is_zero() && timeout <= MAX_BROKER_RESPONSE_IO_TIMEOUT,
