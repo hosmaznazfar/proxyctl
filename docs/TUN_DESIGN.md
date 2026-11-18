@@ -669,3 +669,8 @@ The aggregate response limits are isolated in a deterministic validation helper 
 ### NETLINK_ROUTE inventory integration
 
 The Linux kernel snapshot now records an independent interface-record count from the bounded `RTM_GETLINK` dump. The probe is part of the read-only snapshot path, so the transport, request validator, message parser, and response bounds are exercised by production inventory collection rather than remaining unused scaffolding. The richer interface identities still come from sysfs; no kernel mutation or privileged helper is involved. If the netlink snapshot cannot be obtained, the combined snapshot fails closed rather than silently omitting this evidence.
+
+
+### Linux snapshot fixture compatibility
+
+The independent NETLINK_ROUTE interface count is a Linux-only field on the kernel snapshot. Offline test fixtures now initialize it explicitly to zero; this keeps synthetic snapshots deterministic without opening a netlink socket. Production Linux snapshots still obtain the count from the live read-only RTM_GETLINK dump. No network mutation or TUN activation is introduced.
