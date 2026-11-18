@@ -423,3 +423,8 @@ This is a serialization and validation boundary only. It does not open an IPC ch
 The socket-mark broker contract now includes a Linux Unix-stream peer credential reader backed by SO_PEERCRED. It obtains PID, UID, and GID from kernel socket metadata rather than trusting serialized request fields. A separate authorization policy requires a non-zero peer PID and exact equality between the authenticated peer UID and the target process owner's UID. The target UID must be read by the future helper from procfs only after it pins and verifies the requested process identity; it is never supplied by the request.
 
 Tests use a local UnixStream pair to verify the kernel-reported credentials and synthetic ownership cases to verify same-UID allow / different-UID deny behavior. This is still an authentication and policy primitive, not a running broker: no listening socket, helper process, filesystem socket permissions, process-owner reader, pidfd-bound request handler, or response channel has been added. The main Proxyctl process receives no capability, and TUN activation remains disabled.
+
+
+#### Pidfd-bound process owner inspection
+
+The Linux process layer now reads the target's four procfs UID values only through an already-open ProcessHandle. It checks the exact start-time/executable identity and pidfd liveness before and after reading, requires real/effective/saved/filesystem UIDs to agree, and returns no request-supplied ownership data. This is a same-user authorization primitive, not a broker service; setuid or credential-divergent targets are rejected. No privilege is acquired, no socket diagnostics are run, and TUN activation remains disabled.
