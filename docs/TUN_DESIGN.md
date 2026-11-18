@@ -664,3 +664,8 @@ NETLINK_ROUTE transactions now enforce both per-datagram and aggregate response 
 
 
 The aggregate response limits are isolated in a deterministic validation helper and covered for byte overflow, record-count overflow, and a valid bounded response. No live kernel state is required by these tests.
+
+
+### NETLINK_ROUTE inventory integration
+
+The Linux kernel snapshot now records an independent interface-record count from the bounded `RTM_GETLINK` dump. The probe is part of the read-only snapshot path, so the transport, request validator, message parser, and response bounds are exercised by production inventory collection rather than remaining unused scaffolding. The richer interface identities still come from sysfs; no kernel mutation or privileged helper is involved. If the netlink snapshot cannot be obtained, the combined snapshot fails closed rather than silently omitting this evidence.
