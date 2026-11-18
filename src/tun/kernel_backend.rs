@@ -109,8 +109,9 @@ impl KernelCommandPlan {
                 CleanupTarget::Rule(rule) => format!("rule:{rule:?}"),
                 CleanupTarget::Route(route) => {
                     anyhow::ensure!(
-                        route.interface_name == self.interface_cleanup.interface_name,
-                        "cleanup route does not belong to the guarded TUN interface"
+                        route.interface_name == self.interface_cleanup.interface_name
+                            && route.interface_index == self.interface_cleanup.interface_index,
+                        "cleanup route does not match the guarded TUN interface identity"
                     );
                     format!("route:{route:?}")
                 }
