@@ -76,6 +76,20 @@ pub fn plan_journal_recovery(
     observed: &std::collections::BTreeMap<String, Option<String>>,
 ) -> Result<Vec<(String, JournalRecoveryDecision)>> {
     journal.validate()?;
+    for (key, fingerprint) in observed {
+        ensure!(
+            journal.operations.iter().any(|operation| operation.resource_key == *key),
+            "kernel observation contains a resource outside the transaction journal"
+        );
+        if let Some(fingerprint) = fingerprint {
+            ensure!(
+                !fingerprint.is_empty()
+                    && fingerprint.len() <= 16 * 1024
+                    && !fingerprint.chars().any(char::is_control),
+                "kernel observation contains an invalid resource fingerprint"
+            );
+        }
+    }
     let mut decisions = Vec::with_capacity(journal.operations.len());
     for operation in journal.operations.iter().rev() {
         let current = observed.get(&operation.resource_key).cloned().flatten();
@@ -392,6 +406,35 @@ mod validation_tests {
             operation(2, JournalOperationKind::AddRoute, "route:v6:42420::/0"),
         ]);
         valid.validate().unwrap();
+    }
+
+    #[test]
+    fn recovery_rejects_unjournaled_or_malformed_kernel_observations() {
+        let value = journal(vec![
+            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+        ]);
+        let unknown = std::collections::BTreeMap::from([(
+            "route:v4:42420:192.0.2.0/24".to_owned(),
+            None,
+        )]);
+        assert!(plan_journal_recovery(&value, &unknown).is_err());
+
+        let malformed = std::collections::BTreeMap::from([(
+            "interface:tun-proxyctl".to_owned(),
+            Some("bad\nfingerprint".to_owned()),
+        )]);
+        assert!(plan_journal_recovery(&value, &malformed).is_err());
+
+        let incomplete = std::collections::BTreeMap::from([(
+            "interface:tun-proxyctl".to_owned(),
+            None,
+        )]);
+        let decisions = plan_journal_recovery(&value, &incomplete).unwrap();
+        assert_eq!(
+            decisions[1].1,
+            JournalRecoveryDecision::PreserveAndReportConflict
+        );
     }
 
 }
