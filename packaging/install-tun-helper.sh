@@ -8,9 +8,29 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "Run this installer as root (for example: sudo $0 [built-helper-path])." >&2
     exit 2
 fi
-if [ ! -f "$SOURCE" ] || [ ! -x "$SOURCE" ]; then
-    echo "Built helper not found or not executable: $SOURCE" >&2
+if [ ! -f "$SOURCE" ] || [ ! -x "$SOURCE" ] || [ -L "$SOURCE" ]; then
+    echo "Built helper must be a regular, non-symlink executable: $SOURCE" >&2
     exit 2
+fi
+if [ -L /usr/libexec ] || [ ! -d /usr/libexec ]; then
+    echo "/usr/libexec must be an existing real directory." >&2
+    exit 1
+fi
+LIBEXEC_OWNER=$(stat -c '%u:%g' /usr/libexec)
+LIBEXEC_MODE=$(stat -c '%a' /usr/libexec)
+if [ "$LIBEXEC_OWNER" != "0:0" ]; then
+    echo "/usr/libexec must be owned by root:root." >&2
+    exit 1
+fi
+case "$LIBEXEC_MODE" in
+    *[2367][0-7]|*[0-7][2367])
+        echo "/usr/libexec must not be group- or world-writable." >&2
+        exit 1
+        ;;
+esac
+if [ -L "$DESTINATION" ]; then
+    echo "Refusing to replace a symlink at $DESTINATION." >&2
+    exit 1
 fi
 if ! command -v setcap >/dev/null 2>&1 || ! command -v getcap >/dev/null 2>&1; then
     echo "libcap tools (setcap/getcap) are required; no fallback to setuid is allowed." >&2
