@@ -20,6 +20,7 @@ const MAX_NETLINK_RESPONSE_MESSAGES: usize = 16_384;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3);
 const NLMSG_ERROR: u16 = 2;
 const NLMSG_DONE: u16 = 3;
+const NLM_F_DUMP_INTR: u16 = 0x10;
 const RTM_NEWLINK: u16 = 16;
 const RTM_GETLINK: u16 = 18;
 const IFLA_IFNAME: u16 = 3;
@@ -470,6 +471,7 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
         let header = &bytes[offset..offset + NETLINK_HEADER_LEN];
         let length = u32::from_ne_bytes(header[0..4].try_into()?) as usize;
         let kind = u16::from_ne_bytes(header[4..6].try_into()?);
+        let flags = u16::from_ne_bytes(header[6..8].try_into()?);
         let sequence = u32::from_ne_bytes(header[8..12].try_into()?);
         ensure!(
             length >= NETLINK_HEADER_LEN && length <= bytes.len() - offset,
@@ -478,6 +480,10 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
         ensure!(
             sequence == expected_sequence,
             "unexpected NETLINK_ROUTE sequence"
+        );
+        ensure!(
+            flags & NLM_F_DUMP_INTR == 0,
+            "kernel interrupted the NETLINK_ROUTE dump"
         );
         let message = &bytes[offset..offset + length];
         if kind == NLMSG_ERROR {
@@ -499,6 +505,24 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
             }
             terminal = true;
         } else if kind == NLMSG_DONE {
+            let payload = &message[NETLINK_HEADER_LEN..];
+            if !payload.is_empty() {
+                ensure!(
+                    payload.len() == 4,
+                    "invalid NLMSG_DONE status payload length"
+                );
+                let error = i32::from_ne_bytes(payload.try_into()?);
+                if error != 0 {
+                    let errno = error
+                        .checked_neg()
+                        .context("invalid positive or overflowing NLMSG_DONE error code")?;
+                    ensure!(errno > 0, "invalid NLMSG_DONE error code");
+                    anyhow::bail!(
+                        "kernel interrupted NETLINK_ROUTE dump: {}",
+                        io::Error::from_raw_os_error(errno)
+                    );
+                }
+            }
             terminal = true;
         } else {
             messages.push(message.to_vec());
@@ -630,6 +654,23 @@ mod tests {
             let bytes = message(NLMSG_ERROR, 7, &error.to_ne_bytes());
             assert!(parse_datagram(&bytes, 7).is_err());
         }
+    }
+
+    #[test]
+    fn rejects_interrupted_dump_and_done_error_status() {
+        let mut interrupted = message(NLMSG_DONE, 7, &[]);
+        interrupted[6..8].copy_from_slice(&NLM_F_DUMP_INTR.to_ne_bytes());
+        assert!(parse_datagram(&interrupted, 7).is_err());
+
+        let failed = message(NLMSG_DONE, 7, &(-libc::EINTR).to_ne_bytes());
+        assert!(parse_datagram(&failed, 7).is_err());
+
+        for invalid in [1i32, i32::MIN] {
+            let bytes = message(NLMSG_DONE, 7, &invalid.to_ne_bytes());
+            assert!(parse_datagram(&bytes, 7).is_err());
+        }
+        let truncated = message(NLMSG_DONE, 7, &[0, 0, 0]);
+        assert!(parse_datagram(&truncated, 7).is_err());
     }
 
     #[test]
