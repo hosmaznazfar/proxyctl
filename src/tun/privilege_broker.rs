@@ -82,6 +82,65 @@ fn is_executable_file(_path: &Path) -> bool {
     false
 }
 
+/// Bind a broker listener only inside an already-existing, caller-owned private directory.
+///
+/// The parent must be a real directory (not a symlink), owned by the effective user,
+/// with no group/other permission bits. Existing socket paths are never removed or reused.
+#[cfg(target_os = "linux")]
+pub fn bind_private_broker_listener(
+    socket_path: &Path,
+) -> Result<std::os::unix::net::UnixListener> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+    use std::os::unix::net::UnixListener;
+
+    ensure!(socket_path.is_absolute(), "broker socket path must be absolute");
+    let parent = socket_path
+        .parent()
+        .context("broker socket path has no parent directory")?;
+    let name = socket_path
+        .file_name()
+        .context("broker socket path has no filename")?;
+    ensure!(
+        !name.is_empty() && name != OsStr::new(".") && name != OsStr::new(".."),
+        "broker socket filename is invalid"
+    );
+
+    let parent_metadata = std::fs::symlink_metadata(parent)
+        .context("cannot inspect broker socket parent directory")?;
+    ensure!(
+        parent_metadata.file_type().is_dir(),
+        "broker socket parent must be a real directory"
+    );
+    let effective_uid = unsafe { libc::geteuid() };
+    ensure!(
+        parent_metadata.uid() == effective_uid
+            && parent_metadata.permissions().mode() & 0o077 == 0,
+        "broker socket parent must be caller-owned and inaccessible to group/other users"
+    );
+    ensure!(
+        matches!(
+            std::fs::symlink_metadata(socket_path),
+            Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "broker socket path already exists or cannot be safely inspected"
+    );
+
+    let listener = UnixListener::bind(socket_path)
+        .context("cannot bind private broker Unix socket")?;
+    std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))
+        .context("cannot restrict broker socket permissions")?;
+    let socket_metadata = std::fs::symlink_metadata(socket_path)
+        .context("cannot verify private broker socket")?;
+    ensure!(
+        socket_metadata.file_type().is_socket()
+            && socket_metadata.uid() == effective_uid
+            && socket_metadata.permissions().mode() & 0o777 == 0o600
+            && socket_metadata.nlink() == 1,
+        "broker socket filesystem identity or permissions are unsafe"
+    );
+    Ok(listener)
+}
+
 /// Kernel-authenticated credentials of a connected Unix-domain socket peer.
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -396,6 +455,37 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::{ffi::OsString, fs};
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn private_broker_listener_requires_private_directory_and_creates_mode_0600_socket() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("broker.sock");
+        let listener = bind_private_broker_listener(&socket).unwrap();
+        let metadata = fs::symlink_metadata(&socket).unwrap();
+        assert!(metadata.file_type().is_socket());
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+        assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+        assert!(bind_private_broker_listener(&socket).is_err());
+        drop(listener);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn private_broker_listener_rejects_group_accessible_or_symlink_parent() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o750)).unwrap();
+        assert!(bind_private_broker_listener(&directory.path().join("broker.sock")).is_err());
+
+        let target = tempfile::tempdir().unwrap();
+        let link = target.path().join("linked");
+        std::os::unix::fs::symlink(directory.path(), &link).unwrap();
+        assert!(bind_private_broker_listener(&link.join("broker.sock")).is_err());
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
