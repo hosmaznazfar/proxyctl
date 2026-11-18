@@ -704,3 +704,7 @@ The read-only RTM_GETLINK path now decodes each RTM_NEWLINK record into its exac
 ### NETLINK_ROUTE link-record validation follow-up
 
 The link decoder additionally binds each decoded record to an RTM_NEWLINK header whose declared length exactly matches the received message. It rejects duplicate outer link-info attributes and requires interface-name and link-kind strings to contain exactly one terminal NUL, rather than accepting embedded terminators followed by extra payload. These checks keep malformed kernel records from being promoted to interface ownership evidence. The snapshot remains read-only.
+
+### Interrupted NETLINK_ROUTE dump handling
+
+Multipart NETLINK_ROUTE parsing now rejects the kernel's NLM_F_DUMP_INTR indication and checks the optional integer status carried by NLMSG_DONE. Non-zero valid negative errno statuses, positive or overflowing status values, and truncated status payloads fail the snapshot rather than being mistaken for a complete inventory. This prevents a partial route/link dump from being used as authoritative ownership evidence. No mutation is performed.
