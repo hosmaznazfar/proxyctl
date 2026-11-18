@@ -726,3 +726,8 @@ Service-manager detection now treats a recognized PID 1 executable as authoritat
 ### Activation-bound recovery service identity
 
 The recovery supervisor identity now requires its deterministic service name to include the first eight characters of the exact activation UUID. This prevents a valid but unrelated service name from being paired with another activation's manifest and generation. The validation is pure and covered by a mismatch regression test; no service files or services are created.
+
+
+### Privileged helper installation path checks
+
+The helper installer now rejects a symlinked source or destination, requires the system `/usr/libexec` directory to be a real root-owned directory, and refuses group- or world-writable installation directories. These checks protect the set-capability executable from path redirection and unprivileged replacement. The installer still grants only `cap_net_admin=ep` to the separate diagnostic helper and does not install a service or enable TUN activation.
