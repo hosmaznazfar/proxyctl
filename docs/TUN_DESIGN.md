@@ -443,3 +443,8 @@ A Linux listener-binding primitive now accepts only an absolute socket path bene
 #### Pidfd-bound broker authorization
 
 A request authorization entry point now binds the serialized process identity to an already-open ProcessHandle, verifies that exact process is live, reads its owner UID through the pidfd-bound procfs helper, applies the kernel-authenticated SO_PEERCRED same-user policy, and rechecks identity/liveness after authorization. Synthetic coverage exercises the current process, mismatched start-time identity, and a different peer UID. This remains authorization only: it does not collect diagnostics, start a helper, acquire capabilities, or enable TUN.
+
+
+#### Bounded socket-mark broker response protocol
+
+Socket diagnostic records now support strict serde serialization, and the broker defines a versioned response carrying only the requested peer/transport/mark policy plus candidate records. Response validation caps the collection at 1,024 records and the framed JSON payload at 256 KiB, rejects unknown fields, duplicate/zero inodes, wrong address family, peer, port, mark, invalid local ports, and non-established TCP records. The decoder requires exactly one complete frame. These are transport/data-integrity guarantees only; a response is not proof of successful proxied traffic, and no helper or privileged collector is running.
