@@ -368,6 +368,98 @@ impl SocketMarkBrokerRequest {
     }
 }
 
+/// Maximum serialized broker response size (256 KiB).
+#[cfg(target_os = "linux")]
+pub const MAX_SOCKET_MARK_RESPONSE_BYTES: usize = 256 * 1024;
+/// Maximum number of peer-matched diagnostic records returned to the controller.
+#[cfg(target_os = "linux")]
+pub const MAX_SOCKET_MARK_RESPONSE_RECORDS: usize = 1024;
+
+/// Bounded candidate-only response from the read-only socket-mark diagnostic helper.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SocketMarkBrokerResponse {
+    pub version: u32,
+    pub expected_peer: SocketAddr,
+    pub transport: BrokerSocketTransport,
+    pub expected_mark: u32,
+    pub mark_mask: u32,
+    pub records: Vec<super::socket_diag_records::SocketDiagnosticRecord>,
+}
+
+#[cfg(target_os = "linux")]
+impl SocketMarkBrokerResponse {
+    pub fn validate(&self) -> Result<()> {
+        use super::socket_diag_records::SocketAddressFamily;
+
+        ensure!(self.version == BROKER_REQUEST_VERSION, "unsupported socket-mark broker response version");
+        ensure!(
+            !self.expected_peer.ip().is_unspecified()
+                && !self.expected_peer.ip().is_multicast()
+                && self.expected_peer.port() != 0,
+            "socket-mark broker response peer is invalid"
+        );
+        ensure!(
+            self.expected_mark > 0
+                && self.expected_mark <= i32::MAX as u32
+                && self.mark_mask > 0
+                && self.expected_mark & !self.mark_mask == 0,
+            "socket-mark broker response mark policy is invalid"
+        );
+        ensure!(
+            !self.records.is_empty() && self.records.len() <= MAX_SOCKET_MARK_RESPONSE_RECORDS,
+            "socket-mark broker response record count is invalid"
+        );
+        let expected_family = match self.expected_peer {
+            SocketAddr::V4(_) => SocketAddressFamily::Ipv4,
+            SocketAddr::V6(_) => SocketAddressFamily::Ipv6,
+        };
+        let mut inodes = std::collections::BTreeSet::new();
+        for record in &self.records {
+            ensure!(record.inode > 0 && inodes.insert(record.inode), "broker response contains a zero or duplicate socket inode");
+            ensure!(
+                record.family == expected_family
+                    && record.remote_address == self.expected_peer.ip()
+                    && record.remote_port == self.expected_peer.port()
+                    && record.mark & self.mark_mask == self.expected_mark,
+                "broker response contains a record outside the requested peer or mark policy"
+            );
+            ensure!(record.local_port > 0, "broker response contains an invalid local socket port");
+            if self.transport == BrokerSocketTransport::Tcp {
+                ensure!(record.state == 1, "broker TCP response contains a non-established socket");
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Encode one bounded response frame. Only candidate records for the requested peer/mark
+/// are permitted; the controller must still treat them as diagnostic evidence, not traffic proof.
+#[cfg(target_os = "linux")]
+pub fn encode_socket_mark_response(response: &SocketMarkBrokerResponse) -> Result<Vec<u8>> {
+    response.validate()?;
+    let payload = serde_json::to_vec(response)?;
+    ensure!(!payload.is_empty() && payload.len() <= MAX_SOCKET_MARK_RESPONSE_BYTES, "socket-mark broker response exceeds the frame limit");
+    let length = u32::try_from(payload.len())?;
+    let mut frame = Vec::with_capacity(4 + payload.len());
+    frame.extend_from_slice(&length.to_le_bytes());
+    frame.extend_from_slice(&payload);
+    Ok(frame)
+}
+
+/// Decode exactly one response frame and reject unknown fields, trailing data, and invalid records.
+#[cfg(target_os = "linux")]
+pub fn decode_socket_mark_response(frame: &[u8]) -> Result<SocketMarkBrokerResponse> {
+    ensure!(frame.len() >= 4, "socket-mark broker response header is truncated");
+    let length = u32::from_le_bytes(frame[..4].try_into()?) as usize;
+    ensure!(length > 0 && length <= MAX_SOCKET_MARK_RESPONSE_BYTES, "socket-mark broker response frame length is invalid");
+    ensure!(frame.len() == 4 + length, "socket-mark broker response frame length does not match its payload");
+    let response: SocketMarkBrokerResponse = serde_json::from_slice(&frame[4..])?;
+    response.validate()?;
+    Ok(response)
+}
+
 /// Encode one length-prefixed JSON request for a future private broker channel.
 ///
 /// The frame is bounded and contains no command string, executable path, or arbitrary
@@ -634,6 +726,48 @@ mod tests {
         writer.write_all(&oversized).unwrap();
         let _sender = thread::spawn(move || drop(writer));
         assert!(read_socket_mark_request(&mut reader, std::time::Duration::from_secs(1),).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    fn socket_mark_response() -> SocketMarkBrokerResponse {
+        use super::super::socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord};
+        SocketMarkBrokerResponse {
+            version: BROKER_REQUEST_VERSION,
+            expected_peer: socket_mark_request().expected_peer,
+            transport: BrokerSocketTransport::Tcp,
+            expected_mark: 0x142,
+            mark_mask: 0xffff,
+            records: vec![SocketDiagnosticRecord {
+                family: SocketAddressFamily::Ipv4,
+                state: 1,
+                local_address: "192.0.2.2".parse().unwrap(),
+                local_port: 40000,
+                remote_address: "198.51.100.8".parse().unwrap(),
+                remote_port: 443,
+                inode: 77,
+                mark: 0x142,
+            }],
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn socket_mark_response_round_trips_and_rejects_out_of_scope_records() {
+        let response = socket_mark_response();
+        let frame = encode_socket_mark_response(&response).unwrap();
+        assert_eq!(decode_socket_mark_response(&frame).unwrap(), response);
+
+        let mut invalid = response.clone();
+        invalid.records[0].remote_port = 8443;
+        assert!(encode_socket_mark_response(&invalid).is_err());
+
+        let mut invalid = response.clone();
+        invalid.records[0].mark = 0x242;
+        assert!(encode_socket_mark_response(&invalid).is_err());
+
+        let mut trailing = frame;
+        trailing.push(0);
+        assert!(decode_socket_mark_response(&trailing).is_err());
     }
 
     #[cfg(target_os = "linux")]
