@@ -620,3 +620,8 @@ The read-only route/rule inventory parser now requires every JSON array entry to
 ### Manifest routing-allocation validation
 
 Persisted ownership manifests now enforce the same private allocation floor as the routing-policy planner: table IDs must be at least `10_000` and cannot name Linux's reserved default, main, or local tables; policy-rule priorities must also be in the Proxyctl private range. This rejects edited, stale, or malformed manifests that could otherwise describe cleanup targets in shared system routing namespaces. Existing valid private allocations remain unchanged.
+
+
+### Live fingerprint evidence bounds
+
+Manifest cleanup now validates fingerprints returned by the backend before comparing any resource or beginning deletion. A live fingerprint must be non-empty, at most 16 KiB, and contain no control characters; malformed evidence aborts the complete preflight, so no resource is removed. This supplements the existing manifest-side bounds and atomic compare-and-delete contract. It does not implement a production backend.
