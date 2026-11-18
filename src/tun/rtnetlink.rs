@@ -156,12 +156,7 @@ impl RouteNetlink {
                 "NETLINK_ROUTE receive failed: {}",
                 io::Error::last_os_error()
             );
-            ensure!(
-                sender_len as usize >= std::mem::size_of::<libc::sockaddr_nl>()
-                    && sender.nl_family == libc::AF_NETLINK as u16
-                    && sender.nl_pid == 0,
-                "NETLINK_ROUTE response did not originate from the kernel"
-            );
+            validate_kernel_sender(&sender, sender_len)?;
             ensure!(
                 received as usize <= buffer.len(),
                 "NETLINK_ROUTE datagram exceeded the size limit"
@@ -469,6 +464,20 @@ fn validate_response_budget(current: &[Vec<u8>], incoming: &[Vec<u8>]) -> Result
     Ok(())
 }
 
+fn validate_kernel_sender(
+    sender: &libc::sockaddr_nl,
+    sender_len: libc::socklen_t,
+) -> Result<()> {
+    ensure!(
+        sender_len as usize == std::mem::size_of::<libc::sockaddr_nl>()
+            && sender.nl_family == libc::AF_NETLINK as u16
+            && sender.nl_pid == 0
+            && sender.nl_groups == 0,
+        "NETLINK_ROUTE response did not originate from the kernel unicast endpoint"
+    );
+    Ok(())
+}
+
 fn validate_request(bytes: &[u8]) -> Result<()> {
     ensure!(
         bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM,
@@ -738,6 +747,27 @@ mod tests {
     fn rejects_wrong_sequence_and_truncated_headers() {
         assert!(parse_datagram(&message(NLMSG_DONE, 8, &[]), 7).is_err());
         assert!(parse_datagram(&[1, 2, 3], 7).is_err());
+    }
+
+    #[test]
+    fn accepts_only_kernel_unicast_netlink_sender() {
+        // SAFETY: zero is a valid initial representation for sockaddr_nl.
+        let mut sender: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
+        sender.nl_family = libc::AF_NETLINK as u16;
+        let length = std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t;
+        validate_kernel_sender(&sender, length).unwrap();
+
+        sender.nl_pid = 42;
+        assert!(validate_kernel_sender(&sender, length).is_err());
+        sender.nl_pid = 0;
+        sender.nl_groups = 1;
+        assert!(validate_kernel_sender(&sender, length).is_err());
+        sender.nl_groups = 0;
+        sender.nl_family = libc::AF_INET as u16;
+        assert!(validate_kernel_sender(&sender, length).is_err());
+        sender.nl_family = libc::AF_NETLINK as u16;
+        assert!(validate_kernel_sender(&sender, length - 1).is_err());
+        assert!(validate_kernel_sender(&sender, length + 1).is_err());
     }
 
     #[test]
