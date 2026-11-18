@@ -938,18 +938,14 @@ mod tests {
             inode: 77,
             mark: request.expected_mark,
         };
-        let response =
-            build_socket_mark_broker_response(
-                &request,
-                &snapshot,
-                &snapshot,
-                std::slice::from_ref(&record),
-            )
-                .unwrap();
-        assert_eq!(
-            response.records.as_slice(),
-            std::slice::from_ref(&record)
-        );
+        let response = build_socket_mark_broker_response(
+            &request,
+            &snapshot,
+            &snapshot,
+            std::slice::from_ref(&record),
+        )
+        .unwrap();
+        assert_eq!(response.records.as_slice(), std::slice::from_ref(&record));
 
         let changed = ProcessSocketSnapshot {
             process: ProcessIdentity {
