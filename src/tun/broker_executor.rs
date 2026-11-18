@@ -98,6 +98,22 @@ pub fn serve_one_socket_mark_request(
 ) -> Result<()> {
     use std::os::unix::net::Shutdown;
 
+    ensure!(
+        !accept_timeout.is_zero()
+            && accept_timeout <= super::privilege_broker::MAX_BROKER_REQUEST_READ_TIMEOUT,
+        "broker accept timeout is outside the permitted bound"
+    );
+    ensure!(
+        !diagnostic_timeout_per_dump.is_zero()
+            && diagnostic_timeout_per_dump <= MAX_DUMP_TIMEOUT,
+        "broker diagnostic timeout is outside the permitted bound"
+    );
+    ensure!(
+        !response_timeout.is_zero()
+            && response_timeout <= super::broker_transport::MAX_BROKER_RESPONSE_IO_TIMEOUT,
+        "broker response timeout is outside the permitted bound"
+    );
+
     let (mut stream, peer, request) =
         accept_socket_mark_request(listener, accept_timeout)?;
     let response =
