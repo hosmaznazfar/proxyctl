@@ -693,7 +693,7 @@ impl BrokerRequest {
                 && manifest_path_text.starts_with('/')
                 && !manifest_path_text.ends_with('/')
                 && !manifest_path_text.contains("//")
-                && !manifest_path_text.contains('\\\\')
+                && !manifest_path_text.contains('\\')
                 && manifest_path_text
                     .split('/')
                     .skip(1)
@@ -1166,7 +1166,7 @@ mod tests {
             PathBuf::from("/run/user/1000/proxyctl/other.json"),
             PathBuf::from("/run/user/1000/./proxyctl/tun-manifest.json"),
             PathBuf::from("/run/user/1000//proxyctl/tun-manifest.json"),
-            PathBuf::from("/run/user/1000/proxyctl\\\\tun-manifest.json"),
+            PathBuf::from("/run/user/1000/proxyctl\\tun-manifest.json"),
         ] {
             let mut invalid = request();
             invalid.manifest_path = path;
