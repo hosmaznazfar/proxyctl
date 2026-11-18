@@ -76,11 +76,17 @@ impl KernelCommandPlan {
     /// It does not authorize execution or prove kernel ownership.
     pub fn validate(&self) -> Result<()> {
         self.interface_cleanup.validate()?;
-        anyhow::ensure!(!self.apply.is_empty(), "kernel plan has no interface creation step");
+        anyhow::ensure!(
+            !self.apply.is_empty(),
+            "kernel plan has no interface creation step"
+        );
         anyhow::ensure!(
             self.apply[0].arguments.starts_with(&[
-                "tuntap".to_owned(), "add".to_owned(), "dev".to_owned(),
-                self.interface_cleanup.interface_name.clone(), "mode".to_owned(),
+                "tuntap".to_owned(),
+                "add".to_owned(),
+                "dev".to_owned(),
+                self.interface_cleanup.interface_name.clone(),
+                "mode".to_owned(),
                 "tun".to_owned()
             ]),
             "kernel plan must begin by creating its guarded TUN interface"
@@ -90,7 +96,9 @@ impl KernelCommandPlan {
                 !command.arguments.is_empty()
                     && command.arguments.iter().all(|argument| {
                         !argument.is_empty()
-                            && !argument.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
+                            && !argument
+                                .bytes()
+                                .any(|byte| byte == 0 || byte.is_ascii_control())
                     })
             }),
             "kernel plan contains an empty or unsafe argument"
@@ -107,7 +115,10 @@ impl KernelCommandPlan {
                     format!("route:{route:?}")
                 }
             };
-            anyhow::ensure!(cleanup_keys.insert(key), "kernel plan contains duplicate cleanup identities");
+            anyhow::ensure!(
+                cleanup_keys.insert(key),
+                "kernel plan contains duplicate cleanup identities"
+            );
         }
         Ok(())
     }

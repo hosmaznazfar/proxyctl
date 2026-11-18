@@ -188,9 +188,9 @@ fn validate_link_inventory(
         "NETLINK_ROUTE interface inventory contains duplicate names"
     );
     for interface in sysfs {
-        let link = by_name
-            .get(interface.name.as_str())
-            .context("sysfs and NETLINK_ROUTE interface names disagree; retry the read-only snapshot")?;
+        let link = by_name.get(interface.name.as_str()).context(
+            "sysfs and NETLINK_ROUTE interface names disagree; retry the read-only snapshot",
+        )?;
         ensure!(
             interface.index == link.index,
             "sysfs and NETLINK_ROUTE interface indices disagree; retry the read-only snapshot"

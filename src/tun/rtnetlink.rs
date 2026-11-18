@@ -255,7 +255,10 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
     );
     let payload = &message[NETLINK_HEADER_LEN..];
     let raw_index = i32::from_ne_bytes(payload[4..8].try_into()?);
-    ensure!(raw_index > 0, "RTM_NEWLINK has a non-positive interface index");
+    ensure!(
+        raw_index > 0,
+        "RTM_NEWLINK has a non-positive interface index"
+    );
     let index = u32::try_from(raw_index).context("interface index exceeds u32")?;
     let attributes = &payload[IFINFO_MESSAGE_LEN..];
     let mut name = None;
@@ -295,7 +298,8 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
                 ensure!(
                     parsed.len() <= 15
                         && parsed.bytes().all(|byte| {
-                            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':')
+                            byte.is_ascii_alphanumeric()
+                                || matches!(byte, b'_' | b'-' | b'.' | b':')
                         }),
                     "kernel returned an invalid interface name"
                 );
@@ -330,7 +334,11 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
             );
         }
         offset = offset
-            .checked_add(if aligned <= remaining { aligned } else { length })
+            .checked_add(if aligned <= remaining {
+                aligned
+            } else {
+                length
+            })
             .context("RTM_NEWLINK attribute offset overflow")?;
     }
     let name = name.context("RTM_NEWLINK is missing IFLA_IFNAME")?;
@@ -367,11 +375,13 @@ fn parse_link_kind(attributes: &[u8]) -> Result<Option<String>> {
                 nul > 0 && nul + 1 == value.len(),
                 "invalid IFLA_INFO_KIND payload"
             );
-            let parsed = std::str::from_utf8(&value[..nul])
-                .context("link kind is not valid UTF-8")?;
+            let parsed =
+                std::str::from_utf8(&value[..nul]).context("link kind is not valid UTF-8")?;
             ensure!(
                 parsed.len() <= 32
-                    && parsed.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
+                    && parsed
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'),
                 "invalid kernel link kind"
             );
             kind = Some(parsed.to_owned());
@@ -394,7 +404,11 @@ fn parse_link_kind(attributes: &[u8]) -> Result<Option<String>> {
             );
         }
         offset = offset
-            .checked_add(if aligned <= remaining { aligned } else { length })
+            .checked_add(if aligned <= remaining {
+                aligned
+            } else {
+                length
+            })
             .context("IFLA_LINKINFO offset overflow")?;
     }
     Ok(kind)
@@ -628,8 +642,8 @@ mod tests {
         assert!(parse_link_message(&flagged_name).is_err());
 
         let mut flagged_kind = link_message(2, b"tun0", Some(b"tun"));
-        let link_info_offset = NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN
-            + rtattr(IFLA_IFNAME, b"tun0\0").len();
+        let link_info_offset =
+            NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN + rtattr(IFLA_IFNAME, b"tun0\0").len();
         let nested_kind_offset = link_info_offset + RTATTR_HEADER_LEN;
         flagged_kind[nested_kind_offset + 2..nested_kind_offset + 4]
             .copy_from_slice(&(IFLA_INFO_KIND | IFLA_F_NET_BYTEORDER).to_ne_bytes());
@@ -648,7 +662,8 @@ mod tests {
 
         let mut extra_nul = link_message(2, b"eth0", None);
         let name_attr = NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN;
-        let attr_length = u16::from_ne_bytes(extra_nul[name_attr..name_attr + 2].try_into().unwrap()) as usize;
+        let attr_length =
+            u16::from_ne_bytes(extra_nul[name_attr..name_attr + 2].try_into().unwrap()) as usize;
         extra_nul[name_attr + attr_length - 1] = 0;
         // Extend the declared attribute payload by one byte and preserve alignment.
         extra_nul[name_attr..name_attr + 2]

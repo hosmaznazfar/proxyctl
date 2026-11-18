@@ -82,7 +82,10 @@ impl SupervisorIdentity {
                 && self.manifest_path.starts_with('/')
                 && !self.manifest_path.ends_with('/')
                 && !self.manifest_path.contains("//")
-                && !self.manifest_path.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
+                && !self
+                    .manifest_path
+                    .bytes()
+                    .any(|byte| byte == 0 || byte.is_ascii_control())
                 && matches!(components.next(), Some(std::path::Component::RootDir))
                 && components.all(|component| matches!(component, std::path::Component::Normal(_)))
                 && manifest_path.file_name().is_some(),
@@ -306,18 +309,8 @@ mod lifecycle_tests {
 
     #[test]
     fn repeated_core_exit_retries_cleanup_while_pending() {
-        let first = transition(
-            SupervisorPhase::Running,
-            SupervisorEvent::CoreExited,
-            7,
-            7,
-        );
-        let retry = transition(
-            first.phase,
-            SupervisorEvent::CoreExited,
-            7,
-            7,
-        );
+        let first = transition(SupervisorPhase::Running, SupervisorEvent::CoreExited, 7, 7);
+        let retry = transition(first.phase, SupervisorEvent::CoreExited, 7, 7);
         assert_eq!(retry.phase, SupervisorPhase::CleanupPending);
         assert_eq!(retry.action, RecoveryAction::CleanupManifestResources);
     }
