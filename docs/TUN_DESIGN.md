@@ -531,3 +531,8 @@ The manual helper installer now removes the copied helper if applying `cap_net_a
 ### Consistent socket-mark response records
 
 The broker response validator now requires every returned peer-matched socket record to carry the same full observed mark, not merely a value that matches the requested mask. This prevents a single response from mixing different mark values that happen to select the same policy rule. The readiness bridge still validates the response against the exact requested peer, transport, mark, and mask. Socket diagnostics remain supporting evidence rather than proof of proxied end-to-end traffic.
+
+
+### Journal dependency ordering
+
+A transaction journal now rejects route or policy-rule operations unless the TUN interface creation intent is already the first operation. This mirrors the only supported apply order and prevents a malformed or edited journal from authorizing cleanup decisions for policy resources without the owning interface operation being represented. It remains validation/planning only; no kernel mutation is performed.
