@@ -133,6 +133,14 @@ pub fn observe_proxy_outbound_mark(
     if result.is_err() {
         let _ = child.kill();
         let _ = child.wait();
+        if let Ok(metadata) = std::fs::symlink_metadata(&socket_path)
+            && metadata.file_type().is_socket()
+            && metadata.uid() == unsafe { libc::geteuid() }
+            && metadata.permissions().mode() & 0o777 == 0o600
+            && metadata.nlink() == 1
+        {
+            let _ = std::fs::remove_file(&socket_path);
+        }
     }
     result
 }
