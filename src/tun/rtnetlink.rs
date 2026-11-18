@@ -241,6 +241,10 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
     let mut terminal = false;
     while offset < bytes.len() {
         ensure!(
+            !terminal,
+            "netlink datagram contains data after a terminal message"
+        );
+        ensure!(
             bytes.len() - offset >= NETLINK_HEADER_LEN,
             "truncated netlink message header"
         );
@@ -324,6 +328,13 @@ mod tests {
     #[test]
     fn rejects_kernel_error_ack() {
         let bytes = message(NLMSG_ERROR, 7, &(-libc::EPERM).to_ne_bytes());
+        assert!(parse_datagram(&bytes, 7).is_err());
+    }
+
+    #[test]
+    fn rejects_messages_after_terminal_acknowledgement() {
+        let mut bytes = message(NLMSG_DONE, 7, &[]);
+        bytes.extend(message(99, 7, &[1]));
         assert!(parse_datagram(&bytes, 7).is_err());
     }
 
