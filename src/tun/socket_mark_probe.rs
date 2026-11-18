@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]
 use std::{
-    os::unix::fs::{MetadataExt, PermissionsExt},
+    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt},
     path::Path,
     process::{Command, Stdio},
     thread,
@@ -49,8 +49,11 @@ pub fn observe_proxy_outbound_mark(
 
     let socket_path = runtime_directory.join(format!("broker-{activation_id}.sock"));
     ensure!(
-        std::fs::symlink_metadata(&socket_path).is_err(),
-        "broker socket path already exists; refusing to reuse it"
+        matches!(
+            std::fs::symlink_metadata(&socket_path),
+            Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
+        ),
+        "broker socket path already exists or cannot be safely inspected"
     );
     let request = SocketMarkBrokerRequest {
         version: BROKER_REQUEST_VERSION,
@@ -104,14 +107,17 @@ pub fn observe_proxy_outbound_mark(
             &socket_path,
             &request,
             unsafe { libc::geteuid() },
-            Duration::from_secs(2),
+            Duration::from_secs(10),
         )?;
         let exit_deadline = Instant::now() + HELPER_EXIT_TIMEOUT;
         loop {
             if let Some(status) = child.try_wait()? {
                 ensure!(status.success(), "diagnostic helper exited unsuccessfully");
                 ensure!(
-                    std::fs::symlink_metadata(&socket_path).is_err(),
+                    matches!(
+                        std::fs::symlink_metadata(&socket_path),
+                        Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
+                    ),
                     "diagnostic helper did not remove its private socket"
                 );
                 return Ok(response);
