@@ -205,11 +205,14 @@ fn validate_activation_id(value: &str) -> Result<()> {
 fn validate_runtime_directory(path: &Path) -> Result<()> {
     let metadata =
         std::fs::symlink_metadata(path).context("cannot inspect private TUN runtime directory")?;
+    let canonical = std::fs::canonicalize(path)
+        .context("cannot resolve private TUN runtime directory")?;
     ensure!(
         metadata.file_type().is_dir()
+            && canonical == path
             && metadata.uid() == unsafe { libc::geteuid() }
             && metadata.permissions().mode() & 0o077 == 0,
-        "TUN runtime directory must be a real caller-owned private directory"
+        "TUN runtime directory must be a real caller-owned private directory without symlink aliases"
     );
     Ok(())
 }
@@ -222,6 +225,15 @@ fn validate_helper(path: &Path) -> Result<()> {
     );
     let metadata =
         std::fs::symlink_metadata(path).context("dedicated diagnostic helper is not installed")?;
+    let parent = path.parent().context("diagnostic helper has no parent directory")?;
+    let parent_metadata = std::fs::symlink_metadata(parent)
+        .context("cannot inspect diagnostic helper directory")?;
+    ensure!(
+        parent_metadata.file_type().is_dir()
+            && parent_metadata.uid() == 0
+            && parent_metadata.permissions().mode() & 0o022 == 0,
+        "diagnostic helper directory must be a root-owned, non-writable real directory"
+    );
     ensure!(
         metadata.file_type().is_file()
             && metadata.uid() == 0
