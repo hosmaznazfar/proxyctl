@@ -437,4 +437,51 @@ mod validation_tests {
         );
     }
 
+    #[test]
+    fn recovery_plan_is_reverse_ordered_and_conflicts_are_resource_local() {
+        let mut value = journal(vec![
+            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(2, JournalOperationKind::AddRule, "rule:v4:42410"),
+        ]);
+        for (item, fingerprint) in value.operations.iter_mut().zip([
+            "interface-fingerprint",
+            "route-fingerprint",
+            "rule-fingerprint",
+        ]) {
+            item.state = JournalOperationState::Applied;
+            item.fingerprint = Some(fingerprint.into());
+        }
+        let observed = std::collections::BTreeMap::from([
+            ("interface:tun-proxyctl".into(), Some("interface-fingerprint".into())),
+            ("route:v4:42420:0.0.0.0/0".into(), Some("foreign-route".into())),
+            ("rule:v4:42410".into(), Some("rule-fingerprint".into())),
+        ]);
+        let decisions = plan_journal_recovery(&value, &observed).unwrap();
+        assert_eq!(
+            decisions.iter().map(|(key, _)| key.as_str()).collect::<Vec<_>>(),
+            [
+                "rule:v4:42410",
+                "route:v4:42420:0.0.0.0/0",
+                "interface:tun-proxyctl",
+            ]
+        );
+        assert_eq!(
+            decisions[0].1,
+            JournalRecoveryDecision::CompareAndDelete {
+                expected_fingerprint: "rule-fingerprint".into(),
+            }
+        );
+        assert_eq!(
+            decisions[1].1,
+            JournalRecoveryDecision::PreserveAndReportConflict
+        );
+        assert_eq!(
+            decisions[2].1,
+            JournalRecoveryDecision::CompareAndDelete {
+                expected_fingerprint: "interface-fingerprint".into(),
+            }
+        );
+    }
+
 }
