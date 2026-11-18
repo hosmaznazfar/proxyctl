@@ -66,8 +66,8 @@ pub fn collect_dump(
             &received.bytes,
         )?;
 
-        if let Ok(dump) = accumulator.clone().into_complete_dump() {
-            return Ok(dump);
+        if accumulator.is_complete() {
+            return accumulator.into_complete_dump();
         }
     }
 }
@@ -79,6 +79,7 @@ pub fn collect_all(
     timeout_per_dump: Duration,
 ) -> Result<Vec<(u8, SocketTransport, SocketDiagnosticDump)>> {
     ensure!(first_sequence != 0, "first netlink sequence must be non-zero");
+    ensure!(first_sequence <= u32::MAX - 3, "four netlink sequence identifiers are required");
     let mut sequence = first_sequence;
     let mut dumps = Vec::with_capacity(4);
 
@@ -169,7 +170,7 @@ mod tests {
     fn rejects_missing_terminal_completion() {
         let mut io = FakeIo::default();
         let mut incomplete = done(7);
-        incomplete.bytes.truncate(8);
+        incomplete.bytes[4..6].copy_from_slice(&1u16.to_ne_bytes());
         io.received.push_back(incomplete);
         assert!(collect_dump(&mut io, request(7), Duration::from_secs(1)).is_err());
     }
@@ -187,9 +188,8 @@ mod tests {
     #[test]
     fn refuses_sequence_wrap_before_reusing_an_identifier() {
         let mut io = FakeIo::default();
-        io.received.push_back(done(u32::MAX));
         assert!(collect_all(&mut io, u32::MAX, Duration::from_secs(1)).is_err());
-        assert_eq!(io.sent.len(), 1);
+        assert!(io.sent.is_empty());
     }
 
     #[test]
