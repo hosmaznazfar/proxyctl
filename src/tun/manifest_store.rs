@@ -564,13 +564,20 @@ mod tests {
             operations: vec![
                 JournalOperation {
                     sequence: 0,
-                    kind: JournalOperationKind::AddRoute,
-                    resource_key: "route:v4:42420:default".into(),
-                    state: JournalOperationState::Intent,
-                    fingerprint: None,
+                    kind: JournalOperationKind::CreateInterface,
+                    resource_key: "interface:tun-proxyctl".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("interface-expected".into()),
                 },
                 JournalOperation {
                     sequence: 1,
+                    kind: JournalOperationKind::AddRoute,
+                    resource_key: "route:v4:42420:default".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("route-expected".into()),
+                },
+                JournalOperation {
+                    sequence: 2,
                     kind: JournalOperationKind::AddRule,
                     resource_key: "rule:v4:42421".into(),
                     state: JournalOperationState::Applied,
@@ -579,10 +586,8 @@ mod tests {
             ],
         };
         let observed = std::collections::BTreeMap::from([
-            (
-                "route:v4:42420:default".into(),
-                Some("possibly-foreign".into()),
-            ),
+            ("interface:tun-proxyctl".into(), Some("foreign-interface".into())),
+            ("route:v4:42420:default".into(), Some("possibly-foreign".into())),
             ("rule:v4:42421".into(), Some("changed".into())),
         ]);
         let plan = plan_journal_recovery(&journal, &observed).unwrap();
@@ -599,17 +604,26 @@ mod tests {
             schema_version: 1,
             activation_id: "12345678-1234-4234-8234-123456789abc".into(),
             generation: 7,
-            operations: vec![JournalOperation {
-                sequence: 0,
-                kind: JournalOperationKind::AddRoute,
-                resource_key: "route:v4:42420:default".into(),
-                state: JournalOperationState::Applied,
-                fingerprint: Some("route-fp".into()),
-            }],
+            operations: vec![
+                JournalOperation {
+                    sequence: 0,
+                    kind: JournalOperationKind::CreateInterface,
+                    resource_key: "interface:tun-proxyctl".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("interface-fp".into()),
+                },
+                JournalOperation {
+                    sequence: 1,
+                    kind: JournalOperationKind::AddRoute,
+                    resource_key: "route:v4:42420:default".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("route-fp".into()),
+                },
+            ],
         };
         let plan = plan_journal_recovery(&journal, &std::collections::BTreeMap::new()).unwrap();
         assert_eq!(
-            plan[0].1,
+            plan[1].1,
             JournalRecoveryDecision::PreserveAndReportConflict
         );
     }
@@ -698,6 +712,8 @@ mod tests {
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         let id = "12345678-1234-4234-8234-123456789abc";
         store.create_transaction_journal(id, 21).unwrap();
+        store.record_operation_intent(id, 21, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
+        store.mark_operation_applied(id, 21, "interface:tun-proxyctl", "sha256:interface").unwrap();
         store
             .record_operation_intent(id, 21, JournalOperationKind::AddRule, "rule:v6:42420")
             .unwrap();
@@ -719,6 +735,8 @@ mod tests {
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         let id = "12345678-1234-4234-8234-123456789abc";
         store.create_transaction_journal(id, 18).unwrap();
+        store.record_operation_intent(id, 18, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
+        store.mark_operation_applied(id, 18, "interface:tun-proxyctl", "sha256:interface").unwrap();
         store
             .record_operation_intent(
                 id,
@@ -734,6 +752,7 @@ mod tests {
         store
             .mark_operation_removed(id, 18, "route:v4:42420:default")
             .unwrap();
+        store.mark_operation_removed(id, 18, "interface:tun-proxyctl").unwrap();
         store.remove_completed_transaction_journal(id, 18).unwrap();
         assert!(store.load_transaction_journal().unwrap().is_none());
     }
@@ -745,6 +764,8 @@ mod tests {
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
         let id = "12345678-1234-4234-8234-123456789abc";
         store.create_transaction_journal(id, 19).unwrap();
+        store.record_operation_intent(id, 19, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
+        store.mark_operation_applied(id, 19, "interface:tun-proxyctl", "sha256:interface").unwrap();
         store
             .record_operation_intent(id, 19, JournalOperationKind::AddRule, "rule:v4:42410")
             .unwrap();
