@@ -532,6 +532,12 @@ mod tests {
         }
         assert!(foreign_route.validate().is_err());
 
+        let mut stale_interface_index = plan.clone();
+        if let Some(CleanupTarget::Route(route)) = stale_interface_index.cleanup.last_mut() {
+            route.interface_index += 1;
+        }
+        assert!(stale_interface_index.validate().is_err());
+
         let mut duplicate_cleanup = plan;
         let first_cleanup = duplicate_cleanup.cleanup[0].clone();
         duplicate_cleanup.cleanup.push(first_cleanup);
