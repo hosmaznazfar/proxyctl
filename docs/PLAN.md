@@ -708,3 +708,10 @@ These five items strengthen the offline journal/recovery planner only. They do n
 - [x] Cover failure to retain the recovery journal itself; surface the hard failure without claiming cleanup or success.
 
 These transaction-executor safeguards remain fake-backend/offline only. No production rtnetlink/TUN mutator or detached recovery supervisor is present, and TUN activation remains disabled.
+
+
+- [x] Reconcile journal and recovery tests with the single-final-unresolved-intent invariant; validate default-route keys used by the manifest store.
+- [x] Update kernel transaction fault tests to assert journal retention after ambiguous add failures instead of expecting unsafe rollback.
+- [x] Make recovery fixtures model separate, valid interface and route transactions and use a bounded fake process for activation lifecycle coverage.
+
+These corrections are offline-only. Local formatting, Clippy, and the full test suite must be rerun by the developer; TUN activation remains disabled.
