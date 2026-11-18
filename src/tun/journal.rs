@@ -254,12 +254,24 @@ fn valid_journal_activation_id(value: &str) -> bool {
         })
 }
 
+fn address_text(destination: &str) -> &str {
+    destination.split('/').next().unwrap_or_default()
+}
+
 fn valid_route_destination(key: &str, destination: &str) -> bool {
     let family = key.split(':').nth(1);
     if destination == "default" {
         return true;
     }
-    let Some((address, prefix)) = destination.split_once('/') else {
+    // The resource-key separator and a leading IPv6 compression colon are adjacent
+    // for destinations such as "::/0". Restore the colon consumed by split_once(':')
+    // before parsing; otherwise valid leading-compression IPv6 routes are rejected.
+    let normalized_destination = if family == Some("v6") && destination.starts_with(':') {
+        format!(":{destination}")
+    } else {
+        destination.to_owned()
+    };
+    let Some((address, prefix)) = normalized_destination.split_once('/') else {
         return false;
     };
     let Ok(prefix) = prefix.parse::<u8>() else {
@@ -270,7 +282,7 @@ fn valid_route_destination(key: &str, destination: &str) -> bool {
     };
     match (family, address) {
         (Some("v4"), std::net::IpAddr::V4(address)) => {
-            prefix <= 32 && address.to_string() == destination.split('/').next().unwrap_or_default()
+            prefix <= 32 && address.to_string() == address_text(&normalized_destination)
         }
         (Some("v6"), std::net::IpAddr::V6(address)) => {
             prefix <= 128
