@@ -100,7 +100,15 @@ impl SocketDiagnosticIo for LinuxSocketDiagnosticIo {
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             ensure!(!remaining.is_zero(), "NETLINK_SOCK_DIAG receive timed out");
-            let millis = remaining.as_millis().saturating_add(u128::from(remaining.subsec_nanos() % 1_000_000 != 0)).clamp(1, i32::MAX as u128) as i32;
+            let fractional_millisecond = if remaining.subsec_nanos() % 1_000_000 != 0 {
+                1u128
+            } else {
+                0u128
+            };
+            let millis = remaining
+                .as_millis()
+                .saturating_add(fractional_millisecond)
+                .clamp(1, i32::MAX as u128) as i32;
             let mut descriptor = libc::pollfd {
                 fd: self.socket.as_raw_fd(),
                 events: libc::POLLIN,
