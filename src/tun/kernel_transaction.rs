@@ -610,8 +610,8 @@ mod tests {
         assert!(format!("{error:#}").contains("ambiguous outcome"));
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
-        assert!(backend.interface.is_none());
-        assert!(backend.resources.is_empty());
+        assert!(backend.interface.is_some());
+        assert_eq!(backend.resources.len(), 2);
     }
 
     #[test]
