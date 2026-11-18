@@ -21,7 +21,7 @@ use super::privilege_broker::{
 };
 
 #[cfg(target_os = "linux")]
-pub const MAX_BROKER_RESPONSE_IO_TIMEOUT: Duration = Duration::from_secs(2);
+pub const MAX_BROKER_RESPONSE_IO_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Write exactly one validated response frame before the supplied bounded deadline.
 ///
