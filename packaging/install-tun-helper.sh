@@ -46,23 +46,34 @@ if [ -e "$MAIN_BINARY" ]; then
     fi
 fi
 
-install -D -o root -g root -m 0755 "$SOURCE" "$DESTINATION"
-if ! setcap cap_net_admin=ep "$DESTINATION"; then
-    setcap -r "$DESTINATION" 2>/dev/null || true
-    rm -f "$DESTINATION"
-    echo "Could not apply the required file capability; removed the incomplete helper installation." >&2
+STAGING=$(mktemp /usr/libexec/.proxyctl-tun-helper.XXXXXX)
+cleanup_staging() {
+    if [ -n "${STAGING:-}" ] && [ -e "$STAGING" ]; then
+        setcap -r "$STAGING" 2>/dev/null || true
+        rm -f -- "$STAGING"
+    fi
+}
+trap cleanup_staging EXIT HUP INT TERM
+
+install -o root -g root -m 0755 "$SOURCE" "$STAGING"
+if ! setcap cap_net_admin=ep "$STAGING"; then
+    echo "Could not apply the required file capability; existing helper was left untouched." >&2
     exit 1
 fi
-ACTUAL=$(getcap "$DESTINATION")
+ACTUAL=$(getcap "$STAGING")
 case "$ACTUAL" in
-    "$DESTINATION cap_net_admin=ep") ;;
+    "$STAGING cap_net_admin=ep") ;;
     *)
-        setcap -r "$DESTINATION" 2>/dev/null || true
-        rm -f "$DESTINATION"
-        echo "Unexpected helper file capabilities: $ACTUAL; removed the incomplete helper installation." >&2
+        echo "Unexpected staged helper file capabilities: $ACTUAL; existing helper was left untouched." >&2
         exit 1
         ;;
 esac
+
+# Staging is in the destination directory, so rename is atomic and the previous
+# working helper remains in place until the replacement is fully prepared.
+mv -f -- "$STAGING" "$DESTINATION"
+STAGING=
+trap - EXIT HUP INT TERM
 
 echo "Installed $DESTINATION with only cap_net_admin=ep."
 echo "The helper is diagnostic-only and accepts one same-UID socket-mark request."
