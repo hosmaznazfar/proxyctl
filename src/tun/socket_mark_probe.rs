@@ -150,6 +150,11 @@ pub fn observed_proxy_outbound_mark(
             && expected_mark & !mark_mask == 0,
         "expected proxy outbound mark policy is invalid"
     );
+    response.validate()?;
+    ensure!(
+        response.expected_mark == expected_mark && response.mark_mask == mark_mask,
+        "socket-mark response policy does not match the requested readiness policy"
+    );
     ensure!(
         !response.records.is_empty(),
         "no process-owned proxy outbound socket with the expected peer and mark was observed"
