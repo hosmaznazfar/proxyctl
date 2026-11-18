@@ -245,6 +245,12 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
         message.len() >= NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN,
         "truncated RTM_NEWLINK ifinfomsg"
     );
+    let declared_length = u32::from_ne_bytes(message[0..4].try_into()?) as usize;
+    ensure!(
+        declared_length == message.len()
+            && u16::from_ne_bytes(message[4..6].try_into()?) == RTM_NEWLINK,
+        "RTM_NEWLINK header length or type is inconsistent"
+    );
     let payload = &message[NETLINK_HEADER_LEN..];
     let raw_index = i32::from_ne_bytes(payload[4..8].try_into()?);
     ensure!(raw_index > 0, "RTM_NEWLINK has a non-positive interface index");
@@ -252,6 +258,7 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
     let attributes = &payload[IFINFO_MESSAGE_LEN..];
     let mut name = None;
     let mut kind = None;
+    let mut link_info_seen = false;
     let mut offset = 0usize;
     while offset < attributes.len() {
         ensure!(
@@ -274,7 +281,7 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
                     .position(|byte| *byte == 0)
                     .context("IFLA_IFNAME is not NUL terminated")?;
                 ensure!(
-                    nul > 0 && value[nul + 1..].iter().all(|byte| *byte == 0),
+                    nul > 0 && nul + 1 == value.len(),
                     "invalid IFLA_IFNAME payload"
                 );
                 let parsed = std::str::from_utf8(&value[..nul])
@@ -289,7 +296,8 @@ fn parse_link_message(message: &[u8]) -> Result<NetlinkLinkRecord> {
                 name = Some(parsed.to_owned());
             }
             IFLA_LINKINFO => {
-                ensure!(kind.is_none(), "duplicate IFLA_LINKINFO attribute");
+                ensure!(!link_info_seen, "duplicate IFLA_LINKINFO attribute");
+                link_info_seen = true;
                 kind = parse_link_kind(value)?;
             }
             _ => {}
@@ -342,7 +350,7 @@ fn parse_link_kind(attributes: &[u8]) -> Result<Option<String>> {
                 .position(|byte| *byte == 0)
                 .context("IFLA_INFO_KIND is not NUL terminated")?;
             ensure!(
-                nul > 0 && value[nul + 1..].iter().all(|byte| *byte == 0),
+                nul > 0 && nul + 1 == value.len(),
                 "invalid IFLA_INFO_KIND payload"
             );
             let parsed = std::str::from_utf8(&value[..nul])
@@ -570,6 +578,29 @@ mod tests {
                 kind: Some("tun".into())
             }
         );
+    }
+
+    #[test]
+    fn rejects_inconsistent_link_headers_and_string_terminators() {
+        let mut wrong_type = link_message(2, b"eth0", None);
+        wrong_type[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+        assert!(parse_link_message(&wrong_type).is_err());
+
+        let mut wrong_length = link_message(2, b"eth0", None);
+        wrong_length[0..4].copy_from_slice(&1u32.to_ne_bytes());
+        assert!(parse_link_message(&wrong_length).is_err());
+
+        let mut extra_nul = link_message(2, b"eth0", None);
+        let name_attr = NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN;
+        let attr_length = u16::from_ne_bytes(extra_nul[name_attr..name_attr + 2].try_into().unwrap()) as usize;
+        extra_nul[name_attr + attr_length - 1] = 0;
+        // Extend the declared attribute payload by one byte and preserve alignment.
+        extra_nul[name_attr..name_attr + 2]
+            .copy_from_slice(&((attr_length + 1) as u16).to_ne_bytes());
+        extra_nul.insert(name_attr + attr_length, 0);
+        let message_length = extra_nul.len() as u32;
+        extra_nul[0..4].copy_from_slice(&message_length.to_ne_bytes());
+        assert!(parse_link_message(&extra_nul).is_err());
     }
 
     #[test]
