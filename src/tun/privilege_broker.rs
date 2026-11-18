@@ -535,6 +535,7 @@ impl SocketMarkBrokerResponse {
             SocketAddr::V6(_) => SocketAddressFamily::Ipv6,
         };
         let mut inodes = std::collections::BTreeSet::new();
+        let mut observed_mark = None;
         for record in &self.records {
             ensure!(
                 record.inode > 0 && inodes.insert(record.inode),
@@ -547,6 +548,14 @@ impl SocketMarkBrokerResponse {
                     && record.mark & self.mark_mask == self.expected_mark,
                 "broker response contains a record outside the requested peer or mark policy"
             );
+            if let Some(previous) = observed_mark {
+                ensure!(
+                    previous == record.mark,
+                    "broker response contains inconsistent full socket marks"
+                );
+            } else {
+                observed_mark = Some(record.mark);
+            }
             ensure!(
                 record.local_port > 0,
                 "broker response contains an invalid local socket port"
@@ -982,6 +991,14 @@ mod tests {
         let mut invalid = response.clone();
         invalid.records[0].mark = 0x242;
         assert!(encode_socket_mark_response(&invalid).is_err());
+
+        let mut inconsistent = response.clone();
+        inconsistent.records.push(super::super::socket_diag_records::SocketDiagnosticRecord {
+            inode: 78,
+            mark: 0x242,
+            ..inconsistent.records[0].clone()
+        });
+        assert!(inconsistent.validate().is_err());
 
         let mut trailing = frame;
         trailing.push(0);
