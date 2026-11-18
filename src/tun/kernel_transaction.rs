@@ -737,7 +737,7 @@ mod tests {
             assert!(backend.journal_retained, "step {failed_step}");
             assert!(!backend.finalized, "step {failed_step}");
             assert!(backend.interface.is_some(), "step {failed_step}");
-            assert_eq!(backend.resources.len(), 1, "step {failed_step}");
+            assert_eq!(backend.resources.len(), failed_step, "step {failed_step}");
         }
     }
 
