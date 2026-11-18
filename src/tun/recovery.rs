@@ -252,7 +252,10 @@ pub fn transition(
             action: RecoveryAction::None,
         },
         (SupervisorPhase::Running, SupervisorEvent::CoreExited)
-        | (SupervisorPhase::Prepared, SupervisorEvent::CoreExited) => LifecycleTransition {
+        | (SupervisorPhase::Prepared, SupervisorEvent::CoreExited)
+        | (SupervisorPhase::CleanupPending, SupervisorEvent::CoreExited) => LifecycleTransition {
+            // Re-issuing cleanup while pending is intentional: every cleanup operation
+            // must be idempotent, and a restarted supervisor may observe core exit again.
             phase: SupervisorPhase::CleanupPending,
             action: RecoveryAction::CleanupManifestResources,
         },
