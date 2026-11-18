@@ -635,3 +635,11 @@ The sysfs interface inventory now rejects names that are not valid UTF-8 instead
 ### Interface inventory preflight consistency
 
 Kernel-command planning now validates the complete supplied interface snapshot before accepting a free-name preflight or a created-interface identity. Every record must have a valid bounded Linux interface name and non-zero ifindex, and names and indices must both be unique. This also protects callers that construct snapshots outside the live sysfs collector; malformed or ambiguous snapshots cannot be used as ownership evidence.
+
+
+
+### Bounded NETLINK_ROUTE transport foundation
+
+A Linux-only raw NETLINK_ROUTE transport now provides a bounded, sequence-checked request/response primitive for the forthcoming typed kernel backend. It uses a close-on-exec kernel netlink socket, caps datagrams at 1 MiB, applies a short response deadline, validates message framing and sequence identity, and treats negative kernel acknowledgements as errors. Its module is private to the TUN subsystem; it does not expose a CLI operation or accept untrusted request bytes across the privilege boundary.
+
+This is transport groundwork only: typed TUN/interface, route, and policy-rule encoders; inventory decoding; write-ahead integration; exact ownership fingerprints; atomic compare-and-delete; and the privileged broker execution path remain outstanding. No network mutation is wired to this transport, and activation remains disabled.
