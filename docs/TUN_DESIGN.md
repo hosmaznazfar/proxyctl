@@ -511,3 +511,8 @@ Do not mark TUN complete or enable activation while any item above remains unche
 ### Supervisor identity path validation
 
 Supervisor identities now reject relative manifest paths, parent-directory traversal, embedded NUL bytes, and paths longer than the platform-independent 4096-byte bound. This validation is intentionally syntactic; the manifest store still performs the authoritative owner, directory, symlink, and file-mode checks when opening the path. This does not make a recovery backend operational.
+
+
+### Manifest interface-name validation
+
+Owned interface names are now restricted to Linux-safe ASCII alphanumeric, underscore, hyphen, and dot characters within the 15-byte IFNAMSIZ payload limit. This prevents whitespace, control bytes, separators, and shell-like punctuation from entering persisted ownership identities. It remains input validation only; interface creation/deletion still requires the missing concrete kernel backend and atomic identity checks.
