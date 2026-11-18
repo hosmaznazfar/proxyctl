@@ -14,13 +14,15 @@ pub const INET_DIAG_MSG_LEN: usize = 72;
 /// Netlink attributes are aligned to four bytes.
 const NLA_ALIGNTO: usize = 4;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SocketAddressFamily {
     Ipv4,
     Ipv6,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SocketDiagnosticRecord {
     pub family: SocketAddressFamily,
     pub state: u8,
