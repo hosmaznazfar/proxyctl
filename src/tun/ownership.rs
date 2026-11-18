@@ -46,8 +46,10 @@ impl RouteManifest {
         );
         ensure!(
             !self.interface_name.is_empty()
-                && !self.interface_name.contains('/')
-                && self.interface_name.len() <= 15,
+                && self.interface_name.len() <= 15
+                && self.interface_name.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+                }),
             "invalid TUN interface name"
         );
         ensure!(
@@ -301,8 +303,10 @@ mod tests {
         let mut invalid = manifest();
         invalid.activation_id = "../systemd".into();
         assert!(invalid.validate().is_err());
-        let mut invalid = manifest();
-        invalid.interface_name = "name/with/slash".into();
-        assert!(invalid.validate().is_err());
+        for invalid_name in ["name/with/slash", "name with space", "name\\n", "bad\\0name"] {
+            let mut invalid = manifest();
+            invalid.interface_name = invalid_name.into();
+            assert!(invalid.validate().is_err());
+        }
     }
 }
