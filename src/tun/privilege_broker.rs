@@ -684,9 +684,22 @@ impl BrokerRequest {
             self.generation > 0,
             "privilege-broker generation must be non-zero"
         );
+        let manifest_path_text = self
+            .manifest_path
+            .to_str()
+            .context("privilege-broker manifest path must be valid UTF-8")?;
         ensure!(
-            self.manifest_path.is_absolute(),
-            "privilege-broker manifest path must be absolute"
+            self.manifest_path.is_absolute()
+                && manifest_path_text.starts_with('/')
+                && !manifest_path_text.ends_with('/')
+                && !manifest_path_text.contains("//")
+                && !manifest_path_text.contains('\\\\')
+                && manifest_path_text
+                    .split('/')
+                    .skip(1)
+                    .all(|component| !component.is_empty() && component != "." && component != "..")
+                && !manifest_path_text.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
+            "privilege-broker manifest path must be normalized and absolute"
         );
         ensure!(
             self.manifest_path
@@ -1151,6 +1164,9 @@ mod tests {
             PathBuf::from("run/tun-manifest.json"),
             PathBuf::from("/run/user/../etc/tun-manifest.json"),
             PathBuf::from("/run/user/1000/proxyctl/other.json"),
+            PathBuf::from("/run/user/1000/./proxyctl/tun-manifest.json"),
+            PathBuf::from("/run/user/1000//proxyctl/tun-manifest.json"),
+            PathBuf::from("/run/user/1000/proxyctl\\\\tun-manifest.json"),
         ] {
             let mut invalid = request();
             invalid.manifest_path = path;
