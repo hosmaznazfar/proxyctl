@@ -319,10 +319,14 @@ fn parse_rules(bytes: &[u8], family: AddressFamily) -> Result<ParsedRules> {
 fn parse_array(bytes: &[u8], kind: &str) -> Result<Vec<Value>> {
     let value: Value = serde_json::from_slice(bytes)
         .with_context(|| format!("iproute2 returned invalid JSON for {kind} inventory"))?;
-    value
+    let records = value
         .as_array()
-        .cloned()
-        .with_context(|| format!("iproute2 returned a non-array {kind} inventory"))
+        .with_context(|| format!("iproute2 returned a non-array {kind} inventory"))?;
+    ensure!(
+        records.iter().all(Value::is_object),
+        "iproute2 returned a non-object record in {kind} inventory"
+    );
+    Ok(records.clone())
 }
 
 fn parse_table_id(value: &Value) -> Result<u32> {
@@ -461,6 +465,14 @@ mod tests {
                 .is_err()
         );
         assert!(parse_detailed_snapshot(b"[]", b"[]", br#"[{"table":254}]"#, b"[]").is_err());
+    }
+
+    #[test]
+    fn detailed_snapshot_rejects_non_object_route_and_rule_records() {
+        assert!(parse_detailed_snapshot(b"[null]", b"[]", b"[]", b"[]").is_err());
+        assert!(parse_detailed_snapshot(b"[]", b"[42]", b"[]", b"[]").is_err());
+        assert!(parse_detailed_snapshot(b"[]", b"[]", b"[false]", b"[]").is_err());
+        assert!(parse_detailed_snapshot(b"[]", b"[]", b"[]", br#"[["priority",100]]"#).is_err());
     }
 
     #[test]
