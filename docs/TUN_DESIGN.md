@@ -689,3 +689,8 @@ A live Linux snapshot now requires the sysfs interface count and the independent
 ### Terminal netlink response framing
 
 The netlink datagram parser now rejects any record following NLMSG_DONE or a successful NLMSG_ERROR acknowledgement. A terminal response cannot be followed by additional payload records in the same datagram; accepting such a sequence would make completion ambiguous. A regression test pins this fail-closed behavior. No kernel mutation is involved.
+
+
+### Netlink acknowledgement error-code validation
+
+Successful NLMSG_ERROR acknowledgements remain terminal. Non-zero error payloads are now required to be valid negative errno values and are converted with checked arithmetic; positive values and i32::MIN are rejected without risking integer-negation overflow. This hardens malformed-response handling in the read-only transport and does not change kernel state.
