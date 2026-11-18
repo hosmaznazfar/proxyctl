@@ -50,23 +50,33 @@ fn detect_with_paths(pid1_comm: &Path, run_dir: &Path) -> ServiceManager {
 
     // PID 1 is authoritative. Runtime markers disambiguate init implementations
     // whose process name is the generic "init".
-    if comm == "systemd" || run_dir.join("systemd/system").is_dir() {
-        return ServiceManager::Systemd;
-    }
-    if comm == "openrc-init" || run_dir.join("openrc/softlevel").exists() {
-        return ServiceManager::OpenRc;
-    }
-    if comm == "runit" || run_dir.join("runit").is_dir() {
-        return ServiceManager::Runit;
-    }
-    if comm == "s6-svscan" || run_dir.join("s6").is_dir() {
-        return ServiceManager::S6;
-    }
-    if comm == "dinit" || run_dir.join("dinit").is_dir() {
-        return ServiceManager::Dinit;
-    }
-    if comm == "init" {
-        return ServiceManager::SysVinit;
+    // A specific PID 1 executable outranks stale or bind-mounted runtime markers.
+    // Runtime markers are consulted only when PID 1 uses the generic "init" name.
+    match comm.as_str() {
+        "systemd" => return ServiceManager::Systemd,
+        "openrc-init" => return ServiceManager::OpenRc,
+        "runit" => return ServiceManager::Runit,
+        "s6-svscan" => return ServiceManager::S6,
+        "dinit" => return ServiceManager::Dinit,
+        "init" => {
+            if run_dir.join("systemd/system").is_dir() {
+                return ServiceManager::Systemd;
+            }
+            if run_dir.join("openrc/softlevel").exists() {
+                return ServiceManager::OpenRc;
+            }
+            if run_dir.join("runit").is_dir() {
+                return ServiceManager::Runit;
+            }
+            if run_dir.join("s6").is_dir() {
+                return ServiceManager::S6;
+            }
+            if run_dir.join("dinit").is_dir() {
+                return ServiceManager::Dinit;
+            }
+            return ServiceManager::SysVinit;
+        }
+        _ => {}
     }
 
     ServiceManager::Unknown
@@ -113,6 +123,22 @@ mod tests {
         ] {
             assert_eq!(probe(comm, markers), expected, "PID 1: {comm}");
         }
+    }
+
+    #[test]
+    fn specific_pid1_identity_overrides_stale_runtime_markers() {
+        let root = tempdir().unwrap();
+        let proc = root.path().join("proc/1");
+        let run = root.path().join("run");
+        std::fs::create_dir_all(&proc).unwrap();
+        std::fs::create_dir_all(run.join("systemd/system")).unwrap();
+        std::fs::create_dir_all(run.join("openrc")).unwrap();
+        std::fs::write(proc.join("comm"), "openrc-init").unwrap();
+        std::fs::write(run.join("openrc/softlevel"), "default").unwrap();
+        assert_eq!(
+            detect_with_paths(&proc.join("comm"), &run),
+            ServiceManager::OpenRc
+        );
     }
 
     #[test]
