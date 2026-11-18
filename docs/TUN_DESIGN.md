@@ -773,3 +773,5 @@ The helper remover now applies the same `/usr/libexec` trust checks as installat
 The NETLINK_ROUTE receive path now accepts responses only from the exact kernel unicast endpoint: sockaddr length must match exactly, family must be AF_NETLINK, sender port ID must be zero, and multicast groups must be zero. This prevents a userspace netlink peer or multicast sender from being mistaken for the kernel's reply. The sender predicate has focused negative tests; the transport remains read-only.
 
 Kernel command-plan validation parses the TUN owner UID and GID as bounded `u32` values and requires their canonical decimal spelling. Empty values, overflow, and alternate spellings such as leading-zero numbers are rejected before any future privileged executor can consume the plan.
+
+The post-creation interface check now has a single binding helper: it validates a fresh link inventory, confirms the named device is a TUN interface with a unique non-zero ifindex, and returns a cloned routing policy whose interface and every planned route use that kernel-assigned index. Route planning must use this bound policy, not the constructor's placeholder index.
