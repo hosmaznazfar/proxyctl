@@ -648,3 +648,8 @@ This is transport groundwork only: typed TUN/interface, route, and policy-rule e
 ### NETLINK_ROUTE transport hardening
 
 The bounded transport now verifies that every response datagram is sent by kernel port ID zero, retries interrupted polling/receives within the existing deadline, and validates final-message alignment without indexing beyond an unpadded datagram. These checks strengthen the read-only transport boundary; they do not enable kernel mutation or TUN activation.
+
+
+### Read-only NETLINK_ROUTE link probe
+
+The transport now has a narrow typed public diagnostic, `tun::rtnetlink::inspect_link_count()`. It issues only `RTM_GETLINK` with dump flags, validates returned message kinds and minimum link-record framing, and reports a count. It does not expose raw netlink requests to callers, acquire capabilities, or mutate links. The existing iproute2/sysfs snapshot remains the richer source of interface metadata until a fully decoded netlink inventory is implemented.
