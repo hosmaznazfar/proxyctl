@@ -275,8 +275,21 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
         } else {
             messages.push(message.to_vec());
         }
+        let aligned_length = length
+            .checked_add(3)
+            .map(|value| value & !3)
+            .context("netlink message alignment overflow")?;
+        let remaining = bytes.len() - offset;
+        ensure!(
+            aligned_length <= remaining || length == remaining,
+            "truncated netlink alignment padding"
+        );
         offset = offset
-            .checked_add((length + 3) & !3)
+            .checked_add(if aligned_length <= remaining {
+                aligned_length
+            } else {
+                length
+            })
             .context("netlink offset overflow")?;
     }
     ensure!(
@@ -326,6 +339,13 @@ mod tests {
         bytes[0..4].copy_from_slice(&99u32.to_ne_bytes());
         assert!(validate_request(&bytes).is_err());
     }
+    #[test]
+    fn accepts_final_unpadded_non_aligned_netlink_message() {
+        let mut bytes = message(99, 7, &[1]);
+        bytes.truncate(NETLINK_HEADER_LEN + 1);
+        assert_eq!(parse_datagram(&bytes, 7).unwrap(), (vec![bytes], false));
+    }
+
     #[test]
     fn accepts_final_unpadded_netlink_message_without_out_of_bounds_access() {
         let mut bytes = message(NLMSG_DONE, 7, &[]);
