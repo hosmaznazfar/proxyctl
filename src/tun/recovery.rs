@@ -82,6 +82,13 @@ impl SupervisorIdentity {
                 && self.manifest_path.starts_with('/')
                 && !self.manifest_path.ends_with('/')
                 && !self.manifest_path.contains("//")
+                // Path::components() normalizes interior "." segments away, so
+                // reject them lexically before relying on the parsed components.
+                && self
+                    .manifest_path
+                    .split('/')
+                    .skip(1)
+                    .all(|component| !component.is_empty() && component != "." && component != "..")
                 && !self
                     .manifest_path
                     .bytes()
