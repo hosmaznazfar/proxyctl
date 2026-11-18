@@ -470,3 +470,6 @@ The executor is deliberately not connected to the CLI, does not launch a helper,
 ### Bounded broker response stream
 
 Added a one-response Unix-stream transport with a two-second maximum monotonic deadline, a 256 KiB pre-allocation frame ceiling, exact length validation, and the existing strict response schema/peer/mark/inode checks. Reads and writes recalculate the remaining deadline after partial progress; truncated and malformed frames fail closed. The transport does not authenticate peers itself and is only to be used on the private listener after the caller has authenticated the connection. The helper lifecycle and CLI remain disconnected, and TUN activation remains disabled.
+
+
+- **Single-request broker server orchestration:** the Linux helper-side API now accepts one bounded private Unix-socket request, authenticates SO_PEERCRED, runs the pidfd-bound same-user diagnostic transaction, writes one bounded validated response, and shuts down the response write side. Errors drop the connection without emitting partial response data. This API is not launched by Proxyctl, no service or privilege policy is installed, and no capability is granted. TUN remains disabled.
