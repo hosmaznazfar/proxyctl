@@ -337,6 +337,7 @@ mod tests {
         interface: Option<KernelInterfaceRecord>,
         resources: BTreeMap<String, String>,
         fail_add_at: Option<usize>,
+        fail_add_after_mutation_at: Option<usize>,
         add_count: usize,
         fail_remove: bool,
         journal_retained: bool,
@@ -382,6 +383,9 @@ mod tests {
             let key = route_key(route);
             let fingerprint = format!("fp:{key}");
             self.resources.insert(key, fingerprint.clone());
+            if self.fail_add_after_mutation_at == Some(self.add_count) {
+                anyhow::bail!("injected route failure after kernel mutation");
+            }
             if self.empty_fingerprint_at == Some(self.add_count) {
                 return Ok(String::new());
             }
@@ -396,6 +400,9 @@ mod tests {
             let key = rule_key(rule);
             let fingerprint = format!("fp:{key}");
             self.resources.insert(key, fingerprint.clone());
+            if self.fail_add_after_mutation_at == Some(self.add_count) {
+                anyhow::bail!("injected rule failure after kernel mutation");
+            }
             if self.empty_fingerprint_at == Some(self.add_count) {
                 return Ok(String::new());
             }
@@ -717,6 +724,21 @@ mod tests {
         assert!(!backend.finalized);
         assert!(backend.interface.is_some());
         assert!(backend.resources.is_empty());
+    }
+
+    #[test]
+    fn every_post_mutation_route_and_rule_error_preserves_ambiguous_journal() {
+        for failed_step in 1..=4 {
+            let mut backend = FakeBackend {
+                fail_add_after_mutation_at: Some(failed_step),
+                ..Default::default()
+            };
+            assert!(apply(&transaction(), &mut backend).is_err());
+            assert!(backend.journal_retained, "step {failed_step}");
+            assert!(!backend.finalized, "step {failed_step}");
+            assert!(backend.interface.is_some(), "step {failed_step}");
+            assert_eq!(backend.resources.len(), 1, "step {failed_step}");
+        }
     }
 
 }
