@@ -209,7 +209,7 @@ fn validate_runtime_directory(path: &Path) -> Result<()> {
         .context("cannot resolve private TUN runtime directory")?;
     ensure!(
         metadata.file_type().is_dir()
-            && canonical == path
+            && canonical.as_path() == path
             && metadata.uid() == unsafe { libc::geteuid() }
             && metadata.permissions().mode() & 0o077 == 0,
         "TUN runtime directory must be a real caller-owned private directory without symlink aliases"
