@@ -939,9 +939,17 @@ mod tests {
             mark: request.expected_mark,
         };
         let response =
-            build_socket_mark_broker_response(&request, &snapshot, &snapshot, &[record.clone()])
+            build_socket_mark_broker_response(
+                &request,
+                &snapshot,
+                &snapshot,
+                std::slice::from_ref(&record),
+            )
                 .unwrap();
-        assert_eq!(response.records, [record.clone()]);
+        assert_eq!(
+            response.records.as_slice(),
+            std::slice::from_ref(&record)
+        );
 
         let changed = ProcessSocketSnapshot {
             process: ProcessIdentity {
@@ -951,7 +959,13 @@ mod tests {
             ..snapshot.clone()
         };
         assert!(
-            build_socket_mark_broker_response(&request, &snapshot, &changed, &[record]).is_err()
+            build_socket_mark_broker_response(
+                &request,
+                &snapshot,
+                &changed,
+                std::slice::from_ref(&record),
+            )
+            .is_err()
         );
     }
 
