@@ -759,3 +759,5 @@ A supervisor that observes core exit while already in CleanupPending now emits t
 ### Atomic helper installation
 
 The helper installer now stages the new executable inside the root-owned libexec directory, applies and verifies the exact CAP_NET_ADMIN file capability on that staged file, and only then atomically renames it over the installed helper. Failures before the rename preserve the previous helper instead of deleting or leaving it partially replaced. Signal handling removes only the staging file. The installer still creates no service, sudoers rule, setuid fallback, or automatic startup.
+
+The manifest-path validator also checks the original path spelling before `Path::components()` normalization, explicitly rejecting interior `.` and `..` segments. This matters because standard path component iteration may normalize away interior `.` components rather than expose them to the caller.
