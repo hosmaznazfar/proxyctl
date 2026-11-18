@@ -162,7 +162,8 @@ impl RouteNetlink {
 /// This diagnostic is safe without privileges and never changes interface state.
 pub fn inspect_link_count() -> Result<usize> {
     let mut request = vec![0u8; NETLINK_HEADER_LEN + 16];
-    request[0..4].copy_from_slice(&(request.len() as u32).to_ne_bytes());
+    let request_len = request.len() as u32;
+    request[0..4].copy_from_slice(&request_len.to_ne_bytes());
     request[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
     request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
     // ifinfomsg is zeroed: AF_UNSPEC, all interfaces, no filters.
@@ -284,4 +285,32 @@ mod tests {
         bytes[0..4].copy_from_slice(&99u32.to_ne_bytes());
         assert!(validate_request(&bytes).is_err());
     }
+    #[test]
+    fn accepts_final_unpadded_netlink_message_without_out_of_bounds_access() {
+        let mut bytes = message(NLMSG_DONE, 7, &[]);
+        bytes.truncate(NETLINK_HEADER_LEN);
+        assert_eq!(parse_datagram(&bytes, 7).unwrap(), (Vec::new(), true));
+    }
+
+    #[test]
+    fn rejects_nonzero_alignment_padding_and_truncated_padding() {
+        let mut padded = message(NLMSG_DONE, 7, &[1]);
+        *padded.last_mut().unwrap() = 0x7f;
+        assert!(parse_datagram(&padded, 7).is_err());
+        let mut truncated = message(NLMSG_DONE, 7, &[1]);
+        truncated.pop();
+        assert!(parse_datagram(&truncated, 7).is_err());
+    }
+
+    #[test]
+    fn read_only_link_probe_request_uses_dump_flags() {
+        let mut request = vec![0u8; NETLINK_HEADER_LEN + 16];
+        let length = request.len() as u32;
+        request[0..4].copy_from_slice(&length.to_ne_bytes());
+        request[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+        request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        validate_request(&request).unwrap();
+        assert_eq!(u16::from_ne_bytes(request[4..6].try_into().unwrap()), RTM_GETLINK);
+    }
+
 }
