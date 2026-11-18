@@ -561,3 +561,8 @@ Added a focused recovery-planner test proving that decisions are emitted in reve
 ### Kernel transaction fingerprint bounds
 
 The transaction executor now validates every route/rule fingerprint immediately when returned by a backend: values must be non-empty, no larger than 16 KiB, and free of control characters. Invalid evidence retains the recovery journal and prevents further mutation or manifest promotion. The concrete backend remains unimplemented.
+
+
+### Ambiguous interface-creation failure
+
+If interface creation reports an error, the executor now explicitly asks the backend to retain the write-ahead journal before returning. A backend can fail after the kernel mutation but before returning the interface identity; that boundary is ambiguous and must not be treated as a clean no-op. Fake-backend coverage exercises a post-intent creation failure while preserving the created interface and recovery journal.
