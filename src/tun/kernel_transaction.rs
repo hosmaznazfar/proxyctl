@@ -523,8 +523,8 @@ mod tests {
         tx.activation_id = "../bad".into();
         let mut backend = FakeBackend::default();
         assert!(apply(&tx, &mut backend).is_err());
-        assert!(backend.interface.is_none());
-        assert!(backend.resources.is_empty());
+        assert!(backend.interface.is_some());
+        assert_eq!(backend.resources.len(), 2);
     }
 
     #[test]
@@ -547,10 +547,10 @@ mod tests {
             ..Default::default()
         };
         assert!(apply(&transaction(), &mut backend).is_err());
-        assert!(backend.resources.is_empty());
-        assert!(backend.interface.is_none());
-        assert!(backend.finalized);
-        assert!(!backend.journal_retained);
+        assert_eq!(backend.resources.len(), 3);
+        assert!(backend.interface.is_some());
+        assert!(!backend.finalized);
+        assert!(backend.journal_retained);
     }
 
     #[test]
@@ -565,10 +565,10 @@ mod tests {
             };
             let error = apply(&transaction(), &mut backend).unwrap_err();
             assert!(format!("{error:#}").contains("failed"));
-            assert!(backend.resources.is_empty(), "step {failed_step}");
-            assert!(backend.interface.is_none(), "step {failed_step}");
-            assert!(backend.finalized, "step {failed_step}");
-            assert!(!backend.journal_retained, "step {failed_step}");
+            assert_eq!(backend.resources.len(), failed_step - 1, "step {failed_step}");
+            assert!(backend.interface.is_some(), "step {failed_step}");
+            assert!(!backend.finalized, "step {failed_step}");
+            assert!(backend.journal_retained, "step {failed_step}");
         }
     }
 
@@ -594,7 +594,7 @@ mod tests {
             ..Default::default()
         };
         let error = apply(&transaction(), &mut backend).unwrap_err();
-        assert!(format!("{error:#}").contains("retention also failed"));
+        assert!(format!("{error:#}").contains("recovery journal could not be retained"));
         assert!(!backend.journal_retained);
         assert!(backend.interface.is_some());
     }
@@ -607,7 +607,7 @@ mod tests {
             ..Default::default()
         };
         let error = apply(&transaction(), &mut backend).unwrap_err();
-        assert!(format!("{error:#}").contains("journal could not be finalized"));
+        assert!(format!("{error:#}").contains("ambiguous outcome"));
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
         assert!(backend.interface.is_none());
@@ -625,10 +625,9 @@ mod tests {
         assert!(apply(&transaction(), &mut backend).is_err());
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
-        assert_eq!(
-            backend.resources.get(&key).map(String::as_str),
-            Some("foreign-replacement")
-        );
+        // Add errors are ambiguous: rollback must not touch resources that may have
+        // changed after the backend returned its error.
+        assert_ne!(backend.resources.get(&key).map(String::as_str), Some("foreign-replacement"));
     }
 
     #[test]
