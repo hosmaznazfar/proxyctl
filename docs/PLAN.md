@@ -636,3 +636,9 @@ This transport does not request or acquire capabilities, perform privilege escal
 A versioned, bounded request contract now exists for the future read-only socket-mark broker. It carries only a pid/start-time/canonical-executable process identity, the configured upstream peer endpoint, TCP/UDP transport, and expected mark/mask. Validation rejects malformed identities, invalid peer endpoints, invalid mark policies, unknown JSON fields, truncated/oversized frames, and trailing bytes. The wire frame is length-prefixed and capped at 16 KiB.
 
 This does not launch a privilege helper or perform IPC. The executor must authenticate the connecting user's peer credentials, enforce same-user process ownership, pin the target process with pidfd, recheck identity around collection, and return only peer/mark-matched records. It must never expose a generic command interface or accept arbitrary kernel operations. No ambient capability is granted to Proxyctl; no TUN activation is enabled. Response protocol, IPC transport, helper packaging/policy, and integration with readiness remain future work.
+
+#### Broker peer authentication primitive
+
+A Linux SO_PEERCRED reader now extracts PID, UID, and GID from an accepted Unix stream socket using kernel-provided credentials. The authorization policy requires a valid peer PID and exact same-UID ownership of the requested target process. The future helper must obtain the target UID from procfs only after pidfd-pinning and verifying the requested process identity; the request cannot assert its own owner UID.
+
+This remains a tested primitive rather than an active IPC service. A private listener, socket filesystem permissions, target-owner inspection, pidfd-bound request handling, response framing, helper lifecycle, and end-to-end isolation tests are still outstanding. No TUN activation is enabled.
