@@ -482,6 +482,12 @@ Added a one-response Unix-stream transport with a two-second maximum monotonic d
 
 `proxyctl tun status` now reports the detected PID 1 service manager, whether its recovery backend is actually implemented, and the explicit TUN activation gate. Detection is informational only: it does not invoke service-manager commands, install units, start a supervisor, or change host state. Every current backend remains reported as not implemented, so the command cannot imply recovery readiness.
 
+### Dedicated diagnostic helper (first packaged privilege boundary)
+
+A separate `proxyctl-tun-helper` binary now exposes only one operation: accept one bounded Unix-socket request and return same-UID, pidfd-bound socket-mark diagnostics. It accepts only `--socket PATH`; it has no shell, executable, route, link, DNS, firewall, or generic command interface. It requires its effective/permitted capability sets to equal exactly `CAP_NET_ADMIN`, requires an inheritable set of zero, enables `no_new_privs`, disables dumpability, verifies a caller-owned private runtime directory, serves one request, and exits. The helper is a separate Cargo binary and is not spawned by the main CLI.
+
+`packaging/install-tun-helper.sh` installs it at `/usr/libexec/proxyctl-tun-helper` with only `cap_net_admin=ep`; `packaging/remove-tun-helper.sh` removes the file and capability. The scripts refuse a setuid fallback and do not create sudoers rules, polkit policy, or service units. Installation is an explicit administrator action and has not been run as part of this repository change. This is a diagnostic-only privilege boundary, not the privileged TUN mutator: it does not create interfaces, add routes/rules, or clean kernel resources. A reviewed distribution package, capability bounding policy, helper/controller lifecycle integration, and independent recovery remain outstanding.
+
 ## Remaining implementation gates (not yet complete)
 
 The broker request/response path now has isolated server-side and client-side transport/execution primitives, but this does not close the TUN implementation. The following production gates remain intentionally open:
