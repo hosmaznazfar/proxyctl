@@ -4,7 +4,7 @@
 //! A candidate executable is not proof that authorization is available or safe.
 
 use crate::tun::{manifest_store::ManifestSnapshot, recovery::SupervisorPhase};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
@@ -465,7 +465,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn private_broker_listener_requires_private_directory_and_creates_mode_0600_socket() {
-        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 
         let directory = tempfile::tempdir().unwrap();
         let socket = directory.path().join("broker.sock");
