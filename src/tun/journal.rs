@@ -359,6 +359,13 @@ mod validation_tests {
     }
 
     #[test]
+    fn journal_activation_id_must_use_canonical_lowercase_hex() {
+        let mut value = journal(Vec::new());
+        value.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
+        assert!(value.validate().is_err());
+    }
+
+    #[test]
     fn every_route_and_rule_requires_the_interface_creation_intent_first() {
         let route_first = journal(vec![operation(
             0,
