@@ -453,3 +453,8 @@ Socket diagnostic records now support strict serde serialization, and the broker
 #### Stable process-to-peer response assembly
 
 A response assembly function now composes the existing before/after socket-inode reconciliation with exact configured peer, transport, and masked-mark classification. It requires both snapshots to match the request's complete process identity, rejects socket-set races and unrelated inodes, and validates the resulting bounded response before serialization. Tests use synthetic records and identities only. This is still offline candidate assembly: it does not execute netlink collection, establish successful traffic, populate readiness, or enable TUN.
+
+
+#### Bounded broker listener acceptance
+
+The private Unix listener now has a single-client accept primitive with a bounded poll deadline. It obtains SO_PEERCRED immediately after accept, then reads exactly one bounded request frame within the remaining deadline and returns the stream, kernel credentials, and validated request. Timeout, unexpected poll events, credential errors, malformed frames, and slow clients fail closed. The caller is still responsible for pidfd-bound target authorization before any diagnostic socket is opened. No helper process, capability, privileged collection, network mutation, or TUN activation is introduced.
