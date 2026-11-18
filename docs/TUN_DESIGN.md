@@ -712,3 +712,7 @@ Multipart NETLINK_ROUTE parsing now rejects the kernel's NLM_F_DUMP_INTR indicat
 ### Link inventory consistency test boundary
 
 The sysfs/NETLINK_ROUTE reconciliation is now an isolated validation function. It requires equal inventory sizes, unique netlink names, matching name-to-ifindex identities, and matching TUN kind evidence. Focused tests cover the matching case and name, index, kind, and missing-record disagreements without requiring a live network namespace. Production collection still performs both read-only observations and fails closed on any mismatch.
+
+### NETLINK_ROUTE link attribute flag validation
+
+The exact link decoder now rejects unsupported netlink attribute flags on interface-name and link-kind identity attributes. IFLA_LINKINFO accepts only its ordinary or nested form; identity strings cannot carry network-byte-order or other unexpected flags. This prevents an otherwise well-framed but semantically altered attribute from being accepted as ownership evidence. Tests exercise flagged interface-name and nested link-kind attributes.
