@@ -175,11 +175,16 @@ pub fn apply<B: KernelTransactionBackend>(
     };
     let mut resources = Vec::with_capacity(bound_policy.routes.len() + bound_policy.rules.len());
     let mut invalid_fingerprint = false;
+    let mut ambiguous_mutation_error = false;
     let apply_result = (|| -> Result<()> {
         for route in &bound_policy.routes {
-            let fingerprint = backend
-                .add_owned_route(activation_id, route)
-                .context("failed to add and journal an owned TUN route")?;
+            let fingerprint = match backend.add_owned_route(activation_id, route) {
+                Ok(fingerprint) => fingerprint,
+                Err(error) => {
+                    ambiguous_mutation_error = true;
+                    return Err(error).context("route add failed with an unresolved write-ahead intent");
+                }
+            };
             if !valid_backend_fingerprint(&fingerprint) {
                 invalid_fingerprint = true;
                 anyhow::bail!("route backend returned an invalid fingerprint");
@@ -190,9 +195,13 @@ pub fn apply<B: KernelTransactionBackend>(
             });
         }
         for rule in &bound_policy.rules {
-            let fingerprint = backend
-                .add_owned_rule(activation_id, rule)
-                .context("failed to add and journal an owned policy rule")?;
+            let fingerprint = match backend.add_owned_rule(activation_id, rule) {
+                Ok(fingerprint) => fingerprint,
+                Err(error) => {
+                    ambiguous_mutation_error = true;
+                    return Err(error).context("rule add failed with an unresolved write-ahead intent");
+                }
+            };
             if !valid_backend_fingerprint(&fingerprint) {
                 invalid_fingerprint = true;
                 anyhow::bail!("rule backend returned an invalid fingerprint");
@@ -206,6 +215,14 @@ pub fn apply<B: KernelTransactionBackend>(
     })();
 
     if let Err(error) = apply_result {
+        if ambiguous_mutation_error {
+            backend.retain_recovery_journal(activation_id).context(
+                "kernel add failed with an ambiguous outcome and recovery journal could not be retained",
+            )?;
+            return Err(error).context(
+                "kernel add outcome is ambiguous; recovery journal retained for exact inspection",
+            );
+        }
         if invalid_fingerprint {
             backend.retain_recovery_journal(activation_id).context(
                 "empty resource fingerprint detected and recovery journal could not be retained",
