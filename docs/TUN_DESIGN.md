@@ -521,3 +521,8 @@ Owned interface names are now restricted to Linux-safe ASCII alphanumeric, under
 ### Diagnostic helper path trust checks
 
 The controller-side socket-mark probe now requires the supplied private runtime directory to resolve to itself (rejecting symlink aliases) and verifies that `/usr/libexec` is a real root-owned directory not writable by group or other users before trusting the fixed helper executable. The helper file itself remains root-owned, executable, non-writable by group/other, and non-setuid. These checks reduce path substitution risk but do not eliminate the filesystem-to-exec race or replace package integrity verification and an independent security audit. The probe remains diagnostic-only.
+
+
+### Helper installation rollback
+
+The manual helper installer now removes the copied helper if applying `cap_net_admin=ep` fails or if `getcap` reports any capability set other than the exact expected value. It attempts to clear file capabilities before removal and never leaves a knowingly incomplete helper installation behind. This does not install the helper or authorize its use; package integration and security review remain open.
