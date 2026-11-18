@@ -237,6 +237,29 @@ fn valid_journal_activation_id(value: &str) -> bool {
         })
 }
 
+
+fn valid_route_destination(key: &str, destination: &str) -> bool {
+    let family = key.split(':').nth(1);
+    let Some((address, prefix)) = destination.split_once('/') else {
+        return false;
+    };
+    let Ok(prefix) = prefix.parse::<u8>() else {
+        return false;
+    };
+    let Ok(address) = address.parse::<std::net::IpAddr>() else {
+        return false;
+    };
+    match (family, address) {
+        (Some("v4"), std::net::IpAddr::V4(address)) => {
+            prefix <= 32 && address.to_string() == destination.split('/').next().unwrap_or_default()
+        }
+        (Some("v6"), std::net::IpAddr::V6(address)) => {
+            prefix <= 128 && address.to_string() == destination.split('/').next().unwrap_or_default()
+        }
+        _ => false,
+    }
+}
+
 fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
     match kind {
         JournalOperationKind::CreateInterface => {
@@ -256,9 +279,9 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
                 && parts
                     .next()
                     .is_some_and(|table| table.parse::<u32>().is_ok_and(|value| value > 0))
-                && parts.next().is_some_and(|destination| {
-                    !destination.is_empty() && !destination.chars().any(char::is_whitespace)
-                })
+                && parts
+                    .next()
+                    .is_some_and(|destination| valid_route_destination(key, destination))
         }
         JournalOperationKind::AddRule => {
             let mut parts = key.split(':');
@@ -346,6 +369,29 @@ mod validation_tests {
         invalid.operations[1].state = JournalOperationState::Applied;
         invalid.operations[1].fingerprint = Some("route-fingerprint".into());
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn route_journal_keys_require_a_valid_family_address_and_prefix() {
+        for key in [
+            "route:v4:42420:0.0.0.0/33",
+            "route:v4:42420:2001:db8::/0",
+            "route:v6:42420:192.0.2.0/24",
+            "route:v6:42420:not-an-address/0",
+            "route:v4:42420:0.0.0.0",
+        ] {
+            let invalid = journal(vec![
+                operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+                operation(1, JournalOperationKind::AddRoute, key),
+            ]);
+            assert!(invalid.validate().is_err(), "accepted {key}");
+        }
+        let valid = journal(vec![
+            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(2, JournalOperationKind::AddRoute, "route:v6:42420::/0"),
+        ]);
+        valid.validate().unwrap();
     }
 
 }
