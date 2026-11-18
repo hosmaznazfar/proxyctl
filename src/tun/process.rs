@@ -151,6 +151,10 @@ impl ProcessHandle {
     /// Signal only the pinned process instance after rechecking its recorded identity.
     pub fn signal(&self, signal: i32) -> Result<()> {
         ensure!(
+            (1..=64).contains(&signal),
+            "refusing an invalid or signal-zero pidfd operation"
+        );
+        ensure!(
             self.identity.verify()?,
             "refusing to signal a process whose identity no longer matches"
         );
@@ -301,6 +305,16 @@ mod tests {
         assert!(!changed.verify().unwrap());
         child.kill().unwrap();
         child.wait().unwrap();
+    }
+
+    #[test]
+    fn pidfd_signal_rejects_zero_and_out_of_range_signals() {
+        let child = child();
+        let (_identity, handle) = pin_live_child(&child);
+        assert!(handle.signal(0).is_err());
+        assert!(handle.signal(65).is_err());
+        drop(handle);
+        drop(child);
     }
 
     #[test]
