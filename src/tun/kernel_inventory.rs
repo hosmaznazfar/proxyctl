@@ -325,7 +325,7 @@ fn parse_array(bytes: &[u8], kind: &str) -> Result<Vec<Value>> {
     let records = value
         .as_array()
         .with_context(|| format!("iproute2 returned a non-array {kind} inventory"))?;
-    ensure!(
+    anyhow::ensure!(
         records.iter().all(Value::is_object),
         "iproute2 returned a non-object record in {kind} inventory"
     );
