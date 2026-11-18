@@ -752,3 +752,6 @@ The plan-validation contract is covered by offline tests for a valid generated p
 
 A supervisor identity now accepts only a normalized absolute manifest file path: the path must begin at the root, contain only normal path components, have a filename, and contain no duplicate separators, trailing separator, NUL, or control characters. This prevents ambiguous path spellings from crossing the future service-manager boundary. It does not grant the supervisor authority to open or modify the path; owner, mode, no-follow, and activation-lock checks remain mandatory at the storage layer.
 
+### Re-entrant recovery cleanup
+
+A supervisor that observes core exit while already in CleanupPending now emits the cleanup action again instead of treating the repeated event as a no-op. This supports supervisor restart and event replay: cleanup must tolerate already-removed resources, while any ownership mismatch remains a conflict that preserves the manifest. The transition function remains pure and does not itself perform cleanup.
