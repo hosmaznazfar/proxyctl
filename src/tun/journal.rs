@@ -78,7 +78,10 @@ pub fn plan_journal_recovery(
     journal.validate()?;
     for (key, fingerprint) in observed {
         ensure!(
-            journal.operations.iter().any(|operation| operation.resource_key == *key),
+            journal
+                .operations
+                .iter()
+                .any(|operation| operation.resource_key == *key),
             "kernel observation contains a resource outside the transaction journal"
         );
         if let Some(fingerprint) = fingerprint {
@@ -251,7 +254,6 @@ fn valid_journal_activation_id(value: &str) -> bool {
         })
 }
 
-
 fn valid_route_destination(key: &str, destination: &str) -> bool {
     let family = key.split(':').nth(1);
     let Some((address, prefix)) = destination.split_once('/') else {
@@ -268,7 +270,8 @@ fn valid_route_destination(key: &str, destination: &str) -> bool {
             prefix <= 32 && address.to_string() == destination.split('/').next().unwrap_or_default()
         }
         (Some("v6"), std::net::IpAddr::V6(address)) => {
-            prefix <= 128 && address.to_string() == destination.split('/').next().unwrap_or_default()
+            prefix <= 128
+                && address.to_string() == destination.split('/').next().unwrap_or_default()
         }
         _ => false,
     }
@@ -308,7 +311,6 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
         }
     }
 }
-
 
 #[cfg(test)]
 mod validation_tests {
@@ -350,8 +352,16 @@ mod validation_tests {
         assert!(rule_first.validate().is_err());
 
         let complete = journal(vec![
-            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
-            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(
+                0,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            ),
+            operation(
+                1,
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+            ),
             operation(2, JournalOperationKind::AddRule, "rule:v4:42410"),
         ]);
         complete.validate().unwrap();
@@ -359,8 +369,16 @@ mod validation_tests {
     #[test]
     fn journal_states_follow_apply_then_reverse_cleanup_order() {
         let mut valid = journal(vec![
-            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
-            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(
+                0,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            ),
+            operation(
+                1,
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+            ),
             operation(2, JournalOperationKind::AddRule, "rule:v4:42410"),
         ]);
         valid.operations[0].state = JournalOperationState::Applied;
@@ -395,14 +413,26 @@ mod validation_tests {
             "route:v4:42420:0.0.0.0",
         ] {
             let invalid = journal(vec![
-                operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+                operation(
+                    0,
+                    JournalOperationKind::CreateInterface,
+                    "interface:tun-proxyctl",
+                ),
                 operation(1, JournalOperationKind::AddRoute, key),
             ]);
             assert!(invalid.validate().is_err(), "accepted {key}");
         }
         let valid = journal(vec![
-            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
-            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(
+                0,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            ),
+            operation(
+                1,
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+            ),
             operation(2, JournalOperationKind::AddRoute, "route:v6:42420::/0"),
         ]);
         valid.validate().unwrap();
@@ -411,13 +441,19 @@ mod validation_tests {
     #[test]
     fn recovery_rejects_unjournaled_or_malformed_kernel_observations() {
         let value = journal(vec![
-            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
-            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(
+                0,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            ),
+            operation(
+                1,
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+            ),
         ]);
-        let unknown = std::collections::BTreeMap::from([(
-            "route:v4:42420:192.0.2.0/24".to_owned(),
-            None,
-        )]);
+        let unknown =
+            std::collections::BTreeMap::from([("route:v4:42420:192.0.2.0/24".to_owned(), None)]);
         assert!(plan_journal_recovery(&value, &unknown).is_err());
 
         let malformed = std::collections::BTreeMap::from([(
@@ -426,10 +462,8 @@ mod validation_tests {
         )]);
         assert!(plan_journal_recovery(&value, &malformed).is_err());
 
-        let incomplete = std::collections::BTreeMap::from([(
-            "interface:tun-proxyctl".to_owned(),
-            None,
-        )]);
+        let incomplete =
+            std::collections::BTreeMap::from([("interface:tun-proxyctl".to_owned(), None)]);
         let decisions = plan_journal_recovery(&value, &incomplete).unwrap();
         assert_eq!(
             decisions[1].1,
@@ -440,8 +474,16 @@ mod validation_tests {
     #[test]
     fn recovery_plan_is_reverse_ordered_and_conflicts_are_resource_local() {
         let mut value = journal(vec![
-            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
-            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(
+                0,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            ),
+            operation(
+                1,
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+            ),
             operation(2, JournalOperationKind::AddRule, "rule:v4:42410"),
         ]);
         for (item, fingerprint) in value.operations.iter_mut().zip([
@@ -453,13 +495,22 @@ mod validation_tests {
             item.fingerprint = Some(fingerprint.into());
         }
         let observed = std::collections::BTreeMap::from([
-            ("interface:tun-proxyctl".into(), Some("interface-fingerprint".into())),
-            ("route:v4:42420:0.0.0.0/0".into(), Some("foreign-route".into())),
+            (
+                "interface:tun-proxyctl".into(),
+                Some("interface-fingerprint".into()),
+            ),
+            (
+                "route:v4:42420:0.0.0.0/0".into(),
+                Some("foreign-route".into()),
+            ),
             ("rule:v4:42410".into(), Some("rule-fingerprint".into())),
         ]);
         let decisions = plan_journal_recovery(&value, &observed).unwrap();
         assert_eq!(
-            decisions.iter().map(|(key, _)| key.as_str()).collect::<Vec<_>>(),
+            decisions
+                .iter()
+                .map(|(key, _)| key.as_str())
+                .collect::<Vec<_>>(),
             [
                 "rule:v4:42410",
                 "route:v4:42420:0.0.0.0/0",
@@ -483,5 +534,4 @@ mod validation_tests {
             }
         );
     }
-
 }
