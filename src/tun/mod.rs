@@ -25,7 +25,7 @@ pub mod recovery;
 pub mod resource_snapshot;
 pub mod route_policy;
 #[cfg(target_os = "linux")]
-mod rtnetlink;
+pub mod rtnetlink;
 pub mod service_manager;
 #[cfg(target_os = "linux")]
 pub mod socket_diag_collector;
