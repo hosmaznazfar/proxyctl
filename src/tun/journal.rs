@@ -138,11 +138,17 @@ impl TransactionJournal {
                     );
                     interface_seen = true;
                 }
-                JournalOperationKind::AddRoute => ensure!(
-                    !rules_started,
-                    "routes cannot be journaled after policy rules"
-                ),
-                JournalOperationKind::AddRule => rules_started = true,
+                JournalOperationKind::AddRoute => {
+                    ensure!(interface_seen, "routes require a journaled TUN interface");
+                    ensure!(
+                        !rules_started,
+                        "routes cannot be journaled after policy rules"
+                    );
+                }
+                JournalOperationKind::AddRule => {
+                    ensure!(interface_seen, "rules require a journaled TUN interface");
+                    rules_started = true;
+                }
             }
             ensure!(
                 operation.sequence as usize == index,
@@ -231,5 +237,54 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
                     .is_some_and(|priority| priority.parse::<u32>().is_ok_and(|value| value > 0))
                 && parts.next().is_none()
         }
+    }
+}
+
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    fn journal(operations: Vec<JournalOperation>) -> TransactionJournal {
+        TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 1,
+            operations,
+        }
+    }
+
+    fn operation(sequence: u32, kind: JournalOperationKind, key: &str) -> JournalOperation {
+        JournalOperation {
+            sequence,
+            kind,
+            resource_key: key.into(),
+            state: JournalOperationState::Intent,
+            fingerprint: None,
+        }
+    }
+
+    #[test]
+    fn every_route_and_rule_requires_the_interface_creation_intent_first() {
+        let route_first = journal(vec![operation(
+            0,
+            JournalOperationKind::AddRoute,
+            "route:v4:42420:0.0.0.0/0",
+        )]);
+        assert!(route_first.validate().is_err());
+
+        let rule_first = journal(vec![operation(
+            0,
+            JournalOperationKind::AddRule,
+            "rule:v4:42410",
+        )]);
+        assert!(rule_first.validate().is_err());
+
+        let complete = journal(vec![
+            operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+            operation(1, JournalOperationKind::AddRoute, "route:v4:42420:0.0.0.0/0"),
+            operation(2, JournalOperationKind::AddRule, "rule:v4:42410"),
+        ]);
+        complete.validate().unwrap();
     }
 }
