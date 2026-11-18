@@ -716,3 +716,8 @@ The sysfs/NETLINK_ROUTE reconciliation is now an isolated validation function. I
 ### NETLINK_ROUTE link attribute flag validation
 
 The exact link decoder now rejects unsupported netlink attribute flags on interface-name and link-kind identity attributes. IFLA_LINKINFO accepts only its ordinary or nested form; identity strings cannot carry network-byte-order or other unexpected flags. This prevents an otherwise well-framed but semantically altered attribute from being accepted as ownership evidence. Tests exercise flagged interface-name and nested link-kind attributes.
+
+
+### Service-manager identity precedence
+
+Service-manager detection now treats a recognized PID 1 executable as authoritative. Runtime marker directories are consulted only when PID 1 is the generic `init` process, preventing stale or bind-mounted markers from selecting the wrong recovery integration. A regression test covers conflicting OpenRC PID 1 identity and a stale systemd marker. Detection remains read-only; no init service is installed, started, or modified.
