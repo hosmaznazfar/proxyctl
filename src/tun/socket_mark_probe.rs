@@ -205,8 +205,8 @@ fn validate_activation_id(value: &str) -> Result<()> {
 fn validate_runtime_directory(path: &Path) -> Result<()> {
     let metadata =
         std::fs::symlink_metadata(path).context("cannot inspect private TUN runtime directory")?;
-    let canonical = std::fs::canonicalize(path)
-        .context("cannot resolve private TUN runtime directory")?;
+    let canonical =
+        std::fs::canonicalize(path).context("cannot resolve private TUN runtime directory")?;
     ensure!(
         metadata.file_type().is_dir()
             && canonical.as_path() == path
@@ -225,9 +225,11 @@ fn validate_helper(path: &Path) -> Result<()> {
     );
     let metadata =
         std::fs::symlink_metadata(path).context("dedicated diagnostic helper is not installed")?;
-    let parent = path.parent().context("diagnostic helper has no parent directory")?;
-    let parent_metadata = std::fs::symlink_metadata(parent)
-        .context("cannot inspect diagnostic helper directory")?;
+    let parent = path
+        .parent()
+        .context("diagnostic helper has no parent directory")?;
+    let parent_metadata =
+        std::fs::symlink_metadata(parent).context("cannot inspect diagnostic helper directory")?;
     ensure!(
         parent_metadata.file_type().is_dir()
             && parent_metadata.uid() == 0

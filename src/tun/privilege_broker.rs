@@ -993,11 +993,13 @@ mod tests {
         assert!(encode_socket_mark_response(&invalid).is_err());
 
         let mut inconsistent = response.clone();
-        inconsistent.records.push(super::super::socket_diag_records::SocketDiagnosticRecord {
-            inode: 78,
-            mark: 0x242,
-            ..inconsistent.records[0].clone()
-        });
+        inconsistent
+            .records
+            .push(super::super::socket_diag_records::SocketDiagnosticRecord {
+                inode: 78,
+                mark: 0x242,
+                ..inconsistent.records[0].clone()
+            });
         assert!(inconsistent.validate().is_err());
 
         let mut trailing = frame;

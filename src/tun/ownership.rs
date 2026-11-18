@@ -303,7 +303,12 @@ mod tests {
         let mut invalid = manifest();
         invalid.activation_id = "../systemd".into();
         assert!(invalid.validate().is_err());
-        for invalid_name in ["name/with/slash", "name with space", "name\\n", "bad\\0name"] {
+        for invalid_name in [
+            "name/with/slash",
+            "name with space",
+            "name\\n",
+            "bad\\0name",
+        ] {
             let mut invalid = manifest();
             invalid.interface_name = invalid_name.into();
             assert!(invalid.validate().is_err());
