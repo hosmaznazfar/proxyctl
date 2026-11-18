@@ -254,6 +254,12 @@ fn valid_journal_activation_id(value: &str) -> bool {
         })
 }
 
+fn canonical_positive_u32(value: &str) -> bool {
+    value
+        .parse::<u32>()
+        .is_ok_and(|parsed| parsed > 0 && parsed.to_string() == value)
+}
+
 fn address_text(destination: &str) -> &str {
     destination.split('/').next().unwrap_or_default()
 }
@@ -314,7 +320,7 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
                 return false;
             };
             matches!(family, "v4" | "v6")
-                && table.parse::<u32>().is_ok_and(|value| value > 0)
+                && canonical_positive_u32(table)
                 && valid_route_destination(key, destination)
         }
         JournalOperationKind::AddRule => {
@@ -323,7 +329,7 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
                 && matches!(parts.next(), Some("v4" | "v6"))
                 && parts
                     .next()
-                    .is_some_and(|priority| priority.parse::<u32>().is_ok_and(|value| value > 0))
+                    .is_some_and(|priority| canonical_positive_u32(priority))
                 && parts.next().is_none()
         }
     }
@@ -419,6 +425,28 @@ mod validation_tests {
         invalid.operations[2].state = JournalOperationState::Applied;
         invalid.operations[2].fingerprint = Some("rule-fingerprint".into());
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn journal_resource_keys_require_canonical_numeric_identifiers() {
+        for key in [
+            "route:v4:042420:0.0.0.0/0",
+            "route:v4:0:0.0.0.0/0",
+            "route:v4:4294967296:0.0.0.0/0",
+        ] {
+            let value = journal(vec![
+                operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+                operation(1, JournalOperationKind::AddRoute, key),
+            ]);
+            assert!(value.validate().is_err(), "accepted {key}");
+        }
+        for key in ["rule:v4:042410", "rule:v6:0", "rule:v6:4294967296"] {
+            let value = journal(vec![
+                operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+                operation(1, JournalOperationKind::AddRule, key),
+            ]);
+            assert!(value.validate().is_err(), "accepted {key}");
+        }
     }
 
     #[test]
