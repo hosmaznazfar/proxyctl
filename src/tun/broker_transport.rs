@@ -44,7 +44,10 @@ pub fn write_socket_mark_response(
     let mut remaining_bytes = frame.as_slice();
     while !remaining_bytes.is_empty() {
         let remaining = deadline.saturating_duration_since(Instant::now());
-        ensure!(!remaining.is_zero(), "broker response write exceeded its deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "broker response write exceeded its deadline"
+        );
         stream.set_write_timeout(Some(remaining))?;
         match stream.write(remaining_bytes) {
             Ok(0) => anyhow::bail!("broker response stream closed during write"),
@@ -61,7 +64,9 @@ pub fn write_socket_mark_response(
             Err(error) => return Err(error).context("cannot write broker response frame"),
         }
     }
-    stream.flush().context("cannot flush broker response frame")?;
+    stream
+        .flush()
+        .context("cannot flush broker response frame")?;
     Ok(())
 }
 
@@ -87,7 +92,10 @@ pub fn write_socket_mark_request(
     let mut remaining_bytes = frame.as_slice();
     while !remaining_bytes.is_empty() {
         let remaining = deadline.saturating_duration_since(Instant::now());
-        ensure!(!remaining.is_zero(), "broker request write exceeded its deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "broker request write exceeded its deadline"
+        );
         stream.set_write_timeout(Some(remaining))?;
         match stream.write(remaining_bytes) {
             Ok(0) => anyhow::bail!("broker request stream closed during write"),
@@ -104,7 +112,9 @@ pub fn write_socket_mark_request(
             Err(error) => return Err(error).context("cannot write broker request frame"),
         }
     }
-    stream.flush().context("cannot flush broker request frame")?;
+    stream
+        .flush()
+        .context("cannot flush broker request frame")?;
     Ok(())
 }
 
@@ -178,7 +188,10 @@ fn read_exact_before_deadline(
 ) -> Result<()> {
     while !buffer.is_empty() {
         let remaining = deadline.saturating_duration_since(Instant::now());
-        ensure!(!remaining.is_zero(), "broker response read exceeded its deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "broker response read exceeded its deadline"
+        );
         stream.set_read_timeout(Some(remaining))?;
         match stream.read(buffer) {
             Ok(0) => anyhow::bail!("broker response frame ended before completion"),
@@ -210,7 +223,7 @@ pub fn read_socket_mark_response(
 mod tests {
     use super::*;
     use crate::tun::{
-        privilege_broker::{BrokerSocketTransport, BROKER_REQUEST_VERSION},
+        privilege_broker::{BROKER_REQUEST_VERSION, BrokerSocketTransport},
         socket_diag_records::{SocketAddressFamily, SocketDiagnosticRecord},
     };
     use std::{

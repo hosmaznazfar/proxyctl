@@ -13,12 +13,12 @@ use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 use super::{
+    broker_transport::write_socket_mark_response,
     privilege_broker::{
         BrokerPeerCredentials, SocketMarkBrokerRequest, SocketMarkBrokerResponse,
         accept_socket_mark_request, authorize_socket_mark_request_for_process,
         build_socket_mark_broker_response,
     },
-    broker_transport::write_socket_mark_response,
     process::{ProcessHandle, ProcessIdentity},
     socket_diag_collector::{MAX_DUMP_TIMEOUT, collect_all},
     socket_diag_linux::LinuxSocketDiagnosticIo,
@@ -104,8 +104,7 @@ pub fn serve_one_socket_mark_request(
         "broker accept timeout is outside the permitted bound"
     );
     ensure!(
-        !diagnostic_timeout_per_dump.is_zero()
-            && diagnostic_timeout_per_dump <= MAX_DUMP_TIMEOUT,
+        !diagnostic_timeout_per_dump.is_zero() && diagnostic_timeout_per_dump <= MAX_DUMP_TIMEOUT,
         "broker diagnostic timeout is outside the permitted bound"
     );
     ensure!(
@@ -114,8 +113,7 @@ pub fn serve_one_socket_mark_request(
         "broker response timeout is outside the permitted bound"
     );
 
-    let (mut stream, peer, request) =
-        accept_socket_mark_request(listener, accept_timeout)?;
+    let (mut stream, peer, request) = accept_socket_mark_request(listener, accept_timeout)?;
     let response =
         collect_authorized_socket_mark_response(&request, peer, diagnostic_timeout_per_dump)?;
     write_socket_mark_response(&mut stream, &response, response_timeout)?;
@@ -171,7 +169,10 @@ mod tests {
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
-            assert!(Instant::now() < deadline, "fake child did not become inspectable");
+            assert!(
+                Instant::now() < deadline,
+                "fake child did not become inspectable"
+            );
             if let Ok(identity) = ProcessIdentity::capture(child.id())
                 && let Ok(handle) = ProcessHandle::open(identity.clone())
             {
