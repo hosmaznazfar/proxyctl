@@ -715,3 +715,10 @@ These transaction-executor safeguards remain fake-backend/offline only. No produ
 - [x] Make recovery fixtures model separate, valid interface and route transactions and use a bounded fake process for activation lifecycle coverage.
 
 These corrections are offline-only. Local formatting, Clippy, and the full test suite must be rerun by the developer; TUN activation remains disabled.
+
+
+- [x] Fix IPv6 route-key parsing without splitting the IPv6 destination on its embedded colons.
+- [x] Align Absent journal fixtures with the no-fingerprint invariant and restore zero-backend-call assertions for invalid transactions.
+- [x] Correct ambiguous-add error assertions and resolve broker test-process reaping and cloned-slice Clippy warnings.
+
+These are offline regression fixes only. Local tests and Clippy remain to be rerun; TUN activation remains disabled.
