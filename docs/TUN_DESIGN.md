@@ -605,3 +605,8 @@ All changes are offline test/validation corrections. No privileged operation, ho
 ### Compressed IPv6 journal-key regression
 
 The route journal key uses a colon separator before the destination, so an IPv6 destination beginning with compression syntax (for example `::/0`) places adjacent colons at that boundary. Validation restores the consumed leading compression colon for IPv6 before parsing and canonical-address checks. The family, table, address, and prefix checks remain strict; malformed and cross-family destinations are still rejected. This is parser validation only and does not change kernel route construction or TUN activation.
+
+
+### IPv6 canonicalization follow-up
+
+The compressed-IPv6 route-key validator now compares the parsed address against the restored, normalized destination text. This is important because the key separator consumes one colon before parsing: comparing against the unnormalized suffix incorrectly rejects valid leading-compression forms such as `::/0` and `::1/128`. The family and prefix bounds remain enforced, and the parser still rejects non-canonical or cross-family addresses. This is a pure journal-validation correction; it adds no kernel mutation or activation capability.
