@@ -661,3 +661,6 @@ The transport tests now cover a final unpadded `NLMSG_DONE`, reject malformed al
 ### Aggregate netlink response bounds
 
 NETLINK_ROUTE transactions now enforce both per-datagram and aggregate response budgets (4 MiB and 16,384 records). This prevents a multipart kernel dump from growing memory without bound even when every individual datagram is within the 1 MiB transport limit. The operation remains read-only at this stage.
+
+
+The aggregate response limits are isolated in a deterministic validation helper and covered for byte overflow, record-count overflow, and a valid bounded response. No live kernel state is required by these tests.
