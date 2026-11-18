@@ -566,3 +566,8 @@ The transaction executor now validates every route/rule fingerprint immediately 
 ### Ambiguous interface-creation failure
 
 If interface creation reports an error, the executor now explicitly asks the backend to retain the write-ahead journal before returning. A backend can fail after the kernel mutation but before returning the interface identity; that boundary is ambiguous and must not be treated as a clean no-op. Fake-backend coverage exercises a post-intent creation failure while preserving the created interface and recovery journal.
+
+
+### Ambiguous route/rule mutation failures
+
+A route or policy-rule backend error can occur after the kernel accepted the mutation but before its exact fingerprint was durably returned. The executor now retains the journal and stops immediately for this boundary instead of rolling back known resources and deleting the journal while the failed operation may remain in the kernel. Recovery must inspect the unresolved intent against fresh exact kernel inventory. Fake-backend fault injection covers post-mutation route and rule errors.
