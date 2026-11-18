@@ -35,7 +35,11 @@ impl RouteNetlink {
                 libc::NETLINK_ROUTE,
             )
         };
-        ensure!(raw >= 0, "cannot open NETLINK_ROUTE socket: {}", io::Error::last_os_error());
+        ensure!(
+            raw >= 0,
+            "cannot open NETLINK_ROUTE socket: {}",
+            io::Error::last_os_error()
+        );
         // SAFETY: raw is a newly-created descriptor and ownership is transferred exactly once.
         let fd = unsafe { OwnedFd::from_raw_fd(raw) };
         // SAFETY: zero is a valid initial representation for sockaddr_nl.
@@ -49,7 +53,11 @@ impl RouteNetlink {
                 std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
             )
         };
-        ensure!(result == 0, "cannot bind NETLINK_ROUTE socket: {}", io::Error::last_os_error());
+        ensure!(
+            result == 0,
+            "cannot bind NETLINK_ROUTE socket: {}",
+            io::Error::last_os_error()
+        );
         Ok(Self { fd, sequence: 0 })
     }
 
@@ -57,7 +65,10 @@ impl RouteNetlink {
     /// Callers must not expose arbitrary caller-provided bytes across the privilege boundary.
     pub(crate) fn transact(&mut self, request: &[u8], timeout: Duration) -> Result<Vec<Vec<u8>>> {
         validate_request(request)?;
-        self.sequence = self.sequence.checked_add(1).context("netlink sequence exhausted")?;
+        self.sequence = self
+            .sequence
+            .checked_add(1)
+            .context("netlink sequence exhausted")?;
         let sequence = self.sequence;
         let mut request = request.to_vec();
         request[8..12].copy_from_slice(&sequence.to_ne_bytes());
@@ -76,7 +87,11 @@ impl RouteNetlink {
                 std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
             )
         };
-        ensure!(sent == request.len() as isize, "short NETLINK_ROUTE send: {}", io::Error::last_os_error());
+        ensure!(
+            sent == request.len() as isize,
+            "short NETLINK_ROUTE send: {}",
+            io::Error::last_os_error()
+        );
 
         let deadline = std::time::Instant::now() + timeout.min(DEFAULT_TIMEOUT);
         let mut messages = Vec::new();
@@ -84,12 +99,23 @@ impl RouteNetlink {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             ensure!(!remaining.is_zero(), "NETLINK_ROUTE response timed out");
             let millis = remaining.as_millis().clamp(1, i32::MAX as u128) as i32;
-            let mut pollfd = libc::pollfd { fd: self.fd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+            let mut pollfd = libc::pollfd {
+                fd: self.fd.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
             // SAFETY: pollfd points to one initialized poll descriptor.
             let ready = unsafe { libc::poll(&mut pollfd, 1, millis) };
-            ensure!(ready >= 0, "NETLINK_ROUTE poll failed: {}", io::Error::last_os_error());
+            ensure!(
+                ready >= 0,
+                "NETLINK_ROUTE poll failed: {}",
+                io::Error::last_os_error()
+            );
             ensure!(ready > 0, "NETLINK_ROUTE response timed out");
-            ensure!(pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0, "NETLINK_ROUTE socket reported an error");
+            ensure!(
+                pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0,
+                "NETLINK_ROUTE socket reported an error"
+            );
 
             let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
             // SAFETY: buffer is writable for its full length and recvfrom has valid optional peer storage.
@@ -101,8 +127,15 @@ impl RouteNetlink {
                     libc::MSG_TRUNC,
                 )
             };
-            ensure!(received >= 0, "NETLINK_ROUTE receive failed: {}", io::Error::last_os_error());
-            ensure!(received as usize <= buffer.len(), "NETLINK_ROUTE datagram exceeded the size limit");
+            ensure!(
+                received >= 0,
+                "NETLINK_ROUTE receive failed: {}",
+                io::Error::last_os_error()
+            );
+            ensure!(
+                received as usize <= buffer.len(),
+                "NETLINK_ROUTE datagram exceeded the size limit"
+            );
             buffer.truncate(received as usize);
             let (batch, terminal) = parse_datagram(&buffer, sequence)?;
             messages.extend(batch);
@@ -114,9 +147,15 @@ impl RouteNetlink {
 }
 
 fn validate_request(bytes: &[u8]) -> Result<()> {
-    ensure!(bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM, "invalid netlink request length");
+    ensure!(
+        bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM,
+        "invalid netlink request length"
+    );
     let declared = u32::from_ne_bytes(bytes[0..4].try_into()?);
-    ensure!(declared as usize == bytes.len(), "netlink request length does not match its header");
+    ensure!(
+        declared as usize == bytes.len(),
+        "netlink request length does not match its header"
+    );
     Ok(())
 }
 
@@ -125,27 +164,49 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
     let mut messages = Vec::new();
     let mut terminal = false;
     while offset < bytes.len() {
-        ensure!(bytes.len() - offset >= NETLINK_HEADER_LEN, "truncated netlink message header");
+        ensure!(
+            bytes.len() - offset >= NETLINK_HEADER_LEN,
+            "truncated netlink message header"
+        );
         let header = &bytes[offset..offset + NETLINK_HEADER_LEN];
         let length = u32::from_ne_bytes(header[0..4].try_into()?) as usize;
         let kind = u16::from_ne_bytes(header[4..6].try_into()?);
         let sequence = u32::from_ne_bytes(header[8..12].try_into()?);
-        ensure!(length >= NETLINK_HEADER_LEN && length <= bytes.len() - offset, "invalid netlink message length");
-        ensure!(sequence == expected_sequence, "unexpected NETLINK_ROUTE sequence");
+        ensure!(
+            length >= NETLINK_HEADER_LEN && length <= bytes.len() - offset,
+            "invalid netlink message length"
+        );
+        ensure!(
+            sequence == expected_sequence,
+            "unexpected NETLINK_ROUTE sequence"
+        );
         let message = &bytes[offset..offset + length];
         if kind == NLMSG_ERROR {
-            ensure!(length >= NETLINK_HEADER_LEN + 4, "truncated netlink acknowledgement");
-            let error = i32::from_ne_bytes(message[NETLINK_HEADER_LEN..NETLINK_HEADER_LEN + 4].try_into()?);
-            ensure!(error == 0, "kernel rejected NETLINK_ROUTE request: {}", io::Error::from_raw_os_error(-error));
+            ensure!(
+                length >= NETLINK_HEADER_LEN + 4,
+                "truncated netlink acknowledgement"
+            );
+            let error =
+                i32::from_ne_bytes(message[NETLINK_HEADER_LEN..NETLINK_HEADER_LEN + 4].try_into()?);
+            ensure!(
+                error == 0,
+                "kernel rejected NETLINK_ROUTE request: {}",
+                io::Error::from_raw_os_error(-error)
+            );
             terminal = true;
         } else if kind == NLMSG_DONE {
             terminal = true;
         } else {
             messages.push(message.to_vec());
         }
-        offset = offset.checked_add((length + 3) & !3).context("netlink offset overflow")?;
+        offset = offset
+            .checked_add((length + 3) & !3)
+            .context("netlink offset overflow")?;
     }
-    ensure!(offset == bytes.len() || bytes[offset..].iter().all(|byte| *byte == 0), "invalid netlink alignment padding");
+    ensure!(
+        offset == bytes.len() || bytes[offset..].iter().all(|byte| *byte == 0),
+        "invalid netlink alignment padding"
+    );
     Ok((messages, terminal))
 }
 

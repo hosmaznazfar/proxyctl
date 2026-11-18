@@ -280,15 +280,39 @@ mod tests {
         let policy = policy();
         for interfaces in [
             vec![
-                KernelInterfaceRecord { name: "eth0".into(), index: 2, is_tun: false },
-                KernelInterfaceRecord { name: "eth0".into(), index: 3, is_tun: false },
+                KernelInterfaceRecord {
+                    name: "eth0".into(),
+                    index: 2,
+                    is_tun: false,
+                },
+                KernelInterfaceRecord {
+                    name: "eth0".into(),
+                    index: 3,
+                    is_tun: false,
+                },
             ],
             vec![
-                KernelInterfaceRecord { name: "eth0".into(), index: 2, is_tun: false },
-                KernelInterfaceRecord { name: "eth1".into(), index: 2, is_tun: false },
+                KernelInterfaceRecord {
+                    name: "eth0".into(),
+                    index: 2,
+                    is_tun: false,
+                },
+                KernelInterfaceRecord {
+                    name: "eth1".into(),
+                    index: 2,
+                    is_tun: false,
+                },
             ],
-            vec![KernelInterfaceRecord { name: "eth0".into(), index: 0, is_tun: false }],
-            vec![KernelInterfaceRecord { name: "bad/name".into(), index: 2, is_tun: false }],
+            vec![KernelInterfaceRecord {
+                name: "eth0".into(),
+                index: 0,
+                is_tun: false,
+            }],
+            vec![KernelInterfaceRecord {
+                name: "bad/name".into(),
+                index: 2,
+                is_tun: false,
+            }],
         ] {
             assert!(validate_interface_preflight(&policy, &snapshot(interfaces)).is_err());
         }
