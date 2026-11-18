@@ -13,9 +13,7 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
-use super::socket_diag_collector::{
-    ReceivedNetlinkDatagram, SocketDiagnosticIo,
-};
+use super::socket_diag_collector::{ReceivedNetlinkDatagram, SocketDiagnosticIo};
 
 const NETLINK_SOCK_DIAG: libc::c_int = 4;
 const RECEIVE_BUFFER_BYTES: usize = 64 * 1024;
@@ -38,7 +36,11 @@ impl LinuxSocketDiagnosticIo {
                 NETLINK_SOCK_DIAG,
             )
         };
-        ensure!(raw >= 0, "failed to open NETLINK_SOCK_DIAG socket: {}", std::io::Error::last_os_error());
+        ensure!(
+            raw >= 0,
+            "failed to open NETLINK_SOCK_DIAG socket: {}",
+            std::io::Error::last_os_error()
+        );
         // SAFETY: raw is a newly-created descriptor and ownership is transferred once.
         let socket = unsafe { OwnedFd::from_raw_fd(raw) };
 
@@ -55,14 +57,21 @@ impl LinuxSocketDiagnosticIo {
                 size_of::<libc::sockaddr_nl>() as libc::socklen_t,
             )
         };
-        ensure!(result == 0, "failed to bind NETLINK_SOCK_DIAG socket: {}", std::io::Error::last_os_error());
+        ensure!(
+            result == 0,
+            "failed to bind NETLINK_SOCK_DIAG socket: {}",
+            std::io::Error::last_os_error()
+        );
         Ok(Self { socket })
     }
 }
 
 impl SocketDiagnosticIo for LinuxSocketDiagnosticIo {
     fn send_request(&mut self, request: &[u8]) -> Result<()> {
-        ensure!(!request.is_empty(), "cannot send an empty socket diagnostic request");
+        ensure!(
+            !request.is_empty(),
+            "cannot send an empty socket diagnostic request"
+        );
         // SAFETY: zero is a valid initial representation for sockaddr_nl; fields are set below.
         let mut kernel: libc::sockaddr_nl = unsafe { zeroed() };
         kernel.nl_family = libc::AF_NETLINK as libc::sa_family_t;
@@ -81,7 +90,10 @@ impl SocketDiagnosticIo for LinuxSocketDiagnosticIo {
                 )
             };
             if sent >= 0 {
-                ensure!(sent as usize == request.len(), "short NETLINK_SOCK_DIAG request send");
+                ensure!(
+                    sent as usize == request.len(),
+                    "short NETLINK_SOCK_DIAG request send"
+                );
                 return Ok(());
             }
             let error = std::io::Error::last_os_error();
@@ -92,7 +104,10 @@ impl SocketDiagnosticIo for LinuxSocketDiagnosticIo {
     }
 
     fn receive(&mut self, timeout: Duration) -> Result<ReceivedNetlinkDatagram> {
-        ensure!(!timeout.is_zero(), "netlink receive timeout must be non-zero");
+        ensure!(
+            !timeout.is_zero(),
+            "netlink receive timeout must be non-zero"
+        );
         let deadline = Instant::now()
             .checked_add(timeout)
             .context("netlink receive deadline overflow")?;
@@ -165,10 +180,13 @@ impl SocketDiagnosticIo for LinuxSocketDiagnosticIo {
                 sender.nl_family as libc::c_int == libc::AF_NETLINK,
                 "NETLINK_SOCK_DIAG response has a non-netlink sender address"
             );
-            ensure!(sender.nl_groups == 0, "NETLINK_SOCK_DIAG response came from a multicast group");
+            ensure!(
+                sender.nl_groups == 0,
+                "NETLINK_SOCK_DIAG response came from a multicast group"
+            );
 
-            let truncated = message.msg_flags & libc::MSG_TRUNC != 0
-                || received as usize > bytes.len();
+            let truncated =
+                message.msg_flags & libc::MSG_TRUNC != 0 || received as usize > bytes.len();
             bytes.truncate((received as usize).min(bytes.len()));
             return Ok(ReceivedNetlinkDatagram {
                 sender_port_id: sender.nl_pid,

@@ -82,7 +82,6 @@ fn is_executable_file(_path: &Path) -> bool {
     false
 }
 
-
 /// Maximum serialized socket-mark broker request size (16 KiB).
 pub const MAX_SOCKET_MARK_REQUEST_BYTES: usize = 16 * 1024;
 
@@ -159,7 +158,10 @@ pub fn encode_socket_mark_request(request: &SocketMarkBrokerRequest) -> Result<V
 /// Decode exactly one complete request frame; trailing bytes and oversized frames fail closed.
 #[cfg(target_os = "linux")]
 pub fn decode_socket_mark_request(frame: &[u8]) -> Result<SocketMarkBrokerRequest> {
-    ensure!(frame.len() >= 4, "socket-mark broker frame header is truncated");
+    ensure!(
+        frame.len() >= 4,
+        "socket-mark broker frame header is truncated"
+    );
     let length = u32::from_le_bytes(frame[..4].try_into()?) as usize;
     ensure!(
         length > 0 && length <= MAX_SOCKET_MARK_REQUEST_BYTES,
@@ -264,7 +266,6 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::{ffi::OsString, fs};
 
-
     #[cfg(target_os = "linux")]
     fn socket_mark_request() -> SocketMarkBrokerRequest {
         use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -287,10 +288,7 @@ mod tests {
     fn socket_mark_request_round_trips_in_one_bounded_frame() {
         let request = socket_mark_request();
         let frame = encode_socket_mark_request(&request).unwrap();
-        assert_eq!(
-            decode_socket_mark_request(&frame).unwrap(),
-            request
-        );
+        assert_eq!(decode_socket_mark_request(&frame).unwrap(), request);
         assert_eq!(
             u32::from_le_bytes(frame[..4].try_into().unwrap()) as usize,
             frame.len() - 4
