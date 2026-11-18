@@ -155,35 +155,33 @@ mod tests {
     use std::{
         os::unix::net::UnixStream,
         process::{Command, Stdio},
-        thread,
-        time::Instant,
     };
 
     fn live_child() -> (std::process::Child, ProcessIdentity, ProcessHandle) {
-        let child = Command::new("sleep")
+        let mut child = Command::new("sleep")
             .arg("30")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(2);
-        loop {
-            assert!(
-                Instant::now() < deadline,
-                "fake child did not become inspectable"
-            );
-            if let Ok(identity) = ProcessIdentity::capture(child.id())
-                && let Ok(handle) = ProcessHandle::open(identity.clone())
-            {
-                return (child, identity, handle);
+        let identity = match ProcessIdentity::capture(child.id()) {
+            Ok(identity) => identity,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("fake child identity could not be captured: {error:#}");
             }
-            // A failed identity/handle attempt abandons this child. Reap it before
-            // retrying so every spawned test process has an explicit wait path.
-            let _ = child.kill();
-            let _ = child.wait();
-            thread::sleep(Duration::from_millis(5));
-        }
+        };
+        let handle = match ProcessHandle::open(identity.clone()) {
+            Ok(handle) => handle,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("fake child process handle could not be opened: {error:#}");
+            }
+        };
+        (child, identity, handle)
     }
 
     #[test]
