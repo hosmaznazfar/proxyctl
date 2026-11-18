@@ -115,7 +115,11 @@ impl RouteNetlink {
             if ready < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
                 continue;
             }
-            ensure!(ready >= 0, "NETLINK_ROUTE poll failed: {}", io::Error::last_os_error());
+            ensure!(
+                ready >= 0,
+                "NETLINK_ROUTE poll failed: {}",
+                io::Error::last_os_error()
+            );
             ensure!(ready > 0, "NETLINK_ROUTE response timed out");
             ensure!(
                 pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0,
@@ -139,7 +143,11 @@ impl RouteNetlink {
             if received < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
                 continue;
             }
-            ensure!(received >= 0, "NETLINK_ROUTE receive failed: {}", io::Error::last_os_error());
+            ensure!(
+                received >= 0,
+                "NETLINK_ROUTE receive failed: {}",
+                io::Error::last_os_error()
+            );
             ensure!(
                 sender_len as usize >= std::mem::size_of::<libc::sockaddr_nl>()
                     && sender.nl_family == libc::AF_NETLINK as u16
@@ -178,23 +186,37 @@ pub fn inspect_link_count() -> Result<usize> {
             u16::from_ne_bytes(message[4..6].try_into()?) == RTM_NEWLINK,
             "unexpected message in NETLINK_ROUTE link dump"
         );
-        ensure!(message.len() >= NETLINK_HEADER_LEN + 16, "truncated link record");
-        count = count.checked_add(1).context("link inventory count overflow")?;
+        ensure!(
+            message.len() >= NETLINK_HEADER_LEN + 16,
+            "truncated link record"
+        );
+        count = count
+            .checked_add(1)
+            .context("link inventory count overflow")?;
     }
     Ok(count)
 }
 
 fn validate_response_budget(current: &[Vec<u8>], incoming: &[Vec<u8>]) -> Result<()> {
-    let current_bytes = current.iter().try_fold(0usize, |total, item| total.checked_add(item.len()))
+    let current_bytes = current
+        .iter()
+        .try_fold(0usize, |total, item| total.checked_add(item.len()))
         .context("NETLINK_ROUTE response size overflow")?;
-    let incoming_bytes = incoming.iter().try_fold(0usize, |total, item| total.checked_add(item.len()))
+    let incoming_bytes = incoming
+        .iter()
+        .try_fold(0usize, |total, item| total.checked_add(item.len()))
         .context("NETLINK_ROUTE response size overflow")?;
     ensure!(
-        current_bytes.checked_add(incoming_bytes).is_some_and(|size| size <= MAX_NETLINK_RESPONSE_BYTES),
+        current_bytes
+            .checked_add(incoming_bytes)
+            .is_some_and(|size| size <= MAX_NETLINK_RESPONSE_BYTES),
         "NETLINK_ROUTE response exceeds the aggregate size limit"
     );
     ensure!(
-        current.len().checked_add(incoming.len()).is_some_and(|count| count <= MAX_NETLINK_RESPONSE_MESSAGES),
+        current
+            .len()
+            .checked_add(incoming.len())
+            .is_some_and(|count| count <= MAX_NETLINK_RESPONSE_MESSAGES),
         "NETLINK_ROUTE response contains too many messages"
     );
     Ok(())
@@ -339,7 +361,9 @@ mod tests {
         request[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
         request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
         validate_request(&request).unwrap();
-        assert_eq!(u16::from_ne_bytes(request[4..6].try_into().unwrap()), RTM_GETLINK);
+        assert_eq!(
+            u16::from_ne_bytes(request[4..6].try_into().unwrap()),
+            RTM_GETLINK
+        );
     }
-
 }
