@@ -523,8 +523,9 @@ mod tests {
         tx.activation_id = "../bad".into();
         let mut backend = FakeBackend::default();
         assert!(apply(&tx, &mut backend).is_err());
-        assert!(backend.interface.is_some());
-        assert_eq!(backend.resources.len(), 2);
+        assert!(backend.interface.is_none());
+        assert!(backend.resources.is_empty());
+        assert_eq!(backend.add_count, 0);
     }
 
     #[test]
@@ -611,7 +612,7 @@ mod tests {
             ..Default::default()
         };
         let error = apply(&transaction(), &mut backend).unwrap_err();
-        assert!(format!("{error:#}").contains("ambiguous outcome"));
+        assert!(format!("{error:#}").contains("kernel add outcome is ambiguous"));
         assert!(backend.journal_retained);
         assert!(!backend.finalized);
         assert!(backend.interface.is_some());
