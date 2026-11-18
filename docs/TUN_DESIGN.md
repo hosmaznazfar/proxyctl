@@ -625,3 +625,8 @@ Persisted ownership manifests now enforce the same private allocation floor as t
 ### Live fingerprint evidence bounds
 
 Manifest cleanup now validates fingerprints returned by the backend before comparing any resource or beginning deletion. A live fingerprint must be non-empty, at most 16 KiB, and contain no control characters; malformed evidence aborts the complete preflight, so no resource is removed. This supplements the existing manifest-side bounds and atomic compare-and-delete contract. It does not implement a production backend.
+
+
+### Kernel interface-name identity decoding
+
+The sysfs interface inventory now rejects names that are not valid UTF-8 instead of converting them lossily. Lossy conversion can make distinct kernel names collapse to the same replacement-character string, which is unsuitable for exact name/ifindex ownership comparisons. The inspector remains read-only and now fails closed when an interface identity cannot be represented exactly by the current string model.
