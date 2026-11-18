@@ -346,13 +346,17 @@ mod tests {
         store
             .mark_intent_absent(activation, 19, "interface:tun-proxyctl")
             .unwrap();
-        drop(store); // Simulate termination after recording exact absence.
+        store.remove_completed_transaction_journal(activation, 19).unwrap();
+        drop(store); // The absent interface transaction is complete and removed.
 
         let store = JournalStore::from_directory(directory.path().to_path_buf());
+        store.create_transaction_journal(activation, 20).unwrap();
+        store.record_operation_intent(activation, 20, JournalOperationKind::CreateInterface, "interface:tun-proxyctl").unwrap();
+        store.mark_operation_applied(activation, 20, "interface:tun-proxyctl", "interface-fingerprint").unwrap();
         store
             .record_operation_intent(
                 activation,
-                19,
+                20,
                 JournalOperationKind::AddRoute,
                 "route:v4:42420:0.0.0.0/0",
             )
@@ -360,7 +364,7 @@ mod tests {
         store
             .mark_operation_applied(
                 activation,
-                19,
+                20,
                 "route:v4:42420:0.0.0.0/0",
                 "canonical-route-fingerprint",
             )
@@ -369,8 +373,9 @@ mod tests {
 
         let store = JournalStore::from_directory(directory.path().to_path_buf());
         let applied = store.load_transaction_journal().unwrap().unwrap();
-        let exact = BTreeMap::from([(
-            "route:v4:42420:0.0.0.0/0".to_owned(),
+        let exact = BTreeMap::from([
+            ("interface:tun-proxyctl".to_owned(), Some("interface-fingerprint".to_owned())),
+            ("route:v4:42420:0.0.0.0/0".to_owned(),
             Some("canonical-route-fingerprint".to_owned()),
         )]);
         assert_eq!(
@@ -379,8 +384,9 @@ mod tests {
                 expected_fingerprint: "canonical-route-fingerprint".into(),
             },
         );
-        let changed = BTreeMap::from([(
-            "route:v4:42420:0.0.0.0/0".to_owned(),
+        let changed = BTreeMap::from([
+            ("interface:tun-proxyctl".to_owned(), Some("interface-fingerprint".to_owned())),
+            ("route:v4:42420:0.0.0.0/0".to_owned(),
             Some("foreign-route-fingerprint".to_owned()),
         )]);
         assert_eq!(
