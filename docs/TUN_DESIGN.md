@@ -801,3 +801,8 @@ The recovery-supervisor identity now requires the exact `tun-manifest.json` file
 ### Pidfd target identity input validation
 
 Persisted process identities now reject PIDs outside Linux's signed `pid_t` range before the value can be cast into a pidfd syscall argument. Executable paths are also checked lexically before `Path` normalization, rejecting dot segments, parent traversal, control bytes, and non-UTF-8 representations. This prevents malformed recovery state from aliasing another PID or executable path; live pidfd and start-time verification remain required.
+
+
+### Pidfd signal argument validation
+
+The pinned-process signaling API now rejects signal zero and values outside Linux's supported signal-number range before invoking `pidfd_send_signal`. Signal zero is a permission/liveness probe rather than a termination request, so accepting it through the supervisor's signaling API would blur the distinction between verification and process control. The check is covered with a live fake child and does not signal or terminate that child.
