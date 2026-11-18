@@ -80,17 +80,19 @@ pub fn collect_all(
 ) -> Result<Vec<(u8, SocketTransport, SocketDiagnosticDump)>> {
     ensure!(first_sequence != 0, "first netlink sequence must be non-zero");
     ensure!(first_sequence <= u32::MAX - 3, "four netlink sequence identifiers are required");
-    let mut sequence = first_sequence;
     let mut dumps = Vec::with_capacity(4);
 
-    for family in [libc::AF_INET as u8, libc::AF_INET6 as u8] {
-        for transport in [SocketTransport::Tcp, SocketTransport::Udp] {
+    for (index, (family, transport)) in [
+        (libc::AF_INET as u8, SocketTransport::Tcp),
+        (libc::AF_INET as u8, SocketTransport::Udp),
+        (libc::AF_INET6 as u8, SocketTransport::Tcp),
+        (libc::AF_INET6 as u8, SocketTransport::Udp),
+    ].into_iter().enumerate() {
+            let sequence = first_sequence + index as u32;
             let request = SocketDiagnosticRequest { family, transport, sequence };
             let dump = collect_dump(io, request, timeout_per_dump)
                 .with_context(|| format!("failed to collect {family}/{transport:?} diagnostics"))?;
             dumps.push((family, transport, dump));
-            sequence = sequence.checked_add(1).context("socket diagnostic sequence exhausted")?;
-        }
     }
 
     Ok(dumps)
