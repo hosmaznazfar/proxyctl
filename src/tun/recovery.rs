@@ -305,6 +305,24 @@ mod lifecycle_tests {
     }
 
     #[test]
+    fn repeated_core_exit_retries_cleanup_while_pending() {
+        let first = transition(
+            SupervisorPhase::Running,
+            SupervisorEvent::CoreExited,
+            7,
+            7,
+        );
+        let retry = transition(
+            first.phase,
+            SupervisorEvent::CoreExited,
+            7,
+            7,
+        );
+        assert_eq!(retry.phase, SupervisorPhase::CleanupPending);
+        assert_eq!(retry.action, RecoveryAction::CleanupManifestResources);
+    }
+
+    #[test]
     fn cleanup_conflict_keeps_manifest_for_recovery() {
         let result = transition(
             SupervisorPhase::CleanupPending,
