@@ -519,8 +519,8 @@ mod tests {
                     sequence: 0,
                     kind: JournalOperationKind::CreateInterface,
                     resource_key: "interface:tun-proxyctl".into(),
-                    state: JournalOperationState::Intent,
-                    fingerprint: None,
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("interface-fp".into()),
                 },
                 JournalOperation {
                     sequence: 1,
@@ -539,7 +539,7 @@ mod tests {
             ],
         };
         let observed = std::collections::BTreeMap::from([
-            ("interface:tun-proxyctl".into(), None),
+            ("interface:tun-proxyctl".into(), Some("interface-fp".into())),
             ("route:v4:42420:default".into(), Some("route-fp".into())),
             ("rule:v4:42420".into(), None),
         ]);
@@ -552,7 +552,7 @@ mod tests {
                 expected_fingerprint: "route-fp".into()
             }
         );
-        assert_eq!(plan[2].1, JournalRecoveryDecision::MarkAbsent);
+        assert_eq!(plan[2].1, JournalRecoveryDecision::CompareAndDelete { expected_fingerprint: "interface-fp".into() });
     }
 
     #[test]
@@ -814,8 +814,8 @@ mod tests {
             sequence,
             kind,
             resource_key: resource_key.into(),
-            state: JournalOperationState::Intent,
-            fingerprint: None,
+            state: JournalOperationState::Applied,
+            fingerprint: Some("fixture-fingerprint".into()),
         };
         assert!(
             make(vec![
