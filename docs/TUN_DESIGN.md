@@ -574,3 +574,8 @@ A route or policy-rule backend error can occur after the kernel accepted the mut
 
 
 The fake transaction backend now injects failures after each of the four route/rule mutations have been applied in memory. Each case asserts that the ambiguous resource remains untouched, the journal is retained, and transaction finalization is not attempted. These tests do not open netlink sockets or mutate host networking.
+
+
+### Recovery-journal retention failure coverage
+
+Additional fault-injection cases cover the case where both a kernel mutation and the attempt to retain its recovery journal fail. The executor returns an explicit error and does not claim finalization or success. Such a condition is unrecoverable automatically without external inspection and remains a hard stop; no fallback deletion is attempted.
