@@ -293,6 +293,14 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
             aligned_length <= remaining || length == remaining,
             "truncated netlink alignment padding"
         );
+        if aligned_length <= remaining {
+            ensure!(
+                bytes[offset + length..offset + aligned_length]
+                    .iter()
+                    .all(|byte| *byte == 0),
+                "non-zero netlink alignment padding"
+            );
+        }
         offset = offset
             .checked_add(if aligned_length <= remaining {
                 aligned_length
