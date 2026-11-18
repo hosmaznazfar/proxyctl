@@ -781,3 +781,8 @@ Transaction-journal route table IDs and rule priorities now require canonical po
 Transaction journals and privilege-broker requests now require canonical lowercase hexadecimal activation UUIDs. Uppercase aliases are rejected consistently at both boundaries, and focused tests cover journal and broker validation so a single activation has one textual identity across persisted state and helper requests.
 
 Privilege-broker requests now apply lexical manifest-path validation before `Path` component normalization. They reject interior `.`/`..` segments, repeated or trailing separators, backslashes, non-UTF-8 paths, and control bytes, in addition to requiring the exact manifest filename. This keeps the helper's path identity consistent with the recovery-supervisor contract.
+
+
+### Canonical activation identity across manifests and transactions
+
+Ownership manifests and kernel transaction requests now enforce the same canonical lowercase hexadecimal UUID spelling already required by journals, broker requests, and recovery identities. This prevents case-variant aliases for one activation from crossing storage and execution boundaries. Focused tests reject uppercase UUID aliases; this validation does not enable kernel mutation.
