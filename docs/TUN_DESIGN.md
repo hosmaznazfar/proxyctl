@@ -516,3 +516,8 @@ Supervisor identities now reject relative manifest paths, parent-directory trave
 ### Manifest interface-name validation
 
 Owned interface names are now restricted to Linux-safe ASCII alphanumeric, underscore, hyphen, and dot characters within the 15-byte IFNAMSIZ payload limit. This prevents whitespace, control bytes, separators, and shell-like punctuation from entering persisted ownership identities. It remains input validation only; interface creation/deletion still requires the missing concrete kernel backend and atomic identity checks.
+
+
+### Diagnostic helper path trust checks
+
+The controller-side socket-mark probe now requires the supplied private runtime directory to resolve to itself (rejecting symlink aliases) and verifies that `/usr/libexec` is a real root-owned directory not writable by group or other users before trusting the fixed helper executable. The helper file itself remains root-owned, executable, non-writable by group/other, and non-setuid. These checks reduce path substitution risk but do not eliminate the filesystem-to-exec race or replace package integrity verification and an independent security audit. The probe remains diagnostic-only.
