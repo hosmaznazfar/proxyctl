@@ -10,7 +10,7 @@ use super::{
     kernel_inventory::KernelSnapshot,
     journal::{
         JournalRecoveryDecision, JournalOperationKind, JournalOperationState,
-        TransactionJournal, plan_journal_recovery,
+        plan_journal_recovery,
     },
     manifest_store::ManifestStore,
     ownership::ResourceState,
