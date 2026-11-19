@@ -66,8 +66,10 @@ fn main() -> anyhow::Result<()> {
     const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 
     let mut arguments = env::args_os().skip(1);
-    let flag = arguments.next().context("expected --socket PATH")?;
-    ensure!(flag == "--socket", "only --socket PATH is accepted");
+    let flag = arguments.next().context("expected --socket PATH or --mutation-socket PATH")?;
+    ensure!(flag == "--socket" || flag == "--mutation-socket",
+        "only --socket PATH or --mutation-socket PATH is accepted");
+    let mutation_mode = flag == "--mutation-socket";
     let socket_path = PathBuf::from(arguments.next().context("missing broker socket path")?);
     ensure!(arguments.next().is_none(), "unexpected helper arguments");
     ensure!(
@@ -124,12 +126,16 @@ fn main() -> anyhow::Result<()> {
     );
 
     let socket = OwnedBrokerSocket::bind(socket_path)?;
-    proxyctl::tun::broker_executor::serve_one_socket_mark_request(
-        &socket.listener,
-        ACCEPT_TIMEOUT,
-        DIAGNOSTIC_TIMEOUT_PER_DUMP,
-        RESPONSE_TIMEOUT,
-    )?;
+    if mutation_mode {
+        proxyctl::tun::mutation_broker::serve(&socket.listener, parent)?;
+    } else {
+        proxyctl::tun::broker_executor::serve_one_socket_mark_request(
+            &socket.listener,
+            ACCEPT_TIMEOUT,
+            DIAGNOSTIC_TIMEOUT_PER_DUMP,
+            RESPONSE_TIMEOUT,
+        )?;
+    }
     drop(socket);
     Ok(())
 }
