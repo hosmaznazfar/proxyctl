@@ -6,7 +6,8 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    os::unix::fs::{MetadataExt, PermissionsExt},
+    os::unix::{fd::AsRawFd, fs::{MetadataExt, OpenOptionsExt, PermissionsExt}},
+    fs::OpenOptions,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant},
@@ -17,6 +18,7 @@ use super::mutation_broker::{self, MutationRequest, MutationResponse};
 const HELPER: &str = "/usr/libexec/proxyctl-tun-helper";
 const READY_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL: Duration = Duration::from_millis(40);
+const START_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct MutationHelper {
     socket: PathBuf,
@@ -35,6 +37,7 @@ impl MutationHelper {
             "helper runtime directory must be a caller-owned directory");
         ensure!(metadata.permissions().mode() & 0o077 == 0,
             "helper runtime directory must not be accessible to other users");
+        let _start_lock = acquire_start_lock(&runtime.join("tun-mutation.lock"))?;
         let socket = runtime.join("tun-mutation.sock");
         if probe(&socket) {
             return Ok(Self { socket });
@@ -106,4 +109,40 @@ impl MutationHelper {
 
 fn probe(path: &Path) -> bool {
     std::os::unix::net::UnixStream::connect(path).is_ok()
+}
+
+
+/// Serialize helper discovery and startup across concurrent Proxyctl processes.
+///
+/// The lock file remains on disk; flock ownership is tied to the open file description,
+/// so process exit releases the lock without stale-lock recovery or unsafe unlinking.
+fn acquire_start_lock(path: &Path) -> Result<fs::File> {
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open(path)
+        .context("cannot securely open TUN helper startup lock")?;
+    let metadata = file.metadata()?;
+    ensure!(metadata.is_file(), "TUN helper startup lock is not a regular file");
+    ensure!(metadata.uid() == unsafe { libc::geteuid() }, "TUN helper startup lock has a foreign owner");
+    ensure!(metadata.permissions().mode() & 0o077 == 0, "TUN helper startup lock is not private");
+    ensure!(metadata.nlink() == 1, "TUN helper startup lock has external hard links");
+
+    let deadline = Instant::now() + START_LOCK_TIMEOUT;
+    loop {
+        // SAFETY: flock is called with a valid descriptor owned by the lock file.
+        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        if result == 0 {
+            return Ok(file);
+        }
+        let error = std::io::Error::last_os_error();
+        if !matches!(error.raw_os_error(), Some(libc::EWOULDBLOCK)) {
+            return Err(error).context("cannot acquire TUN helper startup lock");
+        }
+        ensure!(Instant::now() < deadline, "timed out waiting for another TUN helper startup");
+        std::thread::sleep(POLL);
+    }
 }
