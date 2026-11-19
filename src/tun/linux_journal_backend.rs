@@ -559,17 +559,3 @@ mod tests {
     }
 }
 
-fn parse_table_value(value: &Value) -> Result<u32> {
-    if let Some(number) = value.as_u64() {
-        return u32::try_from(number).context("rule table exceeds u32");
-    }
-    match value
-        .as_str()
-        .context("rule table is not numeric or named")?
-    {
-        "default" => Ok(crate::tun::route_policy::RT_TABLE_DEFAULT),
-        "main" => Ok(crate::tun::route_policy::RT_TABLE_MAIN),
-        "local" => Ok(crate::tun::route_policy::RT_TABLE_LOCAL),
-        value => value.parse::<u32>().context("unsupported rule table name"),
-    }
-}
