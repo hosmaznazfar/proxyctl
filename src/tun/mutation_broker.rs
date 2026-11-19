@@ -243,17 +243,8 @@ fn execute(
             ..
         } => {
             let key = (activation_id.clone(), generation);
-            let mut backend = match backends.remove(&key) {
-                Some(backend) => backend,
-                None => LinuxJournalBackend::open_for_recovery(
-                    ManifestStore::open(directory)?,
-                    &activation_id,
-                    generation,
-                )?,
-            };
             let store = ManifestStore::open(directory)?;
-            // Validate the durable active manifest before touching the journal. A stale
-            // recovery request must never clean a different generation's ownership record.
+            // Bind both durable records to the requested identity before any kernel mutation.
             let manifest = store.load()?;
             if let Some(snapshot) = &manifest {
                 ensure!(
@@ -262,12 +253,39 @@ fn execute(
                     "recovery identity does not match the durable TUN manifest"
                 );
             }
-            let result = recover(&store, &mut backend);
-            match result {
+            let journal = store.load_transaction_journal()?;
+            if let Some(journal) = &journal {
+                ensure!(
+                    journal.activation_id == activation_id && journal.generation == generation,
+                    "recovery identity does not match the durable TUN transaction journal"
+                );
+            }
+
+            // A crash may occur after journal removal but before manifest retirement. Finish
+            // that idempotent finalization without trying to reopen a now-absent journal.
+            if journal.is_none() {
+                let Some(mut snapshot) = manifest else {
+                    anyhow::bail!("no matching TUN manifest or transaction journal exists");
+                };
+                snapshot.phase = super::recovery::SupervisorPhase::Cleaned;
+                store.write(&snapshot)?;
+                store.remove_cleaned(&activation_id, generation)?;
+                backends.remove(&key);
+                return Ok("recovery complete: ownership manifest finalized".to_owned());
+            }
+
+            let mut backend = match backends.remove(&key) {
+                Some(backend) => backend,
+                None => LinuxJournalBackend::open_for_recovery(
+                    store.clone(),
+                    &activation_id,
+                    generation,
+                )?,
+            };
+            match recover(&store, &mut backend) {
                 Ok(report) => {
-                    // Journal recovery has freshly verified every operation absent. Retire
-                    // the matching manifest only after that proof, so it cannot permanently
-                    // block the next activation after a successful stop/recovery.
+                    // Retire the matching manifest only after the executor has verified and
+                    // removed every journal-owned kernel resource.
                     if let Some(mut snapshot) = manifest {
                         snapshot.phase = super::recovery::SupervisorPhase::Cleaned;
                         store.write(&snapshot)?;
