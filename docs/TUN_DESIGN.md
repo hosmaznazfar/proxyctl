@@ -1041,6 +1041,10 @@ A helper restarted after a crash may have durable records but no in-memory backe
 
 This check makes socket readiness stronger without claiming that a healthy broker implies a healthy dataplane. It does not establish core liveness, TUN interface ownership, route correctness, end-to-end proxy traffic, or service-manager supervision, and it does not enable public TUN activation.
 
+## Composed managed activation preflight
+
+A Linux-only preflight orchestration entry point composes the independent read-only checks: process-pinned local listener and socket ownership, manifest-bound TUN interface identity, exact routing-policy comparison, marked physical-egress lookup, process-bound outbound socket-mark observation, and baseline/current DNS and firewall comparison. It returns a structured `ReadinessEvidence` record with end-to-end traffic explicitly false. It does not infer successful proxied application traffic from route lookup or a listener connection; that final evidence must be supplied separately before the aggregate readiness gate can pass. The orchestration is diagnostic only and does not enable activation or mutate network state.
+
 ## Host DNS and firewall preservation check
 
 The readiness layer can compare pre-activation and current read-only `NetworkStatus` snapshots. It requires successful DNS inspection in both snapshots and usable firewall inspection evidence, then compares resolver addresses, resolv.conf symlink target, NetworkManager/systemd-resolved runtime markers, and the complete firewall summary. Unavailable or incomplete inspection fails closed; the iptables fallback is accepted only when both IPv4 and IPv6 listing commands succeeded. Route and interface inventories are deliberately excluded because those are resources the TUN activation is expected to add. The caller must capture the baseline before any activation mutation and refresh the current snapshot immediately before readiness evaluation. This comparison is evidence of observed configuration stability, not a guarantee against changes after the snapshot.
