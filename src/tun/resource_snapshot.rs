@@ -214,12 +214,18 @@ fn compare_route(
     expected: &str,
     routes: &[KernelRouteRecord],
 ) -> SnapshotResourceState {
-    let matches = routes
+    let family_table_routes = routes
         .iter()
+        .filter(|route| route.family == family && route.table_id == table_id)
+        .collect::<Vec<_>>();
+    if family_table_routes.iter().any(|route| {
+        serde_json::from_str::<Value>(&route.canonical_attributes).is_err()
+    }) {
+        return SnapshotResourceState::ChangedOrAmbiguous;
+    }
+    let matches = family_table_routes
+        .into_iter()
         .filter(|route| {
-            if route.family != family || route.table_id != table_id {
-                return false;
-            }
             let Ok(value) = serde_json::from_str::<Value>(&route.canonical_attributes) else {
                 return false;
             };
@@ -392,6 +398,15 @@ mod tests {
             comparison.resources[2].state,
             SnapshotResourceState::ChangedOrAmbiguous
         );
+        assert!(!comparison.has_no_conflicts());
+    }
+
+    #[test]
+    fn malformed_route_snapshot_attributes_are_ambiguous_not_absent() {
+        let (manifest, mut snapshot) = fixture();
+        snapshot.routes[0].canonical_attributes = "not-json".into();
+        let comparison = compare_manifest(&manifest, &snapshot).unwrap();
+        assert_eq!(comparison.resources[0].state, SnapshotResourceState::ChangedOrAmbiguous);
         assert!(!comparison.has_no_conflicts());
     }
 
