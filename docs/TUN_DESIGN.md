@@ -94,6 +94,12 @@ Init/service-manager backends are responsible for starting/stopping the supervis
 - Support common init managers through separate tested backends. A distro is not declared supported until its init backend and privilege broker pass the lifecycle matrix.
 - If authorization cannot be obtained non-interactively or safely through the selected broker, cancel before stopping the current activation or changing networking.
 
+## Live routing-policy readiness probe
+
+Before readiness can be declared, the Linux probe captures a fresh read-only kernel snapshot and compares both address families with the activation's validated routing plan. It requires exactly one default unicast route in the dedicated table through the manifest-bound interface name, plus exactly one core-mark bypass rule to the main table and one unmarked proxy rule to the dedicated table at their planned priorities. Missing selectors, duplicate matches, incomplete inventory, or mismatches fail closed. The probe does not mutate routes or rules.
+
+This evidence is deliberately narrower than end-to-end readiness: it does not prove that core sockets actually carry the configured mark, that marked traffic reaches physical egress, or that proxied traffic succeeds. Those remain separate probes. A successful snapshot is point-in-time evidence and must be refreshed after relevant host-network changes. This addition does not enable public TUN activation or implement service-manager supervision.
+
 ## Core configuration requirements
 
 - sing-box, Xray, and Mihomo use native TUN inbounds, but core automatic route/rule installation is disabled.
