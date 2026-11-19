@@ -19,11 +19,11 @@ pub mod lifecycle_coordinator;
 pub mod linux_journal_backend;
 pub(crate) mod manifest_fs;
 pub mod manifest_store;
+#[cfg(target_os = "linux")]
+pub mod mutation_broker;
 pub mod ownership;
 #[cfg(target_os = "linux")]
 pub mod persistent_tun_owner;
-#[cfg(target_os = "linux")]
-pub mod mutation_broker;
 pub mod privilege_broker;
 #[cfg(target_os = "linux")]
 pub mod process;

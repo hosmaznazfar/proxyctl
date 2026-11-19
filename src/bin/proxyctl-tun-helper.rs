@@ -66,9 +66,13 @@ fn main() -> anyhow::Result<()> {
     const RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 
     let mut arguments = env::args_os().skip(1);
-    let flag = arguments.next().context("expected --socket PATH or --mutation-socket PATH")?;
-    ensure!(flag == "--socket" || flag == "--mutation-socket",
-        "only --socket PATH or --mutation-socket PATH is accepted");
+    let flag = arguments
+        .next()
+        .context("expected --socket PATH or --mutation-socket PATH")?;
+    ensure!(
+        flag == "--socket" || flag == "--mutation-socket",
+        "only --socket PATH or --mutation-socket PATH is accepted"
+    );
     let mutation_mode = flag == "--mutation-socket";
     let socket_path = PathBuf::from(arguments.next().context("missing broker socket path")?);
     ensure!(arguments.next().is_none(), "unexpected helper arguments");
