@@ -906,7 +906,9 @@ pub fn probe_socks5_connect_detailed(
 ) -> Result<Socks5ConnectProbeResult> {
     let started = std::time::Instant::now();
     probe_socks5_connect(process, listener, destination, timeout)?;
-    Ok(Socks5ConnectProbeResult { listener, destination, elapsed: started.elapsed(), request_protocol_bytes: 3 + 3 + match destination.ip() { std::net::IpAddr::V4(_) => 4, std::net::IpAddr::V6(_) => 16 } + 2 })
+    let elapsed = started.elapsed();
+    ensure!(elapsed <= timeout.saturating_mul(4), "SOCKS5 probe exceeded its aggregate time bound");
+    Ok(Socks5ConnectProbeResult { listener, destination, elapsed, request_protocol_bytes: 3 + 3 + match destination.ip() { std::net::IpAddr::V4(_) => 4, std::net::IpAddr::V6(_) => 16 } + 2 })
 }
 
 #[cfg(not(target_os = "linux"))]
