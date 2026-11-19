@@ -169,7 +169,7 @@ impl LinuxJournalBackend {
                 Ok(ResourceState::Removed)
             }
             JournalOperationKind::AddRoute => {
-                let (family, table, destination) = parse_route_key(key)?;
+                let (family, table, _destination) = parse_route_key(key)?;
                 let value: Value = serde_json::from_str(&current)?;
                 let dev = value
                     .get("dev")
@@ -463,19 +463,27 @@ fn parse_route_key(key: &str) -> Result<(AddressFamily, u32, String)> {
     let (family, rest) = rest.split_once(':').context("invalid route family")?;
     let (table, destination) = rest.split_once(':').context("invalid route table")?;
     let family = parse_family(family)?;
-    let table = table.parse::<u32>()?;
+    let parsed_table = table.parse::<u32>()?;
     ensure!(
-        table > 0 && (destination == family.default_prefix() || destination == "default"),
+        parsed_table > 0 && parsed_table.to_string() == table,
+        "route table ID is not canonical"
+    );
+    ensure!(
+        destination == family.default_prefix() || destination == "default",
         "unsupported route identity"
     );
+    let table = parsed_table;
     Ok((family, table, family.default_prefix().to_owned()))
 }
 fn parse_rule_key(key: &str) -> Result<(AddressFamily, u32)> {
     let rest = key.strip_prefix("rule:").context("invalid rule key")?;
     let (family, priority) = rest.split_once(':').context("invalid rule priority")?;
-    let priority = priority.parse::<u32>()?;
-    ensure!(priority > 0, "invalid rule priority");
-    Ok((parse_family(family)?, priority))
+    let parsed_priority = priority.parse::<u32>()?;
+    ensure!(
+        parsed_priority > 0 && parsed_priority.to_string() == priority,
+        "rule priority is not canonical"
+    );
+    Ok((parse_family(family)?, parsed_priority))
 }
 fn parse_family(value: &str) -> Result<AddressFamily> {
     match value {
@@ -490,6 +498,25 @@ fn parse_mark(value: &str) -> Result<MarkSelector> {
     let mask = u32::from_str_radix(mask.trim_start_matches("0x"), 16)?;
     ensure!(mask != 0 && value & !mask == 0, "invalid fwmark selector");
     Ok(MarkSelector { value, mask })
+}
+
+fn parse_table_value(value: &Value) -> Result<u32> {
+    if let Some(number) = value.as_u64() {
+        return u32::try_from(number).context("rule table exceeds u32");
+    }
+    match value
+        .as_str()
+        .context("rule table is not numeric or named")?
+    {
+        "default" => Ok(crate::tun::route_policy::RT_TABLE_DEFAULT),
+        "main" => Ok(crate::tun::route_policy::RT_TABLE_MAIN),
+        "local" => Ok(crate::tun::route_policy::RT_TABLE_LOCAL),
+        value => {
+            let table = value.parse::<u32>().context("unsupported rule table name")?;
+            ensure!(table.to_string() == value, "rule table ID is not canonical");
+            Ok(table)
+        }
+    }
 }
 
 #[cfg(test)]
