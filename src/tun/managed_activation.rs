@@ -177,17 +177,14 @@ pub fn resume_managed_supervision(
         anyhow::ensure!(response.success, "dead-core broker cleanup failed: {}", response.message);
         return Ok(response);
     }
-    let process = ProcessHandle::open(identity.clone()).or_else(|error| {
-        if identity.verify()? {
-            Err(error)
-        } else {
-            // A second identity check closes the PID-reuse race. The caller then performs
-            // the same durable exit transition and broker cleanup as the fast path.
-            Ok(ProcessHandle::open(identity.clone())?)
-        }
-    });
-    let process = match process {
+    let process = match ProcessHandle::open(identity.clone()) {
         Ok(process) => process,
+        Err(error) if !identity.verify()? => {
+            coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
+            let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
+            anyhow::ensure!(response.success, "dead-core broker cleanup failed: {}", response.message);
+            return Ok(response);
+        }
         Err(error) => return Err(error).context("cannot safely reopen the managed core pidfd"),
     };
     if process.is_exited()? {
