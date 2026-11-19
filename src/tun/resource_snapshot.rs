@@ -321,7 +321,7 @@ pub fn observe_journal_resources(
                             "name": interface.name
                         }),
                     )?),
-                    _ => anyhow::bail!("journal interface identity is changed or ambiguous")
+                    _ => anyhow::bail!("journal interface identity is changed or ambiguous"),
                 }
             }
             JournalOperationKind::AddRoute => {
