@@ -251,18 +251,40 @@ fn execute(
                     generation,
                 )?,
             };
-            let result = recover(&ManifestStore::open(directory)?, &mut backend);
-            if result.is_err() {
-                backends.insert(key, backend);
+            let store = ManifestStore::open(directory)?;
+            // Validate the durable active manifest before touching the journal. A stale
+            // recovery request must never clean a different generation's ownership record.
+            let manifest = store.load()?;
+            if let Some(snapshot) = &manifest {
+                ensure!(
+                    snapshot.manifest.activation_id == activation_id
+                        && snapshot.generation == generation,
+                    "recovery identity does not match the durable TUN manifest"
+                );
             }
-            result.map(|report| {
-                format!(
-                    "recovery complete: {} removed, {} already absent, {} intents resolved",
-                    report.removed.len(),
-                    report.already_absent.len(),
-                    report.resolved_intents.len()
-                )
-            })
+            let result = recover(&store, &mut backend);
+            match result {
+                Ok(report) => {
+                    // Journal recovery has freshly verified every operation absent. Retire
+                    // the matching manifest only after that proof, so it cannot permanently
+                    // block the next activation after a successful stop/recovery.
+                    if let Some(mut snapshot) = manifest {
+                        snapshot.phase = super::recovery::SupervisorPhase::Cleaned;
+                        store.write(&snapshot)?;
+                        store.remove_cleaned(&activation_id, generation)?;
+                    }
+                    Ok(format!(
+                        "recovery complete: {} removed, {} already absent, {} intents resolved",
+                        report.removed.len(),
+                        report.already_absent.len(),
+                        report.resolved_intents.len()
+                    ))
+                }
+                Err(error) => {
+                    backends.insert(key, backend);
+                    Err(error)
+                }
+            }
         }
     }
 }
