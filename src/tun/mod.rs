@@ -17,6 +17,8 @@ pub mod kernel_transaction;
 pub mod lifecycle_coordinator;
 #[cfg(target_os = "linux")]
 pub mod linux_journal_backend;
+#[cfg(target_os = "linux")]
+pub mod managed_activation;
 pub(crate) mod manifest_fs;
 pub mod manifest_store;
 #[cfg(target_os = "linux")]
