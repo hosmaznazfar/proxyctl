@@ -107,7 +107,13 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
             ensure!(peer.uid == unsafe { libc::geteuid() },
                 "mutation broker accepts requests only from its owning user");
             let request = read_request(&mut stream)?;
-            let response = match request.validate() {
+            let response = match request.validate().and_then(|()| {
+                if let MutationRequest::Activate { owner_uid, owner_gid, .. } = &request {
+                    ensure!(*owner_uid == peer.uid && *owner_gid == peer.gid,
+                        "TUN owner IDs must match the authenticated broker peer");
+                }
+                Ok(())
+            }) {
                 Ok(()) => match execute(request, runtime_directory, &mut backends) {
                     Ok(message) => MutationResponse::success(message),
                     Err(error) => MutationResponse::failure(format!("{error:#}")),
@@ -158,13 +164,32 @@ fn execute(request: MutationRequest, directory: &Path,
 }
 
 fn read_request(stream: &mut UnixStream) -> Result<MutationRequest> {
+    let deadline = std::time::Instant::now() + IO_TIMEOUT;
     let mut header = [0u8; 4];
-    stream.read_exact(&mut header)?;
+    read_exact_deadline(stream, &mut header, deadline)?;
     let length = u32::from_le_bytes(header) as usize;
     ensure!(length > 0 && length <= MAX_FRAME, "mutation request frame length is invalid");
     let mut payload = vec![0u8; length];
-    stream.read_exact(&mut payload)?;
+    read_exact_deadline(stream, &mut payload, deadline)?;
     serde_json::from_slice(&payload).context("mutation request JSON is malformed")
+}
+
+fn read_exact_deadline(stream: &mut UnixStream, mut bytes: &mut [u8], deadline: std::time::Instant) -> Result<()> {
+    use std::io::ErrorKind;
+    while !bytes.is_empty() {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "mutation request exceeded its frame deadline");
+        stream.set_read_timeout(Some(remaining))?;
+        match stream.read(bytes) {
+            Ok(0) => anyhow::bail!("mutation request ended before the frame was complete"),
+            Ok(count) => bytes = &mut bytes[count..],
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+                anyhow::bail!("mutation request exceeded its frame deadline"),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }
 
 fn write_response(stream: &mut UnixStream, response: &MutationResponse) -> Result<()> {
