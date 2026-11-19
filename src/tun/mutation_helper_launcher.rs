@@ -6,7 +6,7 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    os::unix::{fd::AsRawFd, fs::{MetadataExt, OpenOptionsExt, PermissionsExt}},
+    os::unix::{fd::AsRawFd, fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt}},
     fs::OpenOptions,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -108,6 +108,16 @@ impl MutationHelper {
 }
 
 fn probe(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if !metadata.file_type().is_socket()
+        || metadata.uid() != unsafe { libc::geteuid() }
+        || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.nlink() != 1
+    {
+        return false;
+    }
     std::os::unix::net::UnixStream::connect(path).is_ok()
 }
 
