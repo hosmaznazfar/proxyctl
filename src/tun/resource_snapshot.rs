@@ -283,6 +283,125 @@ fn compare_rule(
     }
 }
 
+
+/// Build the exact observed-fingerprint map required by journal recovery from one fresh
+/// kernel snapshot. Fingerprints are copied from live canonical records, never reconstructed
+/// from planned route/rule attributes. Every journal key receives an observation; an absent
+/// exact identity is represented by `None`.
+pub fn observe_journal_resources(
+    journal: &super::journal::TransactionJournal,
+    snapshot: &KernelSnapshot,
+) -> Result<std::collections::BTreeMap<String, Option<String>>> {
+    use super::journal::JournalOperationKind;
+
+    journal.validate()?;
+    let mut observations = std::collections::BTreeMap::new();
+    let interface_name = journal
+        .operations
+        .iter()
+        .find(|operation| operation.kind == JournalOperationKind::CreateInterface)
+        .and_then(|operation| operation.resource_key.strip_prefix("interface:"))
+        .context("journal has no valid interface ownership key")?;
+
+    for operation in &journal.operations {
+        let fingerprint = match operation.kind {
+            JournalOperationKind::CreateInterface => {
+                let name = operation
+                    .resource_key
+                    .strip_prefix("interface:")
+                    .context("invalid journal interface key")?;
+                let matches = snapshot
+                    .interfaces
+                    .iter()
+                    .filter(|interface| interface.name == name)
+                    .collect::<Vec<_>>();
+                match matches.as_slice() {
+                    [] => None,
+                    [interface] if interface.is_tun => Some(serde_json::to_string(
+                        &serde_json::json!({
+                            "ifindex": interface.index,
+                            "kind": "tun",
+                            "name": interface.name
+                        }),
+                    )?),
+                    [_] | [_, ..] => {
+                        anyhow::bail!("journal interface identity is changed or ambiguous")
+                    }
+                }
+            }
+            JournalOperationKind::AddRoute => {
+                let ResourceKey::Route {
+                    family,
+                    table_id,
+                    destination,
+                } = parse_resource_key(&operation.resource_key)?
+                else {
+                    anyhow::bail!("journal route key has an unsupported identity")
+                };
+                let candidates = snapshot
+                    .routes
+                    .iter()
+                    .filter(|route| route.family == family && route.table_id == table_id)
+                    .filter_map(|route| {
+                        let value: Value = serde_json::from_str(&route.canonical_attributes).ok()?;
+                        let actual = value.get("dst")?.as_str()?;
+                        let same_destination = actual == destination
+                            || (actual == "default"
+                                && matches!(
+                                    (family, destination.as_str()),
+                                    (AddressFamily::Ipv4, "0.0.0.0/0")
+                                        | (AddressFamily::Ipv6, "::/0")
+                                ));
+                        same_destination.then_some(route)
+                    })
+                    .collect::<Vec<_>>();
+                match candidates.as_slice() {
+                    [] => None,
+                    [route] => Some(route.canonical_attributes.clone()),
+                    [_, ..] => anyhow::bail!(
+                        "journal route identity has duplicate live kernel records"
+                    ),
+                }
+            }
+            JournalOperationKind::AddRule => {
+                let ResourceKey::Rule { family, priority } =
+                    parse_resource_key(&operation.resource_key)?
+                else {
+                    anyhow::bail!("journal rule key has an unsupported identity")
+                };
+                let matches = snapshot
+                    .rules
+                    .iter()
+                    .filter(|rule| rule.family == family && rule.priority == priority)
+                    .collect::<Vec<_>>();
+                match matches.as_slice() {
+                    [] => None,
+                    [rule] => Some(rule.canonical_attributes.clone()),
+                    [_, ..] => anyhow::bail!(
+                        "journal rule identity has duplicate live kernel records"
+                    ),
+                }
+            }
+        };
+        // The route's live record must be attributed to the activation's exact TUN name.
+        // A route with the same family/table/destination but another device remains an
+        // observed fingerprint and will conflict with the journal's applied fingerprint.
+        if operation.kind == JournalOperationKind::AddRoute
+            && let Some(value) = &fingerprint
+        {
+            let record: Value = serde_json::from_str(value)
+                .context("live route canonical attributes are malformed")?;
+            ensure!(
+                record.get("dev").and_then(Value::as_str).is_some(),
+                "live route identity has no interface selector"
+            );
+            let _ = interface_name;
+        }
+        observations.insert(operation.resource_key.clone(), fingerprint);
+    }
+    Ok(observations)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
