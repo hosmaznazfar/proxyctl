@@ -1041,6 +1041,10 @@ A helper restarted after a crash may have durable records but no in-memory backe
 
 This check makes socket readiness stronger without claiming that a healthy broker implies a healthy dataplane. It does not establish core liveness, TUN interface ownership, route correctness, end-to-end proxy traffic, or service-manager supervision, and it does not enable public TUN activation.
 
+## Host DNS and firewall preservation check
+
+The readiness layer can compare pre-activation and current read-only `NetworkStatus` snapshots. It requires successful DNS inspection in both snapshots and usable firewall inspection evidence, then compares resolver addresses, resolv.conf symlink target, NetworkManager/systemd-resolved runtime markers, and the complete firewall summary. Unavailable or incomplete inspection fails closed. Route and interface inventories are deliberately excluded because those are resources the TUN activation is expected to add. The caller must capture the baseline before any activation mutation and refresh the current snapshot immediately before readiness evaluation. This comparison is evidence of observed configuration stability, not a guarantee against changes after the snapshot.
+
 ## Live managed-core outbound socket-mark probe
 
 A Linux readiness entry point now launches the fixed, validated diagnostic helper and requests read-only INET_DIAG mark records for the persisted managed-core process, an exact expected peer, and a selected transport. The process identity is checked before and after the helper round trip. The response must echo the requested peer and transport, carry the requested mark/mask policy, and contain consistent matching records attributed to sockets owned by that process. Missing diagnostics, mismatched policy, absent marked sockets, or process replacement fails closed. This observes existing sockets only; it does not set marks, create traffic, or mutate kernel networking state. It is still only one signal and does not prove successful end-to-end proxy traffic.
