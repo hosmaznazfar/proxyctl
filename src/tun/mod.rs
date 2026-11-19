@@ -21,6 +21,8 @@ pub(crate) mod manifest_fs;
 pub mod manifest_store;
 #[cfg(target_os = "linux")]
 pub mod mutation_broker;
+#[cfg(target_os = "linux")]
+pub mod mutation_helper_launcher;
 pub mod ownership;
 #[cfg(target_os = "linux")]
 pub mod persistent_tun_owner;
