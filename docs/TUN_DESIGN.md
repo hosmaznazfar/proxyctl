@@ -939,3 +939,12 @@ The helper launcher exposes the typed `activate`, `recover`, and generic `call` 
 
 
 The mutation launcher now includes a recovery-generation convenience entry point that routes a caller-supplied activation ID and generation through the existing typed recovery request. The broker remains responsible for matching that pair against durable journal identity; callers cannot request recovery by arbitrary resource key. Public lifecycle wiring and state persistence are still outstanding.
+
+
+## Persistent mutation broker activation exclusivity
+
+The persistent mutation broker owns the TUN descriptor and journal backend for the lifetime of an activation generation. It accepts at most one live activation backend at a time. A replacement activation is rejected while that backend remains retained; the caller must first recover the exact prior activation ID and generation. This prevents two Proxyctl generations from installing overlapping default routes, policy rules, or TUN interfaces through the same privileged helper.
+
+A helper restart clears in-memory descriptor ownership but does not authorize a new activation: the durable transaction journal and ownership manifest still block a fresh transaction until generation-matched recovery has completed. Recovery never selects a generation by guessing or by scanning numeric resource ranges.
+
+This exclusivity is a broker invariant, not a claim that the complete public activation lifecycle is integrated. TUN activation remains disabled until core/device ownership handoff, process supervision, readiness verification, and stop/replacement orchestration are connected.
