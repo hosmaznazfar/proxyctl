@@ -49,7 +49,7 @@ fn set_link_up(name: &str) -> Result<()> {
     let socket = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
     ensure!(socket >= 0, "cannot open link-control socket: {}", std::io::Error::last_os_error());
     let fd = unsafe { OwnedFd::from_raw_fd(socket) };
-    let mut req = IfReq { name: [0; IFNAMSIZ], flags: 0, padding: [0; 22] };
+    let mut req = IfReq { name: [0; IFNAMSIZ], flags: 0, padding: [0; 6] };
     for (dst, src) in req.name.iter_mut().zip(name.bytes()) { *dst = src as libc::c_char; }
     let rc = unsafe { libc::ioctl(fd.as_raw_fd(), SIOCGIFFLAGS, &mut req) };
     ensure!(rc == 0, "SIOCGIFFLAGS failed: {}", std::io::Error::last_os_error());
