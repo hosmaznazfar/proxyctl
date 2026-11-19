@@ -118,7 +118,7 @@ fn probe(path: &Path) -> bool {
     {
         return false;
     }
-    std::os::unix::net::UnixStream::connect(path).is_ok()
+    mutation_broker::call(path, &MutationRequest::Ping { version: 1 }).is_ok()
 }
 
 
