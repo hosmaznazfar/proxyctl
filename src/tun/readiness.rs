@@ -148,6 +148,39 @@ pub struct ReadinessExpectation<'a> {
     pub core_mark_mask: u32,
 }
 
+/// Compare pre-activation and current host DNS/firewall snapshots.
+///
+/// Route and interface fields are intentionally excluded because the activation owns those
+/// changes. DNS configuration and the complete read-only firewall summary must remain equal.
+/// Both snapshots must contain usable inspection evidence; unavailable DNS/firewall data is
+/// never treated as proof that the host configuration stayed unchanged.
+pub fn verify_host_network_unchanged(
+    baseline: &super::NetworkStatus,
+    current: &super::NetworkStatus,
+) -> Result<()> {
+    ensure!(baseline.dns_inspected && current.dns_inspected,
+        "DNS state must be successfully inspected in both host snapshots");
+    ensure!(baseline.firewall.backend != "not available"
+        && current.firewall.backend != "not available"
+        && !baseline.firewall.detail.contains("failed")
+        && !current.firewall.detail.contains("failed")
+        && !baseline.firewall.detail.contains("unrecognized")
+        && !current.firewall.detail.contains("unrecognized")
+        && !baseline.firewall.detail.contains("not permitted")
+        && !current.firewall.detail.contains("not permitted"),
+        "firewall state is unavailable or incomplete in a host snapshot");
+    ensure!(
+        baseline.dns_servers == current.dns_servers
+            && baseline.resolv_conf_target == current.resolv_conf_target
+            && baseline.systemd_resolved_runtime == current.systemd_resolved_runtime
+            && baseline.network_manager_runtime == current.network_manager_runtime,
+        "host DNS configuration changed during TUN activation"
+    );
+    ensure!(baseline.firewall == current.firewall,
+        "host firewall snapshot changed during TUN activation");
+    Ok(())
+}
+
 /// Collect and validate live marked outbound-socket evidence for the managed core.
 ///
 /// The dedicated helper performs read-only INET_DIAG collection. The process identity is
