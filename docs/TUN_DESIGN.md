@@ -1110,3 +1110,12 @@ The probe also enforces an aggregate duration ceiling in addition to socket oper
 ## First-draft implementation priority
 
 The implementation roadmap is now explicitly focused on a connected first functional draft: (1) device ownership and core handoff, (2) real managed-core launch/configuration, and (3) routing transaction and activation orchestration. Broad edge-case hardening and comprehensive fault-injection tests are deferred until this draft is connected. Essential exact ownership, rollback and safety constraints remain mandatory. See `docs/TUN_FIRST_DRAFT_PLAN.md`. Public TUN activation remains disabled during development.
+
+
+## First-draft integration status (2026-11-19)
+
+The implementation review confirms that broker transaction code, native TUN config adapters, and an isolated systemd launcher are separate pieces; the public activation function does not orchestrate them. Do not treat this as completed TUN mode.
+
+The intended handoff is broker-created and broker-retained interface ownership, with the core attaching to the named existing device under the activation user's credentials. Interface-name matching is necessary but not sufficient evidence of successful attachment. The integrated start path must capture the actual interface identity, ensure the core is launched only after the interface exists, and tie both to the same activation generation. If core attachment cannot be established, exact-generation rollback must run.
+
+Sing-box and Xray adapters already produce a TUN inbound using `tun-proxyctl`, disable automatic route/DNS ownership, and apply a mark to the proxy outbound. Mihomo's TUN adapter remains intentionally unsupported. These adapters are configuration groundwork, not a verified handoff. Phase 1–3 integration remains unfinished, and public activation stays gated.
