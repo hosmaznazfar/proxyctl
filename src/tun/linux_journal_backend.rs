@@ -99,13 +99,21 @@ impl LinuxJournalBackend {
                 let (family, table, destination) = parse_route_key(key)?;
                 let value: Value = serde_json::from_str(&current)?;
                 let dev = value.get("dev").and_then(Value::as_str).context("route fingerprint has no device")?;
-                let retained = self.owner.identity(&journal.activation_id, self.generation)
-                    .context("route cleanup has no retained TUN descriptor owner")?;
-                ensure!(retained.name == dev, "route fingerprint targets a different interface");
-                let interface = snapshot.interfaces.iter().find(|item| item.name == dev && item.index == retained.index && item.is_tun)
-                    .context("route device does not match the retained TUN identity")?;
+                let (owned_name, owned_index) = journal_interface_identity(&journal)?;
+                ensure!(owned_name == dev, "route fingerprint targets a different interface");
+                if let Some(live_interface) = snapshot.interfaces.iter().find(|item| item.name == dev) {
+                    ensure!(live_interface.is_tun && live_interface.index == owned_index,
+                        "route device name has been reused by a different interface identity");
+                }
+                // The descriptor may have closed during a helper crash, which removes the
+                // non-persistent link. The journal's applied interface fingerprint still
+                // supplies the old ifindex needed to delete a surviving route selector.
+                if let Ok(retained) = self.owner.identity(&journal.activation_id, self.generation) {
+                    ensure!(retained.name == dev && retained.index == owned_index,
+                        "retained TUN descriptor does not match the journal identity");
+                }
                 let route = PlannedRoute { family, destination: family.default_prefix().into(), table_id: table,
-                    interface_name: dev.into(), interface_index: interface.index, route_type: RouteType::Unicast };
+                    interface_name: dev.into(), interface_index: owned_index, route_type: RouteType::Unicast };
                 rtnetlink_mutations::delete_route(&route)?;
                 let after = kernel_inventory::inspect_snapshot()?;
                 let after_journal = self.store.load_transaction_journal()?.context("journal disappeared during route removal")?;
@@ -211,6 +219,24 @@ impl JournalRecoveryBackend for LinuxJournalBackend {
     fn remove_if_fingerprint_matches(&mut self, kind: JournalOperationKind, key: &str, expected: &str) -> Result<ResourceState> {
         self.remove_live(kind, key, expected)
     }
+}
+
+
+fn journal_interface_identity(journal: &super::journal::TransactionJournal) -> Result<(String, u32)> {
+    let operation = journal.operations.iter()
+        .find(|operation| operation.kind == JournalOperationKind::CreateInterface)
+        .context("journal has no TUN interface creation operation")?;
+    let fingerprint = operation.fingerprint.as_deref()
+        .context("journal interface operation has no applied fingerprint")?;
+    let value: Value = serde_json::from_str(fingerprint)
+        .context("journal interface fingerprint is malformed")?;
+    let name = value.get("name").and_then(Value::as_str)
+        .context("journal interface fingerprint has no name")?.to_owned();
+    let index = value.get("ifindex").and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .context("journal interface fingerprint has invalid ifindex")?;
+    ensure!(index > 0, "journal interface fingerprint has zero ifindex");
+    Ok((name, index))
 }
 
 fn family_key(family: AddressFamily) -> &'static str { match family { AddressFamily::Ipv4 => "v4", AddressFamily::Ipv6 => "v6" } }
