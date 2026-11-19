@@ -852,3 +852,10 @@ The route/rule primitive also has typed delete requests keyed by the explicit ro
 ### Linux `ifreq` ABI correction
 
 The TUN allocation/link-up primitive uses the Linux `ifreq` ABI with a 16-byte interface-name field and an 8-byte union (24 bytes total). Its flags view is a 16-bit field with six bytes of union padding. This keeps `TUNSETIFF`, `SIOCGIFFLAGS`, and `SIOCSIFFLAGS` ioctl payload layouts consistent with the kernel ABI; this correction is implementation-only and does not enable activation.
+
+
+### TUN transaction integration review — ABI and execution-boundary correction
+
+The flags union in the link-up ioctl's `ifreq` now uses six bytes of padding, matching the 24-byte Linux ABI representation (16-byte interface name plus an 8-byte union). This corrects the source implementation, not merely its description.
+
+The remaining journal-to-kernel integration is deliberately not represented as complete: `JournalStore` and the transaction coordinator still need a concrete broker-held interface lifecycle, operation-intent/apply/fingerprint transitions, canonical fresh inventory evidence, and compare-before-delete recovery. The diagnostic-only broker must not be promoted to a mutation broker by widening its request payload; the mutation protocol needs a separately constrained typed operation envelope, persistent TUN descriptor ownership, and per-operation identity/fingerprint checks. The current route/rule delete primitives are selectors, not atomic compare-and-delete, and must not be used as recovery authorization by themselves.
