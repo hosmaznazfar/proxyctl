@@ -34,6 +34,7 @@ impl LinuxJournalBackend {
     pub fn new(store: ManifestStore, activation_id: &str, generation: u64) -> Result<Self> {
         ensure!(generation > 0, "activation generation must be non-zero");
         ensure!(store.load_transaction_journal()?.is_none(), "an unresolved transaction journal must be recovered first");
+        ensure!(store.load()?.is_none(), "an existing ownership manifest must be cleaned before a new activation");
         store.create_transaction_journal(activation_id, generation)?;
         Ok(Self { store, generation, owner: PersistentTunOwner::new() })
     }
