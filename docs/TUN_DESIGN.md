@@ -834,3 +834,8 @@ This milestone moves the Linux TUN work from offline planning toward a real kern
 ### Concrete Linux TUN descriptor allocation
 
 A first real mutation primitive now allocates an exclusive, non-persistent TUN device via `/dev/net/tun` and `TUNSETIFF` with `IFF_TUN`, `IFF_NO_PI`, and `IFF_TUN_EXCL`. Owner/group are assigned using typed `TUNSETOWNER` and `TUNSETGROUP` ioctl calls. The descriptor owns the attachment; closing it removes the non-persistent interface. Interface names are validated and the kernel-returned name is checked. This primitive does not bring the interface up, configure addresses, install routes or rules, or alter DNS/firewall state. It is not yet wired into the journaled transaction or broker.
+
+
+### TUN link state mutation
+
+The TUN descriptor allocator now performs a typed link-up operation after successful exclusive allocation and owner/group assignment. It reads current interface flags using `SIOCGIFFLAGS` and sets only `IFF_UP` via `SIOCSIFFLAGS`, preserving other flags. If link-up fails, descriptor ownership unwinds and the non-persistent interface is released. This is not yet integrated into the durable transaction executor.
