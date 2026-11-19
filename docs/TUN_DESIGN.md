@@ -898,3 +898,6 @@ The service is now wired into the helper binary, but packaging and the applicati
 
 
 The mutation IPC frame now uses one monotonic deadline for the complete header and payload, rather than resetting a timeout for every partial read. Activation owner UID/GID must equal the kernel-authenticated peer UID/GID; the caller cannot ask the helper to create a device owned by another account. Rollback through the concrete transaction backend also fsyncs each Removed transition before final journal deletion, matching the detached recovery progress contract. The helper installer output documents the explicit persistent mode without enabling or installing a service automatically.
+
+
+Before creating a transaction journal, the mutation service now takes a fresh kernel inventory and validates that the requested dedicated routing table and both families' rule priorities are unoccupied. The subsequent route/rule additions still use create-exclusive NETLINK_ROUTE flags and ACKs, so the preflight is not treated as a lock or race-free reservation. If another actor claims an identity after preflight, the kernel rejects the exclusive add and the durable journal retains the exact partial-transaction state.
