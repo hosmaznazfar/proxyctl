@@ -129,7 +129,7 @@ pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Re
         let route_matches = snapshot.routes.iter().filter(|record| {
             if record.family != family || record.table_id != plan.table_id { return false; }
             let Ok(value) = serde_json::from_str::<serde_json::Value>(&record.canonical_attributes) else { return false; };
-            value.get("dst").and_then(serde_json::Value::as_str).unwrap_or("default") == family.default_prefix()
+            value.get("dst").and_then(serde_json::Value::as_str).map_or(true, |destination| destination == "default" || destination == family.default_prefix())
                 && value.get("dev").and_then(serde_json::Value::as_str) == Some(plan.interface_name.as_str())
                 && value.get("type").and_then(serde_json::Value::as_str).map_or(true, |kind| kind == "unicast")
         }).count();
@@ -274,6 +274,14 @@ mod tests {
             dns_unchanged: true,
             firewall_unchanged: true,
         }
+    }
+
+    #[test]
+    fn parses_kernel_rule_mark_and_mask_without_guessing() {
+        assert_eq!(parse_rule_mark(Some(&serde_json::json!("0x42/0xff"))), Some((0x42, 0xff)));
+        assert_eq!(parse_rule_mark(Some(&serde_json::json!("66/255"))), Some((66, 255)));
+        assert_eq!(parse_rule_mark(Some(&serde_json::json!("0x42"))), None);
+        assert_eq!(parse_rule_mark(Some(&serde_json::json!("invalid/0xff"))), None);
     }
 
     #[cfg(target_os = "linux")]
