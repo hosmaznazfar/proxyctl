@@ -994,3 +994,12 @@ The launcher no longer treats any connectable filesystem path as a ready helper.
 ## Authenticated mutation-helper readiness
 
 The persistent mutation protocol now includes a versioned, side-effect-free `Ping` request. Launcher readiness checks first validate the socket's filesystem identity and permissions, then exchange a bounded protocol frame and require a successful version-matched response. A listening socket alone is no longer considered proof that the expected mutation broker is ready. The broker authenticates the peer with `SO_PEERCRED` before accepting the ping, and the request does not inspect or mutate kernel networking state or alter retained activation ownership.
+
+
+## Broker-to-managed-core activation handoff
+
+A Linux-only managed activation coordinator now connects the typed mutation helper to the durable lifecycle coordinator. The privileged broker remains the sole creator of the kernel transaction and its Prepared ownership manifest. The unprivileged side adopts that exact activation ID and generation rather than creating a competing manifest, pins the already-launched core using its captured process identity and pidfd validation, and persists the Running transition only after binding succeeds.
+
+If manifest adoption or process binding/start commitment fails after broker activation, the coordinator requests recovery for that exact activation ID and generation. Recovery errors are surfaced rather than reported as successful cleanup. The returned activation token is the one required by the existing supervisor monitor/restart APIs.
+
+The caller remains responsible for launching the core with a compatible native TUN configuration and socket mark before handing its captured process identity to this coordinator. This batch does not yet provide a production core launcher, independent dataplane readiness probes, a service-manager-owned supervisor, or supported Mihomo integration. Public TUN activation therefore remains gated.
