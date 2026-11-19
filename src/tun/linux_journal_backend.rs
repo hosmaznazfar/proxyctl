@@ -38,6 +38,16 @@ impl LinuxJournalBackend {
         Ok(Self { store, generation, owner: PersistentTunOwner::new() })
     }
 
+    /// Reopen an existing journal for detached recovery after a helper restart.
+    /// The old non-persistent TUN descriptor is intentionally not reconstructed.
+    pub fn open_for_recovery(store: ManifestStore, activation_id: &str, generation: u64) -> Result<Self> {
+        ensure!(generation > 0, "activation generation must be non-zero");
+        let journal = store.load_transaction_journal()?.context("no transaction journal exists for recovery")?;
+        ensure!(journal.activation_id == activation_id && journal.generation == generation,
+            "recovery identity does not match the durable journal");
+        Ok(Self { store, generation, owner: PersistentTunOwner::new() })
+    }
+
     fn journal_identity(&self, activation_id: &str) -> Result<()> {
         let journal = self.store.load_transaction_journal()?.context("transaction journal is missing")?;
         ensure!(journal.activation_id == activation_id && journal.generation == self.generation,
