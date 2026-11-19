@@ -10,8 +10,9 @@ use anyhow::{Context, Result};
 use super::{
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     mutation_helper_launcher::MutationHelper,
-    process::ProcessIdentity,
-    recovery::SupervisorEvent,
+    process::{ProcessHandle, ProcessIdentity},
+    mutation_broker::MutationResponse,
+    recovery::{SupervisorEvent, SupervisorPhase},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,4 +101,45 @@ pub fn activate_managed_core(
         token,
         activation_message: response.message,
     })
+}
+
+
+/// Supervise a broker-owned activation and request exact-generation cleanup on core exit.
+///
+/// Unlike the backend-injected supervisor, this production-facing handoff leaves the
+/// privileged LinuxJournalBackend inside the persistent broker. The pidfd pins the core
+/// instance while waiting; the broker performs journal-backed compare-and-remove cleanup.
+pub fn monitor_managed_core(
+    helper: &MutationHelper,
+    coordinator: &LifecycleCoordinator,
+    activation: &ManagedActivation,
+    process: &ProcessHandle,
+) -> Result<MutationResponse> {
+    let current = coordinator
+        .load_current()?
+        .context("managed TUN manifest disappeared before supervision")?;
+    anyhow::ensure!(
+        current.token == activation.token
+            && current.snapshot.phase == SupervisorPhase::Running,
+        "managed supervisor token is stale or activation is not Running"
+    );
+    anyhow::ensure!(
+        current.snapshot.core_process.as_ref() == Some(process.identity()),
+        "supervisor pidfd does not match the persisted core process identity"
+    );
+
+    while !process.wait_exit(std::time::Duration::from_millis(250))? {}
+
+    // Persist the exit before asking the broker to mutate kernel state. A failed recovery
+    // therefore leaves a durable CleanupPending/Conflicted record for a later retry.
+    coordinator.apply_event(&activation.token, SupervisorEvent::CoreExited)?;
+    let response = helper.recover(
+        activation.token.activation_id().to_owned(),
+        activation.token.generation(),
+    )?;
+    if !response.success {
+        let _ = coordinator.apply_event(&activation.token, SupervisorEvent::CleanupConflicted);
+        anyhow::bail!("broker cleanup failed; durable recovery state retained: {}", response.message);
+    }
+    Ok(response)
 }
