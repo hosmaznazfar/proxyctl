@@ -65,6 +65,15 @@ pub fn verify_readiness(
     evidence: &ReadinessEvidence,
 ) -> Result<()> {
     ensure!(
+        !expected.interface_name.is_empty()
+            && expected.interface_name.len() <= 15
+            && expected.interface_name.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+            })
+            && expected.interface_index > 0,
+        "expected TUN interface identity is invalid"
+    );
+    ensure!(
         evidence.core_process_verified,
         "TUN core process identity is not verified"
     );
@@ -211,6 +220,16 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_invalid_expected_interface_identity_before_evaluating_evidence() {
+        let mut expected = expected();
+        expected.interface_name = "bad/name";
+        assert!(verify_readiness(&expected, &healthy()).is_err());
+        expected.interface_name = "tun-proxyctl";
+        expected.interface_index = 0;
+        assert!(verify_readiness(&expected, &healthy()).is_err());
     }
 
     #[test]
