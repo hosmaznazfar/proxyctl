@@ -17,6 +17,8 @@ pub mod lifecycle_coordinator;
 pub(crate) mod manifest_fs;
 pub mod manifest_store;
 pub mod ownership;
+#[cfg(target_os = "linux")]
+pub mod persistent_tun_owner;
 pub mod privilege_broker;
 #[cfg(target_os = "linux")]
 pub mod process;
