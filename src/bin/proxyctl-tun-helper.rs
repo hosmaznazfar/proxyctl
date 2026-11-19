@@ -1,8 +1,8 @@
-//! Dedicated, single-request Linux socket-mark diagnostic helper.
+//! Linux TUN helper with separate read-only diagnostic and persistent typed mutation modes.
 //!
-//! Install this binary separately with only CAP_NET_ADMIN (never setuid/root).
-//! It accepts no shell commands, paths to executables, or kernel mutation requests.
-//! The caller owns the private runtime directory and the helper exits after one request.
+//! Install this binary separately with only CAP_NET_ADMIN (never setuid/root). The diagnostic
+//! mode serves one request; mutation mode remains alive and retains generation-bound TUN FDs.
+//! Neither mode accepts shell commands, executable paths, raw netlink payloads, or arbitrary ioctls.
 
 #[cfg(target_os = "linux")]
 struct OwnedBrokerSocket {
