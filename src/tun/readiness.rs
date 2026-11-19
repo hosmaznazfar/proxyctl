@@ -853,6 +853,7 @@ pub fn probe_socks5_connect(
 ) -> Result<()> {
     use std::io::{Read, Write};
     ensure!(destination.port() != 0 && !destination.ip().is_unspecified(), "probe destination must be a concrete IP endpoint");
+    ensure!(!destination.ip().is_loopback() && !destination.ip().is_multicast() && !destination.ip().is_link_local(), "probe destination must not be loopback, multicast, or link-local");
     ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(5), "SOCKS5 probe timeout must be between zero and five seconds");
     probe_core_listener(process, listener, timeout)?;
     let mut stream = TcpStream::connect_timeout(&listener, timeout).context("could not connect to managed SOCKS5 listener")?;
