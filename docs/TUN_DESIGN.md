@@ -815,3 +815,6 @@ Socket-peer candidate classification now rejects zero-inode records at its own b
 
 
 The socket-diagnostic record parser now rejects IPv4 address fields whose unused 12-byte tail is non-zero, keeping the address-family representation canonical. This is parser validation only; the diagnostic transport remains read-only and no socket-marking operation is enabled.
+
+
+Read-only ownership snapshot key parsing now requires route table IDs and rule priorities to be canonical positive decimal `u32` values. Zero, overflow, leading-zero aliases, and malformed numerics are classified as unsupported identities rather than interpreted loosely. This is comparison/parser hardening only and does not authorize cleanup.
