@@ -5,7 +5,7 @@
 //! failure after successful kernel activation requests generation-matched broker recovery.
 #![cfg(target_os = "linux")]
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 
 use super::{
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
