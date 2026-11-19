@@ -969,3 +969,8 @@ Recovery finalization is also restartable across the boundary between journal de
 The persistent mutation broker now distinguishes a fully rolled-back activation failure from an activation that still owns recoverable state. When the transaction executor reports an error, the broker checks both durable records. It releases the in-memory backend (and its retained TUN descriptor) only when the transaction journal and ownership manifest are both absent. If either record remains, the backend stays retained for generation-matched recovery.
 
 This prevents a cleanly rolled-back failed activation from leaving an empty backend entry that would incorrectly block every later activation, while preserving the recovery path for ambiguous or incomplete rollback outcomes. If either storage inspection fails, the broker conservatively retains the backend.
+
+
+## Retain broker exclusivity through recovery finalization errors
+
+After journal-backed kernel recovery succeeds, ownership-manifest retirement is a separate durable step and can itself fail (for example, due to a filesystem error). The broker now retains the generation's backend in that case instead of dropping it while leaving a manifest behind. This preserves the single-generation activation lockout and allows the same generation's recovery request to retry the idempotent manifest-only finalization path. The helper reports that kernel recovery completed but finalization remains pending; it does not report overall recovery success until both durable records are retired.
