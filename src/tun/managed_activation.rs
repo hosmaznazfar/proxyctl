@@ -53,11 +53,24 @@ pub fn activate_managed_core(
         core_mark,
         core_mark_mask,
     )?;
-    ensure!(
-        response.success,
-        "privileged TUN activation failed: {}",
-        response.message
-    );
+    if !response.success {
+        let recovery = helper.recover(activation_id, generation);
+        return match recovery {
+            Ok(result) if result.success => Err(anyhow::anyhow!(
+                "privileged TUN activation failed and its generation was recovered: {}",
+                response.message
+            )),
+            Ok(result) => Err(anyhow::anyhow!(
+                "privileged TUN activation failed: {}; generation recovery failed: {}",
+                response.message,
+                result.message
+            )),
+            Err(error) => Err(anyhow::anyhow!(
+                "privileged TUN activation failed: {}; generation recovery request failed: {error:#}",
+                response.message
+            )),
+        };
+    }
 
     let token = match coordinator.adopt_prepared(&activation_id, generation) {
         Ok(token) => token,
