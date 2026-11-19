@@ -901,3 +901,10 @@ The mutation IPC frame now uses one monotonic deadline for the complete header a
 
 
 Before creating a transaction journal, the mutation service now takes a fresh kernel inventory and validates that the requested dedicated routing table and both families' rule priorities are unoccupied. The subsequent route/rule additions still use create-exclusive NETLINK_ROUTE flags and ACKs, so the preflight is not treated as a lock or race-free reservation. If another actor claims an identity after preflight, the kernel rejects the exclusive add and the durable journal retains the exact partial-transaction state.
+
+
+### Remaining integration boundary after the journal/broker implementation
+
+The five requested implementation layers now have concrete Linux code: journal-backed apply, persistent TUN descriptor retention, live canonical fingerprints, detached compare-before-delete recovery with durable progress, and a separate typed persistent mutation broker. The helper exposes the persistent mode and the library exposes a typed client call. The diagnostic broker remains unchanged.
+
+This does not yet activate TUN mode from the main Proxyctl CLI. The main-process lifecycle coordinator still needs to spawn/monitor the persistent helper, issue typed activation/recovery requests, connect the active manifest to the core process lifecycle, and gate core launch on socket-mark and end-to-end readiness evidence. Service-manager packaging/automatic startup remains intentionally separate. Route/rule removal is preflight compare + typed delete + post-delete verification, not an atomic kernel compare-and-delete operation.
