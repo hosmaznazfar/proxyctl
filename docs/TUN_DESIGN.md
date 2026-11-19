@@ -94,6 +94,10 @@ Init/service-manager backends are responsible for starting/stopping the supervis
 - Support common init managers through separate tested backends. A distro is not declared supported until its init backend and privilege broker pass the lifecycle matrix.
 - If authorization cannot be obtained non-interactively or safely through the selected broker, cancel before stopping the current activation or changing networking.
 
+## Managed-core listener ownership
+
+The active loopback listener probe correlates the requested endpoint with Linux TCP listener tables and the exact managed core's open socket inodes. It pins the process with pidfd, snapshots its socket descriptors before and after the lookup, and verifies the process identity around the connection. The endpoint must be in TCP LISTEN state and its inode must belong to that process; a different local service accepting the connection is not sufficient. Both IPv4 and IPv6 procfs tables are parsed. Restricted procfs visibility, an absent endpoint, or changing socket ownership fails closed. This is point-in-time ownership evidence, not proof of successful proxying.
+
 ## Manifest-bound interface readiness probe
 
 The Linux interface probe takes a fresh kernel snapshot, which cross-checks sysfs interface records against a NETLINK_ROUTE link dump. It requires exactly one interface with the manifest's exact name and ifindex and verifies that the kernel reports the TUN link kind. A reused interface name, changed ifindex, non-TUN link, missing record, or disagreement between the two inventories blocks readiness. The returned evidence is bound to that snapshot only; callers must refresh it after lifecycle transitions or relevant host-network changes. The probe is read-only.
