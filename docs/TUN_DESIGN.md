@@ -955,3 +955,10 @@ This exclusivity is a broker invariant, not a claim that the complete public act
 A successful broker recovery now retires both durable layers for the same activation ID and generation. Before journal cleanup begins, the broker verifies that any active ownership manifest has the requested identity. The recovery executor then re-inspects and resolves every journal operation. Only after that succeeds is the matching manifest persisted in the `Cleaned` phase and removed.
 
 This prevents a successfully recovered activation from leaving a stale manifest that would block the next transaction. A mismatched recovery request is rejected before the journal is mutated. Failed journal recovery retains the live backend and journal for another exact-identity attempt. This finalization does not start or stop a core and does not enable the public TUN activation path.
+
+
+## Restartable recovery finalization
+
+Broker recovery validates the requested activation ID and generation against both the ownership manifest and transaction journal before invoking kernel cleanup. This closes the gap where a matching manifest could otherwise be paired with a different journal.
+
+Recovery finalization is also restartable across the boundary between journal deletion and manifest deletion. If the journal is already absent but the matching manifest remains, a repeated recovery request completes the manifest's `Cleaned` transition and removes it without attempting to reopen a nonexistent journal. A request with neither matching durable record is rejected. This makes the post-kernel-cleanup bookkeeping idempotent after helper or caller interruption.
