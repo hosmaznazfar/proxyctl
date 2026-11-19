@@ -1006,3 +1006,12 @@ The caller remains responsible for launching the core with a compatible native T
 
 
 A broker activation response that reports failure is surfaced directly; the coordinator does not issue a blind recovery request because a fully rolled-back activation legitimately has no remaining journal or manifest. When the broker reports successful activation but later manifest adoption or process binding fails, the coordinator does issue exact-generation recovery. If that recovery cannot be confirmed, the error includes the recovery failure and the durable record remains available for explicit retry.
+
+
+## Managed-core supervision through the persistent broker
+
+The managed activation API now has a broker-backed monitor entry point. It verifies that the supplied pidfd belongs to the same process identity persisted in the Running manifest, waits for that exact process instance to exit, and durably records CoreExited before requesting cleanup.
+
+Kernel cleanup is delegated to the persistent mutation broker using the activation token's exact UUID and generation. This is important because the broker retains the privileged Linux journal backend and TUN descriptor across client connections; the unprivileged supervisor does not construct a second backend or attempt direct privileged cleanup. A failed broker response leaves the durable recovery record available and advances it to a conflicted cleanup state where possible. A successful response means the broker completed journal cleanup and manifest retirement.
+
+This is a reusable lifecycle primitive, not yet an installed service-manager supervisor: no systemd/OpenRC/runit/s6/dinit/SysVinit unit is generated or enabled by this change, and automatic restart after supervisor-process loss is still outstanding. Public TUN activation remains gated until service-manager ownership and independent dataplane readiness are integrated.
