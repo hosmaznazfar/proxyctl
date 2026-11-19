@@ -974,3 +974,8 @@ This prevents a cleanly rolled-back failed activation from leaving an empty back
 ## Retain broker exclusivity through recovery finalization errors
 
 After journal-backed kernel recovery succeeds, ownership-manifest retirement is a separate durable step and can itself fail (for example, due to a filesystem error). The broker now retains the generation's backend in that case instead of dropping it while leaving a manifest behind. This preserves the single-generation activation lockout and allows the same generation's recovery request to retry the idempotent manifest-only finalization path. The helper reports that kernel recovery completed but finalization remains pending; it does not report overall recovery success until both durable records are retired.
+
+
+## Installed helper executable validation
+
+Before spawning the privileged persistent mutation helper, the unprivileged launcher now inspects the executable with `symlink_metadata`. It requires a real regular file (not a symlink), root ownership, at least one execute bit, and no group/world write permission. A missing or unsafe installation fails closed with an installation-oriented error instead of following an unexpected executable path.
