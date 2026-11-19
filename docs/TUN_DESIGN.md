@@ -818,3 +818,6 @@ The socket-diagnostic record parser now rejects IPv4 address fields whose unused
 
 
 Read-only ownership snapshot key parsing now requires route table IDs and rule priorities to be canonical positive decimal `u32` values. Zero, overflow, leading-zero aliases, and malformed numerics are classified as unsupported identities rather than interpreted loosely. This is comparison/parser hardening only and does not authorize cleanup.
+
+
+Route ownership snapshot comparison now treats malformed canonical route JSON within the target family/table as ambiguous, rather than silently skipping it and reporting the resource absent. An inconclusive snapshot must never be interpreted as deletion evidence. A regression test covers the malformed-record case; comparison remains advisory and read-only.
