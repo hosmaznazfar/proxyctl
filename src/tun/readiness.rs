@@ -893,7 +893,7 @@ pub struct Socks5ConnectProbeResult {
     pub destination: SocketAddr,
     pub elapsed: Duration,
     /// Bytes exchanged for SOCKS negotiation and CONNECT response only.
-    pub protocol_bytes: usize,
+    pub request_protocol_bytes: usize,
 }
 
 #[cfg(target_os = "linux")]
@@ -905,7 +905,7 @@ pub fn probe_socks5_connect_detailed(
 ) -> Result<Socks5ConnectProbeResult> {
     let started = std::time::Instant::now();
     probe_socks5_connect(process, listener, destination, timeout)?;
-    Ok(Socks5ConnectProbeResult { listener, destination, elapsed: started.elapsed(), protocol_bytes: 3 + 2 + 3 + match destination.ip() { std::net::IpAddr::V4(_) => 4, std::net::IpAddr::V6(_) => 16 } + 2 + 4 + match destination.ip() { std::net::IpAddr::V4(_) => 4 + 2, std::net::IpAddr::V6(_) => 16 + 2 } })
+    Ok(Socks5ConnectProbeResult { listener, destination, elapsed: started.elapsed(), request_protocol_bytes: 3 + 3 + match destination.ip() { std::net::IpAddr::V4(_) => 4, std::net::IpAddr::V6(_) => 16 } + 2 })
 }
 
 #[cfg(not(target_os = "linux"))]
