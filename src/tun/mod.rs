@@ -40,6 +40,8 @@ pub mod socket_mark_probe;
 pub mod socket_ownership;
 pub mod socket_peer;
 #[cfg(target_os = "linux")]
+pub mod tun_device;
+#[cfg(target_os = "linux")]
 pub mod supervisor;
 
 #[cfg(target_os = "linux")]
