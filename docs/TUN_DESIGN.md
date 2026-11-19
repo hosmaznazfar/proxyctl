@@ -847,3 +847,8 @@ Added Linux-only typed NETLINK_ROUTE mutation functions for installing the valid
 
 
 The route/rule primitive also has typed delete requests keyed by the explicit route family, table, interface index, rule priority, and mark selector. These are narrowly scoped selectors but are not yet conditional on a live canonical fingerprint comparison; the transaction/recovery layer must enforce that precondition before these deletes are used for owned-resource cleanup.
+
+
+### Linux `ifreq` ABI correction
+
+The TUN allocation/link-up primitive uses the Linux `ifreq` ABI with a 16-byte interface-name field and an 8-byte union (24 bytes total). Its flags view is a 16-bit field with six bytes of union padding. This keeps `TUNSETIFF`, `SIOCGIFFLAGS`, and `SIOCSIFFLAGS` ioctl payload layouts consistent with the kernel ABI; this correction is implementation-only and does not enable activation.
