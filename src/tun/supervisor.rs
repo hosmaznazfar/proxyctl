@@ -303,12 +303,15 @@ mod tests {
             .apply_event(&token, SupervisorEvent::StartCommitted)
             .unwrap();
         child.kill().unwrap();
-        child.wait().unwrap();
 
+        // Keep the exited child unreaped until recovery opens its pidfd. This prevents the
+        // kernel from reusing the numeric PID between the persisted identity check and pidfd
+        // acquisition, which would correctly be rejected as a different process instance.
         let mut backend = backend();
         let report = resume_or_recover(&coordinator, &token, &mut backend)
             .unwrap()
             .unwrap();
+        child.wait().unwrap();
         assert_eq!(report.removed, ["route:v4-default"]);
         assert!(coordinator.load_current().unwrap().is_none());
     }
