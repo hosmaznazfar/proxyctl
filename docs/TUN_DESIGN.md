@@ -948,3 +948,10 @@ The persistent mutation broker owns the TUN descriptor and journal backend for t
 A helper restart clears in-memory descriptor ownership but does not authorize a new activation: the durable transaction journal and ownership manifest still block a fresh transaction until generation-matched recovery has completed. Recovery never selects a generation by guessing or by scanning numeric resource ranges.
 
 This exclusivity is a broker invariant, not a claim that the complete public activation lifecycle is integrated. TUN activation remains disabled until core/device ownership handoff, process supervision, readiness verification, and stop/replacement orchestration are connected.
+
+
+## Recovery finalizes the matching ownership manifest
+
+A successful broker recovery now retires both durable layers for the same activation ID and generation. Before journal cleanup begins, the broker verifies that any active ownership manifest has the requested identity. The recovery executor then re-inspects and resolves every journal operation. Only after that succeeds is the matching manifest persisted in the `Cleaned` phase and removed.
+
+This prevents a successfully recovered activation from leaving a stale manifest that would block the next transaction. A mismatched recovery request is rejected before the journal is mutated. Failed journal recovery retains the live backend and journal for another exact-identity attempt. This finalization does not start or stop a core and does not enable the public TUN activation path.
