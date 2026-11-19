@@ -143,3 +143,62 @@ pub fn monitor_managed_core(
     }
     Ok(response)
 }
+
+
+/// Resume a broker-backed supervisor after its unprivileged process restarts.
+///
+/// CleanupPending is retried immediately through the broker. Running activations are rebound
+/// to the persisted process identity and monitored; a vanished or replaced core is converted
+/// into CoreExited before exact-generation broker recovery is requested.
+pub fn resume_managed_supervision(
+    helper: &MutationHelper,
+    coordinator: &LifecycleCoordinator,
+) -> Result<MutationResponse> {
+    let current = coordinator
+        .load_current()?
+        .context("no managed TUN activation is available to resume")?;
+    let token = current.token;
+    if current.snapshot.phase == SupervisorPhase::CleanupPending {
+        let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
+        anyhow::ensure!(response.success, "pending broker cleanup failed: {}", response.message);
+        return Ok(response);
+    }
+    anyhow::ensure!(
+        current.snapshot.phase == SupervisorPhase::Running,
+        "only Running or CleanupPending activations can be resumed"
+    );
+    let identity = current
+        .snapshot
+        .core_process
+        .context("running activation has no persisted core process identity")?;
+    if !identity.verify()? {
+        coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
+        let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
+        anyhow::ensure!(response.success, "dead-core broker cleanup failed: {}", response.message);
+        return Ok(response);
+    }
+    let process = ProcessHandle::open(identity.clone()).or_else(|error| {
+        if identity.verify()? {
+            Err(error)
+        } else {
+            // A second identity check closes the PID-reuse race. The caller then performs
+            // the same durable exit transition and broker cleanup as the fast path.
+            Ok(ProcessHandle::open(identity.clone())?)
+        }
+    });
+    let process = match process {
+        Ok(process) => process,
+        Err(error) => return Err(error).context("cannot safely reopen the managed core pidfd"),
+    };
+    if process.is_exited()? {
+        coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
+        let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
+        anyhow::ensure!(response.success, "exited-core broker cleanup failed: {}", response.message);
+        return Ok(response);
+    }
+    let activation = ManagedActivation {
+        token,
+        activation_message: "resumed existing managed activation".into(),
+    };
+    monitor_managed_core(helper, coordinator, &activation, &process)
+}
