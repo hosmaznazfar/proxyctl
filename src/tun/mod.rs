@@ -22,6 +22,8 @@ pub mod manifest_store;
 pub mod ownership;
 #[cfg(target_os = "linux")]
 pub mod persistent_tun_owner;
+#[cfg(target_os = "linux")]
+pub mod mutation_broker;
 pub mod privilege_broker;
 #[cfg(target_os = "linux")]
 pub mod process;
