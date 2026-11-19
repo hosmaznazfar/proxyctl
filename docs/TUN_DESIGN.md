@@ -806,3 +806,6 @@ Persisted process identities now reject PIDs outside Linux's signed `pid_t` rang
 ### Pidfd signal argument validation
 
 The pinned-process signaling API now rejects signal zero and values outside Linux's supported signal-number range before invoking `pidfd_send_signal`. Signal zero is a permission/liveness probe rather than a termination request, so accepting it through the supervisor's signaling API would blur the distinction between verification and process control. The check is covered with a live fake child and does not signal or terminate that child.
+
+
+Readiness validation now independently validates the expected TUN interface name and non-zero ifindex before evaluating evidence. This prevents malformed expectation values from bypassing the same identity shape enforced by route planning and manifests. Offline tests cover malformed names and zero indices; readiness remains a pure evaluator and TUN activation remains disabled.
