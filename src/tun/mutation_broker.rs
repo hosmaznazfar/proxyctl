@@ -301,19 +301,31 @@ fn execute(
             };
             match recover(&store, &mut backend) {
                 Ok(report) => {
-                    // Retire the matching manifest only after the executor has verified and
-                    // removed every journal-owned kernel resource.
-                    if let Some(mut snapshot) = manifest {
-                        snapshot.phase = super::recovery::SupervisorPhase::Cleaned;
-                        store.write(&snapshot)?;
-                        store.remove_cleaned(&activation_id, generation)?;
+                    // Journal cleanup is already durable at this point. Keep the backend
+                    // registered if manifest retirement fails so the broker remains exclusive
+                    // and a retry can finish the manifest-only finalization path.
+                    let finalization = (|| -> Result<String> {
+                        if let Some(mut snapshot) = manifest {
+                            snapshot.phase = super::recovery::SupervisorPhase::Cleaned;
+                            store.write(&snapshot)?;
+                            store.remove_cleaned(&activation_id, generation)?;
+                        }
+                        Ok(format!(
+                            "recovery complete: {} removed, {} already absent, {} intents resolved",
+                            report.removed.len(),
+                            report.already_absent.len(),
+                            report.resolved_intents.len()
+                        ))
+                    })();
+                    match finalization {
+                        Ok(message) => Ok(message),
+                        Err(error) => {
+                            backends.insert(key, backend);
+                            Err(error).context(
+                                "kernel recovery completed but ownership-manifest finalization failed; retry the same generation",
+                            )
+                        }
                     }
-                    Ok(format!(
-                        "recovery complete: {} removed, {} already absent, {} intents resolved",
-                        report.removed.len(),
-                        report.already_absent.len(),
-                        report.resolved_intents.len()
-                    ))
                 }
                 Err(error) => {
                     backends.insert(key, backend);
