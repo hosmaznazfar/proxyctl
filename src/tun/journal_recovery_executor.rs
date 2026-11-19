@@ -7,11 +7,10 @@
 use anyhow::{Context, Result, ensure};
 
 use super::{
-    kernel_inventory::KernelSnapshot,
     journal::{
-        JournalRecoveryDecision, JournalOperationKind, JournalOperationState,
-        plan_journal_recovery,
+        JournalOperationKind, JournalOperationState, JournalRecoveryDecision, plan_journal_recovery,
     },
+    kernel_inventory::KernelSnapshot,
     manifest_store::ManifestStore,
     ownership::ResourceState,
     resource_snapshot::observe_journal_resources,

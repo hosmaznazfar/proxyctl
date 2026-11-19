@@ -283,7 +283,6 @@ fn compare_rule(
     }
 }
 
-
 /// Build the exact observed-fingerprint map required by journal recovery from one fresh
 /// kernel snapshot. Fingerprints are copied from live canonical records, never reconstructed
 /// from planned route/rule attributes. Every journal key receives an observation; an absent
@@ -310,13 +309,13 @@ pub fn observe_journal_resources(
                     .collect::<Vec<_>>();
                 match matches.as_slice() {
                     [] => None,
-                    [interface] if interface.is_tun => Some(serde_json::to_string(
-                        &serde_json::json!({
+                    [interface] if interface.is_tun => {
+                        Some(serde_json::to_string(&serde_json::json!({
                             "ifindex": interface.index,
                             "kind": "tun",
                             "name": interface.name
-                        }),
-                    )?),
+                        }))?)
+                    }
                     _ => anyhow::bail!("journal interface identity is changed or ambiguous"),
                 }
             }
@@ -345,8 +344,7 @@ pub fn observe_journal_resources(
                         || (actual == "default"
                             && matches!(
                                 (family, destination.as_str()),
-                                (AddressFamily::Ipv4, "0.0.0.0/0")
-                                    | (AddressFamily::Ipv6, "::/0")
+                                (AddressFamily::Ipv4, "0.0.0.0/0") | (AddressFamily::Ipv6, "::/0")
                             ));
                     if same_destination {
                         candidates.push(route);
@@ -355,9 +353,9 @@ pub fn observe_journal_resources(
                 match candidates.as_slice() {
                     [] => None,
                     [route] => Some(route.canonical_attributes.clone()),
-                    [_, ..] => anyhow::bail!(
-                        "journal route identity has duplicate live kernel records"
-                    ),
+                    [_, ..] => {
+                        anyhow::bail!("journal route identity has duplicate live kernel records")
+                    }
                 }
             }
             JournalOperationKind::AddRule => {
@@ -374,9 +372,9 @@ pub fn observe_journal_resources(
                 match matches.as_slice() {
                     [] => None,
                     [rule] => Some(rule.canonical_attributes.clone()),
-                    [_, ..] => anyhow::bail!(
-                        "journal rule identity has duplicate live kernel records"
-                    ),
+                    [_, ..] => {
+                        anyhow::bail!("journal rule identity has duplicate live kernel records")
+                    }
                 }
             }
         };

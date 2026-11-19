@@ -9,8 +9,8 @@ pub mod broker_executor;
 pub mod broker_transport;
 pub mod egress_probe;
 pub mod journal;
-pub mod journal_store;
 pub mod journal_recovery_executor;
+pub mod journal_store;
 pub mod kernel_backend;
 pub mod kernel_inventory;
 pub mod kernel_transaction;
@@ -45,9 +45,9 @@ pub mod socket_mark_probe;
 pub mod socket_ownership;
 pub mod socket_peer;
 #[cfg(target_os = "linux")]
-pub mod tun_device;
-#[cfg(target_os = "linux")]
 pub mod supervisor;
+#[cfg(target_os = "linux")]
+pub mod tun_device;
 
 #[cfg(target_os = "linux")]
 use std::{

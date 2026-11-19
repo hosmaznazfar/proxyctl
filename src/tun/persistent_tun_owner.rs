@@ -64,7 +64,10 @@ impl PersistentTunOwner {
             "this activation generation already owns a TUN device"
         );
         ensure!(
-            !self.devices.values().any(|owned| owned.interface.name == name),
+            !self
+                .devices
+                .values()
+                .any(|owned| owned.interface.name == name),
             "the requested TUN name is already retained by another activation"
         );
 
@@ -105,11 +108,7 @@ impl PersistentTunOwner {
     }
 
     /// Return the live identity only for the exact activation and generation.
-    pub fn identity(
-        &self,
-        activation_id: &str,
-        generation: u64,
-    ) -> Result<&KernelInterfaceRecord> {
+    pub fn identity(&self, activation_id: &str, generation: u64) -> Result<&KernelInterfaceRecord> {
         validate_identity(activation_id, generation)?;
         self.devices
             .get(&OwnerKey {
