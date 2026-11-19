@@ -185,6 +185,69 @@ pub fn verify_host_network_unchanged(
     Ok(())
 }
 
+/// Collect independent read-only evidence for a managed activation preflight.
+///
+/// This composes process/listener, TUN identity, routing-policy, marked physical-egress,
+/// socket-mark, and host DNS/firewall checks. End-to-end proxied traffic remains an explicit
+/// external evidence requirement and is not inferred from these observations.
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+pub fn collect_managed_preflight(
+    runtime_directory: &std::path::Path,
+    activation_id: &str,
+    process: &super::process::ProcessIdentity,
+    listener: SocketAddr,
+    listener_timeout: Duration,
+    plan: &super::route_policy::RoutingPolicyPlan,
+    expected_peer: SocketAddr,
+    transport: super::privilege_broker::BrokerSocketTransport,
+    baseline_host: &super::NetworkStatus,
+    current_host: &super::NetworkStatus,
+) -> Result<ReadinessEvidence> {
+    ensure!(process.verify()?, "managed core identity is not live at preflight start");
+    let listener = probe_core_listener(process, listener, listener_timeout)?;
+    let interface = probe_tun_interface(&plan.interface_name, plan.interface_index)?;
+    probe_routing_policy(plan)?;
+    let egress = super::egress_probe::inspect_marked_egress(plan)?;
+    ensure!(egress.mark == plan.core_mark && egress.mask == plan.core_mark_mask,
+        "marked physical-egress evidence is bound to a different mark policy");
+    let mark = probe_core_outbound_socket_mark(
+        runtime_directory, activation_id, process, expected_peer, transport,
+        plan.core_mark, plan.core_mark_mask,
+    )?;
+    verify_host_network_unchanged(baseline_host, current_host)?;
+    ensure!(process.verify()?, "managed core identity changed during preflight");
+    Ok(ReadinessEvidence {
+        core_process_verified: true,
+        local_listener: Some(listener),
+        tun_interface: Some(interface),
+        route_policy_verified: true,
+        core_outbound_socket_mark: Some(mark),
+        physical_egress_bypass_verified: true,
+        // This collection does not synthesize or initiate an application-level proxy test.
+        proxied_traffic_verified: false,
+        dns_unchanged: true,
+        firewall_unchanged: true,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+#[allow(clippy::too_many_arguments)]
+pub fn collect_managed_preflight(
+    _runtime_directory: &std::path::Path,
+    _activation_id: &str,
+    _process: &(),
+    _listener: SocketAddr,
+    _listener_timeout: Duration,
+    _plan: &super::route_policy::RoutingPolicyPlan,
+    _expected_peer: SocketAddr,
+    _transport: (),
+    _baseline_host: &super::NetworkStatus,
+    _current_host: &super::NetworkStatus,
+) -> Result<ReadinessEvidence> {
+    anyhow::bail!("managed TUN preflight evidence collection is supported only on Linux");
+}
+
 /// Collect and validate live marked outbound-socket evidence for the managed core.
 ///
 /// The dedicated helper performs read-only INET_DIAG collection. The process identity is
