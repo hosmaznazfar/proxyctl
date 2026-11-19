@@ -908,3 +908,10 @@ Before creating a transaction journal, the mutation service now takes a fresh ke
 The five requested implementation layers now have concrete Linux code: journal-backed apply, persistent TUN descriptor retention, live canonical fingerprints, detached compare-before-delete recovery with durable progress, and a separate typed persistent mutation broker. The helper exposes the persistent mode and the library exposes a typed client call. The diagnostic broker remains unchanged.
 
 This does not yet activate TUN mode from the main Proxyctl CLI. The main-process lifecycle coordinator still needs to spawn/monitor the persistent helper, issue typed activation/recovery requests, connect the active manifest to the core process lifecycle, and gate core launch on socket-mark and end-to-end readiness evidence. Service-manager packaging/automatic startup remains intentionally separate. Route/rule removal is preflight compare + typed delete + post-delete verification, not an atomic kernel compare-and-delete operation.
+
+
+### Canonical cleanup-key parsing and pidfd restart regression
+
+The concrete Linux journal backend now rejects non-canonical decimal spellings for route table IDs, rule priorities, and numeric rule table selectors. Parsing a string into an integer is not sufficient: its decimal round-trip must match the original key, so leading-zero aliases cannot identify the same kernel resource under a second journal key. The route-key parser also keeps the parsed destination validation explicit while the deletion selector remains constrained to the supported default route.
+
+The restart-recovery regression test now keeps its terminated child unreaped until the supervisor has opened the pidfd and classified the persisted process identity. This prevents the kernel from reusing the numeric PID in the test window. A reused PID is a different process instance and must continue to be rejected; recovery is only allowed after the recorded process is established as gone. The mutation protocol's maximum-frame bound is now asserted at compile time rather than through a runtime test assertion.
