@@ -172,11 +172,7 @@ fn parse_resource_key(key: &str) -> Result<ResourceKey> {
             Ok(ResourceKey::Route {
                 family,
                 table_id,
-                destination: if family == AddressFamily::Ipv6 && destination.starts_with(':') {
-                    format!(":{destination}")
-                } else {
-                    destination.to_owned()
-                },
+                destination: destination.to_owned(),
             })
         }
         "rule" => {
