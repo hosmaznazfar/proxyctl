@@ -824,3 +824,8 @@ Route ownership snapshot comparison now treats malformed canonical route JSON wi
 
 
 The canonical resource-key numeric parser uses an owned error-context string when wrapping parse errors, satisfying `anyhow`'s context lifetime requirement without changing validation behavior.
+
+
+## Concrete kernel backend implementation milestone
+
+This milestone moves the Linux TUN work from offline planning toward a real kernel executor. Implement concrete typed TUN interface creation, link-up, IPv4/IPv6 route and policy-rule operations using NETLINK_ROUTE (not shell commands), exact resource identity verification, and rollback/cleanup driven by durable write-ahead journal records. Execution is routed through the restricted privilege-broker protocol; callers cannot submit arbitrary netlink bytes or command strings. The backend must re-inventory and fingerprint resources before cleanup, persist intent before mutation and applied evidence after mutation, and preserve ambiguous resources for recovery. The milestone includes offline fake-kernel/fault-injection tests for partial apply, ack failure, inventory mismatch, cleanup conflict, and replay. The activation CLI remains gated until the executor, broker, supervisor, core socket-marking and readiness paths are all integrated.
