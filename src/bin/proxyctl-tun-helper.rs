@@ -125,9 +125,10 @@ fn main() -> anyhow::Result<()> {
         "runtime directory must be a real caller-owned 0700-or-stricter directory"
     );
 
+    let runtime_directory = parent.to_path_buf();
     let socket = OwnedBrokerSocket::bind(socket_path)?;
     if mutation_mode {
-        proxyctl::tun::mutation_broker::serve(&socket.listener, parent)?;
+        proxyctl::tun::mutation_broker::serve(&socket.listener, &runtime_directory)?;
     } else {
         proxyctl::tun::broker_executor::serve_one_socket_mark_request(
             &socket.listener,
