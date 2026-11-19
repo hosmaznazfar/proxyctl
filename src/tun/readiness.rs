@@ -1,10 +1,59 @@
-//! Fail-closed evidence model for TUN dataplane readiness.
+//! Fail-closed evidence model and active local-listener probe for TUN readiness.
 //!
-//! This module evaluates probe results supplied by a future Linux probe backend. It performs
-//! no socket, route, interface, DNS, firewall, or process operation itself.
+//! The listener probe verifies the persisted core process identity around a bounded loopback
+//! TCP connection. Other dataplane evidence remains independently supplied and fail-closed.
 
-use anyhow::{Result, ensure};
-use std::net::SocketAddr;
+use anyhow::{Context, Result, ensure};
+use std::{
+    net::{SocketAddr, TcpStream},
+    time::Duration,
+};
+
+/// Actively verify a loopback listener while the exact managed core process remains alive.
+///
+/// A successful TCP connection is not by itself proof that the listener belongs to the core;
+/// callers must use a dedicated, manifest-bound listener endpoint and retain the process
+/// identity evidence. The identity is checked both before and after connecting to narrow PID
+/// replacement races.
+#[cfg(target_os = "linux")]
+pub fn probe_core_listener(
+    process: &super::process::ProcessIdentity,
+    listener: SocketAddr,
+    timeout: Duration,
+) -> Result<SocketAddr> {
+    ensure!(
+        listener.ip().is_loopback() && listener.port() != 0,
+        "core readiness listener must be a non-zero loopback socket"
+    );
+    ensure!(
+        !timeout.is_zero() && timeout <= Duration::from_secs(5),
+        "core listener probe timeout must be between zero and five seconds"
+    );
+    ensure!(
+        process.verify()?,
+        "managed core process identity is no longer present before listener probe"
+    );
+    let stream = TcpStream::connect_timeout(&listener, timeout)
+        .context("managed core local proxy listener did not accept a connection")?;
+    ensure!(
+        stream.peer_addr()? == listener,
+        "connected local listener does not match the requested endpoint"
+    );
+    ensure!(
+        process.verify()?,
+        "managed core process identity changed during listener probe"
+    );
+    Ok(listener)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_core_listener(
+    _process: &(),
+    _listener: SocketAddr,
+    _timeout: Duration,
+) -> Result<SocketAddr> {
+    anyhow::bail!("managed-core listener probing is supported only on Linux");
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterfaceEvidence {
