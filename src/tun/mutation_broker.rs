@@ -190,7 +190,7 @@ fn execute(
     backends: &mut BTreeMap<(String, u64), LinuxJournalBackend>,
 ) -> Result<String> {
     match request {
-        MutationRequest::Ping { .. } => Ok("mutation broker ready".to_owned()),
+        MutationRequest::Ping { .. } => inspect_broker_readiness(directory, backends),
         MutationRequest::Activate {
             activation_id,
             generation,
@@ -340,6 +340,53 @@ fn execute(
                 }
             }
         }
+    }
+}
+
+
+/// Verify that the persistent broker can safely resume any durable generation.
+///
+/// This is deliberately read-only: a restarted helper may have durable records but no
+/// in-memory descriptor, in which case generation-matched recovery remains available.
+fn inspect_broker_readiness(
+    directory: &Path,
+    backends: &BTreeMap<(String, u64), LinuxJournalBackend>,
+) -> Result<String> {
+    ensure!(
+        backends.len() <= 1,
+        "mutation broker retained more than one activation backend"
+    );
+    let store = ManifestStore::open(directory)?;
+    let manifest = store.load()?;
+    let journal = store.load_transaction_journal()?;
+
+    let manifest_identity = manifest.as_ref().map(|snapshot| {
+        (snapshot.manifest.activation_id.clone(), snapshot.generation)
+    });
+    let journal_identity = journal
+        .as_ref()
+        .map(|entry| (entry.activation_id.clone(), entry.generation));
+
+    if let (Some(manifest_id), Some(journal_id)) = (&manifest_identity, &journal_identity) {
+        ensure!(
+            manifest_id == journal_id,
+            "durable TUN manifest and transaction journal identities disagree"
+        );
+    }
+
+    let durable_identity = manifest_identity.or(journal_identity);
+    if let Some((backend_id, backend_generation)) = backends.keys().next() {
+        ensure!(
+            durable_identity.as_ref() == Some(&(backend_id.clone(), *backend_generation)),
+            "retained mutation backend has no matching durable manifest or journal"
+        );
+    }
+
+    match durable_identity {
+        Some((activation_id, generation)) => Ok(format!(
+            "mutation broker ready; durable activation {activation_id} generation {generation} is available for supervision or recovery"
+        )),
+        None => Ok("mutation broker ready; no durable activation is pending".to_owned()),
     }
 }
 
