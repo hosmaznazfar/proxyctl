@@ -697,8 +697,12 @@ impl BrokerRequest {
                 && manifest_path_text
                     .split('/')
                     .skip(1)
-                    .all(|component| !component.is_empty() && component != "." && component != "..")
-                && !manifest_path_text.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
+                    .all(|component| !component.is_empty()
+                        && component != "."
+                        && component != "..")
+                && !manifest_path_text
+                    .bytes()
+                    .any(|byte| byte == 0 || byte.is_ascii_control()),
             "privilege-broker manifest path must be normalized and absolute"
         );
         ensure!(

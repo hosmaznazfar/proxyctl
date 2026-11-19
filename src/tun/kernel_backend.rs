@@ -93,14 +93,24 @@ impl KernelCommandPlan {
                         "tun"
                     ]
                 && creation[6] == "user"
-                && creation[7].parse::<u32>().is_ok_and(|uid| uid.to_string() == creation[7])
+                && creation[7]
+                    .parse::<u32>()
+                    .is_ok_and(|uid| uid.to_string() == creation[7])
                 && creation[8] == "group"
-                && creation[9].parse::<u32>().is_ok_and(|gid| gid.to_string() == creation[9]),
+                && creation[9]
+                    .parse::<u32>()
+                    .is_ok_and(|gid| gid.to_string() == creation[9]),
             "kernel plan must begin with an exact guarded TUN creation command"
         );
         anyhow::ensure!(
             self.apply[1].arguments
-                == ["link", "set", "dev", self.interface_cleanup.interface_name.as_str(), "up"],
+                == [
+                    "link",
+                    "set",
+                    "dev",
+                    self.interface_cleanup.interface_name.as_str(),
+                    "up"
+                ],
             "kernel plan must bring up only its guarded TUN interface"
         );
         anyhow::ensure!(
@@ -452,7 +462,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(bound.interface_index, 143);
-        assert!(bound.routes.iter().all(|route| route.interface_index == 143));
+        assert!(
+            bound
+                .routes
+                .iter()
+                .all(|route| route.interface_index == 143)
+        );
 
         for invalid in [
             vec![KernelInterfaceRecord {
@@ -583,7 +598,9 @@ mod tests {
         assert!(stale_interface_index.validate().is_err());
 
         let mut extra_apply = plan.clone();
-        extra_apply.apply.push(IpCommand::new(["route", "add", "default"]));
+        extra_apply
+            .apply
+            .push(IpCommand::new(["route", "add", "default"]));
         assert!(extra_apply.validate().is_err());
 
         let mut altered_apply = plan.clone();

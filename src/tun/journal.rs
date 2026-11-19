@@ -442,14 +442,22 @@ mod validation_tests {
             "route:v4:4294967296:0.0.0.0/0",
         ] {
             let value = journal(vec![
-                operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+                operation(
+                    0,
+                    JournalOperationKind::CreateInterface,
+                    "interface:tun-proxyctl",
+                ),
                 operation(1, JournalOperationKind::AddRoute, key),
             ]);
             assert!(value.validate().is_err(), "accepted {key}");
         }
         for key in ["rule:v4:042410", "rule:v6:0", "rule:v6:4294967296"] {
             let value = journal(vec![
-                operation(0, JournalOperationKind::CreateInterface, "interface:tun-proxyctl"),
+                operation(
+                    0,
+                    JournalOperationKind::CreateInterface,
+                    "interface:tun-proxyctl",
+                ),
                 operation(1, JournalOperationKind::AddRule, key),
             ]);
             assert!(value.validate().is_err(), "accepted {key}");

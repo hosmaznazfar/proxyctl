@@ -464,10 +464,7 @@ fn validate_response_budget(current: &[Vec<u8>], incoming: &[Vec<u8>]) -> Result
     Ok(())
 }
 
-fn validate_kernel_sender(
-    sender: &libc::sockaddr_nl,
-    sender_len: libc::socklen_t,
-) -> Result<()> {
+fn validate_kernel_sender(sender: &libc::sockaddr_nl, sender_len: libc::socklen_t) -> Result<()> {
     ensure!(
         sender_len as usize == std::mem::size_of::<libc::sockaddr_nl>()
             && sender.nl_family == libc::AF_NETLINK as u16

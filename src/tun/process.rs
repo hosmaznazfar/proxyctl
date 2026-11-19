@@ -48,11 +48,15 @@ impl ProcessIdentity {
         ensure!(
             self.executable.is_absolute()
                 && self.executable.file_name().is_some()
-                && !executable_text.bytes().any(|byte| byte == 0 || byte.is_ascii_control())
+                && !executable_text
+                    .bytes()
+                    .any(|byte| byte == 0 || byte.is_ascii_control())
                 && executable_text
                     .split('/')
                     .skip(1)
-                    .all(|component| !component.is_empty() && component != "." && component != "..")
+                    .all(|component| !component.is_empty()
+                        && component != "."
+                        && component != "..")
                 && self.executable.components().all(|component| {
                     matches!(
                         component,
