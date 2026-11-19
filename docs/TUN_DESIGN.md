@@ -94,6 +94,10 @@ Init/service-manager backends are responsible for starting/stopping the supervis
 - Support common init managers through separate tested backends. A distro is not declared supported until its init backend and privilege broker pass the lifecycle matrix.
 - If authorization cannot be obtained non-interactively or safely through the selected broker, cancel before stopping the current activation or changing networking.
 
+## Manifest-bound interface readiness probe
+
+The Linux interface probe takes a fresh kernel snapshot, which cross-checks sysfs interface records against a NETLINK_ROUTE link dump. It requires exactly one interface with the manifest's exact name and ifindex and verifies that the kernel reports the TUN link kind. A reused interface name, changed ifindex, non-TUN link, missing record, or disagreement between the two inventories blocks readiness. The returned evidence is bound to that snapshot only; callers must refresh it after lifecycle transitions or relevant host-network changes. The probe is read-only.
+
 ## Live routing-policy readiness probe
 
 Before readiness can be declared, the Linux probe captures a fresh read-only kernel snapshot and compares both address families with the activation's validated routing plan. It requires exactly one default unicast route in the dedicated table through the manifest-bound interface name, plus exactly one core-mark bypass rule to the main table and one unmarked proxy rule to the dedicated table at their planned priorities. Missing selectors, duplicate matches, incomplete inventory, or mismatches fail closed. The probe does not mutate routes or rules.
