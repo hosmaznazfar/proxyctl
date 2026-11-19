@@ -512,7 +512,9 @@ fn parse_table_value(value: &Value) -> Result<u32> {
         "main" => Ok(crate::tun::route_policy::RT_TABLE_MAIN),
         "local" => Ok(crate::tun::route_policy::RT_TABLE_LOCAL),
         value => {
-            let table = value.parse::<u32>().context("unsupported rule table name")?;
+            let table = value
+                .parse::<u32>()
+                .context("unsupported rule table name")?;
             ensure!(table.to_string() == value, "rule table ID is not canonical");
             Ok(table)
         }
