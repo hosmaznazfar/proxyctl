@@ -76,6 +76,10 @@ impl LinuxJournalBackend {
                 let live = snapshot.interfaces.iter().find(|item| item.name == name && item.index == index && item.is_tun);
                 if live.is_none() { return Ok(ResourceState::ChangedOrForeign); }
                 self.owner.release(&journal.activation_id, self.generation, name, index)?;
+                let after = kernel_inventory::inspect_snapshot()?;
+                if after.interfaces.iter().any(|item| item.name == name || item.index == index) {
+                    return Ok(ResourceState::ChangedOrForeign);
+                }
                 Ok(ResourceState::Removed)
             }
             JournalOperationKind::AddRoute => {
@@ -99,9 +103,9 @@ impl LinuxJournalBackend {
             JournalOperationKind::AddRule => {
                 let (family, priority) = parse_rule_key(key)?;
                 let value: Value = serde_json::from_str(&current)?;
-                let table = value.get("table").or_else(|| value.get("lookup")).and_then(|v| {
-                    v.as_u64().and_then(|n| u32::try_from(n).ok()).or_else(|| v.as_str()?.parse().ok())
-                }).context("rule fingerprint has no supported table")?;
+                let table_value = value.get("table").or_else(|| value.get("lookup"))
+                    .context("rule fingerprint has no table selector")?;
+                let table = parse_table_value(table_value)?;
                 let mark = value.get("fwmark").and_then(Value::as_str).map(parse_mark).transpose()?;
                 let rule = PlannedRule { family, priority, purpose: if mark.is_some() { RulePurpose::CoreTrafficBypass } else { RulePurpose::ProxyTraffic }, mark, lookup_table: table };
                 rtnetlink_mutations::delete_rule(&rule)?;
@@ -242,5 +246,17 @@ mod tests {
         assert_eq!(parse_mark("0x42/0xff").unwrap(), MarkSelector { value: 0x42, mask: 0xff });
         assert!(parse_mark("0x100/0xff").is_err());
         assert!(parse_mark("0x42/0").is_err());
+    }
+}
+
+fn parse_table_value(value: &Value) -> Result<u32> {
+    if let Some(number) = value.as_u64() {
+        return u32::try_from(number).context("rule table exceeds u32");
+    }
+    match value.as_str().context("rule table is not numeric or named")? {
+        "default" => Ok(crate::tun::route_policy::RT_TABLE_DEFAULT),
+        "main" => Ok(crate::tun::route_policy::RT_TABLE_MAIN),
+        "local" => Ok(crate::tun::route_policy::RT_TABLE_LOCAL),
+        value => value.parse::<u32>().context("unsupported rule table name"),
     }
 }
