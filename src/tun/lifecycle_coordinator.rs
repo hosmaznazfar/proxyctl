@@ -61,6 +61,38 @@ impl LifecycleCoordinator {
         ActivationToken::from_snapshot(snapshot)
     }
 
+    /// Adopt the Prepared manifest committed by the privileged mutation broker.
+    ///
+    /// The broker owns kernel transaction creation; the unprivileged lifecycle coordinator
+    /// must not create a competing manifest. Adoption is allowed only for the exact
+    /// activation generation and only before a core process has been bound.
+    pub fn adopt_prepared(
+        &self,
+        activation_id: &str,
+        generation: u64,
+    ) -> Result<ActivationToken> {
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        let snapshot = self
+            .store
+            .load()?
+            .context("mutation broker did not commit an ownership manifest")?;
+        ensure!(
+            snapshot.manifest.activation_id == activation_id
+                && snapshot.generation == generation,
+            "broker manifest identity does not match the requested activation generation"
+        );
+        ensure!(
+            snapshot.phase == SupervisorPhase::Prepared,
+            "only a newly prepared broker manifest can be adopted"
+        );
+        #[cfg(target_os = "linux")]
+        ensure!(
+            snapshot.core_process.is_none(),
+            "broker manifest unexpectedly already contains a core process identity"
+        );
+        ActivationToken::from_snapshot(&snapshot)
+    }
+
     pub fn load_current(&self) -> Result<Option<CoordinatedSnapshot>> {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         self.store
