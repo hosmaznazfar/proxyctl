@@ -185,6 +185,73 @@ pub fn verify_host_network_unchanged(
     Ok(())
 }
 
+
+/// Evidence from a bounded, externally executed end-to-end proxy traffic probe.
+///
+/// This record intentionally does not execute traffic itself. The caller must use a verifier
+/// that binds the request to the proxy process and activation generation; validation here
+/// prevents incomplete or unbounded probe results from being promoted to readiness.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProxyTrafficObservation {
+    pub activation_id: String,
+    pub generation: u64,
+    pub process: super::process::ProcessIdentity,
+    pub destination: SocketAddr,
+    pub completed: bool,
+    pub elapsed: Duration,
+    pub response_bytes: usize,
+    pub expected_response_verified: bool,
+}
+
+/// Validate bounded traffic-probe evidence against the activation identity and limits.
+///
+/// The API requires a non-zero generation, a concrete destination, positive bounded duration,
+/// and response-size ceiling. It does not infer that traffic was proxied from metadata alone;
+/// callers must set `expected_response_verified` only after the probe independently confirms
+/// the expected response through the proxy path.
+#[cfg(target_os = "linux")]
+pub fn validate_proxy_traffic_observation(
+    observation: &ProxyTrafficObservation,
+    activation_id: &str,
+    generation: u64,
+    process: &super::process::ProcessIdentity,
+    maximum_duration: Duration,
+    maximum_response_bytes: usize,
+) -> Result<()> {
+    ensure!(!activation_id.is_empty(), "activation identity must not be empty");
+    ensure!(generation > 0, "activation generation must be non-zero");
+    ensure!(observation.activation_id == activation_id && observation.generation == generation,
+        "traffic observation belongs to a different activation generation");
+    ensure!(observation.process == *process && process.verify()?,
+        "traffic observation process identity is mismatched or no longer live");
+    ensure!(!observation.destination.ip().is_unspecified() && observation.destination.port() != 0,
+        "traffic observation destination is invalid");
+    ensure!(!maximum_duration.is_zero() && maximum_duration <= Duration::from_secs(30),
+        "traffic observation duration bound must be within thirty seconds");
+    ensure!(observation.completed && !observation.elapsed.is_zero() && observation.elapsed <= maximum_duration,
+        "traffic probe did not complete within its duration bound");
+    ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
+        "traffic response bound must be within one MiB");
+    ensure!(observation.response_bytes <= maximum_response_bytes,
+        "traffic probe exceeded its response size bound");
+    ensure!(observation.expected_response_verified,
+        "traffic probe did not independently verify its expected response");
+    ensure!(process.verify()?, "managed core identity changed after traffic probe");
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn validate_proxy_traffic_observation(
+    _observation: &ProxyTrafficObservation,
+    _activation_id: &str,
+    _generation: u64,
+    _process: &(),
+    _maximum_duration: Duration,
+    _maximum_response_bytes: usize,
+) -> Result<()> {
+    anyhow::bail!("managed proxy traffic observation validation is supported only on Linux");
+}
+
 /// Collect independent read-only evidence for a managed activation preflight.
 ///
 /// This composes process/listener, TUN identity, routing-policy, marked physical-egress,
