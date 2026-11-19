@@ -26,10 +26,12 @@ impl MutationHelper {
     /// Start helper only when its private socket is not already accepting connections.
     /// Runtime directory is caller-owned and private; stale sockets are never blindly removed.
     pub fn ensure_started(runtime: &Path) -> Result<Self> {
-        fs::create_dir_all(runtime)?;
-        fs::set_permissions(runtime, fs::Permissions::from_mode(0o700))?;
+        if !runtime.exists() {
+            fs::create_dir_all(runtime)?;
+            fs::set_permissions(runtime, fs::Permissions::from_mode(0o700))?;
+        }
         let metadata = fs::symlink_metadata(runtime)?;
-        ensure!(metadata.is_dir() && metadata.uid() == unsafe { libc::geteuid() },
+        ensure!(metadata.is_dir() && !metadata.file_type().is_symlink() && metadata.uid() == unsafe { libc::geteuid() },
             "helper runtime directory must be a caller-owned directory");
         ensure!(metadata.permissions().mode() & 0o077 == 0,
             "helper runtime directory must not be accessible to other users");
@@ -62,6 +64,22 @@ impl MutationHelper {
 
     pub fn socket_path(&self) -> &Path {
         &self.socket
+    }
+
+    /// Submit a typed activation operation to the broker.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate(&self, activation_id: String, generation: u64, interface_name: String, owner_uid: u32, owner_gid: u32, table_id: u32, bypass_priority: u32, proxy_priority: u32, core_mark: u32, core_mark_mask: u32) -> Result<MutationResponse> {
+        self.call(&MutationRequest::Activate { version: 1, activation_id, generation, interface_name, owner_uid, owner_gid, table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask })
+    }
+
+    /// Request recovery for an activation generation.
+    pub fn recover(&self, activation_id: String, generation: u64) -> Result<MutationResponse> {
+        self.call(&MutationRequest::Recover { version: 1, activation_id, generation })
+    }
+
+    /// Send a protocol request through the broker client.
+    pub fn call(&self, request: &MutationRequest) -> Result<MutationResponse> {
+        mutation_broker::call(&self.socket, request)
     }
 }
 
