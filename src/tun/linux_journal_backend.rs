@@ -202,3 +202,32 @@ fn parse_mark(value: &str) -> Result<MarkSelector> {
     ensure!(mask != 0 && value & !mask == 0, "invalid fwmark selector");
     Ok(MarkSelector { value, mask })
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_ipv4_and_ipv6_route_keys_without_losing_ipv6_colons() {
+        assert_eq!(parse_route_key("route:v4:42420:0.0.0.0/0").unwrap(),
+            (AddressFamily::Ipv4, 42420, "0.0.0.0/0".into()));
+        assert_eq!(parse_route_key("route:v6:42420:::/0").unwrap(),
+            (AddressFamily::Ipv6, 42420, "::/0".into()));
+    }
+
+    #[test]
+    fn rejects_noncanonical_or_unsupported_cleanup_keys() {
+        assert!(parse_route_key("route:v7:42420:0.0.0.0/0").is_err());
+        assert!(parse_route_key("route:v4:0:0.0.0.0/0").is_err());
+        assert!(parse_rule_key("rule:v6:0").is_err());
+        assert!(parse_rule_key("rule:v4:042410").is_err());
+    }
+
+    #[test]
+    fn parses_only_valid_marked_rule_selectors() {
+        assert_eq!(parse_mark("0x42/0xff").unwrap(), MarkSelector { value: 0x42, mask: 0xff });
+        assert!(parse_mark("0x100/0xff").is_err());
+        assert!(parse_mark("0x42/0").is_err());
+    }
+}
