@@ -197,6 +197,13 @@ fn execute(
             core_mark_mask,
             ..
         } => {
+            // The kernel policy and persistent TUN owner are process-lifetime resources.
+            // A second generation must not coexist with them: replacement first recovers the
+            // previous journal, then starts a fresh activation under the same broker.
+            ensure!(
+                backends.is_empty(),
+                "another TUN activation still has a live broker backend; recover it before activating a replacement"
+            );
             let key = (activation_id.clone(), generation);
             ensure!(
                 !backends.contains_key(&key),
