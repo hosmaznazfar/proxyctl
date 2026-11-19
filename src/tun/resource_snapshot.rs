@@ -155,11 +155,10 @@ fn parse_resource_key(key: &str) -> Result<ResourceKey> {
 
     match kind {
         "route" => {
-            let table_id = fields
-                .next()
-                .context("route resource key has no table ID")?
-                .parse::<u32>()
-                .context("route resource key has an invalid table ID")?;
+            let table_id = parse_canonical_positive_u32(
+                fields.next().context("route resource key has no table ID")?,
+                "route resource table ID",
+            )?;
             let destination = fields
                 .next()
                 .context("route resource key has no destination")?;
@@ -175,11 +174,10 @@ fn parse_resource_key(key: &str) -> Result<ResourceKey> {
             })
         }
         "rule" => {
-            let priority = fields
-                .next()
-                .context("rule resource key has no priority")?
-                .parse::<u32>()
-                .context("rule resource key has an invalid priority")?;
+            let priority = parse_canonical_positive_u32(
+                fields.next().context("rule resource key has no priority")?,
+                "rule resource priority",
+            )?;
             ensure!(
                 fields.next().is_none(),
                 "rule resource key has extra fields"
@@ -188,6 +186,16 @@ fn parse_resource_key(key: &str) -> Result<ResourceKey> {
         }
         _ => anyhow::bail!("unsupported manifest resource kind"),
     }
+}
+
+fn parse_canonical_positive_u32(value: &str, label: &str) -> Result<u32> {
+    ensure!(
+        !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
+        "{label} is not canonical decimal"
+    );
+    let parsed = value.parse::<u32>().context(label)?;
+    ensure!(parsed > 0 && parsed.to_string() == value, "{label} is not canonical positive decimal");
+    Ok(parsed)
 }
 
 fn parse_family(value: &str) -> Result<AddressFamily> {
@@ -457,6 +465,16 @@ mod tests {
                 .interface_state,
             Some(SnapshotResourceState::ChangedOrAmbiguous)
         );
+    }
+
+    #[test]
+    fn resource_keys_reject_zero_and_noncanonical_numeric_aliases() {
+        for key in ["rule:v4:0", "rule:v4:042410", "route:v4:042420:0.0.0.0/0"] {
+            let (mut manifest, snapshot) = fixture();
+            manifest.resources[0].key = key.into();
+            let comparison = compare_manifest(&manifest, &snapshot).unwrap();
+            assert_eq!(comparison.resources[0].state, SnapshotResourceState::UnsupportedIdentity, "accepted {key}");
+        }
     }
 
     #[test]
