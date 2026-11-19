@@ -809,3 +809,6 @@ The pinned-process signaling API now rejects signal zero and values outside Linu
 
 
 Readiness validation now independently validates the expected TUN interface name and non-zero ifindex before evaluating evidence. This prevents malformed expectation values from bypassing the same identity shape enforced by route planning and manifests. Offline tests cover malformed names and zero indices; readiness remains a pure evaluator and TUN activation remains disabled.
+
+
+Socket-peer candidate classification now rejects zero-inode records at its own boundary, even when a caller supplies synthetic or otherwise untrusted records instead of the strict parser's output. This avoids treating inode zero as an ownership key. The classifier remains offline and read-only.
