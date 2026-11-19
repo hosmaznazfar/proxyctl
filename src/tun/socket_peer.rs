@@ -50,6 +50,7 @@ pub fn classify_proxy_peer_sockets(
     let mut candidates = Vec::new();
 
     for record in records {
+        ensure!(record.inode > 0, "socket diagnostic record has a zero inode");
         ensure!(
             seen.insert(record.inode),
             "socket diagnostics contain duplicate inode records"
@@ -139,6 +140,15 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_zero_inode_records_even_when_not_candidate_sockets() {
+        let records = [record(0, 0x142, 443, TCP_STATE_ESTABLISHED)];
+        let owned = [0].into_iter().collect();
+        assert!(classify_proxy_peer_sockets(
+            &records, &owned, peer(), SocketTransport::Tcp, 0x142, 0xffff,
+        ).is_err());
     }
 
     #[test]
