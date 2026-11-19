@@ -329,23 +329,29 @@ pub fn observe_journal_resources(
                 else {
                     anyhow::bail!("journal route key has an unsupported identity")
                 };
-                let candidates = snapshot
+                let mut candidates = Vec::new();
+                for route in snapshot
                     .routes
                     .iter()
                     .filter(|route| route.family == family && route.table_id == table_id)
-                    .filter_map(|route| {
-                        let value: Value = serde_json::from_str(&route.canonical_attributes).ok()?;
-                        let actual = value.get("dst")?.as_str()?;
-                        let same_destination = actual == destination
-                            || (actual == "default"
-                                && matches!(
-                                    (family, destination.as_str()),
-                                    (AddressFamily::Ipv4, "0.0.0.0/0")
-                                        | (AddressFamily::Ipv6, "::/0")
-                                ));
-                        same_destination.then_some(route)
-                    })
-                    .collect::<Vec<_>>();
+                {
+                    let value: Value = serde_json::from_str(&route.canonical_attributes)
+                        .context("live route canonical attributes are malformed")?;
+                    let actual = value
+                        .get("dst")
+                        .and_then(Value::as_str)
+                        .context("live route record has no canonical destination")?;
+                    let same_destination = actual == destination
+                        || (actual == "default"
+                            && matches!(
+                                (family, destination.as_str()),
+                                (AddressFamily::Ipv4, "0.0.0.0/0")
+                                    | (AddressFamily::Ipv6, "::/0")
+                            ));
+                    if same_destination {
+                        candidates.push(route);
+                    }
+                }
                 match candidates.as_slice() {
                     [] => None,
                     [route] => Some(route.canonical_attributes.clone()),
