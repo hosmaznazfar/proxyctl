@@ -12,6 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use super::mutation_broker::{self, MutationRequest, MutationResponse};
+
 const HELPER: &str = "/usr/libexec/proxyctl-tun-helper";
 const READY_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL: Duration = Duration::from_millis(40);
