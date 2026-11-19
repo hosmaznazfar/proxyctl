@@ -20,6 +20,7 @@ use super::{
     journal_recovery_executor::recover,
     kernel_transaction::{self, KernelTransaction},
     linux_journal_backend::LinuxJournalBackend,
+    kernel_inventory,
     manifest_store::ManifestStore,
     route_policy::RoutingPolicyPlan,
     privilege_broker::read_broker_peer_credentials,
@@ -133,10 +134,14 @@ fn execute(request: MutationRequest, directory: &Path,
             table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask, .. } => {
             let key = (activation_id.clone(), generation);
             ensure!(!backends.contains_key(&key), "activation generation already has a live broker backend");
-            let store = ManifestStore::open(directory)?;
-            let backend = LinuxJournalBackend::new(store, &activation_id, generation)?;
             let policy = RoutingPolicyPlan::new(table_id, bypass_priority, proxy_priority,
                 core_mark, core_mark_mask, interface_name, 1);
+            // Refuse occupied tables/priorities before the write-ahead transaction begins.
+            // The typed add operations still use create-exclusive ACKs to close the race.
+            let inventory = kernel_inventory::inspect_snapshot()?;
+            policy.validate_against(&inventory.inventory)?;
+            let store = ManifestStore::open(directory)?;
+            let backend = LinuxJournalBackend::new(store, &activation_id, generation)?;
             let transaction = KernelTransaction { activation_id: activation_id.clone(), policy,
                 owner_uid, owner_gid };
             // Keep the backend even when apply fails: an error can follow an acknowledged
