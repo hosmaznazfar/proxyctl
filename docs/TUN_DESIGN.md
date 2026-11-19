@@ -1078,3 +1078,8 @@ The readiness module now provides a Linux-only validator for externally collecte
 The readiness API also exposes a promotion function that accepts only a validated traffic observation and then evaluates the full existing readiness gate. This does not make the observation self-authenticating: the traffic executor is responsible for proving proxy-path semantics and setting the response-verification result accurately. The function only validates identity/bounds and composes readiness evidence; it cannot independently establish that a remote service response traversed the proxy.
 
 The traffic-observation API includes conservative reusable bounds: five seconds and 64 KiB by default, with validation allowing explicit bounds up to thirty seconds and one MiB. These are policy limits for a future executor, not a promise that any traffic probe is currently available or run automatically.
+
+
+## Bounded SOCKS5 CONNECT diagnostic
+
+A Linux-only SOCKS5 CONNECT probe is available as a diagnostic API. It uses an explicit IP-address destination (IPv4 or IPv6), avoiding DNS resolution, sends no application payload, and accepts only the SOCKS5 no-authentication negotiation and a successful CONNECT reply. It uses bounded read/write timeouts and rechecks the exact managed process and listener socket ownership around the probe. This demonstrates a successful proxy tunnel establishment to the requested endpoint, not application-level content validation or general Internet reachability.
