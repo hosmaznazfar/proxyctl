@@ -1060,3 +1060,13 @@ The readiness layer now provides a bounded Linux loopback TCP probe tied to the 
 This is one independent readiness signal only. A successful connection does not cryptographically prove that the listening socket belongs to the managed core, so the caller must supply the dedicated listener endpoint from the selected core configuration and retain the manifest-bound process identity. The probe does not send application credentials or modify routes, interfaces, DNS, firewall state, or socket marks.
 
 The probe does not establish TUN interface ownership, policy-route correctness, marked physical egress, socket-mark behavior, or end-to-end proxied traffic. The aggregate readiness gate still requires all of those independent evidence fields; this addition does not enable TUN activation.
+
+## End-to-end proxied-traffic readiness contract
+
+The composed preflight deliberately leaves `proxied_traffic_verified` false. The final dataplane signal must be produced by an explicit, bounded traffic-verification stage; callers must not promote this field merely because a listener accepts connections, a route lookup selects physical egress, or a socket carries the expected mark.
+
+A future traffic verifier must use a caller-selected destination and protocol that are documented as safe for diagnostic traffic, enforce a strict timeout and response-size ceiling, and avoid credentials or user data. It must distinguish a direct request from a request through the selected core's proxy path, and must bind the observation to the activation generation and the exact managed process identity. DNS resolution must be controlled or separately evidenced so the check cannot silently rely on host DNS changes. The probe must not change routes, marks, firewall rules, DNS, or interface state.
+
+A result is valid only when the probe confirms the expected response and its process/activation binding remains valid at the end of the observation. Timeout, unsupported proxy transport, ambiguous routing, response mismatch, or process replacement is a failed readiness signal. A diagnostic traffic probe is not a general-purpose benchmark and must not run automatically during ordinary loopback activation.
+
+Until such an implementation is connected to the lifecycle gate, the readiness evidence remains incomplete and public TUN activation stays disabled.
