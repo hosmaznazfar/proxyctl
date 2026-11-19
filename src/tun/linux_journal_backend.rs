@@ -154,14 +154,22 @@ impl KernelTransactionBackend for LinuxJournalBackend {
         self.journal_identity(id)?;
         let journal = self.store.load_transaction_journal()?.context("journal is missing")?;
         let operation = journal.operations.iter().find(|item| item.resource_key == key).context("resource is not in this journal")?;
-        self.remove_live(operation.kind.clone(), key, fp)
+        let state = self.remove_live(operation.kind, key, fp)?;
+        if matches!(state, ResourceState::Removed | ResourceState::AlreadyAbsent) {
+            self.store.mark_operation_removed(id, self.generation, key)?;
+        }
+        Ok(state)
     }
 
     fn remove_interface_if_matches(&mut self, id: &str, name: &str, index: u32) -> Result<ResourceState> {
         self.journal_identity(id)?;
         let key = format!("interface:{name}");
         let fp = serde_json::to_string(&serde_json::json!({"ifindex":index,"kind":"tun","name":name}))?;
-        self.remove_live(JournalOperationKind::CreateInterface, &key, &fp)
+        let state = self.remove_live(JournalOperationKind::CreateInterface, &key, &fp)?;
+        if matches!(state, ResourceState::Removed | ResourceState::AlreadyAbsent) {
+            self.store.mark_operation_removed(id, self.generation, &key)?;
+        }
+        Ok(state)
     }
 
     fn retain_recovery_journal(&mut self, id: &str) -> Result<()> { self.journal_identity(id) }
