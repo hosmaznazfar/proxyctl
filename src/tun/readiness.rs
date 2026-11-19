@@ -186,6 +186,30 @@ pub fn verify_host_network_unchanged(
 }
 
 
+
+/// Hard defaults for a conservative diagnostic traffic observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProxyTrafficProbeLimits {
+    pub timeout: Duration,
+    pub maximum_response_bytes: usize,
+}
+
+impl ProxyTrafficProbeLimits {
+    /// Construct validated limits; no timeout above thirty seconds or body above one MiB.
+    pub fn new(timeout: Duration, maximum_response_bytes: usize) -> Result<Self> {
+        ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(30),
+            "proxy traffic timeout must be between zero and thirty seconds");
+        ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
+            "proxy traffic response bound must be within one MiB");
+        Ok(Self { timeout, maximum_response_bytes })
+    }
+
+    /// Conservative default bounds for a future explicit diagnostic probe.
+    pub fn conservative() -> Self {
+        Self { timeout: Duration::from_secs(5), maximum_response_bytes: 64 * 1024 }
+    }
+}
+
 /// Evidence from a bounded, externally executed end-to-end proxy traffic probe.
 ///
 /// This record intentionally does not execute traffic itself. The caller must use a verifier
