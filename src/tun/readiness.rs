@@ -33,6 +33,7 @@ pub fn probe_core_listener(
         process.verify()?,
         "managed core process identity is no longer present before listener probe"
     );
+    verify_listener_process_ownership(process, listener)?;
     let stream = TcpStream::connect_timeout(&listener, timeout)
         .context("managed core local proxy listener did not accept a connection")?;
     ensure!(
@@ -43,7 +44,71 @@ pub fn probe_core_listener(
         process.verify()?,
         "managed core process identity changed during listener probe"
     );
+    verify_listener_process_ownership(process, listener)?;
     Ok(listener)
+}
+
+#[cfg(target_os = "linux")]
+fn verify_listener_process_ownership(
+    identity: &super::process::ProcessIdentity,
+    listener: SocketAddr,
+) -> Result<()> {
+    use std::{collections::BTreeSet, fs};
+
+    let handle = super::process::ProcessHandle::open(identity.clone())
+        .context("cannot pin managed core while verifying listener ownership")?;
+    let before = super::socket_ownership::inspect_process_sockets(&handle)?;
+    let mut listener_inodes = BTreeSet::new();
+    for table in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        let contents = fs::read_to_string(table)
+            .with_context(|| format!("cannot inspect kernel listener table {table}"))?;
+        for line in contents.lines().skip(1) {
+            let fields = line.split_whitespace().collect::<Vec<_>>();
+            if fields.len() < 10 || fields[3] != "0A" {
+                continue;
+            }
+            let Some((address, port)) = parse_proc_tcp_endpoint(fields[1], table.ends_with("tcp6")) else {
+                continue;
+            };
+            if address == listener.ip() && port == listener.port() {
+                if let Ok(inode) = fields[9].parse::<u64>() {
+                    if inode > 0 {
+                        listener_inodes.insert(inode);
+                    }
+                }
+            }
+        }
+    }
+    ensure!(
+        !listener_inodes.is_disjoint(&before.socket_inodes),
+        "loopback listener socket is not owned by the managed core process"
+    );
+    let after = super::socket_ownership::inspect_process_sockets(&handle)?;
+    ensure!(
+        before == after && identity.verify()? && !handle.is_exited()?,
+        "managed core socket ownership changed during listener verification"
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn parse_proc_tcp_endpoint(value: &str, ipv6: bool) -> Option<(std::net::IpAddr, u16)> {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    let (address, port) = value.split_once(':')?;
+    let port = u16::from_str_radix(port, 16).ok()?;
+    if ipv6 {
+        if address.len() != 32 { return None; }
+        let mut bytes = [0u8; 16];
+        for (index, chunk) in address.as_bytes().chunks_exact(8).enumerate() {
+            let word = u32::from_str_radix(std::str::from_utf8(chunk).ok()?, 16).ok()?;
+            bytes[index * 4..index * 4 + 4].copy_from_slice(&word.to_le_bytes());
+        }
+        Some((IpAddr::V6(Ipv6Addr::from(bytes)), port))
+    } else {
+        if address.len() != 8 { return None; }
+        let word = u32::from_str_radix(address, 16).ok()?;
+        Some((IpAddr::V4(Ipv4Addr::from(word.to_le_bytes())), port))
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -306,6 +371,21 @@ mod tests {
             dns_unchanged: true,
             firewall_unchanged: true,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parses_proc_tcp_ipv4_and_ipv6_endpoints() {
+        assert_eq!(
+            parse_proc_tcp_endpoint("0100007F:0438", false),
+            Some(("127.0.0.1".parse().unwrap(), 1080))
+        );
+        assert_eq!(
+            parse_proc_tcp_endpoint("00000000000000000000000001000000:0438", true),
+            Some(("::1".parse().unwrap(), 1080))
+        );
+        assert_eq!(parse_proc_tcp_endpoint("bad:0438", false), None);
+        assert_eq!(parse_proc_tcp_endpoint("0100007F:0438", true), None);
     }
 
     #[test]
