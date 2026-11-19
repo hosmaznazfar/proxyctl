@@ -923,3 +923,8 @@ The cleanup-key parser refactor keeps exactly one shared rule-table value parser
 ## Persistent mutation-helper launch milestone
 
 The Linux code now includes a caller-runtime helper launcher (`mutation_helper_launcher`). It targets the installed `/usr/libexec/proxyctl-tun-helper`, starts it in typed mutation-socket mode, and polls for socket readiness. The runtime directory is checked for caller ownership and restrictive permissions; an existing socket that cannot be reached is not unlinked or replaced. The launcher is an orchestration primitive only: it does not yet make TUN activation available, establish the activation transaction, start a core, or manage stop/recovery as one lifecycle. TUN remains disabled in the activation command until those handoffs are integrated and verified.
+
+
+## Launcher-to-broker client boundary
+
+The Linux mutation-helper launcher now exposes a typed call method over the helper's existing bounded request/response protocol. Activation and recovery requests are passed as closed `MutationRequest` variants; callers do not gain access to raw netlink payloads or arbitrary privileged commands through this client surface. This is a transport integration primitive only: the activation entry point remains gated, and process/core readiness and stop/recovery orchestration are not yet connected to this broker client.
