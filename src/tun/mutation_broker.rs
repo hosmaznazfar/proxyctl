@@ -98,20 +98,25 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
     let mut backends: BTreeMap<(String, u64), LinuxJournalBackend> = BTreeMap::new();
     loop {
         let (mut stream, _) = listener.accept().context("cannot accept mutation broker client")?;
-        stream.set_read_timeout(Some(IO_TIMEOUT))?;
-        stream.set_write_timeout(Some(IO_TIMEOUT))?;
-        let peer = read_broker_peer_credentials(&stream)?;
-        ensure!(peer.uid == unsafe { libc::geteuid() },
-            "mutation broker accepts requests only from its owning user");
-        let request = read_request(&mut stream)?;
-        let response = match request.validate() {
-            Ok(()) => match execute(request, runtime_directory, &mut backends) {
-                Ok(message) => MutationResponse::success(message),
+        // A malformed or unauthorized client must not terminate the persistent privileged
+        // service. Close that connection and continue accepting authenticated peers.
+        let handled = (|| -> Result<()> {
+            stream.set_read_timeout(Some(IO_TIMEOUT))?;
+            stream.set_write_timeout(Some(IO_TIMEOUT))?;
+            let peer = read_broker_peer_credentials(&stream)?;
+            ensure!(peer.uid == unsafe { libc::geteuid() },
+                "mutation broker accepts requests only from its owning user");
+            let request = read_request(&mut stream)?;
+            let response = match request.validate() {
+                Ok(()) => match execute(request, runtime_directory, &mut backends) {
+                    Ok(message) => MutationResponse::success(message),
+                    Err(error) => MutationResponse::failure(format!("{error:#}")),
+                },
                 Err(error) => MutationResponse::failure(format!("{error:#}")),
-            },
-            Err(error) => MutationResponse::failure(format!("{error:#}")),
-        };
-        write_response(&mut stream, &response)?;
+            };
+            write_response(&mut stream, &response)
+        })();
+        let _ = handled;
     }
 }
 
