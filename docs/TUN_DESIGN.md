@@ -821,3 +821,6 @@ Read-only ownership snapshot key parsing now requires route table IDs and rule p
 
 
 Route ownership snapshot comparison now treats malformed canonical route JSON within the target family/table as ambiguous, rather than silently skipping it and reporting the resource absent. An inconclusive snapshot must never be interpreted as deletion evidence. A regression test covers the malformed-record case; comparison remains advisory and read-only.
+
+
+The canonical resource-key numeric parser uses an owned error-context string when wrapping parse errors, satisfying `anyhow`'s context lifetime requirement without changing validation behavior.
