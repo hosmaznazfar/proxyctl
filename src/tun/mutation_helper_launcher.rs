@@ -66,6 +66,11 @@ impl MutationHelper {
         &self.socket
     }
 
+    /// Recover the journal left by a prior activation generation. The broker verifies identity.
+    pub fn recover_generation(&self, activation_id: &str, generation: u64) -> Result<MutationResponse> {
+        self.recover(activation_id.to_owned(), generation)
+    }
+
     /// Submit a typed activation operation to the broker.
     #[allow(clippy::too_many_arguments)]
     pub fn activate(&self, activation_id: String, generation: u64, interface_name: String, owner_uid: u32, owner_gid: u32, table_id: u32, bypass_priority: u32, proxy_priority: u32, core_mark: u32, core_mark_mask: u32) -> Result<MutationResponse> {
