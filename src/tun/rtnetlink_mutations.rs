@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use super::rtnetlink::RouteNetlink;
 use super::route_policy::{AddressFamily, PlannedRoute, PlannedRule, RouteType};
 use std::time::Duration;
-const RTM_NEWROUTE:u16=24; const RTM_NEWRULE:u16=32;
+const RTM_NEWROUTE:u16=24; const RTM_DELROUTE:u16=25; const RTM_NEWRULE:u16=32; const RTM_DELRULE:u16=33;
 const NLM_F_REQUEST:u16=1; const NLM_F_ACK:u16=4; const NLM_F_EXCL:u16=0x200; const NLM_F_CREATE:u16=0x400;
 const RTA_OIF:u16=4; const RTA_TABLE:u16=15; const FRA_PRIORITY:u16=6; const FRA_FWMARK:u16=10; const FRA_FWMASK:u16=11; const FRA_TABLE:u16=15;
 const RTPROT_STATIC:u8=4; const RT_SCOPE_UNIVERSE:u8=0; const RTN_UNICAST:u8=1; const FR_ACT_TO_TBL:u8=1;
@@ -27,4 +27,21 @@ pub fn add_rule(rule:&PlannedRule)->Result<()> {
  let mut attrs=Vec::new();attr(FRA_PRIORITY,&rule.priority.to_ne_bytes(),&mut attrs)?;attr(FRA_TABLE,&rule.lookup_table.to_ne_bytes(),&mut attrs)?;
  if let Some(mark)=rule.mark {ensure!(mark.mask!=0 && mark.value & !mark.mask==0,"invalid mark selector");attr(FRA_FWMARK,&mark.value.to_ne_bytes(),&mut attrs)?;attr(FRA_FWMASK,&mark.mask.to_ne_bytes(),&mut attrs)?;}
  p.extend(attrs);let nl=request(RTM_NEWRULE,NLM_F_REQUEST|NLM_F_ACK|NLM_F_CREATE|NLM_F_EXCL,&p);let mut sock=RouteNetlink::open()?;sock.transact(&nl,Duration::from_secs(3))?;Ok(())
+}
+
+/// Removes a route only by its exact default prefix, table, and interface selector.
+pub fn delete_route(route:&PlannedRoute)->Result<()> {
+ ensure!(route.interface_index>0 && route.table_id>0 && route.destination==route.family.default_prefix(),"route deletion selector invalid");
+ ensure!(route.route_type==RouteType::Unicast,"only unicast route deletion supported");
+ let mut p=vec![0u8;12];p[0]=family(route.family);p[4]=RTPROT_STATIC;p[5]=RT_SCOPE_UNIVERSE;p[6]=RTN_UNICAST;
+ let mut attrs=Vec::new();attr(RTA_OIF,&route.interface_index.to_ne_bytes(),&mut attrs)?;attr(RTA_TABLE,&route.table_id.to_ne_bytes(),&mut attrs)?;p.extend(attrs);
+ let nl=request(RTM_DELROUTE,NLM_F_REQUEST|NLM_F_ACK,&p);let mut sock=RouteNetlink::open()?;sock.transact(&nl,Duration::from_secs(3))?;Ok(())
+}
+/// Removes a policy rule using the exact priority/table and optional mark selector.
+pub fn delete_rule(rule:&PlannedRule)->Result<()> {
+ ensure!(rule.priority>0 && rule.lookup_table>0,"rule deletion selector invalid");
+ let mut p=vec![0u8;12];p[0]=family(rule.family);p[7]=FR_ACT_TO_TBL;
+ let mut attrs=Vec::new();attr(FRA_PRIORITY,&rule.priority.to_ne_bytes(),&mut attrs)?;attr(FRA_TABLE,&rule.lookup_table.to_ne_bytes(),&mut attrs)?;
+ if let Some(mark)=rule.mark {ensure!(mark.mask!=0 && mark.value & !mark.mask==0,"invalid mark selector");attr(FRA_FWMARK,&mark.value.to_ne_bytes(),&mut attrs)?;attr(FRA_FWMASK,&mark.mask.to_ne_bytes(),&mut attrs)?;}
+ p.extend(attrs);let nl=request(RTM_DELRULE,NLM_F_REQUEST|NLM_F_ACK,&p);let mut sock=RouteNetlink::open()?;sock.transact(&nl,Duration::from_secs(3))?;Ok(())
 }
