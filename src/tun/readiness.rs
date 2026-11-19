@@ -884,3 +884,31 @@ pub fn probe_socks5_connect(
 pub fn probe_socks5_connect(_process: &(), _listener: SocketAddr, _destination: SocketAddr, _timeout: Duration) -> Result<()> {
     anyhow::bail!("managed SOCKS5 probing is supported only on Linux");
 }
+
+
+/// Structured result from a SOCKS5 CONNECT-only diagnostic (no payload sent).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Socks5ConnectProbeResult {
+    pub listener: SocketAddr,
+    pub destination: SocketAddr,
+    pub elapsed: Duration,
+    /// Bytes exchanged for SOCKS negotiation and CONNECT response only.
+    pub protocol_bytes: usize,
+}
+
+#[cfg(target_os = "linux")]
+pub fn probe_socks5_connect_detailed(
+    process: &super::process::ProcessIdentity,
+    listener: SocketAddr,
+    destination: SocketAddr,
+    timeout: Duration,
+) -> Result<Socks5ConnectProbeResult> {
+    let started = std::time::Instant::now();
+    probe_socks5_connect(process, listener, destination, timeout)?;
+    Ok(Socks5ConnectProbeResult { listener, destination, elapsed: started.elapsed(), protocol_bytes: 3 + 2 + 3 + match destination.ip() { std::net::IpAddr::V4(_) => 4, std::net::IpAddr::V6(_) => 16 } + 2 + 4 + match destination.ip() { std::net::IpAddr::V4(_) => 4 + 2, std::net::IpAddr::V6(_) => 16 + 2 } })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_socks5_connect_detailed(_process: &(), _listener: SocketAddr, _destination: SocketAddr, _timeout: Duration) -> Result<Socks5ConnectProbeResult> {
+    anyhow::bail!("managed SOCKS5 probing is supported only on Linux");
+}
