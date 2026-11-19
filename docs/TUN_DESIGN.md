@@ -936,3 +936,6 @@ The launcher client additionally provides explicit activation and generation-bou
 ## Launcher API and runtime-directory hardening
 
 The helper launcher exposes the typed `activate`, `recover`, and generic `call` client methods. Runtime-directory validation rejects symlink directories and checks ownership and private permissions before using the broker socket. The launcher does not remove stale socket paths. These primitives are not yet wired into the public activation lifecycle; the legacy activation path remains gated pending generation persistence, native core readiness, and coordinated rollback/recovery.
+
+
+The mutation launcher now includes a recovery-generation convenience entry point that routes a caller-supplied activation ID and generation through the existing typed recovery request. The broker remains responsible for matching that pair against durable journal identity; callers cannot request recovery by arbitrary resource key. Public lifecycle wiring and state persistence are still outstanding.
