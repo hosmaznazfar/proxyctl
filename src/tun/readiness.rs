@@ -109,6 +109,71 @@ pub fn verify_readiness_with_socket_mark(
     verify_readiness(expected, &complete_evidence)
 }
 
+/// Compare the live kernel routes and policy rules with the exact activation plan.
+///
+/// This is a read-only snapshot probe. It requires one matching default route and both
+/// expected rules for each address family; ambiguous duplicates or missing attributes fail
+/// closed. It does not prove that the core actually applies its socket mark or that traffic
+/// traverses the proxy; those remain separate readiness checks.
+#[cfg(target_os = "linux")]
+pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Result<()> {
+    use super::route_policy::{RulePurpose, RT_TABLE_MAIN};
+    plan.validate()?;
+    let snapshot = super::kernel_inventory::inspect_snapshot()
+        .context("cannot capture live routing policy for TUN readiness")?;
+
+    for family in [
+        super::route_policy::AddressFamily::Ipv4,
+        super::route_policy::AddressFamily::Ipv6,
+    ] {
+        let route_matches = snapshot.routes.iter().filter(|record| {
+            if record.family != family || record.table_id != plan.table_id { return false; }
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&record.canonical_attributes) else { return false; };
+            value.get("dst").and_then(serde_json::Value::as_str).unwrap_or("default") == family.default_prefix()
+                && value.get("dev").and_then(serde_json::Value::as_str) == Some(plan.interface_name.as_str())
+                && value.get("type").and_then(serde_json::Value::as_str).map_or(true, |kind| kind == "unicast")
+        }).count();
+        ensure!(route_matches == 1, "live {family:?} Proxyctl default route is missing, duplicated, or mismatched");
+
+        for purpose in [RulePurpose::CoreTrafficBypass, RulePurpose::ProxyTraffic] {
+            let expected = plan.rules.iter().find(|rule| rule.family == family && rule.purpose == purpose)
+                .ok_or_else(|| anyhow::anyhow!("routing plan is missing a {family:?} {purpose:?} rule"))?;
+            let matches = snapshot.rules.iter().filter(|record| {
+                if record.family != family || record.priority != expected.priority || record.table_id != Some(expected.lookup_table) { return false; }
+                let Ok(value) = serde_json::from_str::<serde_json::Value>(&record.canonical_attributes) else { return false; };
+                match expected.mark {
+                    Some(mark) => parse_rule_mark(value.get("fwmark")) == Some((mark.value, mark.mask)),
+                    None => value.get("fwmark").is_none(),
+                }
+            }).count();
+            ensure!(matches == 1, "live {family:?} {purpose:?} policy rule is missing, duplicated, or mismatched");
+            if purpose == RulePurpose::CoreTrafficBypass {
+                ensure!(expected.lookup_table == RT_TABLE_MAIN, "core bypass rule does not use the main table");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_routing_policy(_plan: &super::route_policy::RoutingPolicyPlan) -> Result<()> {
+    anyhow::bail!("live routing-policy probing is supported only on Linux");
+}
+
+fn parse_rule_mark(value: Option<&serde_json::Value>) -> Option<(u32, u32)> {
+    let value = value?;
+    if let Some(number) = value.as_u64().and_then(|number| u32::try_from(number).ok()) {
+        return Some((number, u32::MAX));
+    }
+    let text = value.as_str()?;
+    let (mark, mask) = text.split_once('/')?;
+    let parse = |part: &str| {
+        let part = part.strip_prefix("0x").unwrap_or(part);
+        u32::from_str_radix(part, if text.contains("0x") { 16 } else { 10 }).ok()
+    };
+    Some((parse(mark)?, parse(mask)?))
+}
+
 pub fn verify_readiness(
     expected: &ReadinessExpectation<'_>,
     evidence: &ReadinessEvidence,
