@@ -36,6 +36,9 @@ const IO_TIMEOUT: Duration = Duration::from_secs(3);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MutationRequest {
+    Ping {
+        version: u32,
+    },
     Activate {
         version: u32,
         activation_id: String,
@@ -59,6 +62,9 @@ pub enum MutationRequest {
 impl MutationRequest {
     fn validate(&self) -> Result<()> {
         match self {
+            Self::Ping { version } => {
+                ensure!(*version == VERSION, "unsupported mutation broker protocol version");
+            }
             Self::Activate {
                 version,
                 activation_id,
@@ -184,6 +190,7 @@ fn execute(
     backends: &mut BTreeMap<(String, u64), LinuxJournalBackend>,
 ) -> Result<String> {
     match request {
+        MutationRequest::Ping { .. } => Ok("mutation broker ready".to_owned()),
         MutationRequest::Activate {
             activation_id,
             generation,
