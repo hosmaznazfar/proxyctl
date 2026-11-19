@@ -156,7 +156,9 @@ fn parse_resource_key(key: &str) -> Result<ResourceKey> {
     match kind {
         "route" => {
             let table_id = parse_canonical_positive_u32(
-                fields.next().context("route resource key has no table ID")?,
+                fields
+                    .next()
+                    .context("route resource key has no table ID")?,
                 "route resource table ID",
             )?;
             let destination = fields
@@ -194,7 +196,10 @@ fn parse_canonical_positive_u32(value: &str, label: &str) -> Result<u32> {
         "{label} is not canonical decimal"
     );
     let parsed = value.parse::<u32>().context(label)?;
-    ensure!(parsed > 0 && parsed.to_string() == value, "{label} is not canonical positive decimal");
+    ensure!(
+        parsed > 0 && parsed.to_string() == value,
+        "{label} is not canonical positive decimal"
+    );
     Ok(parsed)
 }
 
@@ -218,9 +223,10 @@ fn compare_route(
         .iter()
         .filter(|route| route.family == family && route.table_id == table_id)
         .collect::<Vec<_>>();
-    if family_table_routes.iter().any(|route| {
-        serde_json::from_str::<Value>(&route.canonical_attributes).is_err()
-    }) {
+    if family_table_routes
+        .iter()
+        .any(|route| serde_json::from_str::<Value>(&route.canonical_attributes).is_err())
+    {
         return SnapshotResourceState::ChangedOrAmbiguous;
     }
     let matches = family_table_routes
@@ -406,7 +412,10 @@ mod tests {
         let (manifest, mut snapshot) = fixture();
         snapshot.routes[0].canonical_attributes = "not-json".into();
         let comparison = compare_manifest(&manifest, &snapshot).unwrap();
-        assert_eq!(comparison.resources[0].state, SnapshotResourceState::ChangedOrAmbiguous);
+        assert_eq!(
+            comparison.resources[0].state,
+            SnapshotResourceState::ChangedOrAmbiguous
+        );
         assert!(!comparison.has_no_conflicts());
     }
 
@@ -488,7 +497,11 @@ mod tests {
             let (mut manifest, snapshot) = fixture();
             manifest.resources[0].key = key.into();
             let comparison = compare_manifest(&manifest, &snapshot).unwrap();
-            assert_eq!(comparison.resources[0].state, SnapshotResourceState::UnsupportedIdentity, "accepted {key}");
+            assert_eq!(
+                comparison.resources[0].state,
+                SnapshotResourceState::UnsupportedIdentity,
+                "accepted {key}"
+            );
         }
     }
 

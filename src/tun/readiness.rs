@@ -67,9 +67,10 @@ pub fn verify_readiness(
     ensure!(
         !expected.interface_name.is_empty()
             && expected.interface_name.len() <= 15
-            && expected.interface_name.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
-            })
+            && expected
+                .interface_name
+                .bytes()
+                .all(|byte| { byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.') })
             && expected.interface_index > 0,
         "expected TUN interface identity is invalid"
     );

@@ -116,7 +116,10 @@ fn parse_address(family: SocketAddressFamily, bytes: &[u8]) -> Result<IpAddr> {
     );
     Ok(match family {
         SocketAddressFamily::Ipv4 => {
-            ensure!(bytes[4..].iter().all(|byte| *byte == 0), "IPv4 socket address contains non-zero padding");
+            ensure!(
+                bytes[4..].iter().all(|byte| *byte == 0),
+                "IPv4 socket address contains non-zero padding"
+            );
             IpAddr::V4(Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]))
         }
         SocketAddressFamily::Ipv6 => IpAddr::V6(Ipv6Addr::from(<[u8; 16]>::try_from(bytes)?)),
