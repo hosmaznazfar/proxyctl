@@ -1018,3 +1018,11 @@ This is a reusable lifecycle primitive, not yet an installed service-manager sup
 
 
 The broker-backed supervisor also exposes a restart-resume operation. It retries CleanupPending generations directly through the broker. For Running generations it reopens a pidfd from the persisted process identity; if the exact process has exited or its PID no longer identifies that process instance, it records CoreExited and requests generation-matched cleanup. If process identity inspection is inconclusive, resume fails without treating uncertainty as proof of exit. If the process is still live, monitoring resumes against that pinned pidfd.
+
+## Durable-state-aware mutation broker readiness
+
+The persistent mutation helper's versioned Ping now performs a read-only consistency check of the durable ownership manifest and transaction journal before reporting readiness. If both records exist, their activation UUID and generation must agree. If the broker retains an in-memory privileged backend, that backend must correspond to the same durable generation; multiple retained backends or an orphaned in-memory backend make readiness fail closed.
+
+A helper restarted after a crash may have durable records but no in-memory backend or TUN descriptor. That is an expected recoverable state: readiness reports the pending generation, and the broker can reopen its journal backend for exact-generation recovery. A manifest-only or journal-only record is also accepted because recovery finalization and partial transaction rollback can legitimately leave one durable layer temporarily. No kernel inventory or mutation is performed by Ping.
+
+This check makes socket readiness stronger without claiming that a healthy broker implies a healthy dataplane. It does not establish core liveness, TUN interface ownership, route correctness, end-to-end proxy traffic, or service-manager supervision, and it does not enable public TUN activation.
