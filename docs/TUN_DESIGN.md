@@ -1093,3 +1093,8 @@ The SOCKS5 diagnostic is opt-in at the API caller level and does not run during 
 ## SOCKS5 readiness evidence limits
 
 A successful CONNECT response indicates that the core accepted the SOCKS request and reported establishment of a tunnel to the explicit endpoint. It does not independently verify response content, TLS, HTTP, DNS, or a complete application transaction. This diagnostic therefore cannot alone promote readiness to fully verified proxied traffic, and the public TUN activation gate remains disabled.
+
+
+## Probe ownership and lifecycle
+
+The diagnostic must be run only against a listener endpoint recorded for the managed activation. Process identity and listener socket ownership are revalidated during the exchange to reduce PID reuse and listener substitution risks. The probe creates a short-lived loopback TCP connection and leaves tunnel cleanup to ordinary connection teardown; it is not a supervisor, recovery executor, or traffic-routing activation path.
