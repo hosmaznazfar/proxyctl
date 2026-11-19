@@ -123,7 +123,7 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
             };
             write_response(&mut stream, &response)
         })();
-        let _ = handled;
+        if let Err(_error) = handled {}
     }
 }
 
