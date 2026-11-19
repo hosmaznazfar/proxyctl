@@ -1083,3 +1083,8 @@ The traffic-observation API includes conservative reusable bounds: five seconds 
 ## Bounded SOCKS5 CONNECT diagnostic
 
 A Linux-only SOCKS5 CONNECT probe is available as a diagnostic API. It uses an explicit IP-address destination (IPv4 or IPv6), avoiding DNS resolution, sends no application payload, and accepts only the SOCKS5 no-authentication negotiation and a successful CONNECT reply. It uses bounded read/write timeouts and rechecks the exact managed process and listener socket ownership around the probe. This demonstrates a successful proxy tunnel establishment to the requested endpoint, not application-level content validation or general Internet reachability.
+
+
+## Diagnostic probe constraints
+
+The SOCKS5 diagnostic is opt-in at the API caller level and does not run during activation automatically. Callers must select a concrete destination address and port; the probe does not resolve names, use credentials, or mutate host routes, resolver settings, firewall rules, or system proxy settings. A refusal or timeout is diagnostic failure only and must not trigger network repair or resource deletion.
