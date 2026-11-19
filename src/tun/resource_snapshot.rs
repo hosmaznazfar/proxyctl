@@ -195,7 +195,7 @@ fn parse_canonical_positive_u32(value: &str, label: &str) -> Result<u32> {
         !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
         "{label} is not canonical decimal"
     );
-    let parsed = value.parse::<u32>().context(label)?;
+    let parsed = value.parse::<u32>().with_context(|| label.to_owned())?;
     ensure!(
         parsed > 0 && parsed.to_string() == value,
         "{label} is not canonical positive decimal"
