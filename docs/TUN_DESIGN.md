@@ -1105,3 +1105,8 @@ The diagnostic must be run only against a listener endpoint recorded for the man
 The diagnostic can return structured metadata including its listener, requested destination, measured duration, and request-side protocol byte count. Byte accounting is limited to the request exchange and is not represented as application payload or received-content verification. The diagnostic rejects unspecified, loopback, multicast, link-local, and zero-port destinations; it does not attempt to classify every special-purpose or globally routable range. Operators remain responsible for selecting a suitable explicit endpoint.
 
 The probe also enforces an aggregate duration ceiling in addition to socket operation timeouts. The aggregate bound is conservative and is not a readiness SLA. Failures are reported without automatic retries, activation, or repair.
+
+
+## First-draft implementation priority
+
+The implementation roadmap is now explicitly focused on a connected first functional draft: (1) device ownership and core handoff, (2) real managed-core launch/configuration, and (3) routing transaction and activation orchestration. Broad edge-case hardening and comprehensive fault-injection tests are deferred until this draft is connected. Essential exact ownership, rollback and safety constraints remain mandatory. See `docs/TUN_FIRST_DRAFT_PLAN.md`. Public TUN activation remains disabled during development.
