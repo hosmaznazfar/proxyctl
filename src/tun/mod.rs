@@ -15,6 +15,8 @@ pub mod kernel_backend;
 pub mod kernel_inventory;
 pub mod kernel_transaction;
 pub mod lifecycle_coordinator;
+#[cfg(target_os = "linux")]
+pub mod linux_journal_backend;
 pub(crate) mod manifest_fs;
 pub mod manifest_store;
 pub mod ownership;
