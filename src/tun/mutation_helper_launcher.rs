@@ -42,8 +42,24 @@ impl MutationHelper {
         if socket.exists() {
             anyhow::bail!("mutation broker socket exists but is not accepting connections; refusing to unlink an unverified socket");
         }
-        ensure!(Path::new(HELPER).is_file(),
-            "TUN helper is not installed at {HELPER}; run packaging/install-tun-helper.sh");
+        let helper_metadata = fs::symlink_metadata(HELPER)
+            .with_context(|| format!("TUN helper is not installed at {HELPER}; run packaging/install-tun-helper.sh"))?;
+        ensure!(
+            helper_metadata.file_type().is_file(),
+            "TUN helper must be a regular file, not a symlink"
+        );
+        ensure!(
+            helper_metadata.uid() == 0,
+            "TUN helper executable must be owned by root"
+        );
+        ensure!(
+            helper_metadata.permissions().mode() & 0o022 == 0,
+            "TUN helper executable must not be group- or world-writable"
+        );
+        ensure!(
+            helper_metadata.permissions().mode() & 0o111 != 0,
+            "TUN helper executable has no execute permission"
+        );
         Command::new(HELPER)
             .arg("--mutation-socket")
             .arg(&socket)
