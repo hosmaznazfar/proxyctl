@@ -167,7 +167,11 @@ pub fn verify_host_network_unchanged(
         && !baseline.firewall.detail.contains("unrecognized")
         && !current.firewall.detail.contains("unrecognized")
         && !baseline.firewall.detail.contains("not permitted")
-        && !current.firewall.detail.contains("not permitted"),
+        && !current.firewall.detail.contains("not permitted")
+        && (baseline.firewall.backend != "iptables"
+            || baseline.firewall.detail.contains("2 address family commands"))
+        && (current.firewall.backend != "iptables"
+            || current.firewall.detail.contains("2 address family commands")),
         "firewall state is unavailable or incomplete in a host snapshot");
     ensure!(
         baseline.dns_servers == current.dns_servers
