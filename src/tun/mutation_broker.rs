@@ -223,19 +223,36 @@ fn execute(
             let inventory = kernel_inventory::inspect_snapshot()?;
             policy.validate_against(&inventory.inventory)?;
             let store = ManifestStore::open(directory)?;
-            let backend = LinuxJournalBackend::new(store, &activation_id, generation)?;
+            let backend = LinuxJournalBackend::new(store.clone(), &activation_id, generation)?;
             let transaction = KernelTransaction {
                 activation_id: activation_id.clone(),
                 policy,
                 owner_uid,
                 owner_gid,
             };
-            // Keep the backend even when apply fails: an error can follow an acknowledged
-            // mutation or an unresolved write-ahead intent, and its descriptor must stay owned.
             let mut backend = backend;
             let result = kernel_transaction::apply(&transaction, &mut backend);
-            backends.insert(key, backend);
-            result.map(|_| format!("activation {activation_id} generation {generation} committed"))
+            match result {
+                Ok(_) => {
+                    backends.insert(key, backend);
+                    Ok(format!("activation {activation_id} generation {generation} committed"))
+                }
+                Err(error) => {
+                    // A fully successful rollback removes the journal and never creates an
+                    // active manifest. In that case the retained TUN descriptor has already
+                    // been released and this generation must not poison the broker's next
+                    // activation. If either durable record remains, preserve the backend so
+                    // unresolved ownership and its descriptor remain available for recovery.
+                    let fully_rolled_back = matches!(
+                        (store.load_transaction_journal(), store.load()),
+                        (Ok(None), Ok(None))
+                    );
+                    if !fully_rolled_back {
+                        backends.insert(key, backend);
+                    }
+                    Err(error)
+                }
+            }
         }
         MutationRequest::Recover {
             activation_id,
