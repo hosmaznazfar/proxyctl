@@ -1026,3 +1026,11 @@ The persistent mutation helper's versioned Ping now performs a read-only consist
 A helper restarted after a crash may have durable records but no in-memory backend or TUN descriptor. That is an expected recoverable state: readiness reports the pending generation, and the broker can reopen its journal backend for exact-generation recovery. A manifest-only or journal-only record is also accepted because recovery finalization and partial transaction rollback can legitimately leave one durable layer temporarily. No kernel inventory or mutation is performed by Ping.
 
 This check makes socket readiness stronger without claiming that a healthy broker implies a healthy dataplane. It does not establish core liveness, TUN interface ownership, route correctness, end-to-end proxy traffic, or service-manager supervision, and it does not enable public TUN activation.
+
+## Active managed-core listener probe
+
+The readiness layer now provides a bounded Linux loopback TCP probe tied to the persisted managed-core process identity. It rejects wildcard/non-loopback endpoints and zero ports, limits the connection timeout to five seconds, verifies the exact process identity before connecting, checks the connected peer address, and verifies the process identity again before accepting the observation.
+
+This is one independent readiness signal only. A successful connection does not cryptographically prove that the listening socket belongs to the managed core, so the caller must supply the dedicated listener endpoint from the selected core configuration and retain the manifest-bound process identity. The probe does not send application credentials or modify routes, interfaces, DNS, firewall state, or socket marks.
+
+The probe does not establish TUN interface ownership, policy-route correctness, marked physical egress, socket-mark behavior, or end-to-end proxied traffic. The aggregate readiness gate still requires all of those independent evidence fields; this addition does not enable TUN activation.
