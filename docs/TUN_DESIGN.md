@@ -962,3 +962,10 @@ This prevents a successfully recovered activation from leaving a stale manifest 
 Broker recovery validates the requested activation ID and generation against both the ownership manifest and transaction journal before invoking kernel cleanup. This closes the gap where a matching manifest could otherwise be paired with a different journal.
 
 Recovery finalization is also restartable across the boundary between journal deletion and manifest deletion. If the journal is already absent but the matching manifest remains, a repeated recovery request completes the manifest's `Cleaned` transition and removes it without attempting to reopen a nonexistent journal. A request with neither matching durable record is rejected. This makes the post-kernel-cleanup bookkeeping idempotent after helper or caller interruption.
+
+
+## Broker handling of completed activation rollback
+
+The persistent mutation broker now distinguishes a fully rolled-back activation failure from an activation that still owns recoverable state. When the transaction executor reports an error, the broker checks both durable records. It releases the in-memory backend (and its retained TUN descriptor) only when the transaction journal and ownership manifest are both absent. If either record remains, the backend stays retained for generation-matched recovery.
+
+This prevents a cleanly rolled-back failed activation from leaving an empty backend entry that would incorrectly block every later activation, while preserving the recovery path for ambiguous or incomplete rollback outcomes. If either storage inspection fails, the broker conservatively retains the backend.
