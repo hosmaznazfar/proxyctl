@@ -928,3 +928,6 @@ The Linux code now includes a caller-runtime helper launcher (`mutation_helper_l
 ## Launcher-to-broker client boundary
 
 The Linux mutation-helper launcher now exposes a typed call method over the helper's existing bounded request/response protocol. Activation and recovery requests are passed as closed `MutationRequest` variants; callers do not gain access to raw netlink payloads or arbitrary privileged commands through this client surface. This is a transport integration primitive only: the activation entry point remains gated, and process/core readiness and stop/recovery orchestration are not yet connected to this broker client.
+
+
+The launcher client additionally provides explicit activation and generation-bound recovery methods that construct the protocol envelopes internally. These methods are available for lifecycle integration; they do not independently make TUN activation available or imply a successful activation without the complete process/readiness lifecycle.
