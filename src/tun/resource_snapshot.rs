@@ -296,13 +296,6 @@ pub fn observe_journal_resources(
 
     journal.validate()?;
     let mut observations = std::collections::BTreeMap::new();
-    let interface_name = journal
-        .operations
-        .iter()
-        .find(|operation| operation.kind == JournalOperationKind::CreateInterface)
-        .and_then(|operation| operation.resource_key.strip_prefix("interface:"))
-        .context("journal has no valid interface ownership key")?;
-
     for operation in &journal.operations {
         let fingerprint = match operation.kind {
             JournalOperationKind::CreateInterface => {
@@ -324,9 +317,7 @@ pub fn observe_journal_resources(
                             "name": interface.name
                         }),
                     )?),
-                    [_] | [_, ..] => {
-                        anyhow::bail!("journal interface identity is changed or ambiguous")
-                    }
+                    _ => anyhow::bail!("journal interface identity is changed or ambiguous")
                 }
             }
             JournalOperationKind::AddRoute => {
@@ -392,10 +383,12 @@ pub fn observe_journal_resources(
             let record: Value = serde_json::from_str(value)
                 .context("live route canonical attributes are malformed")?;
             ensure!(
-                record.get("dev").and_then(Value::as_str).is_some(),
+                record
+                    .get("dev")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| !name.is_empty()),
                 "live route identity has no interface selector"
             );
-            let _ = interface_name;
         }
         observations.insert(operation.resource_key.clone(), fingerprint);
     }
