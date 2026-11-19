@@ -179,3 +179,73 @@ fn validate_identity(id: &str, generation: u64) -> Result<()> {
     ensure!(generation > 0, "activation generation must be non-zero");
     Ok(())
 }
+
+
+/// Send one typed request to an already-running mutation helper.
+pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationResponse> {
+    request.validate()?;
+    let payload = serde_json::to_vec(request)?;
+    ensure!(payload.len() <= MAX_FRAME, "mutation request exceeds frame limit");
+    let mut stream = UnixStream::connect(socket_path).context("cannot connect to mutation broker")?;
+    stream.set_read_timeout(Some(IO_TIMEOUT))?;
+    stream.set_write_timeout(Some(IO_TIMEOUT))?;
+    stream.write_all(&(payload.len() as u32).to_le_bytes())?;
+    stream.write_all(&payload)?;
+    stream.flush()?;
+    let mut header = [0u8; 4];
+    stream.read_exact(&mut header)?;
+    let length = u32::from_le_bytes(header) as usize;
+    ensure!(length > 0 && length <= MAX_FRAME, "mutation response frame length is invalid");
+    let mut bytes = vec![0u8; length];
+    stream.read_exact(&mut bytes)?;
+    let response: MutationResponse = serde_json::from_slice(&bytes)
+        .context("mutation broker response is malformed")?;
+    ensure!(response.version == VERSION, "mutation broker response version mismatch");
+    ensure!(response.success, "mutation broker rejected request: {}", response.message);
+    Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn activation() -> MutationRequest {
+        MutationRequest::Activate {
+            version: VERSION,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 8,
+            interface_name: "tun-proxyctl".into(),
+            owner_uid: 1000,
+            owner_gid: 1000,
+            table_id: 42420,
+            bypass_priority: 42410,
+            proxy_priority: 42420,
+            core_mark: 0x42,
+            core_mark_mask: 0xff,
+        }
+    }
+
+    #[test]
+    fn validates_generation_bound_typed_activation_envelope() {
+        assert!(activation().validate().is_ok());
+        let mut invalid = activation();
+        if let MutationRequest::Activate { generation, .. } = &mut invalid { *generation = 0; }
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_or_oversized_protocol_payloads() {
+        assert!(serde_json::from_slice::<MutationRequest>(br#"{"operation":"activate","version":1,"activation_id":"12345678-1234-4234-8234-123456789abc","generation":1,"interface_name":"tun0","owner_uid":1,"owner_gid":1,"table_id":42420,"bypass_priority":42410,"proxy_priority":42420,"core_mark":66,"core_mark_mask":255,"raw_netlink":"AA"}"#).is_err());
+        assert!(MAX_FRAME < 64 * 1024);
+    }
+
+    #[test]
+    fn recovery_envelope_requires_canonical_activation_identity() {
+        let request = MutationRequest::Recover {
+            version: VERSION,
+            activation_id: "12345678-1234-4234-8234-123456789ABC".into(),
+            generation: 8,
+        };
+        assert!(request.validate().is_err());
+    }
+}
