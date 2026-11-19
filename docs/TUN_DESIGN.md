@@ -1003,3 +1003,6 @@ A Linux-only managed activation coordinator now connects the typed mutation help
 If manifest adoption or process binding/start commitment fails after broker activation, the coordinator requests recovery for that exact activation ID and generation. Recovery errors are surfaced rather than reported as successful cleanup. The returned activation token is the one required by the existing supervisor monitor/restart APIs.
 
 The caller remains responsible for launching the core with a compatible native TUN configuration and socket mark before handing its captured process identity to this coordinator. This batch does not yet provide a production core launcher, independent dataplane readiness probes, a service-manager-owned supervisor, or supported Mihomo integration. Public TUN activation therefore remains gated.
+
+
+A broker activation response that reports failure is surfaced directly; the coordinator does not issue a blind recovery request because a fully rolled-back activation legitimately has no remaining journal or manifest. When the broker reports successful activation but later manifest adoption or process binding fails, the coordinator does issue exact-generation recovery. If that recovery cannot be confirmed, the error includes the recovery failure and the durable record remains available for explicit retry.
