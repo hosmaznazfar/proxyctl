@@ -116,8 +116,10 @@ impl PersistentTunOwner {
                 activation_id: activation_id.to_owned(),
                 generation,
             })
-            .map(|owned| &owned.interface)
-            .context("activation generation does not own a retained TUN device")
+            .and_then(|owned| {
+                (owned.device.name() == owned.interface.name).then_some(&owned.interface)
+            })
+            .context("activation generation does not own a consistent retained TUN device")
     }
 
     /// Release the descriptor only when activation, generation, name and ifindex all match.
