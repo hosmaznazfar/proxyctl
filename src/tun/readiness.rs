@@ -109,6 +109,38 @@ pub fn verify_readiness_with_socket_mark(
     verify_readiness(expected, &complete_evidence)
 }
 
+/// Verify the manifest-bound TUN interface against a fresh sysfs and NETLINK_ROUTE snapshot.
+///
+/// Both inventories must agree before this returns evidence. A matching name alone is never
+/// sufficient because Linux may reuse an interface name after the original link disappears.
+#[cfg(target_os = "linux")]
+pub fn probe_tun_interface(interface_name: &str, interface_index: u32) -> Result<InterfaceEvidence> {
+    ensure!(
+        !interface_name.is_empty()
+            && interface_name.len() <= 15
+            && interface_name.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+            && interface_index > 0,
+        "expected TUN interface identity is invalid"
+    );
+    let snapshot = super::kernel_inventory::inspect_snapshot()
+        .context("cannot capture live interface identity for TUN readiness")?;
+    let matches = snapshot.interfaces.iter()
+        .filter(|interface| interface.name == interface_name)
+        .collect::<Vec<_>>();
+    ensure!(matches.len() == 1, "manifest-bound TUN interface is missing or ambiguous");
+    let interface = matches[0];
+    ensure!(
+        interface.index == interface_index && interface.is_tun,
+        "live interface name, ifindex, or link kind does not match the activation manifest"
+    );
+    Ok(InterfaceEvidence { name: interface.name.clone(), index: interface.index })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_tun_interface(_interface_name: &str, _interface_index: u32) -> Result<InterfaceEvidence> {
+    anyhow::bail!("live TUN interface probing is supported only on Linux");
+}
+
 /// Compare the live kernel routes and policy rules with the exact activation plan.
 ///
 /// This is a read-only snapshot probe. It requires one matching default route and both
