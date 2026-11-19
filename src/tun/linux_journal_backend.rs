@@ -82,8 +82,11 @@ impl LinuxJournalBackend {
                 let (family, table, destination) = parse_route_key(key)?;
                 let value: Value = serde_json::from_str(&current)?;
                 let dev = value.get("dev").and_then(Value::as_str).context("route fingerprint has no device")?;
-                let interface = snapshot.interfaces.iter().find(|item| item.name == dev && item.is_tun)
-                    .context("route device is not the retained TUN interface")?;
+                let retained = self.owner.identity(&journal.activation_id, self.generation)
+                    .context("route cleanup has no retained TUN descriptor owner")?;
+                ensure!(retained.name == dev, "route fingerprint targets a different interface");
+                let interface = snapshot.interfaces.iter().find(|item| item.name == dev && item.index == retained.index && item.is_tun)
+                    .context("route device does not match the retained TUN identity")?;
                 let route = PlannedRoute { family, destination: family.default_prefix().into(), table_id: table,
                     interface_name: dev.into(), interface_index: interface.index, route_type: RouteType::Unicast };
                 rtnetlink_mutations::delete_route(&route)?;
@@ -118,7 +121,7 @@ impl KernelTransactionBackend for LinuxJournalBackend {
         let key = format!("interface:{name}");
         self.store.record_operation_intent(id, self.generation, JournalOperationKind::CreateInterface, &key)?;
         let interface = self.owner.create(id, self.generation, name, uid, gid)?;
-        let fp = serde_json::to_string(&serde_json::json!({"ifindex":interface.index,"kind":"tun","name":interface.name}))?;
+        let fp = self.fingerprint(&key)?;
         self.store.mark_operation_applied(id, self.generation, &key, &fp)?;
         Ok(interface)
     }
@@ -147,7 +150,7 @@ impl KernelTransactionBackend for LinuxJournalBackend {
         self.journal_identity(id)?;
         let journal = self.store.load_transaction_journal()?.context("journal is missing")?;
         let operation = journal.operations.iter().find(|item| item.resource_key == key).context("resource is not in this journal")?;
-        self.remove_live(operation.kind, key, fp)
+        self.remove_live(operation.kind.clone(), key, fp)
     }
 
     fn remove_interface_if_matches(&mut self, id: &str, name: &str, index: u32) -> Result<ResourceState> {
@@ -193,7 +196,7 @@ fn parse_route_key(key: &str) -> Result<(AddressFamily, u32, String)> {
     let family = parse_family(family)?;
     let table = table.parse::<u32>()?;
     ensure!(table > 0 && destination == family.default_prefix() || destination == "default", "unsupported route identity");
-    Ok((family, table, destination.to_owned()))
+    Ok((family, table, family.default_prefix().to_owned()))
 }
 fn parse_rule_key(key: &str) -> Result<(AddressFamily, u32)> {
     let rest = key.strip_prefix("rule:").context("invalid rule key")?;
