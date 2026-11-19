@@ -66,7 +66,19 @@ impl LinuxJournalBackend {
         let journal = self.store.load_transaction_journal()?.context("transaction journal is missing")?;
         let snapshot = kernel_inventory::inspect_snapshot()?;
         let observed = observe_journal_resources(&journal, &snapshot)?;
-        let Some(current) = observed.get(key).cloned().flatten() else { return Ok(ResourceState::AlreadyAbsent) };
+        let Some(current) = observed.get(key).cloned().flatten() else {
+            if kind == JournalOperationKind::CreateInterface
+                && let Ok(interface) = self.owner.identity(&journal.activation_id, self.generation).cloned()
+            {
+                self.owner.release(&journal.activation_id, self.generation, &interface.name, interface.index)?;
+                let after = kernel_inventory::inspect_snapshot()?;
+                if after.interfaces.iter().any(|item| item.name == interface.name || item.index == interface.index) {
+                    return Ok(ResourceState::ChangedOrForeign);
+                }
+                return Ok(ResourceState::Removed);
+            }
+            return Ok(ResourceState::AlreadyAbsent);
+        };
         if current != expected { return Ok(ResourceState::ChangedOrForeign); }
         match kind {
             JournalOperationKind::CreateInterface => {
@@ -207,7 +219,8 @@ fn parse_route_key(key: &str) -> Result<(AddressFamily, u32, String)> {
     let (table, destination) = rest.split_once(':').context("invalid route table")?;
     let family = parse_family(family)?;
     let table = table.parse::<u32>()?;
-    ensure!(table > 0 && destination == family.default_prefix() || destination == "default", "unsupported route identity");
+    ensure!(table > 0 && (destination == family.default_prefix() || destination == "default"),
+        "unsupported route identity");
     Ok((family, table, family.default_prefix().to_owned()))
 }
 fn parse_rule_key(key: &str) -> Result<(AddressFamily, u32)> {
