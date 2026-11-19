@@ -327,9 +327,7 @@ fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
             let mut parts = key.split(':');
             matches!(parts.next(), Some("rule"))
                 && matches!(parts.next(), Some("v4" | "v6"))
-                && parts
-                    .next()
-                    .is_some_and(canonical_positive_u32)
+                && parts.next().is_some_and(canonical_positive_u32)
                 && parts.next().is_none()
         }
     }
