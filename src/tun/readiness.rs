@@ -839,3 +839,48 @@ mod tests {
         assert!(verify_readiness(&expected(), &evidence).is_err());
     }
 }
+
+
+/// Perform a bounded SOCKS5 CONNECT probe through the manifest-bound core listener.
+/// This establishes a TCP tunnel to the explicit IP destination without DNS resolution,
+/// credentials, host-network mutation, or application payload transmission.
+#[cfg(target_os = "linux")]
+pub fn probe_socks5_connect(
+    process: &super::process::ProcessIdentity,
+    listener: SocketAddr,
+    destination: SocketAddr,
+    timeout: Duration,
+) -> Result<()> {
+    use std::io::{Read, Write};
+    ensure!(destination.port() != 0 && !destination.ip().is_unspecified(), "probe destination must be a concrete IP endpoint");
+    ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(5), "SOCKS5 probe timeout must be between zero and five seconds");
+    probe_core_listener(process, listener, timeout)?;
+    let mut stream = TcpStream::connect_timeout(&listener, timeout).context("could not connect to managed SOCKS5 listener")?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
+    stream.write_all(&[0x05, 0x01, 0x00]).context("failed sending SOCKS5 greeting")?;
+    let mut greeting = [0u8; 2];
+    stream.read_exact(&mut greeting).context("failed reading SOCKS5 greeting response")?;
+    ensure!(greeting == [0x05, 0x00], "listener did not accept unauthenticated SOCKS5 probe");
+    let mut request = vec![0x05, 0x01, 0x00];
+    match destination.ip() {
+        std::net::IpAddr::V4(ip) => { request.push(0x01); request.extend_from_slice(&ip.octets()); }
+        std::net::IpAddr::V6(ip) => { request.push(0x04); request.extend_from_slice(&ip.octets()); }
+    }
+    request.extend_from_slice(&destination.port().to_be_bytes());
+    stream.write_all(&request).context("failed sending SOCKS5 CONNECT request")?;
+    let mut response = [0u8; 4];
+    stream.read_exact(&mut response).context("failed reading SOCKS5 CONNECT response")?;
+    ensure!(response[0] == 0x05 && response[1] == 0x00 && response[2] == 0x00,
+        "SOCKS5 CONNECT failed or returned an invalid protocol response");
+    let tail_len = match response[3] { 0x01 => 6, 0x04 => 18, 0x03 => { let mut length=[0u8;1]; stream.read_exact(&mut length)?; usize::from(length[0])+2 }, _ => anyhow::bail!("SOCKS5 response contained an invalid address type") };
+    let mut tail=vec![0u8;tail_len]; stream.read_exact(&mut tail).context("failed reading SOCKS5 bound address")?;
+    ensure!(process.verify()?, "managed core process identity changed during SOCKS5 probe");
+    verify_listener_process_ownership(process, listener)?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_socks5_connect(_process: &(), _listener: SocketAddr, _destination: SocketAddr, _timeout: Duration) -> Result<()> {
+    anyhow::bail!("managed SOCKS5 probing is supported only on Linux");
+}
