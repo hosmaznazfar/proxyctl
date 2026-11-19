@@ -918,3 +918,8 @@ The restart-recovery regression test now keeps its terminated child unreaped unt
 
 
 The cleanup-key parser refactor keeps exactly one shared rule-table value parser at module scope, before the test module. This avoids duplicate symbol definitions while retaining canonical decimal validation for numeric table selectors.
+
+
+## Persistent mutation-helper launch milestone
+
+The Linux code now includes a caller-runtime helper launcher (`mutation_helper_launcher`). It targets the installed `/usr/libexec/proxyctl-tun-helper`, starts it in typed mutation-socket mode, and polls for socket readiness. The runtime directory is checked for caller ownership and restrictive permissions; an existing socket that cannot be reached is not unlinked or replaced. The launcher is an orchestration primitive only: it does not yet make TUN activation available, establish the activation transaction, start a core, or manage stop/recovery as one lifecycle. TUN remains disabled in the activation command until those handoffs are integrated and verified.
