@@ -844,3 +844,6 @@ The TUN descriptor allocator now performs a typed link-up operation after succes
 ### Typed route and policy-rule installation primitives
 
 Added Linux-only typed NETLINK_ROUTE mutation functions for installing the validated default unicast route into its dedicated table and installing RPDB lookup rules with optional fwmark selectors. They encode `RTM_NEWROUTE`/`RTM_NEWRULE` and structured attributes, use create-exclusive plus ACK, and reject unsupported route types or malformed identity values. This is an initial add-only primitive: it is not yet coupled to durable transaction intent/fingerprints or exact delete/recovery, and the lifecycle remains gated.
+
+
+The route/rule primitive also has typed delete requests keyed by the explicit route family, table, interface index, rule priority, and mark selector. These are narrowly scoped selectors but are not yet conditional on a live canonical fingerprint comparison; the transaction/recovery layer must enforce that precondition before these deletes are used for owned-resource cleanup.
