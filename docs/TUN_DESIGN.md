@@ -1070,3 +1070,7 @@ A future traffic verifier must use a caller-selected destination and protocol th
 A result is valid only when the probe confirms the expected response and its process/activation binding remains valid at the end of the observation. Timeout, unsupported proxy transport, ambiguous routing, response mismatch, or process replacement is a failed readiness signal. A diagnostic traffic probe is not a general-purpose benchmark and must not run automatically during ordinary loopback activation.
 
 Until such an implementation is connected to the lifecycle gate, the readiness evidence remains incomplete and public TUN activation stays disabled.
+
+## Bounded proxy-traffic evidence validation
+
+The readiness module now provides a Linux-only validator for externally collected end-to-end traffic observations. It binds evidence to activation UUID, generation, and the exact managed process identity, rechecks process liveness before and after validation, and enforces caller-specified elapsed-time and response-size bounds (with hard ceilings of thirty seconds and one MiB). The observation must indicate that an expected response was independently verified; metadata, listener acceptance, and routing evidence alone are not sufficient. This validator does not execute network requests and is not a traffic probe implementation. The lifecycle gate remains disabled until an actual safe probe implementation and service-manager integration provide this evidence.
