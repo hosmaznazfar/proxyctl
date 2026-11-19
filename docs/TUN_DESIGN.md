@@ -989,3 +989,8 @@ The unprivileged launcher now serializes helper discovery and startup with a pri
 ## Mutation socket discovery validation
 
 The launcher no longer treats any connectable filesystem path as a ready helper. Before probing, it uses non-following metadata inspection and requires the endpoint to be a Unix socket owned by the current effective user, mode `0600`, with a single link. Symlinks, regular files, foreign-owned sockets, and sockets with broader permissions are not accepted as an existing helper endpoint. This complements the private runtime directory and startup lock checks.
+
+
+## Authenticated mutation-helper readiness
+
+The persistent mutation protocol now includes a versioned, side-effect-free `Ping` request. Launcher readiness checks first validate the socket's filesystem identity and permissions, then exchange a bounded protocol frame and require a successful version-matched response. A listening socket alone is no longer considered proof that the expected mutation broker is ready. The broker authenticates the peer with `SO_PEERCRED` before accepting the ping, and the request does not inspect or mutate kernel networking state or alter retained activation ownership.
