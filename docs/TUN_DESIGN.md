@@ -829,3 +829,8 @@ The canonical resource-key numeric parser uses an owned error-context string whe
 ## Concrete kernel backend implementation milestone
 
 This milestone moves the Linux TUN work from offline planning toward a real kernel executor. Implement concrete typed TUN interface creation, link-up, IPv4/IPv6 route and policy-rule operations using NETLINK_ROUTE (not shell commands), exact resource identity verification, and rollback/cleanup driven by durable write-ahead journal records. Execution is routed through the restricted privilege-broker protocol; callers cannot submit arbitrary netlink bytes or command strings. The backend must re-inventory and fingerprint resources before cleanup, persist intent before mutation and applied evidence after mutation, and preserve ambiguous resources for recovery. The milestone includes offline fake-kernel/fault-injection tests for partial apply, ack failure, inventory mismatch, cleanup conflict, and replay. The activation CLI remains gated until the executor, broker, supervisor, core socket-marking and readiness paths are all integrated.
+
+
+### Concrete Linux TUN descriptor allocation
+
+A first real mutation primitive now allocates an exclusive, non-persistent TUN device via `/dev/net/tun` and `TUNSETIFF` with `IFF_TUN`, `IFF_NO_PI`, and `IFF_TUN_EXCL`. Owner/group are assigned using typed `TUNSETOWNER` and `TUNSETGROUP` ioctl calls. The descriptor owns the attachment; closing it removes the non-persistent interface. Interface names are validated and the kernel-returned name is checked. This primitive does not bring the interface up, configure addresses, install routes or rules, or alter DNS/firewall state. It is not yet wired into the journaled transaction or broker.
