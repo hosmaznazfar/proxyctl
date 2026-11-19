@@ -915,3 +915,6 @@ This does not yet activate TUN mode from the main Proxyctl CLI. The main-process
 The concrete Linux journal backend now rejects non-canonical decimal spellings for route table IDs, rule priorities, and numeric rule table selectors. Parsing a string into an integer is not sufficient: its decimal round-trip must match the original key, so leading-zero aliases cannot identify the same kernel resource under a second journal key. The route-key parser also keeps the parsed destination validation explicit while the deletion selector remains constrained to the supported default route.
 
 The restart-recovery regression test now keeps its terminated child unreaped until the supervisor has opened the pidfd and classified the persisted process identity. This prevents the kernel from reusing the numeric PID in the test window. A reused PID is a different process instance and must continue to be rejected; recovery is only allowed after the recorded process is established as gone. The mutation protocol's maximum-frame bound is now asserted at compile time rather than through a runtime test assertion.
+
+
+The cleanup-key parser refactor keeps exactly one shared rule-table value parser at module scope, before the test module. This avoids duplicate symbol definitions while retaining canonical decimal validation for numeric table selectors.
