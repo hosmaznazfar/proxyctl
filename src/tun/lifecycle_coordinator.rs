@@ -28,6 +28,10 @@ impl ActivationToken {
         })
     }
 
+    pub fn activation_id(&self) -> &str {
+        &self.activation_id
+    }
+
     pub fn generation(&self) -> u64 {
         self.generation
     }
