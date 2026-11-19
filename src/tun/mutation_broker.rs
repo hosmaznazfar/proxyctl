@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn rejects_unknown_or_oversized_protocol_payloads() {
         assert!(serde_json::from_slice::<MutationRequest>(br#"{"operation":"activate","version":1,"activation_id":"12345678-1234-4234-8234-123456789abc","generation":1,"interface_name":"tun0","owner_uid":1,"owner_gid":1,"table_id":42420,"bypass_priority":42410,"proxy_priority":42420,"core_mark":66,"core_mark_mask":255,"raw_netlink":"AA"}"#).is_err());
-        assert!(MAX_FRAME < 64 * 1024);
+        const { assert!(MAX_FRAME < 64 * 1024) };
     }
 
     #[test]
