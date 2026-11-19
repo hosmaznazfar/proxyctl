@@ -77,5 +77,6 @@ STAGING=
 trap - EXIT HUP INT TERM
 
 echo "Installed $DESTINATION with only cap_net_admin=ep."
-echo "The helper is diagnostic-only and accepts one same-UID socket-mark request."
+echo "The helper supports the read-only --socket mode and persistent typed --mutation-socket mode."
+echo "Start the mutation mode explicitly with: /usr/libexec/proxyctl-tun-helper --mutation-socket PATH"
 echo "No setuid bit, service, sudoers rule, or automatic startup was installed."
