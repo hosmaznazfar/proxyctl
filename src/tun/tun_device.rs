@@ -13,7 +13,7 @@ const SIOCGIFFLAGS: libc::c_ulong = 0x8913;
 const SIOCSIFFLAGS: libc::c_ulong = 0x8914;
 const IFF_UP: libc::c_short = 0x1;
 #[repr(C)]
-struct IfReq { name: [libc::c_char; IFNAMSIZ], flags: libc::c_short, padding: [u8; 22] }
+struct IfReq { name: [libc::c_char; IFNAMSIZ], flags: libc::c_short, padding: [u8; 6] }
 /// Owns a non-persistent TUN attachment. Closing this fd removes the device.
 #[derive(Debug)]
 pub struct TunDevice { fd: OwnedFd, name: String }
@@ -24,7 +24,7 @@ impl TunDevice {
         validate_name(name)?;
         let file = OpenOptions::new().read(true).write(true).open("/dev/net/tun").context("open /dev/net/tun")?;
         let fd: OwnedFd = file.into();
-        let mut req = IfReq { name: [0; IFNAMSIZ], flags: (IFF_TUN | IFF_NO_PI | IFF_TUN_EXCL) as libc::c_short, padding: [0; 22] };
+        let mut req = IfReq { name: [0; IFNAMSIZ], flags: (IFF_TUN | IFF_NO_PI | IFF_TUN_EXCL) as libc::c_short, padding: [0; 6] };
         for (dst, src) in req.name.iter_mut().zip(name.bytes()) { *dst = src as libc::c_char; }
         // SAFETY: fd is a TUN fd and req follows Linux ifreq layout.
         let rc = unsafe { libc::ioctl(fd.as_raw_fd(), TUNSETIFF, &mut req) };
