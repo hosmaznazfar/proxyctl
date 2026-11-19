@@ -1088,3 +1088,8 @@ A Linux-only SOCKS5 CONNECT probe is available as a diagnostic API. It uses an e
 ## Diagnostic probe constraints
 
 The SOCKS5 diagnostic is opt-in at the API caller level and does not run during activation automatically. Callers must select a concrete destination address and port; the probe does not resolve names, use credentials, or mutate host routes, resolver settings, firewall rules, or system proxy settings. A refusal or timeout is diagnostic failure only and must not trigger network repair or resource deletion.
+
+
+## SOCKS5 readiness evidence limits
+
+A successful CONNECT response indicates that the core accepted the SOCKS request and reported establishment of a tunnel to the explicit endpoint. It does not independently verify response content, TLS, HTTP, DNS, or a complete application transaction. This diagnostic therefore cannot alone promote readiness to fully verified proxied traffic, and the public TUN activation gate remains disabled.
