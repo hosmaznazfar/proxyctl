@@ -839,3 +839,8 @@ A first real mutation primitive now allocates an exclusive, non-persistent TUN d
 ### TUN link state mutation
 
 The TUN descriptor allocator now performs a typed link-up operation after successful exclusive allocation and owner/group assignment. It reads current interface flags using `SIOCGIFFLAGS` and sets only `IFF_UP` via `SIOCSIFFLAGS`, preserving other flags. If link-up fails, descriptor ownership unwinds and the non-persistent interface is released. This is not yet integrated into the durable transaction executor.
+
+
+### Typed route and policy-rule installation primitives
+
+Added Linux-only typed NETLINK_ROUTE mutation functions for installing the validated default unicast route into its dedicated table and installing RPDB lookup rules with optional fwmark selectors. They encode `RTM_NEWROUTE`/`RTM_NEWRULE` and structured attributes, use create-exclusive plus ACK, and reject unsupported route types or malformed identity values. This is an initial add-only primitive: it is not yet coupled to durable transaction intent/fingerprints or exact delete/recovery, and the lifecycle remains gated.
