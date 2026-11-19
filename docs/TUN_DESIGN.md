@@ -1098,3 +1098,10 @@ A successful CONNECT response indicates that the core accepted the SOCKS request
 ## Probe ownership and lifecycle
 
 The diagnostic must be run only against a listener endpoint recorded for the managed activation. Process identity and listener socket ownership are revalidated during the exchange to reduce PID reuse and listener substitution risks. The probe creates a short-lived loopback TCP connection and leaves tunnel cleanup to ordinary connection teardown; it is not a supervisor, recovery executor, or traffic-routing activation path.
+
+
+## Detailed SOCKS5 probe result and address guardrails
+
+The diagnostic can return structured metadata including its listener, requested destination, measured duration, and request-side protocol byte count. Byte accounting is limited to the request exchange and is not represented as application payload or received-content verification. The diagnostic rejects unspecified, loopback, multicast, link-local, and zero-port destinations; it does not attempt to classify every special-purpose or globally routable range. Operators remain responsible for selecting a suitable explicit endpoint.
+
+The probe also enforces an aggregate duration ceiling in addition to socket operation timeouts. The aggregate bound is conservative and is not a readiness SLA. Failures are reported without automatic retries, activation, or repair.
