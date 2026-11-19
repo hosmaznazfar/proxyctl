@@ -252,6 +252,33 @@ pub fn validate_proxy_traffic_observation(
     anyhow::bail!("managed proxy traffic observation validation is supported only on Linux");
 }
 
+
+/// Promote a validated traffic observation into complete readiness evidence.
+///
+/// This validates the observation's generation/process binding and then runs the common
+/// readiness gate over the supplied evidence. The supplied evidence must already contain
+/// all other independently collected signals.
+#[cfg(target_os = "linux")]
+pub fn verify_readiness_with_traffic_observation(
+    expected: &ReadinessExpectation<'_>,
+    evidence: &ReadinessEvidence,
+    observation: &ProxyTrafficObservation,
+    activation_id: &str,
+    generation: u64,
+    process: &super::process::ProcessIdentity,
+    maximum_duration: Duration,
+    maximum_response_bytes: usize,
+) -> Result<()> {
+    validate_proxy_traffic_observation(
+        observation, activation_id, generation, process, maximum_duration, maximum_response_bytes,
+    )?;
+    ensure!(evidence.core_process_verified, "readiness process evidence is missing");
+    ensure!(evidence.local_listener.is_some(), "readiness listener evidence is missing");
+    let mut promoted = evidence.clone();
+    promoted.proxied_traffic_verified = true;
+    verify_readiness(expected, &promoted)
+}
+
 /// Collect independent read-only evidence for a managed activation preflight.
 ///
 /// This composes process/listener, TUN identity, routing-policy, marked physical-egress,
