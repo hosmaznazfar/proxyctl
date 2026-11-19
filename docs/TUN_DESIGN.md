@@ -812,3 +812,6 @@ Readiness validation now independently validates the expected TUN interface name
 
 
 Socket-peer candidate classification now rejects zero-inode records at its own boundary, even when a caller supplies synthetic or otherwise untrusted records instead of the strict parser's output. This avoids treating inode zero as an ownership key. The classifier remains offline and read-only.
+
+
+The socket-diagnostic record parser now rejects IPv4 address fields whose unused 12-byte tail is non-zero, keeping the address-family representation canonical. This is parser validation only; the diagnostic transport remains read-only and no socket-marking operation is enabled.
