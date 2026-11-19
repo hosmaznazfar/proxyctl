@@ -984,3 +984,8 @@ Before spawning the privileged persistent mutation helper, the unprivileged laun
 ## Concurrent persistent-helper startup
 
 The unprivileged launcher now serializes helper discovery and startup with a private runtime lock file and nonblocking `flock`. Concurrent Proxyctl processes wait for the startup owner, then probe the same socket instead of racing to spawn duplicate helpers. The lock descriptor is close-on-exec and remains held through readiness polling; the lock file itself is intentionally persistent, while kernel lock ownership is released automatically when the launcher exits. Lock acquisition is bounded to five seconds and validates file type, owner, restrictive permissions, and link count. This does not change the helper's request protocol or enable TUN activation.
+
+
+## Mutation socket discovery validation
+
+The launcher no longer treats any connectable filesystem path as a ready helper. Before probing, it uses non-following metadata inspection and requires the endpoint to be a Unix socket owned by the current effective user, mode `0600`, with a single link. Symlinks, regular files, foreign-owned sockets, and sockets with broader permissions are not accepted as an existing helper endpoint. This complements the private runtime directory and startup lock checks.
