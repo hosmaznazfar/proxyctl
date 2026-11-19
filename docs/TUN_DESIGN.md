@@ -979,3 +979,8 @@ After journal-backed kernel recovery succeeds, ownership-manifest retirement is 
 ## Installed helper executable validation
 
 Before spawning the privileged persistent mutation helper, the unprivileged launcher now inspects the executable with `symlink_metadata`. It requires a real regular file (not a symlink), root ownership, at least one execute bit, and no group/world write permission. A missing or unsafe installation fails closed with an installation-oriented error instead of following an unexpected executable path.
+
+
+## Concurrent persistent-helper startup
+
+The unprivileged launcher now serializes helper discovery and startup with a private runtime lock file and nonblocking `flock`. Concurrent Proxyctl processes wait for the startup owner, then probe the same socket instead of racing to spawn duplicate helpers. The lock descriptor is close-on-exec and remains held through readiness polling; the lock file itself is intentionally persistent, while kernel lock ownership is released automatically when the launcher exits. Lock acquisition is bounded to five seconds and validates file type, owner, restrictive permissions, and link count. This does not change the helper's request protocol or enable TUN activation.
