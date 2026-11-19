@@ -148,6 +148,56 @@ pub struct ReadinessExpectation<'a> {
     pub core_mark_mask: u32,
 }
 
+/// Collect and validate live marked outbound-socket evidence for the managed core.
+///
+/// The dedicated helper performs read-only INET_DIAG collection. The process identity is
+/// checked around the helper round trip, and the response must match the exact peer,
+/// transport, mark, and mask requested by the activation manifest.
+#[cfg(target_os = "linux")]
+pub fn probe_core_outbound_socket_mark(
+    runtime_directory: &std::path::Path,
+    activation_id: &str,
+    process: &super::process::ProcessIdentity,
+    expected_peer: SocketAddr,
+    transport: super::privilege_broker::BrokerSocketTransport,
+    expected_mark: u32,
+    mark_mask: u32,
+) -> Result<u32> {
+    ensure!(process.verify()?, "managed core identity changed before socket-mark probe");
+    let response = super::socket_mark_probe::observe_proxy_outbound_mark(
+        runtime_directory,
+        activation_id,
+        process.clone(),
+        expected_peer,
+        transport,
+        expected_mark,
+        mark_mask,
+    )?;
+    ensure!(process.verify()?, "managed core identity changed during socket-mark probe");
+    ensure!(
+        response.expected_peer == expected_peer && response.transport == transport,
+        "socket-mark helper response does not match the requested outbound peer and transport"
+    );
+    super::socket_mark_probe::observed_proxy_outbound_mark(
+        &response,
+        expected_mark,
+        mark_mask,
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_core_outbound_socket_mark(
+    _runtime_directory: &std::path::Path,
+    _activation_id: &str,
+    _process: &(),
+    _expected_peer: SocketAddr,
+    _transport: (),
+    _expected_mark: u32,
+    _mark_mask: u32,
+) -> Result<u32> {
+    anyhow::bail!("managed-core socket-mark probing is supported only on Linux");
+}
+
 /// Verify readiness using the actual broker response rather than a caller-supplied mark.
 ///
 /// The remaining evidence fields must come from independent live probes. This function
