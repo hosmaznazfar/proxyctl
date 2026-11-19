@@ -10,6 +10,7 @@ pub mod broker_transport;
 pub mod egress_probe;
 pub mod journal;
 pub mod journal_store;
+pub mod journal_recovery_executor;
 pub mod kernel_backend;
 pub mod kernel_inventory;
 pub mod kernel_transaction;
