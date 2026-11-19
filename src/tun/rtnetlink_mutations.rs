@@ -9,7 +9,7 @@ const NLM_F_REQUEST:u16=1; const NLM_F_ACK:u16=4; const NLM_F_EXCL:u16=0x200; co
 const RTA_OIF:u16=4; const RTA_TABLE:u16=15; const FRA_PRIORITY:u16=6; const FRA_FWMARK:u16=10; const FRA_FWMASK:u16=11; const FRA_TABLE:u16=15;
 const RTPROT_STATIC:u8=4; const RT_SCOPE_UNIVERSE:u8=0; const RTN_UNICAST:u8=1; const FR_ACT_TO_TBL:u8=1;
 fn family(f:AddressFamily)->u8 { match f { AddressFamily::Ipv4=>libc::AF_INET as u8, AddressFamily::Ipv6=>libc::AF_INET6 as u8 } }
-fn attr(kind:u16,value:&[u8],out:&mut Vec<u8>)->Result<()> { let len=4usize.checked_add(value.len()).ok_or_else(||anyhow::anyhow!("attribute overflow"))?;ensure!(len<=u16::MAX as usize,"attribute too large");out.extend_from_slice(&(len as u16).to_ne_bytes());out.extend_from_slice(&kind.to_ne_bytes());out.extend_from_slice(value);while out.len()%4!=0 {out.push(0);}Ok(()) }
+fn attr(kind:u16,value:&[u8],out:&mut Vec<u8>)->Result<()> { let len=4usize.checked_add(value.len()).ok_or_else(||anyhow::anyhow!("attribute overflow"))?;ensure!(len<=u16::MAX as usize,"attribute too large");out.extend_from_slice(&(len as u16).to_ne_bytes());out.extend_from_slice(&kind.to_ne_bytes());out.extend_from_slice(value);while !out.len().is_multiple_of(4) {out.push(0);}Ok(()) }
 fn request(kind:u16,flags:u16,payload:&[u8])->Vec<u8>{let mut b=vec![0u8;16];b.extend_from_slice(payload);let len=b.len() as u32;b[0..4].copy_from_slice(&len.to_ne_bytes());b[4..6].copy_from_slice(&kind.to_ne_bytes());b[6..8].copy_from_slice(&flags.to_ne_bytes());b}
 /// Installs an exact default unicast route into a dedicated table, using an ACK.
 pub fn add_route(route:&PlannedRoute)->Result<()> {
