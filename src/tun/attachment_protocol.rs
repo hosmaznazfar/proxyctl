@@ -10,11 +10,13 @@ use std::{
     fs::File,
     io::{Read, Write},
     os::{fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd}, unix::net::UnixStream},
+    time::Duration,
 };
 use super::{descriptor_transfer, process::ProcessIdentity};
 
 const VERSION: u8 = 1;
 const MAX_FRAME: usize = 4096;
+const HANDOFF_IO_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -132,6 +134,7 @@ pub fn send_attachment(
     offer: &AttachmentOffer,
     expected_child: &ProcessIdentity,
 ) -> Result<()> {
+    configure_handoff_timeouts(stream)?;
     verify_peer_process(stream, expected_child)?;
     send_offer(stream, offer)?;
     descriptor_transfer::send_descriptor(stream, descriptor)?;
@@ -148,6 +151,7 @@ pub fn receive_and_adopt<F>(
 where
     F: FnOnce(&AttachmentOffer, OwnedFd) -> Result<()>,
 {
+    configure_handoff_timeouts(stream)?;
     verify_peer_process(stream, expected_parent)?;
     let received_offer = receive_offer(stream)?;
     ensure!(&received_offer == expected_offer, "received attachment offer differs from expected activation");
@@ -171,6 +175,15 @@ where
     ensure!(&received == expected, "received attachment offer differs from the expected activation");
     adopt(&received, descriptor).context("core-specific descriptor adoption failed")?;
     send_adoption_ack(stream, &received)
+}
+
+
+fn configure_handoff_timeouts(stream: &UnixStream) -> Result<()> {
+    stream.set_read_timeout(Some(HANDOFF_IO_TIMEOUT))
+        .context("cannot set attachment protocol read deadline")?;
+    stream.set_write_timeout(Some(HANDOFF_IO_TIMEOUT))
+        .context("cannot set attachment protocol write deadline")?;
+    Ok(())
 }
 
 fn write_frame<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<()> {

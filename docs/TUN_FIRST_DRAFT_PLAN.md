@@ -133,3 +133,8 @@ The protocol is not wired to a real sing-box/Xray/Mihomo descriptor consumer. Th
 The attachment protocol now includes parent- and child-side composition helpers. The sender checks the connected peer against the exact expected child process, sends the generation/nonce offer, transfers the descriptor, and waits for a matching positive receipt. The receiver checks the expected parent process, validates the exact offer before receiving the descriptor, calls the core-adoption callback, and acknowledges only after callback success.
 
 These helpers do not select or implement a native core FD API. They are ready for a verified adapter to call, but no core is currently wired to them. Same-user SO_PEERCRED checks do not replace private socket path ownership, executable allowlisting, or adapter-level validation.
+
+
+## Bounded handoff I/O (2026-11-20)
+
+The composed parent/child handoff helpers now set five-second read and write timeouts before peer verification and protocol exchange. A stalled or non-responsive adapter therefore cannot block the activation caller indefinitely. The timeout is a transport bound, not a readiness guarantee; the public activation path remains gated.

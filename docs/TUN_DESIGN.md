@@ -1170,3 +1170,6 @@ The Linux-only descriptor_transfer module sends and receives one descriptor over
 
 
 The composed send_attachment and receive_and_adopt APIs enforce this ordering: verify socket peer, validate offer, transfer descriptor, perform core-specific adoption, and only then acknowledge. They remain unused until a supported adapter exists. Never provide a no-op adoption callback.
+
+
+The composed attachment exchange applies a fixed five-second socket read/write timeout. This bounds stalled peers but does not replace a supervisor deadline or a core-specific readiness probe.
