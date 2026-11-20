@@ -57,7 +57,18 @@ impl<'a> ActivationOrchestrator<'a> {
         Self { helper, coordinator }
     }
 
-    /// Activate only when a caller supplies generation/process-bound attachment evidence.\n    pub fn activate_with_attachment_evidence(&self, request: ActivationRequest, process: ProcessIdentity, evidence: &super::attachment_contract::AttachmentEvidence) -> Result<ManagedActivation> {\n        evidence.validate_binding(&request, &process).context("invalid TUN attachment evidence")?;\n        self.activate(request, process)\n    }\n\n    pub fn activate(&self, request: ActivationRequest, process: ProcessIdentity) -> Result<ManagedActivation> {
+    /// Activate only when a caller supplies generation/process-bound attachment evidence.
+    pub fn activate_with_attachment_evidence(
+        &self,
+        request: ActivationRequest,
+        process: ProcessIdentity,
+        evidence: &super::attachment_contract::AttachmentEvidence,
+    ) -> Result<ManagedActivation> {
+        evidence.validate_binding(&request, &process).context("invalid TUN attachment evidence")?;
+        self.activate(request, process)
+    }
+
+    pub fn activate(&self, request: ActivationRequest, process: ProcessIdentity) -> Result<ManagedActivation> {
         request.validate().context("invalid TUN activation request")?;
         ensure!(self.coordinator.load_current()?.is_none(), "an activation manifest already exists; recover it before creating another");
         managed_activation::activate_managed_core(

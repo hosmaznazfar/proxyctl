@@ -384,3 +384,6 @@ Proxy URLs can contain credentials. Do not share database files or logs containi
 ### Accurate download retry policy
 
 Quick accepts a useful partial download after one attempt. Accurate retries an incomplete download up to three total attempts, stopping only when the configured byte cap is reached. Each Accurate attempt receives the full configured download duration; attempts are not divided into one shared duration. Latency, TCP-connect, and upload checks retry failures up to three total attempts and stop at the first success. Attempt history records only the attempts actually made.
+
+
+**TUN integration status:** Linux SCM_RIGHTS descriptor-transfer primitives now exist, but they are not connected to a managed-core launch or a core-supported TUN descriptor consumer. A successful descriptor send is not proof of attachment. TUN activation remains gated; see docs/TUN_FIRST_DRAFT_PLAN.md.

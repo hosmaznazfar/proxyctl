@@ -112,3 +112,10 @@ No local build, tests, host network mutation, or TUN activation was performed in
 ## Descriptor evidence contract implementation
 
 A Linux-only attachment evidence contract now represents a passed-descriptor mechanism and validates its structural fields. A second validator binds the evidence to the activation request and ProcessIdentity (activation ID, generation, interface name, process start ticks and live process verification). The orchestrator has an evidence-gated convenience entrypoint. The evidence remains caller-supplied and does not prove the fd was actually transferred; the ordinary façade path remains present and activation remains disabled at the public service layer. This is a contract seam, not a completed core integration.
+
+
+## Descriptor-transfer primitive checkpoint (2026-11-20)
+
+Added a Linux SCM_RIGHTS transport primitive that sends and receives exactly one file descriptor over a connected Unix stream. The receiver requests close-on-exec atomically and rejects missing, truncated, or unexpected control messages. Focused tests cover descriptor transfer and rejection of a marker-only frame.
+
+This is a transport primitive, not a completed native-core attachment. It does not authenticate the peer, coordinate a child launch, prove that sing-box/Xray/Mihomo consumes the descriptor, or produce kernel-backed attachment evidence. A successful sendmsg is not an attachment receipt. Do not populate AttachmentEvidence from send success; require a child-side acknowledgement tied to the pinned process and activation generation, plus a core-specific supported way to consume the received descriptor. Public TUN activation remains gated. No host network changes or local tests/builds were run.

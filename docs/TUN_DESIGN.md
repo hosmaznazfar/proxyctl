@@ -1157,3 +1157,8 @@ The draft activation façade now includes a monitor-current entrypoint for persi
 ## Attachment evidence contract (continuation)
 
 The draft Linux attachment-contract module rejects incomplete or mismatched evidence fields, non-passed-descriptor mechanisms, and evidence that does not bind to activation identity/generation/interface and a verified process identity. An orchestrator convenience method requires this contract before delegating. These checks are not proof of descriptor transfer and do not alter the activation gate. Native-core integration must produce independently verifiable evidence before this API can be used to enable activation.
+
+
+### SCM_RIGHTS transport implementation boundary (2026-11-20)
+
+The Linux-only descriptor_transfer module sends and receives one descriptor over an existing Unix stream. Receive uses MSG_CMSG_CLOEXEC and validates the marker and ancillary header shape. This does not authenticate the peer, launch the core, or establish core adoption. A successful sendmsg is not an attachment receipt. Do not populate AttachmentEvidence from send success; require a child-side acknowledgement tied to the pinned process and activation generation, plus a core-specific supported descriptor consumer. Public activation remains disabled until end-to-end integration exists.
