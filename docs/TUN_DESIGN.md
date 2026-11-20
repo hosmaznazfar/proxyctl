@@ -1203,3 +1203,6 @@ Added a Linux verifier that pins the exact Xray process identity, checks the exp
 ## Xray composed readiness gate (2026-11-20)
 
 Added `verify_xray_readiness` to compose Xray's exact process/fdinfo attachment check with fresh core-listener ownership, kernel TUN interface identity, live route-policy inspection, generation/process-bound bounded traffic observation, and the shared socket-mark/readiness validator. Host DNS/firewall and physical-egress evidence remain explicit caller inputs and must come from their independent probes. A SOCKS5 CONNECT alone is not promoted to successful proxied traffic. The function does not yet launch or mutate the host network; it is the fail-closed post-launch readiness gate.
+
+
+Xray startup now also has a bounded attachment wait helper. It pins the launched process, checks for early exit, and polls the exact kernel TUN fdinfo attachment for at most five seconds. This wait is only descriptor-adoption confirmation; the composed readiness gate remains responsible for listener, routes, socket mark, host invariants, physical egress, and proxied traffic.

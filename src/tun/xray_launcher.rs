@@ -175,3 +175,36 @@ pub fn verify_xray_readiness(
     ensure!(process.verify()?, "Xray process identity changed during readiness verification");
     Ok(())
 }
+
+
+/// Wait for Xray to expose the exact TUN attachment in kernel fdinfo.
+///
+/// This is a bounded startup wait (maximum five seconds), not a traffic-readiness check.
+pub fn wait_for_xray_tun_attachment(
+    process: &ProcessIdentity,
+    interface_name: &str,
+    expected_ifindex: u32,
+    timeout: std::time::Duration,
+) -> Result<()> {
+    ensure!(!timeout.is_zero() && timeout <= std::time::Duration::from_secs(5),
+        "Xray TUN attachment wait must be between zero and five seconds");
+    let handle = ProcessHandle::open(process.clone())
+        .context("cannot pin Xray while waiting for TUN attachment")?;
+    let deadline = std::time::Instant::now() + timeout;
+    let mut last_error = None;
+    loop {
+        ensure!(!handle.is_exited()?, "Xray exited before adopting its TUN descriptor");
+        match verify_xray_tun_attachment(process, interface_name, expected_ifindex) {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = Some(error),
+        }
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50).min(
+            deadline.saturating_duration_since(std::time::Instant::now())
+        ));
+    }
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Xray TUN attachment was not observed")))
+        .context("Xray did not adopt the expected TUN interface before the startup deadline")
+}

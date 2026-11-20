@@ -168,3 +168,6 @@ Added `verify_xray_tun_attachment`: it checks the expected kernel TUN interface 
 ## Xray readiness composition (2026-11-20)
 
 Added `verify_xray_readiness`: verifies the process holds the exact TUN interface, refreshes listener/interface/routing-policy evidence, validates the bounded traffic observation against activation ID/generation/process identity, and delegates socket-mark plus complete evidence validation to the common readiness gate. Caller-supplied host DNS/firewall and physical-egress evidence remain required; no field is synthesized from a successful connection alone. This is a post-launch gate, not public activation wiring.
+
+
+Added `wait_for_xray_tun_attachment`, a process-pinned, five-second-bounded startup wait that returns only after the expected interface appears in Xray's kernel fdinfo. Early child exit fails immediately. This confirms attachment only and does not replace the complete readiness gate.
