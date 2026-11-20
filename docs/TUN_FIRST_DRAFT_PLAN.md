@@ -187,3 +187,6 @@ Added `activate_xray_with_readiness` to the unified orchestrator. Ordering is no
 
 
 The Xray staged entrypoint now reads the kernel-assigned interface index from the exact broker-adopted Prepared manifest and validates its token, phase, interface name, and routing table. This removes a caller-supplied ifindex guess from the activation boundary.
+
+
+Xray child rollback now signals the pinned process through its pidfd, waits at most two seconds for exit, and then reaps the child. Failure to terminate is surfaced instead of risking an unbounded wait. This path is used for attachment failure, readiness failure, and failure to commit Running.

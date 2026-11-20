@@ -231,19 +231,28 @@ pub fn spawn_xray_with_verified_attachment(
     if let Err(error) = wait_for_xray_tun_attachment(
         &identity, interface_name, expected_ifindex, attachment_timeout,
     ) {
-        let kill_result = child.kill();
-        let wait_result = child.wait();
-        if let Err(kill_error) = kill_result {
+        if let Err(termination_error) = terminate_and_reap_xray(&mut child, &identity) {
             return Err(error).context(format!(
-                "Xray failed TUN attachment and child termination also failed: {kill_error}"
-            ));
-        }
-        if let Err(wait_error) = wait_result {
-            return Err(error).context(format!(
-                "Xray failed TUN attachment and child reaping also failed: {wait_error}"
+                "Xray failed TUN attachment and bounded child termination/reaping also failed: {termination_error:#}"
             ));
         }
         return Err(error).context("Xray did not attach the expected TUN device; child was terminated and reaped");
     }
     Ok((child, identity))
+}
+
+
+/// Terminate and reap the exact Xray child without an unbounded wait.
+pub fn terminate_and_reap_xray(child: &mut Child, process: &ProcessIdentity) -> Result<()> {
+    let handle = ProcessHandle::open(process.clone())
+        .context("cannot pin Xray child for bounded termination")?;
+    if !handle.is_exited()? {
+        if let Err(signal_error) = handle.signal(libc::SIGKILL) {
+            ensure!(handle.is_exited()?, "cannot terminate Xray child: {signal_error:#}");
+        }
+        ensure!(handle.wait_exit(std::time::Duration::from_secs(2))?,
+            "Xray child did not exit within the two-second termination bound");
+    }
+    child.wait().context("cannot reap terminated Xray child")?;
+    Ok(())
 }

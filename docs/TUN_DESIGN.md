@@ -1222,3 +1222,6 @@ Added `ActivationOrchestrator::activate_xray_with_readiness`. It applies the bro
 
 
 The staged Xray orchestrator now obtains the expected interface index from the broker-committed Prepared manifest itself, and verifies that manifest token, phase, interface name, table, and positive kernel-assigned index match the request. Callers no longer provide or guess an interface index before kernel creation.
+
+
+Xray rollback now uses the pinned process identity and a two-second pidfd-based termination bound before reaping the child. It does not rely on an unbounded `Child::wait` after a failed `kill` call. If termination cannot be confirmed, the error is surfaced alongside broker recovery status.

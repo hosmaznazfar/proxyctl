@@ -143,11 +143,10 @@ impl<'a> ActivationOrchestrator<'a> {
         };
 
         if let Err(error) = readiness(&process, &token) {
-            let _ = child.kill();
-            let reap = child.wait();
+            let reap = super::xray_launcher::terminate_and_reap_xray(&mut child, &process);
             let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
             return match (reap, recovery) {
-                (Ok(_), Ok(response)) if response.success =>
+                (Ok(()), Ok(response)) if response.success =>
                     Err(error).context("Xray readiness failed; child was reaped and exact-generation TUN resources were recovered"),
                 (Err(reap_error), Ok(response)) if response.success =>
                     Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child reaping failed: {reap_error}; TUN resources were recovered")),
@@ -163,9 +162,11 @@ impl<'a> ActivationOrchestrator<'a> {
         ) {
             Ok(managed) => managed,
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(error).context("Xray process could not be committed after readiness; child was terminated");
+                let termination = super::xray_launcher::terminate_and_reap_xray(&mut child, &process);
+                return match termination {
+                    Ok(()) => Err(error).context("Xray process could not be committed after readiness; child was terminated and reaped"),
+                    Err(termination_error) => Err(anyhow::anyhow!("Xray process commit failed ({error:#}); bounded child termination/reaping failed: {termination_error:#}")),
+                };
             }
         };
         Ok(XrayActivation { child, managed })
