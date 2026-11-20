@@ -117,20 +117,28 @@ impl SystemdRecoverySupervisor {
     fn active_state(&self, identity: &SupervisorIdentity) -> Result<Option<String>> {
         self.validate_identity(identity)?;
         let output = Command::new(&self.systemctl)
-            .args(["--user", "show", "--property=ActiveState", "--value"])
-            .arg(Self::unit(identity)).output()
-            .context("could not query the systemd user service state")?;
-        ensure!(output.status.success(),
-            "systemctl could not query the TUN recovery service: {}",
-            String::from_utf8_lossy(&output.stderr).trim());
+            .args(["--user", "is-active"])
+            .arg(Self::unit(identity))
+            .output()
+            .context("could not query the TUN recovery service state")?;
         let state = String::from_utf8(output.stdout)
             .context("systemd returned a non-UTF-8 service state")?
             .trim()
             .to_owned();
-        match state.as_str() {
-            "active" | "activating" | "reloading" | "deactivating" => Ok(Some(state)),
-            "" | "inactive" | "failed" => Ok(None),
-            _ => anyhow::bail!("systemd returned an unrecognized service state: {state:?}"),
+        if output.status.success() {
+            return match state.as_str() {
+                "active" | "activating" | "reloading" | "deactivating" => Ok(Some(state)),
+                _ => anyhow::bail!("systemd returned an unrecognized active service state: {state:?}"),
+            };
+        }
+        match output.status.code() {
+            // systemctl is-active: 3 means inactive; 4 means no such unit.
+            Some(3) | Some(4) => Ok(None),
+            _ => anyhow::bail!(
+                "systemctl could not query the TUN recovery service ({}): {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
         }
     }
 }
