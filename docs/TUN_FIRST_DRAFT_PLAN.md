@@ -201,3 +201,6 @@ Restart/resume now also recovers a persisted Prepared generation. This is the in
 ## Standalone recovery supervisor process entrypoint (2026-11-20)
 
 Added `proxyctl-tun-supervisor`, a separate executable that accepts only an absolute private runtime-directory argument, validates the manifest store, starts/connects to the persistent mutation broker, and resumes the persisted activation. It is independent of the main CLI process and can be run under an init/service manager. Actual service unit/backend installation and automatic startup integration for supported init systems remain outstanding; this binary alone does not satisfy the detached-supervision release gate.
+
+
+Added a fail-closed rollback branch for missing/stale/mismatched broker Prepared manifests in Xray activation. The exact generation is sent to broker recovery before returning the manifest validation error.

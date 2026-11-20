@@ -8,11 +8,10 @@ use anyhow::{Context, Result, ensure};
 use std::{path::Path, process::Child, time::Duration};
 
 use super::{
-    lifecycle_coordinator::LifecycleCoordinator,
     managed_activation::{self, ManagedActivation},
     mutation_helper_launcher::MutationHelper,
     process::ProcessIdentity,
-    lifecycle_coordinator::ActivationToken,
+    lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
 };
 
 /// Parameters for one generation-scoped activation.
@@ -117,15 +116,31 @@ impl<'a> ActivationOrchestrator<'a> {
             request.core_mark, request.core_mark_mask,
         ).context("could not prepare broker-owned Xray TUN resources")?;
 
-        let prepared = self.coordinator.load_current()?
-            .context("broker-prepared Xray activation manifest disappeared")?;
-        ensure!(prepared.token == token && prepared.snapshot.phase == super::recovery::SupervisorPhase::Prepared,
-            "Xray activation manifest is not the exact Prepared generation");
-        ensure!(prepared.snapshot.manifest.interface_name == request.interface_name
-            && prepared.snapshot.manifest.table_id == request.table_id
-            && prepared.snapshot.manifest.interface_index > 0,
-            "broker-prepared Xray manifest does not match the requested interface and routing table");
-        let expected_ifindex = prepared.snapshot.manifest.interface_index;
+        let prepared_result = (|| -> Result<u32> {
+            let prepared = self.coordinator.load_current()?
+                .context("broker-prepared Xray activation manifest disappeared")?;
+            ensure!(prepared.token == token && prepared.snapshot.phase == super::recovery::SupervisorPhase::Prepared,
+                "Xray activation manifest is not the exact Prepared generation");
+            ensure!(prepared.snapshot.manifest.interface_name == request.interface_name
+                && prepared.snapshot.manifest.table_id == request.table_id
+                && prepared.snapshot.manifest.interface_index > 0,
+                "broker-prepared Xray manifest does not match the requested interface and routing table");
+            Ok(prepared.snapshot.manifest.interface_index)
+        })();
+        let expected_ifindex = match prepared_result {
+            Ok(index) => index,
+            Err(error) => {
+                let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
+                return match recovery {
+                    Ok(response) if response.success =>
+                        Err(error).context("prepared manifest validation failed; exact-generation TUN resources were recovered"),
+                    Ok(response) =>
+                        Err(anyhow::anyhow!("prepared manifest validation failed ({error:#}); broker recovery failed: {}", response.message)),
+                    Err(recovery_error) =>
+                        Err(anyhow::anyhow!("prepared manifest validation failed ({error:#}); broker recovery request failed: {recovery_error:#}")),
+                };
+            }
+        };
 
         let (mut child, process) = match super::xray_launcher::spawn_xray_with_verified_attachment(
             self.helper, &request.activation_id, request.generation,

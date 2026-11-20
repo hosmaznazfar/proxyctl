@@ -1238,3 +1238,6 @@ Restarted supervision now treats a persisted Prepared manifest as an interrupted
 ## CLI-independent supervisor executable (2026-11-20)
 
 Added the `proxyctl-tun-supervisor` binary. A service manager can launch it with the absolute private Proxyctl runtime directory; it securely opens the manifest store, reconnects/starts the mutation broker, and resumes the exact persisted generation. It handles interrupted Prepared cleanup, CleanupPending retry, and Running process monitoring through the pidfd lifecycle. This is a supervisor process entrypoint, not yet a configured systemd/OpenRC/runit/s6/dinit/SysVinit service backend. No init service is installed or enabled by this repository change, and public activation remains gated until a supported manager backend is wired and exercised.
+
+
+The staged Xray activation now also requests exact-generation broker recovery if the Prepared manifest is missing, stale, or inconsistent with the requested interface/table after broker activation. A manifest-validation error therefore cannot strand the newly applied kernel resources without an explicit recovery attempt.
