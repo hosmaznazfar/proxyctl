@@ -92,3 +92,8 @@ No critical SOLID violation was found that justifies a broad rewrite before real
 ## TUN integration review checkpoint — 2026-11-20
 
 Draft orchestration has advanced with monitor-current and request-validation entrypoints, but the architecture remains intentionally gated. The public activation service is not wired to these APIs, the broker-retained exclusive TUN descriptor is not demonstrably attached by the native core adapters, live readiness/traffic evidence is not composed into start, and the recovery supervisor is not independent of CLI lifetime. The next implementation work must establish an adapter/device attachment contract before connecting activation. Do not treat façade additions or request tests as evidence of dataplane functionality.
+
+
+## Attachment contract review
+
+A structural descriptor-attachment evidence type and activation/process binding validator are now available in draft code. This creates an explicit seam for future adapter integration, but is caller-provided evidence and is not independent fd-transfer confirmation. The raw façade method is not yet removed or restricted, so public activation gating remains mandatory until adapters, service wiring, and evidence capture are implemented and reviewed.
