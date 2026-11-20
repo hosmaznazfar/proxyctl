@@ -98,8 +98,10 @@ impl LifecycleCoordinator {
     }
 
     /// Return the private directory containing this coordinator's durable manifest.
-    pub fn runtime_directory(&self) -> PathBuf {
-        self.store.path().parent().expect("manifest store always has a parent directory").to_path_buf()
+    pub fn runtime_directory(&self) -> Result<PathBuf> {
+        self.store.path().parent()
+            .map(std::path::Path::to_path_buf)
+            .context("TUN manifest path has no parent directory")
     }
 
     pub fn load_current(&self) -> Result<Option<CoordinatedSnapshot>> {

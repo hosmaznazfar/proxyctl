@@ -212,7 +212,7 @@ impl<'a> ActivationOrchestrator<'a> {
     fn start_recovery_supervisor(&self, activation: &ManagedActivation) -> Result<()> {
         ensure!(ServiceManager::detect() == ServiceManager::Systemd,
             "automatic TUN recovery currently requires systemd; no fallback service manager is enabled");
-        let runtime = self.coordinator.runtime_directory();
+        let runtime = self.coordinator.runtime_directory()?;
         let manifest = runtime.join("tun-manifest.json");
         let executable = std::env::current_exe()
             .context("cannot locate the Proxyctl executable for supervisor discovery")?
