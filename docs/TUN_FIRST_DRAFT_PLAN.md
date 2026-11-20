@@ -190,3 +190,6 @@ The Xray staged entrypoint now reads the kernel-assigned interface index from th
 
 
 Xray child rollback now signals the pinned process through its pidfd, waits at most two seconds for exit, and then reaps the child. Failure to terminate is surfaced instead of risking an unbounded wait. This path is used for attachment failure, readiness failure, and failure to commit Running.
+
+
+The Xray broker launcher now checks both paths with `symlink_metadata`: executable and config must be regular non-symlink files; the executable must have an execute bit; config ownership must match the current user and permissions must be private. Both paths are canonicalized before process launch.
