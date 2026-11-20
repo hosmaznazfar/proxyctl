@@ -396,3 +396,6 @@ The native-core attachment inventory is explicit: Xray documents Linux external 
 
 
 The TUN mutation broker can now export its retained descriptor to an authenticated same-user client for an exact live activation generation using SCM_RIGHTS. This is only the broker-to-client transport leg; core launch/adoption and independent readiness are still not integrated, so TUN activation remains disabled.
+
+
+Xray now has a Linux-only descriptor-inheritance helper for its documented `XRAY_TUN_FD` input. It preserves close-on-exec in the parent and exposes the descriptor only to the spawned Xray child. The helper is not yet connected to public activation or readiness checks; TUN remains disabled.

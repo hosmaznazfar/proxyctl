@@ -1183,3 +1183,8 @@ Do not infer descriptor adoption from a native TUN configuration. The adapter tr
 ## Broker-owned descriptor export (2026-11-20)
 
 The mutation broker now has a typed, generation-scoped descriptor-export request. It only exports a descriptor while the exact activation backend remains live in the broker, validates the authenticated same-UID client, and transfers one descriptor using the existing close-on-exec SCM_RIGHTS primitive. The client API returns an owned descriptor; stale generations, absent backends, and broker-restart cases fail closed. This is a transport/export capability, not a native-core launch integration: callers must still use a verified core adapter and must not claim attachment until core readiness is independently established.
+
+
+## Xray descriptor inheritance primitive (2026-11-20)
+
+Added a Linux Xray launch helper for the documented `XRAY_TUN_FD` contract. It duplicates the broker-exported descriptor above stdin/stdout/stderr with close-on-exec retained in the parent, sets the environment variable on the child command, and clears close-on-exec only in the forked child immediately before exec. The owner must remain alive through `Command::spawn`. This is a launch primitive, not yet wired into the unified activation orchestrator; it does not itself prove that Xray initialized the interface or that traffic flows. Keep public activation gated until process identity, interface identity, listener readiness, and bounded proxied traffic checks are composed.

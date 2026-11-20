@@ -148,3 +148,8 @@ The adapter trait now exposes a typed TUN attachment mode separate from native c
 ## Broker descriptor export (2026-11-20)
 
 Added a typed `attach_descriptor` broker request and client API. The persistent broker exports the retained descriptor only for a matching live activation ID/generation and sends it with SCM_RIGHTS after a positive bounded response frame. The receiver owns the transferred fd with close-on-exec set. This closes the missing broker-to-client descriptor-export leg, but does not yet wire an Xray child launcher, descriptor inheritance, native-core acknowledgement, or readiness. Public activation remains gated.
+
+
+## Xray Linux descriptor inheritance (2026-11-20)
+
+The Xray adapter now has a Linux-only `XrayTunDescriptor` helper that duplicates an exported TUN fd, keeps the parent's copy CLOEXEC, supplies `XRAY_TUN_FD`, and makes the fd inheritable only in the spawned child via a pre-exec `fcntl`. This follows Project X's documented Linux FD input. It is not yet called by the managed TUN orchestrator; no readiness or traffic proof is claimed.

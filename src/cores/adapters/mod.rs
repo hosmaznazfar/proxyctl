@@ -4,6 +4,8 @@ mod mihomo;
 mod shared;
 mod sing_box;
 mod xray;
+#[cfg(target_os = "linux")]
+pub mod xray_tun_fd;
 
 pub mod validation;
 
