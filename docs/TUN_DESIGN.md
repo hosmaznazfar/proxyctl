@@ -1167,3 +1167,6 @@ The Linux-only descriptor_transfer module sends and receives one descriptor over
 ### Generation-bound descriptor handoff protocol (2026-11-20)
 
 `src/tun/attachment_protocol.rs` defines a bounded versioned offer and acknowledgement carrying activation UUID, generation, interface name, and a 256-bit nonce. It provides SO_PEERCRED verification against the exact captured process identity and a receiver helper that sends a positive receipt only after a caller-supplied core-adoption callback succeeds. The callback must be implemented by a verified core-specific adapter; it must not simply retain or discard the descriptor and report success. The protocol is not yet connected to any supported native core. Keep activation disabled until a real adapter consumes the descriptor and the parent verifies the acknowledgement and interface identity.
+
+
+The composed send_attachment and receive_and_adopt APIs enforce this ordering: verify socket peer, validate offer, transfer descriptor, perform core-specific adoption, and only then acknowledge. They remain unused until a supported adapter exists. Never provide a no-op adoption callback.

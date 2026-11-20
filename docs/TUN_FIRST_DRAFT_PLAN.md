@@ -126,3 +126,10 @@ This is a transport primitive, not a completed native-core attachment. It does n
 Added a bounded attachment offer/acknowledgement protocol for the future core-side adapter. Offers bind a canonical activation UUID, positive generation, interface name, protocol version, and 256-bit kernel-random nonce. The socket peer can be checked with SO_PEERCRED against a captured ProcessIdentity. The receiver helper emits a positive acknowledgement only after its supplied core-adoption callback succeeds; the sender must match every offer field before accepting that acknowledgement.
 
 The protocol is not wired to a real sing-box/Xray/Mihomo descriptor consumer. The callback is an integration seam, not proof that a particular core supports FD adoption. SO_PEERCRED authenticates the connected peer identity but does not replace private socket-directory permissions or an executable allowlist. Public TUN activation remains gated.
+
+
+## Composed handoff entry points (2026-11-20)
+
+The attachment protocol now includes parent- and child-side composition helpers. The sender checks the connected peer against the exact expected child process, sends the generation/nonce offer, transfers the descriptor, and waits for a matching positive receipt. The receiver checks the expected parent process, validates the exact offer before receiving the descriptor, calls the core-adoption callback, and acknowledges only after callback success.
+
+These helpers do not select or implement a native core FD API. They are ready for a verified adapter to call, but no core is currently wired to them. Same-user SO_PEERCRED checks do not replace private socket path ownership, executable allowlisting, or adapter-level validation.

@@ -9,10 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{Read, Write},
-    os::{fd::{AsRawFd, OwnedFd}, unix::net::UnixStream},
-    path::PathBuf,
+    os::{fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd}, unix::net::UnixStream},
 };
-use super::process::ProcessIdentity;
+use super::{descriptor_transfer, process::ProcessIdentity};
 
 const VERSION: u8 = 1;
 const MAX_FRAME: usize = 4096;
@@ -122,6 +121,39 @@ pub fn receive_adoption_ack(stream: &mut UnixStream, offer: &AttachmentOffer) ->
         "attachment acknowledgement does not match the outstanding offer"
     );
     Ok(())
+}
+
+
+/// Send an offer, transfer the descriptor, and require a matching adoption receipt.
+/// The socket peer must be the exact expected child process.
+pub fn send_attachment(
+    stream: &mut UnixStream,
+    descriptor: BorrowedFd<'_>,
+    offer: &AttachmentOffer,
+    expected_child: &ProcessIdentity,
+) -> Result<()> {
+    verify_peer_process(stream, expected_child)?;
+    send_offer(stream, offer)?;
+    descriptor_transfer::send_descriptor(stream, descriptor)?;
+    receive_adoption_ack(stream, offer)
+}
+
+/// Receive an offer and descriptor, acknowledging only after real adapter adoption.
+pub fn receive_and_adopt<F>(
+    stream: &mut UnixStream,
+    expected_parent: &ProcessIdentity,
+    expected_offer: &AttachmentOffer,
+    adopt: F,
+) -> Result<()>
+where
+    F: FnOnce(&AttachmentOffer, OwnedFd) -> Result<()>,
+{
+    verify_peer_process(stream, expected_parent)?;
+    let received_offer = receive_offer(stream)?;
+    ensure!(&received_offer == expected_offer, "received attachment offer differs from expected activation");
+    let descriptor = descriptor_transfer::receive_descriptor(stream)?;
+    adopt(&received_offer, descriptor).context("core-specific descriptor adoption failed")?;
+    send_adoption_ack(stream, &received_offer)
 }
 
 /// Receiver-side helper. The callback must transfer ownership to the real core adapter;
