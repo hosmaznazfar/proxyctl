@@ -1,7 +1,8 @@
 //! Recovery-supervisor contract and explicit backend selection.
 //!
-//! No service is started here. A concrete backend is not activation-ready until it implements
-//! this contract and passes the same crash/recovery fault-injection suite.
+//! Backend selection is explicit. Implementing the service-control contract does not by itself
+//! make a backend activation-approved; host lifecycle and crash-recovery behavior still require
+//! runtime verification before the public TUN path can be enabled.
 
 use super::service_manager::ServiceManager;
 use anyhow::{Result, ensure};

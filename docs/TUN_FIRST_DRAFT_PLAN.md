@@ -204,3 +204,10 @@ Added `proxyctl-tun-supervisor`, a separate executable that accepts only an abso
 
 
 Added a fail-closed rollback branch for missing/stale/mismatched broker Prepared manifests in Xray activation. The exact generation is sent to broker recovery before returning the manifest validation error.
+
+
+## Systemd recovery integration continuation (2026-11-20)
+
+The Linux systemd user-service adapter now implements the RecoverySupervisor start/status/stop contract and is selected explicitly; OpenRC, runit, s6, dinit, and SysVinit remain unsupported. The staged Xray activation path starts the service after committing the exact generation to Running. Failure to start it terminates/reaps Xray and requests generation-scoped broker cleanup.
+
+This is a code-level integration only. The systemd service has not been exercised on a host, crash/reboot recovery has not been verified, and a narrow crash window remains between the Running manifest commit and the service-start request. The public CLI activation path remains gated. Sing-box and Mihomo attachment are unresolved; Xray's descriptor path and readiness callback are implemented but not runtime-verified.
