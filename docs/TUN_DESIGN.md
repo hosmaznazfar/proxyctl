@@ -1241,3 +1241,6 @@ Added the `proxyctl-tun-supervisor` binary. A service manager can launch it with
 
 
 The staged Xray activation now also requests exact-generation broker recovery if the Prepared manifest is missing, stale, or inconsistent with the requested interface/table after broker activation. A manifest-validation error therefore cannot strand the newly applied kernel resources without an explicit recovery attempt.
+
+
+The standalone supervisor binary now has an explicit non-Linux entrypoint that exits with a clear unsupported-platform message; Linux-only TUN modules are imported only on Linux, preserving cross-target compilation of the rest of the application.

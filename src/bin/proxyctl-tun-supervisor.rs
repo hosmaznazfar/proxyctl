@@ -3,9 +3,12 @@
 //! Intended to be launched by a supported service manager with the private Proxyctl runtime
 //! directory as its sole argument. It resumes a persisted Prepared/Running/CleanupPending
 //! generation and remains attached to the exact core pidfd until exit-triggered cleanup.
+#[cfg(target_os = "linux")]
 use anyhow::{Context, Result, ensure};
+#[cfg(target_os = "linux")]
 use std::{env, path::PathBuf, process};
 
+#[cfg(target_os = "linux")]
 use proxyctl::tun::{
     activation_orchestrator::ActivationOrchestrator,
     lifecycle_coordinator::LifecycleCoordinator,
@@ -13,6 +16,7 @@ use proxyctl::tun::{
     mutation_helper_launcher::MutationHelper,
 };
 
+#[cfg(target_os = "linux")]
 fn main() {
     if let Err(error) = run() {
         eprintln!("proxyctl-tun-supervisor: {error:#}");
@@ -20,6 +24,7 @@ fn main() {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn run() -> Result<()> {
     let mut args = env::args_os();
     let _program = args.next();
@@ -39,4 +44,10 @@ fn run() -> Result<()> {
     supervisor.resume()
         .context("TUN recovery supervisor could not resume the persisted activation")?;
     Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    eprintln!("proxyctl-tun-supervisor is supported only on Linux");
+    std::process::exit(1);
 }
