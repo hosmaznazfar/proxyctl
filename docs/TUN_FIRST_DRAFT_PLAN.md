@@ -153,3 +153,8 @@ Added a typed `attach_descriptor` broker request and client API. The persistent 
 ## Xray Linux descriptor inheritance (2026-11-20)
 
 The Xray adapter now has a Linux-only `XrayTunDescriptor` helper that duplicates an exported TUN fd, keeps the parent's copy CLOEXEC, supplies `XRAY_TUN_FD`, and makes the fd inheritable only in the spawned child via a pre-exec `fcntl`. This follows Project X's documented Linux FD input. It is not yet called by the managed TUN orchestrator; no readiness or traffic proof is claimed.
+
+
+## Xray broker-to-child launch primitive (2026-11-20)
+
+Added `tun::xray_launcher::spawn_xray_from_broker`. It obtains the exact generation's live descriptor through the typed broker export, prepares the documented `XRAY_TUN_FD` inheritance, launches Xray with the existing `run -c` command shape, and returns a captured process identity. It fails closed if the descriptor is unavailable or process identity capture fails (killing/reaping the child). It is not yet composed with route transaction preparation, lifecycle manifest adoption, readiness, or detached recovery. Public activation remains disabled.

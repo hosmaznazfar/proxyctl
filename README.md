@@ -399,3 +399,6 @@ The TUN mutation broker can now export its retained descriptor to an authenticat
 
 
 Xray now has a Linux-only descriptor-inheritance helper for its documented `XRAY_TUN_FD` input. It preserves close-on-exec in the parent and exposes the descriptor only to the spawned Xray child. The helper is not yet connected to public activation or readiness checks; TUN remains disabled.
+
+
+The Xray TUN path now has a broker-to-child launch primitive: it exports the descriptor for an exact activation generation and starts Xray with `XRAY_TUN_FD`, returning a pinned process identity. It does not yet compose activation, readiness, and independent recovery, so it does not enable TUN mode.

@@ -1188,3 +1188,8 @@ The mutation broker now has a typed, generation-scoped descriptor-export request
 ## Xray descriptor inheritance primitive (2026-11-20)
 
 Added a Linux Xray launch helper for the documented `XRAY_TUN_FD` contract. It duplicates the broker-exported descriptor above stdin/stdout/stderr with close-on-exec retained in the parent, sets the environment variable on the child command, and clears close-on-exec only in the forked child immediately before exec. The owner must remain alive through `Command::spawn`. This is a launch primitive, not yet wired into the unified activation orchestrator; it does not itself prove that Xray initialized the interface or that traffic flows. Keep public activation gated until process identity, interface identity, listener readiness, and bounded proxied traffic checks are composed.
+
+
+## Xray broker-to-process launch composition (2026-11-20)
+
+Added a Linux Xray launcher that requests the exact activation generation's descriptor from the mutation broker, duplicates it through the Xray FD helper, and spawns the managed Xray executable with `XRAY_TUN_FD`. It captures the child ProcessIdentity immediately and kills/reaps the child if identity capture fails. The helper requires an existing absolute executable and config path. It does not apply broker activation itself, commit lifecycle state, wait for the listener/interface, or verify proxied traffic; those remain mandatory orchestration steps before activation can be considered Running.
