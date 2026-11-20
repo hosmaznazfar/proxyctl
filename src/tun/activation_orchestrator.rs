@@ -127,6 +127,12 @@ mod request_tests {
     fn rejects_mark_outside_mask() { let mut r=valid(); r.core_mark=0x100; assert!(r.validate().is_err()); }
     #[test]
     fn rejects_invalid_interface_length() { let mut r=valid(); r.interface_name="1234567890123456".into(); assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_invalid_interface_characters() { let mut r=valid(); r.interface_name="tun/unsafe".into(); assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_mask_outside_native_range() { let mut r=valid(); r.core_mark_mask=u32::MAX; assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_priority_below_allocation_floor() { let mut r=valid(); r.bypass_priority=1; assert!(r.validate().is_err()); }
 }
 
 
