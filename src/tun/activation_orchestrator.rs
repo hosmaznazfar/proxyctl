@@ -5,12 +5,14 @@
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
+use std::{path::Path, process::Child, time::Duration};
 
 use super::{
     lifecycle_coordinator::LifecycleCoordinator,
     managed_activation::{self, ManagedActivation},
     mutation_helper_launcher::MutationHelper,
     process::ProcessIdentity,
+    lifecycle_coordinator::ActivationToken,
 };
 
 /// Parameters for one generation-scoped activation.
@@ -47,6 +49,11 @@ impl ActivationRequest {
 
 /// Unified orchestration façade: broker policy setup, manifest adoption, and core binding.
 /// The core process must already have been launched using matching configuration.
+pub struct XrayActivation {
+    pub child: Child,
+    pub managed: ManagedActivation,
+}
+
 pub struct ActivationOrchestrator<'a> {
     helper: &'a MutationHelper,
     coordinator: &'a LifecycleCoordinator,
@@ -78,6 +85,83 @@ impl<'a> ActivationOrchestrator<'a> {
             request.bypass_priority, request.proxy_priority,
             request.core_mark, request.core_mark_mask, process,
         ).context("unified TUN activation failed")
+    }
+
+    /// Prepare broker-owned TUN resources, launch Xray with the retained descriptor, and
+    /// require caller-supplied full readiness verification before committing Running.
+    ///
+    /// The readiness callback is mandatory and executes while the manifest is still Prepared.
+    /// Any launch, attachment, or readiness failure terminates the child (when created) and
+    /// requests exact-generation broker recovery. This API does not provide a default/no-op
+    /// readiness implementation.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate_xray_with_readiness<F>(
+        &self,
+        request: ActivationRequest,
+        executable: &Path,
+        config: &Path,
+        expected_ifindex: u32,
+        attachment_timeout: Duration,
+        readiness: F,
+    ) -> Result<XrayActivation>
+    where
+        F: FnOnce(&ProcessIdentity, &ActivationToken) -> Result<()>,
+    {
+        request.validate().context("invalid Xray TUN activation request")?;
+        ensure!(self.coordinator.load_current()?.is_none(),
+            "an activation manifest already exists; recover it before creating another");
+        ensure!(expected_ifindex > 0, "expected Xray TUN interface index must be positive");
+
+        let (token, _) = managed_activation::prepare_managed_activation(
+            self.helper, self.coordinator,
+            request.activation_id.clone(), request.generation, request.interface_name.clone(),
+            request.owner_uid, request.owner_gid, request.table_id,
+            request.bypass_priority, request.proxy_priority,
+            request.core_mark, request.core_mark_mask,
+        ).context("could not prepare broker-owned Xray TUN resources")?;
+
+        let (mut child, process) = match super::xray_launcher::spawn_xray_with_verified_attachment(
+            self.helper, &request.activation_id, request.generation,
+            executable, config, &request.interface_name, expected_ifindex, attachment_timeout,
+        ) {
+            Ok(started) => started,
+            Err(error) => {
+                let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
+                return match recovery {
+                    Ok(response) if response.success => Err(error).context("Xray launch/attachment failed; exact-generation TUN resources were recovered"),
+                    Ok(response) => Err(anyhow::anyhow!("Xray launch/attachment failed ({error:#}); broker recovery failed: {}", response.message)),
+                    Err(recovery_error) => Err(anyhow::anyhow!("Xray launch/attachment failed ({error:#}); broker recovery request failed: {recovery_error:#}")),
+                };
+            }
+        };
+
+        if let Err(error) = readiness(&process, &token) {
+            let _ = child.kill();
+            let reap = child.wait();
+            let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
+            return match (reap, recovery) {
+                (Ok(_), Ok(response)) if response.success =>
+                    Err(error).context("Xray readiness failed; child was reaped and exact-generation TUN resources were recovered"),
+                (Err(reap_error), Ok(response)) if response.success =>
+                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child reaping failed: {reap_error}; TUN resources were recovered")),
+                (reap_result, Ok(response)) =>
+                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child reaping: {}; broker recovery failed: {}", reap_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()), response.message)),
+                (reap_result, Err(recovery_error)) =>
+                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child reaping: {}; broker recovery request failed: {recovery_error:#}", reap_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()))),
+            };
+        }
+
+        let managed = match managed_activation::commit_managed_process(
+            self.helper, self.coordinator, &token, process,
+        ) {
+            Ok(managed) => managed,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("Xray process could not be committed after readiness; child was terminated");
+            }
+        };
+        Ok(XrayActivation { child, managed })
     }
 
     /// Monitor the persisted Running activation and request exact-generation cleanup on exit.

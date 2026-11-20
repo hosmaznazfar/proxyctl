@@ -1214,3 +1214,8 @@ A composed Xray startup primitive now combines broker descriptor export, child l
 ## Staged lifecycle commit (2026-11-20)
 
 Split managed activation into two explicit stages: `prepare_managed_activation` commits the broker-owned kernel transaction and adopts the exact Prepared manifest; `commit_managed_process` binds a process and transitions to Running. This permits a core-specific launcher and attachment/readiness verifier to run between Prepared adoption and Running commit. The compatibility wrapper remains for existing callers, but new TUN integration must use the staged path and invoke exact-generation broker recovery if launch or readiness fails.
+
+
+## Staged Xray activation entrypoint (2026-11-20)
+
+Added `ActivationOrchestrator::activate_xray_with_readiness`. It applies the broker transaction and adopts Prepared first, launches Xray through the broker descriptor path, waits for kernel-confirmed attachment, then invokes a mandatory caller-provided readiness callback while the manifest is still Prepared. Only after that callback succeeds does it bind the pinned process and commit Running. Launch/attachment failures and readiness failures request exact-generation broker recovery; readiness failure also kills and reaps the child. Commit failure terminates the child. There is no default readiness callback, and the public CLI TUN gate remains unchanged.
