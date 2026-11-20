@@ -6,7 +6,7 @@
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]
-use std::{env, path::PathBuf, process};
+use std::{env, fs, path::PathBuf, process};
 
 #[cfg(target_os = "linux")]
 use proxyctl::tun::{
@@ -42,6 +42,10 @@ fn run() -> Result<()> {
         generation,
     )?;
     ensure!(runtime.is_absolute(), "supervisor runtime directory must be an absolute path");
+    ensure!(
+        fs::canonicalize(&runtime).context("cannot canonicalize supervisor runtime directory")? == runtime,
+        "supervisor runtime directory must not contain symlinked or non-canonical path components"
+    );
 
     // ManifestStore validates ownership, directory permissions, and symlink boundaries.
     let store = ManifestStore::open(&runtime)
