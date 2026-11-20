@@ -41,6 +41,18 @@ impl TunOutboundMark {
     }
 }
 
+/// How a core obtains its TUN device. This describes the native core contract only; it does
+/// not imply that Proxyctl currently launches the core with a transferred descriptor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TunAttachmentMode {
+    /// The core accepts an externally supplied descriptor through a documented environment key.
+    ExternalDescriptorEnvironment { variable: &'static str },
+    /// The core creates or opens the device itself from its native configuration.
+    NativeDeviceCreation,
+    /// No supported TUN attachment contract is available in this adapter.
+    Unsupported,
+}
+
 /// A core adapter must either represent every retained connection option or explain why it
 /// cannot. It must never emit a partial configuration after silently dropping an option.
 pub trait CoreAdapter {
@@ -60,6 +72,11 @@ pub trait CoreAdapter {
         node: &ProxyNode,
         listen_port: u16,
     ) -> anyhow::Result<GeneratedConfig>;
+
+    /// Describe how the native core obtains its TUN device.
+    fn tun_attachment_mode(&self) -> TunAttachmentMode {
+        TunAttachmentMode::Unsupported
+    }
 
     /// Generate a marked TUN config. The mark is mandatory so an unmarked TUN config
     /// cannot accidentally be selected by a future activation path. Unsupported adapters fail closed.

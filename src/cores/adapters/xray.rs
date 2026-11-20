@@ -272,6 +272,10 @@ impl CoreAdapter for XrayAdapter {
         json_config(document)
     }
 
+    fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
+        super::TunAttachmentMode::ExternalDescriptorEnvironment { variable: "XRAY_TUN_FD" }
+    }
+
     fn generate_tun_activation_config(
         &self,
         node: &ProxyNode,
@@ -399,6 +403,10 @@ mod config_contract_tests {
 
     #[test]
     fn xray_activation_benchmark_and_tun_options_stay_core_native() {
+        assert_eq!(
+            super::XrayAdapter.tun_attachment_mode(),
+            super::TunAttachmentMode::ExternalDescriptorEnvironment { variable: "XRAY_TUN_FD" }
+        );
         const {
             assert!(!CAPABILITIES.hysteria2 && CAPABILITIES.reality_vmess);
             assert!(CAPABILITIES.reality_optional_fields && CAPABILITIES.xhttp);

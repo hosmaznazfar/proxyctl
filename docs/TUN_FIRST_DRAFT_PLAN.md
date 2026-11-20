@@ -138,3 +138,8 @@ These helpers do not select or implement a native core FD API. They are ready fo
 ## Bounded handoff I/O (2026-11-20)
 
 The composed parent/child handoff helpers now set five-second read and write timeouts before peer verification and protocol exchange. A stalled or non-responsive adapter therefore cannot block the activation caller indefinitely. The timeout is a transport bound, not a readiness guarantee; the public activation path remains gated.
+
+
+## Core attachment capability inventory (2026-11-20)
+
+The adapter trait now exposes a typed TUN attachment mode separate from native config generation. Xray declares its documented Linux `XRAY_TUN_FD` environment-variable path for an externally supplied descriptor. sing-box is explicitly classified as native device creation in the current standalone adapter; Mihomo remains unsupported for Proxyctl's marked TUN activation contract. This is capability metadata only: no broker descriptor export, child-process FD inheritance, Xray environment wiring, or end-to-end readiness/acknowledgement integration has been completed. The public TUN activation gate remains in place.

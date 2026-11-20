@@ -55,3 +55,14 @@ cargo build --release --locked
 ```
 
 These checks do not start a real proxy core or change system networking.
+
+
+## Native TUN attachment contracts
+
+The adapter contract now reports the native device-acquisition mode independently of config generation:
+
+- **Xray:** Linux supports an externally supplied TUN descriptor through `XRAY_TUN_FD`. This is documented by Project X. Proxyctl has not yet wired descriptor export from the privileged broker, inheritance into the managed Xray process, or readiness confirmation; this capability declaration is not end-to-end support.
+- **sing-box:** the current standalone configuration opens/creates a named TUN device. No verified external-FD injection contract is exposed by the current adapter, so it is classified as native device creation and cannot consume the broker-retained descriptor through the present path.
+- **Mihomo:** remains unsupported for Proxyctl's marked TUN activation contract.
+
+Do not treat `NativeDeviceCreation` as compatible with a broker-owned exclusive TUN descriptor. Do not enable activation based on this metadata alone. The adapter metadata exists so orchestration can reject mismatched ownership models rather than assuming every native TUN config can adopt an externally created device.

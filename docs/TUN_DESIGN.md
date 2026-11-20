@@ -1173,3 +1173,8 @@ The composed send_attachment and receive_and_adopt APIs enforce this ordering: v
 
 
 The composed attachment exchange applies a fixed five-second socket read/write timeout. This bounds stalled peers but does not replace a supervisor deadline or a core-specific readiness probe.
+
+
+## Native-core attachment capability inventory
+
+Do not infer descriptor adoption from a native TUN configuration. The adapter trait reports one of three acquisition modes: externally supplied descriptor via a documented environment key, native device creation, or unsupported. Xray's Linux `XRAY_TUN_FD` path is documented upstream; the current Proxyctl launch path does not yet pass the broker-retained descriptor into Xray. The current sing-box adapter requests native named-device creation and therefore does not match the broker's exclusive descriptor owner. Mihomo remains unsupported in this marked TUN design. These declarations are used to make the integration gap explicit, not to authorize activation.

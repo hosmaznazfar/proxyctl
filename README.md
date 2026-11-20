@@ -390,3 +390,6 @@ Quick accepts a useful partial download after one attempt. Accurate retries an i
 
 
 **TUN handoff status:** A generation-bound, nonce-bearing descriptor offer/acknowledgement protocol is available as an integration seam. It verifies Unix-socket peer credentials against a process identity and acknowledges only after a core-adoption callback succeeds. No native-core adapter currently consumes the descriptor; TUN activation remains gated.
+
+
+The native-core attachment inventory is explicit: Xray documents Linux external TUN FD input through `XRAY_TUN_FD`, while the current sing-box adapter requests native named-device creation and Mihomo remains unsupported for the marked TUN contract. Proxyctl has not yet connected broker descriptor export and process launch to Xray's environment-variable path, so this does not change the TUN activation gate.
