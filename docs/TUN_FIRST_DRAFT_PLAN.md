@@ -158,3 +158,8 @@ The Xray adapter now has a Linux-only `XrayTunDescriptor` helper that duplicates
 ## Xray broker-to-child launch primitive (2026-11-20)
 
 Added `tun::xray_launcher::spawn_xray_from_broker`. It obtains the exact generation's live descriptor through the typed broker export, prepares the documented `XRAY_TUN_FD` inheritance, launches Xray with the existing `run -c` command shape, and returns a captured process identity. It fails closed if the descriptor is unavailable or process identity capture fails (killing/reaping the child). It is not yet composed with route transaction preparation, lifecycle manifest adoption, readiness, or detached recovery. Public activation remains disabled.
+
+
+## Xray kernel-backed attachment check (2026-11-20)
+
+Added `verify_xray_tun_attachment`: it checks the expected kernel TUN interface and ifindex, pins the exact Xray process, and requires an `iff:` record for that interface in one of the process's fdinfo entries, followed by a second process-identity/pidfd check. This can verify that Xray actually holds the broker-created TUN device, not merely that a same-named interface exists. It is not yet wired into activation orchestration or combined with the bounded proxied-traffic check.

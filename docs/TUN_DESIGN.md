@@ -1193,3 +1193,8 @@ Added a Linux Xray launch helper for the documented `XRAY_TUN_FD` contract. It d
 ## Xray broker-to-process launch composition (2026-11-20)
 
 Added a Linux Xray launcher that requests the exact activation generation's descriptor from the mutation broker, duplicates it through the Xray FD helper, and spawns the managed Xray executable with `XRAY_TUN_FD`. It captures the child ProcessIdentity immediately and kills/reaps the child if identity capture fails. The helper requires an existing absolute executable and config path. It does not apply broker activation itself, commit lifecycle state, wait for the listener/interface, or verify proxied traffic; those remain mandatory orchestration steps before activation can be considered Running.
+
+
+## Xray kernel attachment verification (2026-11-20)
+
+Added a Linux verifier that pins the exact Xray process identity, checks the expected interface's kernel TUN marker and ifindex, then scans that process's `/proc/PID/fdinfo` records for an exact `iff:` interface-name match. It verifies the process identity and pidfd state again after inspection. This is stronger than checking that the interface merely exists: it establishes that Xray holds a descriptor attached to the expected TUN interface. It still does not prove that packets traverse the proxy dataplane; bounded proxied-traffic verification remains required.
