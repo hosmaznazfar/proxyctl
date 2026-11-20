@@ -57,8 +57,8 @@ fn run() -> Result<()> {
         "supervisor service identity does not match the persisted activation generation"
     );
     let supervisor = ActivationOrchestrator::new(&helper, &coordinator);
-    supervisor.resume()
-        .context("TUN recovery supervisor could not resume the persisted activation")?;
+    supervisor.resume_generation(&expected.activation_id, expected.generation)
+        .context("TUN recovery supervisor could not resume the requested activation generation")?;
     Ok(())
 }
 
