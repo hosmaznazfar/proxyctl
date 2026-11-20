@@ -75,4 +75,17 @@ mod tests {
         assert!(flags >= 0);
         assert_ne!(flags & libc::FD_CLOEXEC, 0);
     }
+
+    #[test]
+    fn configures_only_the_xray_fd_environment_contract() {
+        let source = File::open("/dev/null").unwrap();
+        let duplicate = XrayTunDescriptor::duplicate(source.as_fd()).unwrap();
+        let mut command = Command::new("xray");
+        duplicate.configure_command(&mut command).unwrap();
+        let configured = command.get_envs().find(|(key, _)| *key == "XRAY_TUN_FD")
+            .and_then(|(_, value)| value)
+            .and_then(|value| value.to_str())
+            .unwrap();
+        assert_eq!(configured, duplicate.as_raw_fd().to_string());
+    }
 }
