@@ -133,9 +133,18 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
         if self.active_state(identity)?.is_some() { return Ok(()); }
         let unit_arg = format!("--unit={}", Self::unit(identity));
         let output = Command::new(&self.systemd_run)
-            .args(["--user", "--quiet", "--no-block", "--collect", &unit_arg,
-                "--property=Restart=on-failure", "--property=RestartSec=1s", "--property=StartLimitIntervalSec=0", "--"])
-            .arg(&self.executable).arg(&self.runtime).output()
+            .arg("--user")
+            .arg("--quiet")
+            .arg("--no-block")
+            .arg("--collect")
+            .arg(&unit_arg)
+            .arg("--property=Restart=on-failure")
+            .arg("--property=RestartSec=1s")
+            .arg("--property=StartLimitIntervalSec=0")
+            .arg("--")
+            .arg(&self.executable)
+            .arg(&self.runtime)
+            .output()
             .context("could not start the TUN recovery supervisor user service")?;
         if !output.status.success() {
             // A concurrent start may have won after the initial state query. Accept only
