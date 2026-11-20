@@ -9,3 +9,6 @@ These are regression fixes to offline validation and restart classification only
 - [x] Add draft unified TUN orchestrator monitoring entrypoint, strict activation/recovery UUID checks, interface validation, allocation-floor validation, and focused request validation tests. Document the integration state in README and TUN design/plan documents.
 - [ ] Resolve core attachment to the broker-owned exclusive TUN descriptor; interface-name configuration alone is not evidence of attachment.
 - [ ] Connect public activation, launch, readiness/traffic checks, stop, and CLI-independent supervisor; retain fail-closed activation gating until this is verified.
+
+- [x] Introduce a Linux attachment-evidence contract and binding validator for activation identity/generation, interface name, process start identity, mechanism, and descriptor-transfer confirmation (structural contract only).
+- [ ] Implement real fd transfer to a supported core adapter and capture independently verifiable attachment evidence; structural caller-supplied evidence is insufficient.
