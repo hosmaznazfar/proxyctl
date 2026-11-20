@@ -11,6 +11,8 @@ use std::{
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::PathBuf,
     process::Command,
+    thread,
+    time::{Duration, Instant},
 };
 
 #[derive(Debug, Clone)]
@@ -110,13 +112,23 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
         if !output.status.success() {
             // A concurrent start may have won after the initial state query. Accept only
             // when systemd now reports this exact generation's unit as active/activating.
+            if self.active_state(identity)?.is_none() {
+                anyhow::bail!("systemd-run rejected the TUN recovery service: {}",
+                    String::from_utf8_lossy(&output.stderr).trim());
+            }
+        }
+
+        // --no-block confirms only that the manager accepted the request. Wait briefly
+        // until the exact transient unit is visible as active/activating before returning.
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
             if self.active_state(identity)?.is_some() {
                 return Ok(());
             }
-            anyhow::bail!("systemd-run rejected the TUN recovery service: {}",
-                String::from_utf8_lossy(&output.stderr).trim());
+            ensure!(Instant::now() < deadline,
+                "systemd accepted the recovery service but it did not become active before the startup deadline");
+            thread::sleep(Duration::from_millis(50));
         }
-        Ok(())
     }
 
     fn is_alive(&mut self, identity: &SupervisorIdentity) -> Result<bool> {
@@ -125,6 +137,15 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
 
     fn stop(&mut self, identity: &SupervisorIdentity) -> Result<()> {
         self.validate_identity(identity)?;
+        let store = super::manifest_store::ManifestStore::open(self.runtime.clone())?;
+        if let Some(snapshot) = store.load()? {
+            ensure!(
+                snapshot.manifest.activation_id == identity.activation_id
+                    && snapshot.generation == identity.generation
+                    && snapshot.phase == super::recovery::SupervisorPhase::Cleaned,
+                "refusing to stop the recovery supervisor while its activation is not durably cleaned"
+            );
+        }
         if self.active_state(identity)?.is_none() { return Ok(()); }
         let output = Command::new(&self.systemctl).args(["--user", "stop"]).arg(Self::unit(identity))
             .output().context("could not stop the TUN recovery supervisor user service")?;
