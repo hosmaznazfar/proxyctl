@@ -5,7 +5,7 @@
 //! failure after successful kernel activation requests generation-matched broker recovery.
 #![cfg(target_os = "linux")]
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
 use super::{
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
@@ -221,4 +221,52 @@ pub fn resume_managed_supervision(
         activation_message: "resumed existing managed activation".into(),
     };
     monitor_managed_core(helper, coordinator, &activation, &process)
+}
+
+
+/// Wait for the exact Prepared generation to either commit Running or enter cleanup.
+///
+/// The recovery service is launched before the core. Prepared is therefore a legitimate
+/// transient state, not an instruction to tear down immediately. If the CLI disappears before
+/// committing Running, the bounded startup deadline converts the orphaned Prepared generation
+/// into exact-generation broker recovery.
+pub fn resume_managed_supervision_after_startup(
+    helper: &MutationHelper,
+    coordinator: &LifecycleCoordinator,
+    activation_id: &str,
+    generation: u64,
+    startup_timeout: std::time::Duration,
+) -> Result<()> {
+    ensure!(!activation_id.is_empty() && generation > 0, "invalid supervisor activation identity");
+    ensure!(
+        !startup_timeout.is_zero() && startup_timeout <= std::time::Duration::from_secs(60),
+        "supervisor startup wait must be between 1ms and 60s"
+    );
+    let deadline = std::time::Instant::now() + startup_timeout;
+    loop {
+        let Some(current) = coordinator.load_current()? else {
+            // Successful broker cleanup removes the durable manifest.
+            return Ok(());
+        };
+        ensure!(
+            current.token.activation_id() == activation_id
+                && current.token.generation() == generation,
+            "supervisor observed a different activation generation; refusing cross-generation recovery"
+        );
+        match current.snapshot.phase {
+            SupervisorPhase::Prepared if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            SupervisorPhase::Prepared | SupervisorPhase::CleanupPending => {
+                let response = helper.recover(activation_id.to_owned(), generation)?;
+                ensure!(response.success, "orphaned activation recovery failed: {}", response.message);
+                return Ok(());
+            }
+            SupervisorPhase::Running => {
+                resume_managed_supervision(helper, coordinator)?;
+                return Ok(());
+            }
+            SupervisorPhase::Cleaned => return Ok(()),
+        }
+    }
 }
