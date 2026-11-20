@@ -206,11 +206,25 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             );
         }
         if self.active_state(identity)?.is_none() { return Ok(()); }
-        let output = Command::new(&self.systemctl).args(["--user", "stop"]).arg(Self::unit(identity))
-            .output().context("could not stop the TUN recovery supervisor user service")?;
+        let output = Command::new(&self.systemctl)
+            .args(["--user", "stop", "--no-block"])
+            .arg(Self::unit(identity))
+            .output()
+            .context("could not request stop of the TUN recovery supervisor user service")?;
         ensure!(output.status.success(), "systemctl could not stop the TUN recovery service: {}",
             String::from_utf8_lossy(&output.stderr).trim());
-        Ok(())
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if self.active_state(identity)?.is_none() {
+                return Ok(());
+            }
+            ensure!(
+                Instant::now() < deadline,
+                "TUN recovery supervisor did not stop before the bounded shutdown deadline"
+            );
+            thread::sleep(Duration::from_millis(50));
+        }
     }
 }
 
