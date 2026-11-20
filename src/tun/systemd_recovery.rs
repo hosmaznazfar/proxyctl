@@ -115,3 +115,22 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
         Ok(())
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unit_name_contains_the_complete_activation_uuid() {
+        let identity = SupervisorIdentity::for_activation(
+            "12345678-1234-4234-8234-123456789abc",
+            "/run/user/1000/proxyctl/tun-manifest.json",
+            4,
+        ).unwrap();
+        assert_eq!(
+            SystemdRecoverySupervisor::unit(&identity),
+            "proxyctl-tun-12345678-1234-4234-8234-123456789abc.service"
+        );
+    }
+}

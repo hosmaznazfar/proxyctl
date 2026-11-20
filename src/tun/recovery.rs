@@ -171,6 +171,25 @@ mod tests {
     }
 
     #[test]
+    fn activation_identity_uses_full_uuid_and_rejects_zero_generation() {
+        let identity = SupervisorIdentity::for_activation(
+            "12345678-1234-4234-8234-123456789abc",
+            "/run/user/1000/proxyctl/tun-manifest.json",
+            9,
+        ).unwrap();
+        assert_eq!(
+            identity.service_name,
+            "proxyctl-tun-12345678-1234-4234-8234-123456789abc"
+        );
+        assert_eq!(identity.generation, 9);
+        assert!(SupervisorIdentity::for_activation(
+            "12345678-1234-4234-8234-123456789abc",
+            "/run/user/1000/proxyctl/tun-manifest.json",
+            0,
+        ).is_err());
+    }
+
+    #[test]
     fn supervisor_service_identity_is_bound_to_activation_id() {
         let identity = SupervisorIdentity {
             activation_id: "12345678-1234-4234-8234-123456789abc".into(),
