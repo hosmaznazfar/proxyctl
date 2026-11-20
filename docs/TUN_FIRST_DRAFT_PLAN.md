@@ -68,3 +68,12 @@ The typed mutation helper and broker client are implemented, including persisten
 **Additional hard blocker confirmed by source inspection:** both native TUN config adapters currently emit a native TUN inbound naming `tun-proxyctl`. The broker separately creates and retains an exclusive TUN descriptor. No verified adapter contract or handoff currently proves that either core attaches to that broker-owned device instead of attempting to create its own. Interface name, process identity, and interface presence alone do not prove attachment or traffic flow. The isolated systemd launcher is also a competing launch path, not the broker lifecycle orchestrator.
 
 Accordingly, work must prioritize a single launch contract and device attachment proof, then connect generation-scoped broker activation, process binding, readiness/traffic evidence, stop/recovery, and a supervisor independent of the CLI. No public activation or automatic network mutation is enabled in this checkpoint. No tests/builds were run here; the user runs local verification.
+
+
+## Draft orchestrator checkpoint (2026-11-20)
+
+A draft unified orchestrator façade is now present in `src/tun/activation_orchestrator.rs` and exported from `src/tun/mod.rs`. It composes the existing broker activation, lifecycle adoption/process binding, generation-specific recovery, and supervision-resume APIs. The façade accepts an already-launched process identity and does not itself launch or configure the core.
+
+Routing policy transaction integration is composed through the existing `MutationHelper::activate` request, whose broker path creates the interface, binds routes to the kernel-assigned ifindex, installs route/rule policy, and commits its ownership manifest. The façade provides recover/resume entry points for generation-bound cleanup and supervision.
+
+This remains a draft integration layer, not a complete end-to-end activation pipeline: core launch/configuration ordering and native TUN attachment behavior are not reconciled here, nor are traffic-flow readiness checks connected. No tests or local builds were run.
