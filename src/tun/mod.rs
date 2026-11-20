@@ -21,6 +21,8 @@ pub mod linux_journal_backend;
 pub mod managed_activation;
 #[cfg(target_os = "linux")]
 pub mod activation_orchestrator;
+#[cfg(target_os = "linux")]
+pub mod attachment_contract;
 pub(crate) mod manifest_fs;
 pub mod manifest_store;
 #[cfg(target_os = "linux")]
