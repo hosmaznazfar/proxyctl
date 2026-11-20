@@ -1219,3 +1219,6 @@ Split managed activation into two explicit stages: `prepare_managed_activation` 
 ## Staged Xray activation entrypoint (2026-11-20)
 
 Added `ActivationOrchestrator::activate_xray_with_readiness`. It applies the broker transaction and adopts Prepared first, launches Xray through the broker descriptor path, waits for kernel-confirmed attachment, then invokes a mandatory caller-provided readiness callback while the manifest is still Prepared. Only after that callback succeeds does it bind the pinned process and commit Running. Launch/attachment failures and readiness failures request exact-generation broker recovery; readiness failure also kills and reaps the child. Commit failure terminates the child. There is no default readiness callback, and the public CLI TUN gate remains unchanged.
+
+
+The staged Xray orchestrator now obtains the expected interface index from the broker-committed Prepared manifest itself, and verifies that manifest token, phase, interface name, table, and positive kernel-assigned index match the request. Callers no longer provide or guess an interface index before kernel creation.

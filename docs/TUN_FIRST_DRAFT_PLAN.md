@@ -184,3 +184,6 @@ Refactored managed activation into `prepare_managed_activation` and `commit_mana
 ## Xray staged activation orchestration (2026-11-20)
 
 Added `activate_xray_with_readiness` to the unified orchestrator. Ordering is now broker prepare/manifest adoption → Xray launch with exported descriptor → kernel fdinfo attachment wait → mandatory readiness callback → process binding → Running transition. Failure paths request exact-generation recovery; readiness failure kills/reaps the spawned child. The callback is required at the type level, so this API cannot silently skip readiness. Public CLI TUN activation remains gated pending independent recovery supervision and release review.
+
+
+The Xray staged entrypoint now reads the kernel-assigned interface index from the exact broker-adopted Prepared manifest and validates its token, phase, interface name, and routing table. This removes a caller-supplied ifindex guess from the activation boundary.

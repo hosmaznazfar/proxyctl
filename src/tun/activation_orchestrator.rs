@@ -100,7 +100,6 @@ impl<'a> ActivationOrchestrator<'a> {
         request: ActivationRequest,
         executable: &Path,
         config: &Path,
-        expected_ifindex: u32,
         attachment_timeout: Duration,
         readiness: F,
     ) -> Result<XrayActivation>
@@ -110,8 +109,6 @@ impl<'a> ActivationOrchestrator<'a> {
         request.validate().context("invalid Xray TUN activation request")?;
         ensure!(self.coordinator.load_current()?.is_none(),
             "an activation manifest already exists; recover it before creating another");
-        ensure!(expected_ifindex > 0, "expected Xray TUN interface index must be positive");
-
         let (token, _) = managed_activation::prepare_managed_activation(
             self.helper, self.coordinator,
             request.activation_id.clone(), request.generation, request.interface_name.clone(),
@@ -119,6 +116,16 @@ impl<'a> ActivationOrchestrator<'a> {
             request.bypass_priority, request.proxy_priority,
             request.core_mark, request.core_mark_mask,
         ).context("could not prepare broker-owned Xray TUN resources")?;
+
+        let prepared = self.coordinator.load_current()?
+            .context("broker-prepared Xray activation manifest disappeared")?;
+        ensure!(prepared.token == token && prepared.snapshot.phase == super::recovery::SupervisorPhase::Prepared,
+            "Xray activation manifest is not the exact Prepared generation");
+        ensure!(prepared.snapshot.manifest.interface_name == request.interface_name
+            && prepared.snapshot.manifest.table_id == request.table_id
+            && prepared.snapshot.manifest.interface_index > 0,
+            "broker-prepared Xray manifest does not match the requested interface and routing table");
+        let expected_ifindex = prepared.snapshot.manifest.interface_index;
 
         let (mut child, process) = match super::xray_launcher::spawn_xray_with_verified_attachment(
             self.helper, &request.activation_id, request.generation,
