@@ -90,3 +90,23 @@ impl<'a> ActivationOrchestrator<'a> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod request_tests {
+    use super::*;
+
+    fn valid() -> ActivationRequest {
+        ActivationRequest { activation_id: "draft".into(), generation: 1, interface_name: "tun-proxyctl".into(), owner_uid: 1000, owner_gid: 1000, table_id: 100, bypass_priority: 100, proxy_priority: 110, core_mark: 0x42, core_mark_mask: 0xff }
+    }
+
+    #[test]
+    fn accepts_valid_request() { assert!(valid().validate().is_ok()); }
+    #[test]
+    fn rejects_zero_generation() { let mut r=valid(); r.generation=0; assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_duplicate_priorities() { let mut r=valid(); r.proxy_priority=r.bypass_priority; assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_mark_outside_mask() { let mut r=valid(); r.core_mark=0x100; assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_invalid_interface_length() { let mut r=valid(); r.interface_name="1234567890123456".into(); assert!(r.validate().is_err()); }
+}
