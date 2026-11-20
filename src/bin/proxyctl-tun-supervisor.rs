@@ -52,14 +52,18 @@ fn run() -> Result<()> {
         .context("cannot open the private TUN lifecycle runtime directory")?;
     let coordinator = LifecycleCoordinator::new(store)
         .context("cannot initialize TUN lifecycle coordination")?;
+    let Some(current) = coordinator.load_current()? else {
+        // This generation was already cleaned before the service process started.
+        return Ok(());
+    };
+    if current.token.activation_id() != expected.activation_id
+        || current.token.generation() != expected.generation
+    {
+        // A newer generation replaced this service's target. Never supervise or recover it.
+        return Ok(());
+    }
     let helper = MutationHelper::ensure_started(&runtime)
         .context("cannot start or connect to the persistent TUN mutation broker")?;
-    let current = coordinator.load_current()?.context("no TUN activation manifest exists")?;
-    ensure!(
-        current.token.activation_id() == expected.activation_id
-            && current.token.generation() == expected.generation,
-        "supervisor service identity does not match the persisted activation generation"
-    );
     let supervisor = ActivationOrchestrator::new(&helper, &coordinator);
     supervisor.resume_generation(&expected.activation_id, expected.generation)
         .context("TUN recovery supervisor could not resume the requested activation generation")?;
