@@ -83,7 +83,7 @@ impl<'a> ActivationOrchestrator<'a> {
 
     /// Recover only the explicitly supplied activation generation.
     pub fn recover(&self, activation_id: &str, generation: u64) -> Result<()> {
-        ensure!(!activation_id.is_empty() && generation > 0, "invalid recovery identity");
+        ensure!(canonical_activation_id(activation_id) && generation > 0, "invalid recovery identity");
         let response = self.helper.recover(activation_id.to_owned(), generation)?;
         ensure!(response.success, "broker recovery failed: {}", response.message);
         Ok(())
