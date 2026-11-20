@@ -28,7 +28,7 @@ impl SystemdRecoverySupervisor {
 
     fn validate_identity(&self, identity: &SupervisorIdentity) -> Result<()> {
         identity.validate()?;
-        ensure!(identity.manifest_path == self.runtime.join("tun-manifest.json").to_string_lossy(),
+        ensure!(identity.manifest_path == self.runtime.join("tun-manifest.json").to_string_lossy().as_ref(),
             "supervisor identity points outside the configured runtime directory");
         ensure!(self.runtime.is_absolute(), "supervisor runtime directory must be absolute");
         let runtime = fs::symlink_metadata(&self.runtime).context("cannot inspect supervisor runtime directory")?;

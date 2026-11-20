@@ -59,6 +59,22 @@ pub struct SupervisorIdentity {
 }
 
 impl SupervisorIdentity {
+    pub fn for_activation(activation_id: &str, manifest_path: impl Into<String>, generation: u64) -> Result<Self> {
+        ensure!(activation_id.len() == 36
+            && activation_id.bytes().enumerate().all(|(index, byte)| {
+                if [8, 13, 18, 23].contains(&index) { byte == b'-' }
+                else { byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase() }
+            }), "invalid supervisor activation identity");
+        let identity = Self {
+            activation_id: activation_id.to_owned(),
+            service_name: format!("proxyctl-tun-{}", &activation_id[..8]),
+            manifest_path: manifest_path.into(),
+            generation,
+        };
+        identity.validate()?;
+        Ok(identity)
+    }
+
     pub fn validate(&self) -> Result<()> {
         ensure!(
             self.activation_id.len() == 36
@@ -138,7 +154,6 @@ mod tests {
             "unsupported"
         );
         for manager in [
-            ServiceManager::Systemd,
             ServiceManager::OpenRc,
             ServiceManager::Runit,
             ServiceManager::S6,
@@ -149,9 +164,10 @@ mod tests {
             let backend = RecoveryBackendKind::for_manager(manager);
             assert!(
                 !backend.is_implemented(),
-                "detection must not be mistaken for a working recovery backend"
+                "unsupported service managers must remain detection-only"
             );
         }
+        assert!(RecoveryBackendKind::Systemd.is_implemented());
     }
 
     #[test]
