@@ -1152,3 +1152,8 @@ The unified activation façade now validates request-local invariants (activatio
 ## Unified orchestrator monitor and request validation update (2026-11-20)
 
 The draft activation façade now includes a monitor-current entrypoint for persisted Running activations: it validates phase, obtains the recorded process identity, opens a process handle, and delegates monitoring to the managed lifecycle path. Request/recovery identity checks are canonical lowercase UUID checks, interface names are constrained to Linux-safe characters and IFNAMSIZ, and table/priority values must be in the Proxyctl allocation ranges. These changes remain façade-level integration and do not remove the public activation gate. Core descriptor attachment and live dataplane readiness are still unproven and must not be bypassed.
+
+
+## Attachment evidence contract (continuation)
+
+The draft Linux attachment-contract module rejects incomplete or mismatched evidence fields, non-passed-descriptor mechanisms, and evidence that does not bind to activation identity/generation/interface and a verified process identity. An orchestrator convenience method requires this contract before delegating. These checks are not proof of descriptor transfer and do not alter the activation gate. Native-core integration must produce independently verifiable evidence before this API can be used to enable activation.
