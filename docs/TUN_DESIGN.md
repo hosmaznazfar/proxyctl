@@ -1124,3 +1124,12 @@ Sing-box and Xray adapters already produce a TUN inbound using `tun-proxyctl`, d
 The typed mutation broker/helper, journal backend, manifest adoption, process identity binding, generation-scoped lifecycle events, and broker-backed supervision/recovery APIs exist as separate components. They are not yet connected to the public activation/stop workflow. The existing isolated systemd launcher remains a separate path.
 
 A critical device handoff gap remains: native Sing-box and Xray TUN config generation emits an inbound for `tun-proxyctl`, while the mutation broker independently creates an exclusive TUN descriptor. The code does not establish a verified attach-existing-device contract between that descriptor and either core. Name-based interface presence is not attachment evidence. Activation must remain disabled until this ownership/handoff issue, end-to-end readiness/traffic verification, and CLI-independent recovery supervision are connected and reviewed.
+
+
+## Draft orchestrator checkpoint (2026-11-20)
+
+A draft unified orchestrator façade is now present in `src/tun/activation_orchestrator.rs` and exported from `src/tun/mod.rs`. It composes the existing broker activation, lifecycle adoption/process binding, generation-specific recovery, and supervision-resume APIs. The façade accepts an already-launched process identity and does not itself launch or configure the core.
+
+Routing policy transaction integration is composed through the existing `MutationHelper::activate` request, whose broker path creates the interface, binds routes to the kernel-assigned ifindex, installs route/rule policy, and commits its ownership manifest. The façade provides recover/resume entry points for generation-bound cleanup and supervision.
+
+This remains a draft integration layer, not a complete end-to-end activation pipeline: core launch/configuration ordering and native TUN attachment behavior are not reconciled here, nor are traffic-flow readiness checks connected. No tests or local builds were run.
