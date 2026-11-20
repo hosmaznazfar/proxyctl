@@ -129,7 +129,7 @@ impl SystemdRecoverySupervisor {
             .to_owned();
         match state.as_str() {
             "active" | "activating" | "reloading" | "deactivating" => Ok(Some(state)),
-            "inactive" | "failed" => Ok(None),
+            "" | "inactive" | "failed" => Ok(None),
             _ => anyhow::bail!("systemd returned an unrecognized service state: {state:?}"),
         }
     }
