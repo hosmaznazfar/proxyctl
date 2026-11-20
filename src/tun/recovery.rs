@@ -43,10 +43,10 @@ impl RecoveryBackendKind {
         }
     }
 
-    /// Detection identifies the init system only. No concrete service-manager
-    /// supervisor backend is implemented or activation-approved yet.
+    /// Systemd has a concrete user-service supervisor backend. Other managers remain
+    /// detection-only until their service lifecycle adapters are implemented.
     pub const fn is_implemented(self) -> bool {
-        false
+        matches!(self, Self::Systemd)
     }
 }
 

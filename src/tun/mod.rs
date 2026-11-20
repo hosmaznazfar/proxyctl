@@ -43,6 +43,8 @@ pub mod privilege_broker;
 pub mod process;
 pub mod readiness;
 pub mod recovery;
+#[cfg(target_os = "linux")]
+pub mod systemd_recovery;
 pub mod resource_snapshot;
 pub mod route_policy;
 #[cfg(target_os = "linux")]

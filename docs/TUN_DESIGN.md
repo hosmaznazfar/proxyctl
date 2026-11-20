@@ -1244,3 +1244,8 @@ The staged Xray activation now also requests exact-generation broker recovery if
 
 
 The standalone supervisor binary now has an explicit non-Linux entrypoint that exits with a clear unsupported-platform message; Linux-only TUN modules are imported only on Linux, preserving cross-target compilation of the rest of the application.
+
+
+## Systemd recovery supervisor backend (2026-11-20)
+
+Added a Linux systemd **user-service** backend for the standalone recovery supervisor. It validates the activation-bound service identity, private runtime directory, executable ownership/permissions, and fixed systemd command paths before starting a transient service with failure restart enabled. It exposes idempotent start/status/stop operations through the existing RecoverySupervisor contract. The service runs unprivileged; journal-backed kernel cleanup remains delegated to the authenticated mutation helper. This backend is not yet called by activation orchestration, and the other init systems remain detection-only. No unit is installed or started by this code change.
