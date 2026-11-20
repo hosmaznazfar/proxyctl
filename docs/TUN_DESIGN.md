@@ -1209,3 +1209,8 @@ Xray startup now also has a bounded attachment wait helper. It pins the launched
 
 
 A composed Xray startup primitive now combines broker descriptor export, child launch, and the bounded kernel attachment wait. It returns the child only after the exact interface attachment is observed. If attachment fails or times out, it kills and reaps the child it spawned; the caller must still request exact-generation broker rollback. It does not mark the activation Running or assert dataplane readiness.
+
+
+## Staged lifecycle commit (2026-11-20)
+
+Split managed activation into two explicit stages: `prepare_managed_activation` commits the broker-owned kernel transaction and adopts the exact Prepared manifest; `commit_managed_process` binds a process and transitions to Running. This permits a core-specific launcher and attachment/readiness verifier to run between Prepared adoption and Running commit. The compatibility wrapper remains for existing callers, but new TUN integration must use the staged path and invoke exact-generation broker recovery if launch or readiness fails.

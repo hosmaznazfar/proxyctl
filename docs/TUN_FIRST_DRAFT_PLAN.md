@@ -174,3 +174,8 @@ Added `wait_for_xray_tun_attachment`, a process-pinned, five-second-bounded star
 
 
 Added `spawn_xray_with_verified_attachment`: composes broker fd export, Xray launch, and the bounded kernel fdinfo wait. It returns the child/process identity only after attachment is observed; on failure it kills and reaps that child. Exact-generation broker rollback remains the caller's responsibility, and no Running transition occurs in this helper.
+
+
+## Prepared-to-Running lifecycle staging (2026-11-20)
+
+Refactored managed activation into `prepare_managed_activation` and `commit_managed_process`. The first applies the generation-scoped broker transaction and adopts Prepared; the second binds the exact launched process and commits Running. This creates the correct ordering seam for Xray: broker creates/retains TUN, Xray adopts it, readiness is verified, then process binding/Running occurs. The legacy composition remains but new integration should use staged APIs. Failed adoption/binding triggers exact-generation broker recovery.

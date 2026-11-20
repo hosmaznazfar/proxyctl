@@ -27,7 +27,7 @@ pub struct ManagedActivation {
 /// configured before calling this function. The process identity is captured from that
 /// exact child, not reconstructed from a PID later.
 #[allow(clippy::too_many_arguments)]
-pub fn activate_managed_core(
+pub fn prepare_managed_activation(
     helper: &MutationHelper,
     coordinator: &LifecycleCoordinator,
     activation_id: String,
@@ -40,19 +40,10 @@ pub fn activate_managed_core(
     proxy_priority: u32,
     core_mark: u32,
     core_mark_mask: u32,
-    process: ProcessIdentity,
-) -> Result<ManagedActivation> {
+) -> Result<(ActivationToken, String)> {
     let response = helper.activate(
-        activation_id.clone(),
-        generation,
-        interface_name,
-        owner_uid,
-        owner_gid,
-        table_id,
-        bypass_priority,
-        proxy_priority,
-        core_mark,
-        core_mark_mask,
+        activation_id.clone(), generation, interface_name, owner_uid, owner_gid,
+        table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
     )?;
     if !response.success {
         anyhow::bail!(
@@ -60,7 +51,6 @@ pub fn activate_managed_core(
             response.message
         );
     }
-
     let token = match coordinator.adopt_prepared(&activation_id, generation) {
         Ok(token) => token,
         Err(error) => {
@@ -77,12 +67,21 @@ pub fn activate_managed_core(
             });
         }
     };
+    Ok((token, response.message))
+}
 
+/// Bind a process only after the caller has completed core-specific attachment and readiness.
+pub fn commit_managed_process(
+    helper: &MutationHelper,
+    coordinator: &LifecycleCoordinator,
+    token: &ActivationToken,
+    process: ProcessIdentity,
+) -> Result<ManagedActivation> {
     if let Err(error) = coordinator
-        .bind_core_process(&token, process)
-        .and_then(|()| coordinator.apply_event(&token, SupervisorEvent::StartCommitted).map(|_| ()))
+        .bind_core_process(token, process)
+        .and_then(|()| coordinator.apply_event(token, SupervisorEvent::StartCommitted).map(|_| ()))
     {
-        let recovery = helper.recover(activation_id, generation);
+        let recovery = helper.recover(token.activation_id().to_owned(), token.generation());
         return match recovery {
             Ok(result) if result.success => Err(error).context(
                 "managed core binding failed; the exact broker activation was recovered",
@@ -96,13 +95,35 @@ pub fn activate_managed_core(
             )),
         };
     }
-
     Ok(ManagedActivation {
-        token,
-        activation_message: response.message,
+        token: token.clone(),
+        activation_message: "managed core process committed after readiness".into(),
     })
 }
 
+/// Compatibility composition for callers that have already launched and validated a core.
+#[allow(clippy::too_many_arguments)]
+pub fn activate_managed_core(
+    helper: &MutationHelper,
+    coordinator: &LifecycleCoordinator,
+    activation_id: String,
+    generation: u64,
+    interface_name: String,
+    owner_uid: u32,
+    owner_gid: u32,
+    table_id: u32,
+    bypass_priority: u32,
+    proxy_priority: u32,
+    core_mark: u32,
+    core_mark_mask: u32,
+    process: ProcessIdentity,
+) -> Result<ManagedActivation> {
+    let (token, _message) = prepare_managed_activation(
+        helper, coordinator, activation_id, generation, interface_name, owner_uid, owner_gid,
+        table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
+    )?;
+    commit_managed_process(helper, coordinator, &token, process)
+}
 
 /// Supervise a broker-owned activation and request exact-generation cleanup on core exit.
 ///
