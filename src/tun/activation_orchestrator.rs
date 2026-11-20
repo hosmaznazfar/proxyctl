@@ -13,7 +13,6 @@ use super::{
     process::ProcessIdentity,
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     recovery::{RecoverySupervisor, SupervisorIdentity},
-    service_manager::{ServiceManager},
     systemd_recovery::SystemdRecoverySupervisor,
 };
 
@@ -210,8 +209,6 @@ impl<'a> ActivationOrchestrator<'a> {
     /// The service is started only after the manifest reaches Running; if service startup fails,
     /// the caller must terminate the core and request exact-generation broker recovery.
     fn start_recovery_supervisor(&self, activation: &ManagedActivation) -> Result<()> {
-        ensure!(ServiceManager::detect() == ServiceManager::Systemd,
-            "automatic TUN recovery currently requires systemd; no fallback service manager is enabled");
         let runtime = self.coordinator.runtime_directory()?;
         let manifest = runtime.join("tun-manifest.json");
         let executable = std::env::current_exe()
@@ -224,12 +221,7 @@ impl<'a> ActivationOrchestrator<'a> {
             manifest.to_string_lossy().into_owned(),
             activation.token.generation(),
         )?;
-        let mut supervisor = SystemdRecoverySupervisor::new(
-            "/usr/bin/systemd-run",
-            "/usr/bin/systemctl",
-            executable,
-            runtime,
-        );
+        let mut supervisor = SystemdRecoverySupervisor::for_current_manager(executable, runtime)?;
         supervisor.start(&identity).context("could not start the generation-bound systemd recovery service")
     }
 

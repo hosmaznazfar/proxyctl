@@ -22,6 +22,24 @@ pub struct SystemdRecoverySupervisor {
 }
 
 impl SystemdRecoverySupervisor {
+    /// Construct the only currently supported automatic recovery backend.
+    pub fn for_current_manager(
+        executable: impl Into<PathBuf>,
+        runtime: impl Into<PathBuf>,
+    ) -> Result<Self> {
+        ensure!(
+            super::service_manager::ServiceManager::detect()
+                == super::service_manager::ServiceManager::Systemd,
+            "automatic TUN recovery currently requires systemd"
+        );
+        Ok(Self::new(
+            "/usr/bin/systemd-run",
+            "/usr/bin/systemctl",
+            executable,
+            runtime,
+        ))
+    }
+
     pub fn new(systemd_run: impl Into<PathBuf>, systemctl: impl Into<PathBuf>, executable: impl Into<PathBuf>, runtime: impl Into<PathBuf>) -> Self {
         Self { systemd_run: systemd_run.into(), systemctl: systemctl.into(), executable: executable.into(), runtime: runtime.into() }
     }
