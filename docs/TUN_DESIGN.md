@@ -1178,3 +1178,8 @@ The composed attachment exchange applies a fixed five-second socket read/write t
 ## Native-core attachment capability inventory
 
 Do not infer descriptor adoption from a native TUN configuration. The adapter trait reports one of three acquisition modes: externally supplied descriptor via a documented environment key, native device creation, or unsupported. Xray's Linux `XRAY_TUN_FD` path is documented upstream; the current Proxyctl launch path does not yet pass the broker-retained descriptor into Xray. The current sing-box adapter requests native named-device creation and therefore does not match the broker's exclusive descriptor owner. Mihomo remains unsupported in this marked TUN design. These declarations are used to make the integration gap explicit, not to authorize activation.
+
+
+## Broker-owned descriptor export (2026-11-20)
+
+The mutation broker now has a typed, generation-scoped descriptor-export request. It only exports a descriptor while the exact activation backend remains live in the broker, validates the authenticated same-UID client, and transfers one descriptor using the existing close-on-exec SCM_RIGHTS primitive. The client API returns an owned descriptor; stale generations, absent backends, and broker-restart cases fail closed. This is a transport/export capability, not a native-core launch integration: callers must still use a verified core adapter and must not claim attachment until core readiness is independently established.

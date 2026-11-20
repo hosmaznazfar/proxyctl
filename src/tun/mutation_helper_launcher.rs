@@ -96,6 +96,11 @@ impl MutationHelper {
         self.call(&MutationRequest::Activate { version: 1, activation_id, generation, interface_name, owner_uid, owner_gid, table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask })
     }
 
+    /// Export the retained TUN descriptor for one exact activation generation.
+    pub fn attach_descriptor(&self, activation_id: &str, generation: u64) -> Result<std::os::fd::OwnedFd> {
+        mutation_broker::attach_descriptor(&self.socket, activation_id, generation)
+    }
+
     /// Request recovery for an activation generation.
     pub fn recover(&self, activation_id: String, generation: u64) -> Result<MutationResponse> {
         self.call(&MutationRequest::Recover { version: 1, activation_id, generation })

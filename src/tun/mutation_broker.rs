@@ -57,6 +57,11 @@ pub enum MutationRequest {
         activation_id: String,
         generation: u64,
     },
+    AttachDescriptor {
+        version: u32,
+        activation_id: String,
+        generation: u64,
+    },
 }
 
 impl MutationRequest {
@@ -94,6 +99,10 @@ impl MutationRequest {
                 plan.validate()?;
             }
             Self::Recover {
+                version,
+                activation_id,
+                generation,
+            } | Self::AttachDescriptor {
                 version,
                 activation_id,
                 generation,
@@ -158,6 +167,16 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
                 "mutation broker accepts requests only from its owning user"
             );
             let request = read_request(&mut stream)?;
+            if let MutationRequest::AttachDescriptor { version: _, activation_id, generation } = &request {
+                request.validate()?;
+                let backend = backends.get(&(activation_id.clone(), *generation))
+                    .context("no live broker-owned TUN descriptor exists for this activation generation")?;
+                let response = MutationResponse::success("generation-bound TUN descriptor follows");
+                write_response(&mut stream, &response)?;
+                let descriptor = backend.tun_descriptor(activation_id, *generation)?;
+                super::descriptor_transfer::send_descriptor(&stream, descriptor)?;
+                return Ok(());
+            }
             let response = match request.validate().and_then(|()| {
                 if let MutationRequest::Activate {
                     owner_uid,
@@ -260,6 +279,9 @@ fn execute(
                     Err(error)
                 }
             }
+        }
+        MutationRequest::AttachDescriptor { .. } => {
+            anyhow::bail!("descriptor attachment requests must use the authenticated SCM_RIGHTS response path")
         }
         MutationRequest::Recover {
             activation_id,
@@ -494,6 +516,33 @@ pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationRes
         response.message
     );
     Ok(response)
+}
+
+/// Request the descriptor retained by one exact activation generation.
+/// The broker authenticates the peer, sends a positive envelope, then transfers one fd.
+pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u64) -> Result<std::os::fd::OwnedFd> {
+    use std::os::fd::AsRawFd;
+    let request = MutationRequest::AttachDescriptor { version: VERSION, activation_id: activation_id.to_owned(), generation };
+    request.validate()?;
+    let payload = serde_json::to_vec(&request)?;
+    ensure!(payload.len() <= MAX_FRAME, "mutation request exceeds frame limit");
+    let mut stream = UnixStream::connect(socket_path).context("cannot connect to mutation broker for TUN descriptor attachment")?;
+    stream.set_read_timeout(Some(IO_TIMEOUT))?;
+    stream.set_write_timeout(Some(IO_TIMEOUT))?;
+    stream.write_all(&(payload.len() as u32).to_le_bytes())?;
+    stream.write_all(&payload)?;
+    stream.flush()?;
+    let mut header = [0u8; 4];
+    stream.read_exact(&mut header)?;
+    let length = u32::from_le_bytes(header) as usize;
+    ensure!(length > 0 && length <= MAX_FRAME, "mutation response frame length is invalid");
+    let mut bytes = vec![0u8; length];
+    stream.read_exact(&mut bytes)?;
+    let response: MutationResponse = serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
+    ensure!(response.version == VERSION && response.success, "mutation broker rejected descriptor attachment: {}", response.message);
+    let descriptor = super::descriptor_transfer::receive_descriptor(&stream)?;
+    ensure!(unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) } >= 0, "received TUN descriptor is not valid");
+    Ok(descriptor)
 }
 
 #[cfg(test)]

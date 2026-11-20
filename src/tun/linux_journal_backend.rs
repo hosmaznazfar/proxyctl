@@ -33,6 +33,14 @@ pub struct LinuxJournalBackend {
 }
 
 impl LinuxJournalBackend {
+    /// Borrow the descriptor retained for this backend's exact activation generation.
+    pub fn tun_descriptor(&self, activation_id: &str, generation: u64) -> Result<std::os::fd::BorrowedFd<'_>> {
+        ensure!(generation == self.generation, "TUN descriptor request has a stale generation");
+        let journal = self.store.load_transaction_journal()?.context("TUN transaction journal is missing")?;
+        ensure!(journal.activation_id == activation_id && journal.generation == generation, "TUN descriptor request does not match the active journal");
+        self.owner.descriptor(activation_id, generation)
+    }
+
     pub fn new(store: ManifestStore, activation_id: &str, generation: u64) -> Result<Self> {
         ensure!(generation > 0, "activation generation must be non-zero");
         ensure!(

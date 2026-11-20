@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs::OpenOptions,
-    os::fd::{AsRawFd, FromRawFd, OwnedFd},
+    os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd},
 };
 const TUNSETIFF: libc::c_ulong = 0x4004_54ca;
 const TUNSETOWNER: libc::c_ulong = 0x4004_54cc;
@@ -86,6 +86,9 @@ impl TunDevice {
     }
     pub fn as_raw_fd(&self) -> std::os::fd::RawFd {
         self.fd.as_raw_fd()
+    }
+    pub fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
     }
 }
 

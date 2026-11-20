@@ -393,3 +393,6 @@ Quick accepts a useful partial download after one attempt. Accurate retries an i
 
 
 The native-core attachment inventory is explicit: Xray documents Linux external TUN FD input through `XRAY_TUN_FD`, while the current sing-box adapter requests native named-device creation and Mihomo remains unsupported for the marked TUN contract. Proxyctl has not yet connected broker descriptor export and process launch to Xray's environment-variable path, so this does not change the TUN activation gate.
+
+
+The TUN mutation broker can now export its retained descriptor to an authenticated same-user client for an exact live activation generation using SCM_RIGHTS. This is only the broker-to-client transport leg; core launch/adoption and independent readiness are still not integrated, so TUN activation remains disabled.
