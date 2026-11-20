@@ -116,6 +116,10 @@ mod request_tests {
     #[test]
     fn accepts_valid_request() { assert!(valid().validate().is_ok()); }
     #[test]
+    fn rejects_noncanonical_activation_id() { let mut r=valid(); r.activation_id="draft".into(); assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_low_table_allocation() { let mut r=valid(); r.table_id=254; assert!(r.validate().is_err()); }
+    #[test]
     fn rejects_zero_generation() { let mut r=valid(); r.generation=0; assert!(r.validate().is_err()); }
     #[test]
     fn rejects_duplicate_priorities() { let mut r=valid(); r.proxy_priority=r.bypass_priority; assert!(r.validate().is_err()); }
