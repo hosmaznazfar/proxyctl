@@ -253,6 +253,18 @@ impl<'a> ActivationOrchestrator<'a> {
         Ok(())
     }
 
+    /// Resume an exact generation, allowing a bounded Prepared-to-Running startup window.
+    pub fn resume_generation(&self, activation_id: &str, generation: u64) -> Result<()> {
+        managed_activation::resume_managed_supervision_after_startup(
+            self.helper,
+            self.coordinator,
+            activation_id,
+            generation,
+            Duration::from_secs(30),
+        )
+        .context("cannot resume generation-bound TUN supervision")
+    }
+
     /// Resume existing supervision or retry its durable cleanup state.
     pub fn resume(&self) -> Result<()> {
         managed_activation::resume_managed_supervision(self.helper, self.coordinator)
