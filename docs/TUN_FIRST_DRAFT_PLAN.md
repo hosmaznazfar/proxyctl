@@ -107,3 +107,8 @@ This continuation added façade-level monitoring, stricter request and recovery 
 5. Implement and validate CLI-independent recovery supervision for supported service manager(s), then revisit the release gate.
 
 No local build, tests, host network mutation, or TUN activation was performed in this continuation.
+
+
+## Descriptor evidence contract implementation
+
+A Linux-only attachment evidence contract now represents a passed-descriptor mechanism and validates its structural fields. A second validator binds the evidence to the activation request and ProcessIdentity (activation ID, generation, interface name, process start ticks and live process verification). The orchestrator has an evidence-gated convenience entrypoint. The evidence remains caller-supplied and does not prove the fd was actually transferred; the ordinary façade path remains present and activation remains disabled at the public service layer. This is a contract seam, not a completed core integration.
