@@ -193,3 +193,6 @@ Xray child rollback now signals the pinned process through its pidfd, waits at m
 
 
 The Xray broker launcher now checks both paths with `symlink_metadata`: executable and config must be regular non-symlink files; the executable must have an execute bit; config ownership must match the current user and permissions must be private. Both paths are canonicalized before process launch.
+
+
+Restart/resume now also recovers a persisted Prepared generation. This is the interrupted-start boundary between broker commit and process binding: the exact generation is sent to the broker for journal-backed cleanup rather than being rejected or left indefinitely. Running and CleanupPending behavior remains unchanged.

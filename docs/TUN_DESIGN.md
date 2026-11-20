@@ -1228,3 +1228,8 @@ Xray rollback now uses the pinned process identity and a two-second pidfd-based 
 
 
 Xray launch now rejects symlinked/non-regular executable and config paths, requires an executable bit on the core binary, and requires the config to be owned by the current user with mode 0600-equivalent private permissions before canonicalizing both paths. This prevents the descriptor launcher from silently following a replaced config symlink or executing a non-executable file.
+
+
+## Interrupted Prepared activation recovery (2026-11-20)
+
+Restarted supervision now treats a persisted Prepared manifest as an interrupted start and requests exact-generation broker cleanup immediately. This covers crashes after kernel resources were committed but before the core process identity was bound and Running was committed. The operation remains journal-backed and generation-scoped; no broad interface or route sweep is performed.

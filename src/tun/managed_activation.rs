@@ -179,14 +179,16 @@ pub fn resume_managed_supervision(
         .load_current()?
         .context("no managed TUN activation is available to resume")?;
     let token = current.token;
-    if current.snapshot.phase == SupervisorPhase::CleanupPending {
+    if matches!(current.snapshot.phase, SupervisorPhase::CleanupPending | SupervisorPhase::Prepared) {
+        let phase = current.snapshot.phase;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
-        anyhow::ensure!(response.success, "pending broker cleanup failed: {}", response.message);
+        anyhow::ensure!(response.success,
+            "broker cleanup for interrupted {phase:?} activation failed: {}", response.message);
         return Ok(response);
     }
     anyhow::ensure!(
         current.snapshot.phase == SupervisorPhase::Running,
-        "only Running or CleanupPending activations can be resumed"
+        "only Running, Prepared, or CleanupPending activations can be resumed"
     );
     let identity = current
         .snapshot
