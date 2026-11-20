@@ -7,6 +7,15 @@ pub struct AttachmentEvidence {
  pub activation_id:String,pub generation:u64,pub process_start_time:u64,pub interface_name:String,pub mechanism:AttachmentMechanism,pub descriptor_transfer_confirmed:bool,pub interface_index:u32,
 }
 impl AttachmentEvidence {
+ /// Validate evidence against the activation request and pinned process instance.
+ pub fn validate_binding(&self, request: &super::activation_orchestrator::ActivationRequest, process: &super::process::ProcessIdentity) -> Result<()> {
+   self.validate()?; request.validate()?; process.validate()?;
+   ensure!(self.activation_id == request.activation_id && self.generation == request.generation, "attachment evidence is from a different activation generation");
+   ensure!(self.interface_name == request.interface_name, "attachment evidence interface does not match activation request");
+   ensure!(self.process_start_time == process.start_ticks, "attachment evidence process identity does not match pinned process");
+   ensure!(process.verify()?, "managed core process identity is stale");
+   Ok(())
+ }
  /// Structural gate; evidence is caller supplied and not independent kernel proof.
  pub fn validate(&self)->Result<()> {
  ensure!(canonical_uuid(&self.activation_id),"attachment activation ID is invalid");
