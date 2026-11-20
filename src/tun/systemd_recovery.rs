@@ -144,6 +144,8 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             .arg("--")
             .arg(&self.executable)
             .arg(&self.runtime)
+            .arg(&identity.activation_id)
+            .arg(identity.generation.to_string())
             .output()
             .context("could not start the TUN recovery supervisor user service")?;
         if !output.status.success() {

@@ -29,8 +29,18 @@ fn run() -> Result<()> {
     let mut args = env::args_os();
     let _program = args.next();
     let runtime = args.next().map(PathBuf::from)
-        .context("usage: proxyctl-tun-supervisor ABSOLUTE_PRIVATE_RUNTIME_DIRECTORY")?;
+        .context("usage: proxyctl-tun-supervisor ABSOLUTE_PRIVATE_RUNTIME_DIRECTORY ACTIVATION_UUID GENERATION")?;
+    let activation_id = args.next().context("missing activation UUID")?
+        .into_string().map_err(|_| anyhow::anyhow!("activation UUID must be UTF-8"))?;
+    let generation = args.next().context("missing activation generation")?
+        .into_string().map_err(|_| anyhow::anyhow!("activation generation must be UTF-8"))?
+        .parse::<u64>().context("activation generation must be a positive integer")?;
     ensure!(args.next().is_none(), "unexpected extra supervisor arguments");
+    let expected = proxyctl::tun::recovery::SupervisorIdentity::for_activation(
+        &activation_id,
+        runtime.join("tun-manifest.json").to_string_lossy().into_owned(),
+        generation,
+    )?;
     ensure!(runtime.is_absolute(), "supervisor runtime directory must be an absolute path");
 
     // ManifestStore validates ownership, directory permissions, and symlink boundaries.
@@ -40,6 +50,12 @@ fn run() -> Result<()> {
         .context("cannot initialize TUN lifecycle coordination")?;
     let helper = MutationHelper::ensure_started(&runtime)
         .context("cannot start or connect to the persistent TUN mutation broker")?;
+    let current = coordinator.load_current()?.context("no TUN activation manifest exists")?;
+    ensure!(
+        current.token.activation_id() == expected.activation_id
+            && current.token.generation() == expected.generation,
+        "supervisor service identity does not match the persisted activation generation"
+    );
     let supervisor = ActivationOrchestrator::new(&helper, &coordinator);
     supervisor.resume()
         .context("TUN recovery supervisor could not resume the persisted activation")?;
