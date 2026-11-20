@@ -208,3 +208,42 @@ pub fn wait_for_xray_tun_attachment(
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Xray TUN attachment was not observed")))
         .context("Xray did not adopt the expected TUN interface before the startup deadline")
 }
+
+
+/// Spawn Xray and require kernel-confirmed attachment before returning the child handle.
+///
+/// On attachment timeout or early exit, this function terminates and reaps only the child it
+/// created. The caller remains responsible for generation-scoped broker rollback and lifecycle
+/// manifest cleanup.
+pub fn spawn_xray_with_verified_attachment(
+    helper: &MutationHelper,
+    activation_id: &str,
+    generation: u64,
+    executable: &Path,
+    config: &Path,
+    interface_name: &str,
+    expected_ifindex: u32,
+    attachment_timeout: std::time::Duration,
+) -> Result<(Child, ProcessIdentity)> {
+    let (mut child, identity) = spawn_xray_from_broker(
+        helper, activation_id, generation, executable, config,
+    )?;
+    if let Err(error) = wait_for_xray_tun_attachment(
+        &identity, interface_name, expected_ifindex, attachment_timeout,
+    ) {
+        let kill_result = child.kill();
+        let wait_result = child.wait();
+        if let Err(kill_error) = kill_result {
+            return Err(error).context(format!(
+                "Xray failed TUN attachment and child termination also failed: {kill_error}"
+            ));
+        }
+        if let Err(wait_error) = wait_result {
+            return Err(error).context(format!(
+                "Xray failed TUN attachment and child reaping also failed: {wait_error}"
+            ));
+        }
+        return Err(error).context("Xray did not attach the expected TUN device; child was terminated and reaped");
+    }
+    Ok((child, identity))
+}

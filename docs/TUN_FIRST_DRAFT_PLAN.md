@@ -171,3 +171,6 @@ Added `verify_xray_readiness`: verifies the process holds the exact TUN interfac
 
 
 Added `wait_for_xray_tun_attachment`, a process-pinned, five-second-bounded startup wait that returns only after the expected interface appears in Xray's kernel fdinfo. Early child exit fails immediately. This confirms attachment only and does not replace the complete readiness gate.
+
+
+Added `spawn_xray_with_verified_attachment`: composes broker fd export, Xray launch, and the bounded kernel fdinfo wait. It returns the child/process identity only after attachment is observed; on failure it kills and reaps that child. Exact-generation broker rollback remains the caller's responsibility, and no Running transition occurs in this helper.

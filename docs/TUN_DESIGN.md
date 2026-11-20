@@ -1206,3 +1206,6 @@ Added `verify_xray_readiness` to compose Xray's exact process/fdinfo attachment 
 
 
 Xray startup now also has a bounded attachment wait helper. It pins the launched process, checks for early exit, and polls the exact kernel TUN fdinfo attachment for at most five seconds. This wait is only descriptor-adoption confirmation; the composed readiness gate remains responsible for listener, routes, socket mark, host invariants, physical egress, and proxied traffic.
+
+
+A composed Xray startup primitive now combines broker descriptor export, child launch, and the bounded kernel attachment wait. It returns the child only after the exact interface attachment is observed. If attachment fails or times out, it kills and reaps the child it spawned; the caller must still request exact-generation broker rollback. It does not mark the activation Running or assert dataplane readiness.
