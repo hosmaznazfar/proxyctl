@@ -171,9 +171,9 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
                 request.validate()?;
                 let backend = backends.get(&(activation_id.clone(), *generation))
                     .context("no live broker-owned TUN descriptor exists for this activation generation")?;
+                let descriptor = backend.tun_descriptor(activation_id, *generation)?;
                 let response = MutationResponse::success("generation-bound TUN descriptor follows");
                 write_response(&mut stream, &response)?;
-                let descriptor = backend.tun_descriptor(activation_id, *generation)?;
                 super::descriptor_transfer::send_descriptor(&stream, descriptor)?;
                 return Ok(());
             }
