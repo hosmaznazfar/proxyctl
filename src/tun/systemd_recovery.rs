@@ -33,6 +33,8 @@ impl SystemdRecoverySupervisor {
         ensure!(self.runtime.is_absolute(), "supervisor runtime directory must be absolute");
         let runtime = fs::symlink_metadata(&self.runtime).context("cannot inspect supervisor runtime directory")?;
         ensure!(runtime.is_dir() && !runtime.file_type().is_symlink(), "supervisor runtime must be a real directory");
+        ensure!(fs::canonicalize(&self.runtime)? == self.runtime,
+            "supervisor runtime path must not contain symlinked or non-canonical components");
         // SAFETY: geteuid is a read-only query of the current effective user.
         ensure!(runtime.uid() == unsafe { libc::geteuid() }, "supervisor runtime directory has a foreign owner");
         ensure!(runtime.permissions().mode() & 0o077 == 0, "supervisor runtime directory must be private");
@@ -45,8 +47,11 @@ impl SystemdRecoverySupervisor {
         ensure!(executable.permissions().mode() & 0o022 == 0, "recovery supervisor executable must not be group- or world-writable");
         for tool in [&self.systemd_run, &self.systemctl] {
             let metadata = fs::symlink_metadata(tool).with_context(|| format!("cannot inspect {}", tool.display()))?;
-            ensure!(metadata.is_file() && !metadata.file_type().is_symlink() && metadata.permissions().mode() & 0o111 != 0,
-                "systemd command must be an executable regular non-symlink file");
+            ensure!(metadata.is_file() && !metadata.file_type().is_symlink()
+                && metadata.uid() == 0
+                && metadata.permissions().mode() & 0o111 != 0
+                && metadata.permissions().mode() & 0o022 == 0,
+                "systemd command must be a root-owned, non-writable executable regular file");
         }
         Ok(())
     }
@@ -75,8 +80,15 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
                 "--property=Restart=on-failure", "--property=RestartSec=1s", "--property=StartLimitIntervalSec=0", "--"])
             .arg(&self.executable).arg(&self.runtime).output()
             .context("could not start the TUN recovery supervisor user service")?;
-        ensure!(output.status.success(), "systemd-run rejected the TUN recovery service: {}",
-            String::from_utf8_lossy(&output.stderr).trim());
+        if !output.status.success() {
+            // A concurrent start may have won after the initial state query. Accept only
+            // when systemd now reports this exact generation's unit as active/activating.
+            if self.active_state(identity)?.is_some() {
+                return Ok(());
+            }
+            anyhow::bail!("systemd-run rejected the TUN recovery service: {}",
+                String::from_utf8_lossy(&output.stderr).trim());
+        }
         Ok(())
     }
 
