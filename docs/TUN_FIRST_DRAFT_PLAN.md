@@ -61,3 +61,10 @@ Deferred until first draft: broad integration tests, fault injection, crash/rebo
 ## Release gate
 
 Public TUN activation stays disabled until Phases 1–6 are connected, essential ownership/safety checks exist, the supported environment is documented, and the integration is reviewed. Do not delay integration with test-only batches; do not bypass essential safety for speed.
+## Integration checkpoint (2026-11-20)
+
+The typed mutation helper and broker client are implemented, including persistent backend ownership, peer credential checks, typed activation/recovery requests, and generation-bound journal recovery. The lifecycle coordinator can adopt a broker-committed Prepared manifest, bind a pinned process identity, and commit Running; managed supervision can monitor and request exact-generation recovery. These APIs still are not invoked from the public activation entry point.
+
+**Additional hard blocker confirmed by source inspection:** both native TUN config adapters currently emit a native TUN inbound naming `tun-proxyctl`. The broker separately creates and retains an exclusive TUN descriptor. No verified adapter contract or handoff currently proves that either core attaches to that broker-owned device instead of attempting to create its own. Interface name, process identity, and interface presence alone do not prove attachment or traffic flow. The isolated systemd launcher is also a competing launch path, not the broker lifecycle orchestrator.
+
+Accordingly, work must prioritize a single launch contract and device attachment proof, then connect generation-scoped broker activation, process binding, readiness/traffic evidence, stop/recovery, and a supervisor independent of the CLI. No public activation or automatic network mutation is enabled in this checkpoint. No tests/builds were run here; the user runs local verification.
