@@ -116,8 +116,8 @@ mod attachment_tests {
 
     #[test]
     fn fdinfo_interface_match_is_exact() {
-        assert!(fdinfo_names_interface("pos:\t0\\niff:\ttun-proxyctl\\n", "tun-proxyctl"));
-        assert!(!fdinfo_names_interface("iff:\ttun-proxyctl-extra\\n", "tun-proxyctl"));
-        assert!(!fdinfo_names_interface("pos:\t0\\n", "tun-proxyctl"));
+        assert!(fdinfo_names_interface("pos:\t0\niff:\ttun-proxyctl\n", "tun-proxyctl"));
+        assert!(!fdinfo_names_interface("iff:\ttun-proxyctl-extra\n", "tun-proxyctl"));
+        assert!(!fdinfo_names_interface("pos:\t0\n", "tun-proxyctl"));
     }
 }
