@@ -387,3 +387,6 @@ Quick accepts a useful partial download after one attempt. Accurate retries an i
 
 
 **TUN integration status:** Linux SCM_RIGHTS descriptor-transfer primitives now exist, but they are not connected to a managed-core launch or a core-supported TUN descriptor consumer. A successful descriptor send is not proof of attachment. TUN activation remains gated; see docs/TUN_FIRST_DRAFT_PLAN.md.
+
+
+**TUN handoff status:** A generation-bound, nonce-bearing descriptor offer/acknowledgement protocol is available as an integration seam. It verifies Unix-socket peer credentials against a process identity and acknowledges only after a core-adoption callback succeeds. No native-core adapter currently consumes the descriptor; TUN activation remains gated.

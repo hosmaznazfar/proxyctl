@@ -119,3 +119,10 @@ A Linux-only attachment evidence contract now represents a passed-descriptor mec
 Added a Linux SCM_RIGHTS transport primitive that sends and receives exactly one file descriptor over a connected Unix stream. The receiver requests close-on-exec atomically and rejects missing, truncated, or unexpected control messages. Focused tests cover descriptor transfer and rejection of a marker-only frame.
 
 This is a transport primitive, not a completed native-core attachment. It does not authenticate the peer, coordinate a child launch, prove that sing-box/Xray/Mihomo consumes the descriptor, or produce kernel-backed attachment evidence. A successful sendmsg is not an attachment receipt. Do not populate AttachmentEvidence from send success; require a child-side acknowledgement tied to the pinned process and activation generation, plus a core-specific supported way to consume the received descriptor. Public TUN activation remains gated. No host network changes or local tests/builds were run.
+
+
+## Generation-bound child handoff protocol (2026-11-20)
+
+Added a bounded attachment offer/acknowledgement protocol for the future core-side adapter. Offers bind a canonical activation UUID, positive generation, interface name, protocol version, and 256-bit kernel-random nonce. The socket peer can be checked with SO_PEERCRED against a captured ProcessIdentity. The receiver helper emits a positive acknowledgement only after its supplied core-adoption callback succeeds; the sender must match every offer field before accepting that acknowledgement.
+
+The protocol is not wired to a real sing-box/Xray/Mihomo descriptor consumer. The callback is an integration seam, not proof that a particular core supports FD adoption. SO_PEERCRED authenticates the connected peer identity but does not replace private socket-directory permissions or an executable allowlist. Public TUN activation remains gated.

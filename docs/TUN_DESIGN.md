@@ -1162,3 +1162,8 @@ The draft Linux attachment-contract module rejects incomplete or mismatched evid
 ### SCM_RIGHTS transport implementation boundary (2026-11-20)
 
 The Linux-only descriptor_transfer module sends and receives one descriptor over an existing Unix stream. Receive uses MSG_CMSG_CLOEXEC and validates the marker and ancillary header shape. This does not authenticate the peer, launch the core, or establish core adoption. A successful sendmsg is not an attachment receipt. Do not populate AttachmentEvidence from send success; require a child-side acknowledgement tied to the pinned process and activation generation, plus a core-specific supported descriptor consumer. Public activation remains disabled until end-to-end integration exists.
+
+
+### Generation-bound descriptor handoff protocol (2026-11-20)
+
+`src/tun/attachment_protocol.rs` defines a bounded versioned offer and acknowledgement carrying activation UUID, generation, interface name, and a 256-bit nonce. It provides SO_PEERCRED verification against the exact captured process identity and a receiver helper that sends a positive receipt only after a caller-supplied core-adoption callback succeeds. The callback must be implemented by a verified core-specific adapter; it must not simply retain or discard the descriptor and report success. The protocol is not yet connected to any supported native core. Keep activation disabled until a real adapter consumes the descriptor and the parent verifies the acknowledgement and interface identity.
