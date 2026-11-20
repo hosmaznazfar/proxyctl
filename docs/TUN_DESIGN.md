@@ -1259,3 +1259,12 @@ The staged Xray orchestrator now starts the generation-bound systemd user recove
 ## Full activation identity in systemd unit names (2026-11-20)
 
 Recovery service names now include the complete canonical activation UUID rather than only its first eight hexadecimal characters. This removes the avoidable prefix-collision risk between concurrently or sequentially managed activation generations. The service name remains derived and validated from the activation identity; callers cannot supply an arbitrary unit name.
+
+
+## Generation-bound early recovery supervision (2026-11-20)
+
+The staged Xray path now starts its systemd recovery service while the broker manifest is still Prepared, before launching the core. The service command carries the exact activation UUID and generation; the supervisor refuses to act on a different generation and exits cleanly when its generation has already been cleaned or replaced. It waits up to 30 seconds for Prepared to become Running, then monitors the pinned process or retries exact-generation cleanup for an orphaned Prepared/CleanupPending record. This removes the former post-Running supervisor-start gap, but a smaller crash window remains between broker preparation and systemd accepting the service start.
+
+The transient user service applies a restrictive systemd sandbox (private temporary directory, read-only system/home protections, kernel/control-group protections, restrictive umask, and related hardening). NoNewPrivileges is intentionally not set because the separately installed mutation helper relies on its file capabilities. The supervisor itself remains unprivileged and delegates kernel cleanup to that helper.
+
+The service has not been exercised against a live systemd user manager, process crash, or reboot. The startup timeout and systemd sandbox still require host verification. Public TUN activation remains gated; Xray native descriptor support/readiness is not runtime-verified, and sing-box/Mihomo attachment remains unresolved.

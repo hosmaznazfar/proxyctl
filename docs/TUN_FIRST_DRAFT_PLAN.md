@@ -211,3 +211,10 @@ Added a fail-closed rollback branch for missing/stale/mismatched broker Prepared
 The Linux systemd user-service adapter now implements the RecoverySupervisor start/status/stop contract and is selected explicitly; OpenRC, runit, s6, dinit, and SysVinit remain unsupported. The staged Xray activation path starts the service after committing the exact generation to Running. Failure to start it terminates/reaps Xray and requests generation-scoped broker cleanup.
 
 This is a code-level integration only. The systemd service has not been exercised on a host, crash/reboot recovery has not been verified, and a narrow crash window remains between the Running manifest commit and the service-start request. The public CLI activation path remains gated. Sing-box and Mihomo attachment are unresolved; Xray's descriptor path and readiness callback are implemented but not runtime-verified.
+
+
+## Early recovery-supervisor startup continuation (2026-11-20)
+
+The systemd recovery service is now started immediately after broker preparation and before Xray launch. Its command is bound to the exact activation UUID and generation. The standalone supervisor waits a bounded 30 seconds for Prepared to transition to Running; if the CLI disappears and the generation remains Prepared, it requests exact-generation broker recovery. If the manifest is gone or a newer generation replaced it, the stale service exits without touching the replacement.
+
+The systemd transient unit has additional sandbox properties. The service stop operation is bounded and only permitted after durable cleanup. This reduces the previous crash window between Running commit and service startup, but does not eliminate the smaller interval between broker preparation and service-start acceptance. The supervisor service still needs live host verification, and the readiness callback must remain bounded by its caller. Public activation remains gated.
