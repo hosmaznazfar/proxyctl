@@ -1249,3 +1249,8 @@ The standalone supervisor binary now has an explicit non-Linux entrypoint that e
 ## Systemd recovery supervisor backend (2026-11-20)
 
 Added a Linux systemd **user-service** backend for the standalone recovery supervisor. It validates the activation-bound service identity, private runtime directory, executable ownership/permissions, and fixed systemd command paths before starting a transient service with failure restart enabled. It exposes idempotent start/status/stop operations through the existing RecoverySupervisor contract. The service runs unprivileged; journal-backed kernel cleanup remains delegated to the authenticated mutation helper. This backend is not yet called by activation orchestration, and the other init systems remain detection-only. No unit is installed or started by this code change.
+
+
+## Automatic systemd supervisor startup for staged Xray (2026-11-20)
+
+The staged Xray orchestrator now starts the generation-bound systemd user recovery service after the Prepared manifest has been committed to Running. It derives the supervisor executable as a sibling of the canonical Proxyctl executable and binds the service to the exact activation ID, generation, and manifest path. If systemd is unavailable or service startup fails, the orchestrator terminates/reaps the Xray child and requests exact-generation broker recovery; cleanup failures are surfaced. This integration currently supports systemd only and does not close the small process-crash window between the Running commit and the service-start request. Public CLI TUN activation remains gated.

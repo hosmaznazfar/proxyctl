@@ -12,6 +12,9 @@ use super::{
     mutation_helper_launcher::MutationHelper,
     process::ProcessIdentity,
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
+    recovery::{RecoverySupervisor, SupervisorIdentity},
+    service_manager::{ServiceManager},
+    systemd_recovery::SystemdRecoverySupervisor,
 };
 
 /// Parameters for one generation-scoped activation.
@@ -173,7 +176,7 @@ impl<'a> ActivationOrchestrator<'a> {
         }
 
         let managed = match managed_activation::commit_managed_process(
-            self.helper, self.coordinator, &token, process,
+            self.helper, self.coordinator, &token, process.clone(),
         ) {
             Ok(managed) => managed,
             Err(error) => {
@@ -184,7 +187,50 @@ impl<'a> ActivationOrchestrator<'a> {
                 };
             }
         };
+
+        if let Err(error) = self.start_recovery_supervisor(&managed) {
+            let termination = super::xray_launcher::terminate_and_reap_xray(&mut child, &process);
+            let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
+            return match (termination, recovery) {
+                (Ok(()), Ok(response)) if response.success =>
+                    Err(error).context("systemd recovery supervisor could not be started; Xray was terminated and TUN resources were recovered"),
+                (Err(stop_error), Ok(response)) if response.success =>
+                    Err(anyhow::anyhow!("recovery supervisor start failed ({error:#}); Xray termination failed: {stop_error:#}; TUN resources were recovered")),
+                (stop_result, Ok(response)) =>
+                    Err(anyhow::anyhow!("recovery supervisor start failed ({error:#}); Xray termination: {}; broker recovery failed: {}", stop_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()), response.message)),
+                (stop_result, Err(recovery_error)) =>
+                    Err(anyhow::anyhow!("recovery supervisor start failed ({error:#}); Xray termination: {}; broker recovery request failed: {recovery_error:#}", stop_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()))),
+            };
+        }
         Ok(XrayActivation { child, managed })
+    }
+
+    /// Start the CLI-independent systemd user service for an already committed generation.
+    ///
+    /// The service is started only after the manifest reaches Running; if service startup fails,
+    /// the caller must terminate the core and request exact-generation broker recovery.
+    fn start_recovery_supervisor(&self, activation: &ManagedActivation) -> Result<()> {
+        ensure!(ServiceManager::detect() == ServiceManager::Systemd,
+            "automatic TUN recovery currently requires systemd; no fallback service manager is enabled");
+        let runtime = self.coordinator.runtime_directory();
+        let manifest = runtime.join("tun-manifest.json");
+        let executable = std::env::current_exe()
+            .context("cannot locate the Proxyctl executable for supervisor discovery")?
+            .canonicalize()
+            .context("cannot canonicalize the Proxyctl executable path")?
+            .with_file_name("proxyctl-tun-supervisor");
+        let identity = SupervisorIdentity::for_activation(
+            activation.token.activation_id(),
+            manifest.to_string_lossy().into_owned(),
+            activation.token.generation(),
+        )?;
+        let mut supervisor = SystemdRecoverySupervisor::new(
+            "/usr/bin/systemd-run",
+            "/usr/bin/systemctl",
+            executable,
+            runtime,
+        );
+        supervisor.start(&identity).context("could not start the generation-bound systemd recovery service")
     }
 
     /// Monitor the persisted Running activation and request exact-generation cleanup on exit.

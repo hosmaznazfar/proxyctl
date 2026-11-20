@@ -97,6 +97,11 @@ impl LifecycleCoordinator {
         ActivationToken::from_snapshot(&snapshot)
     }
 
+    /// Return the private directory containing this coordinator's durable manifest.
+    pub fn runtime_directory(&self) -> PathBuf {
+        self.store.path().parent().expect("manifest store always has a parent directory").to_path_buf()
+    }
+
     pub fn load_current(&self) -> Result<Option<CoordinatedSnapshot>> {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         self.store
