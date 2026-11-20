@@ -67,7 +67,7 @@ impl SupervisorIdentity {
             }), "invalid supervisor activation identity");
         let identity = Self {
             activation_id: activation_id.to_owned(),
-            service_name: format!("proxyctl-tun-{}", &activation_id[..8]),
+            service_name: format!("proxyctl-tun-{activation_id}"),
             manifest_path: manifest_path.into(),
             generation,
         };
@@ -88,7 +88,7 @@ impl SupervisorIdentity {
             "invalid supervisor activation identity"
         );
         ensure!(
-            self.service_name == format!("proxyctl-tun-{}", &self.activation_id[..8]),
+            self.service_name == format!("proxyctl-tun-{}", self.activation_id),
             "supervisor service identity does not match its activation"
         );
         let manifest_path = std::path::Path::new(&self.manifest_path);
@@ -174,14 +174,14 @@ mod tests {
     fn supervisor_service_identity_is_bound_to_activation_id() {
         let identity = SupervisorIdentity {
             activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            service_name: "proxyctl-tun-12345678".into(),
+            service_name: "proxyctl-tun-12345678-1234-4234-8234-123456789abc".into(),
             manifest_path: "/private/runtime/tun-manifest.json".into(),
             generation: 1,
         };
         identity.validate().unwrap();
 
         let mut mismatched = identity;
-        mismatched.service_name = "proxyctl-tun-87654321".into();
+        mismatched.service_name = "proxyctl-tun-87654321-1234-4234-8234-123456789abc".into();
         assert!(mismatched.validate().is_err());
     }
 
