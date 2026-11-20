@@ -1233,3 +1233,8 @@ Xray launch now rejects symlinked/non-regular executable and config paths, requi
 ## Interrupted Prepared activation recovery (2026-11-20)
 
 Restarted supervision now treats a persisted Prepared manifest as an interrupted start and requests exact-generation broker cleanup immediately. This covers crashes after kernel resources were committed but before the core process identity was bound and Running was committed. The operation remains journal-backed and generation-scoped; no broad interface or route sweep is performed.
+
+
+## CLI-independent supervisor executable (2026-11-20)
+
+Added the `proxyctl-tun-supervisor` binary. A service manager can launch it with the absolute private Proxyctl runtime directory; it securely opens the manifest store, reconnects/starts the mutation broker, and resumes the exact persisted generation. It handles interrupted Prepared cleanup, CleanupPending retry, and Running process monitoring through the pidfd lifecycle. This is a supervisor process entrypoint, not yet a configured systemd/OpenRC/runit/s6/dinit/SysVinit service backend. No init service is installed or enabled by this repository change, and public activation remains gated until a supported manager backend is wired and exercised.

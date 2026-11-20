@@ -196,3 +196,8 @@ The Xray broker launcher now checks both paths with `symlink_metadata`: executab
 
 
 Restart/resume now also recovers a persisted Prepared generation. This is the interrupted-start boundary between broker commit and process binding: the exact generation is sent to the broker for journal-backed cleanup rather than being rejected or left indefinitely. Running and CleanupPending behavior remains unchanged.
+
+
+## Standalone recovery supervisor process entrypoint (2026-11-20)
+
+Added `proxyctl-tun-supervisor`, a separate executable that accepts only an absolute private runtime-directory argument, validates the manifest store, starts/connects to the persistent mutation broker, and resumes the persisted activation. It is independent of the main CLI process and can be run under an init/service manager. Actual service unit/backend installation and automatic startup integration for supported init systems remain outstanding; this binary alone does not satisfy the detached-supervision release gate.
