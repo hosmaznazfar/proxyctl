@@ -78,6 +78,30 @@ impl SystemdRecoverySupervisor {
 
     fn unit(identity: &SupervisorIdentity) -> String { format!("{}.service", identity.service_name) }
 
+    fn validate_running_manifest(&self, identity: &SupervisorIdentity) -> Result<()> {
+        let store = super::manifest_store::ManifestStore::open(self.runtime.clone())?;
+        let snapshot = store.load()?.context("cannot start recovery service without a durable activation manifest")?;
+        ensure!(
+            snapshot.manifest.activation_id == identity.activation_id
+                && snapshot.generation == identity.generation
+                && snapshot.phase == super::recovery::SupervisorPhase::Running
+                && snapshot.core_process.is_some(),
+            "recovery service identity does not match a Running activation with a bound core process"
+        );
+        Ok(())
+    }
+
+    fn generation_is_cleaned(&self, identity: &SupervisorIdentity) -> Result<bool> {
+        let store = super::manifest_store::ManifestStore::open(self.runtime.clone())?;
+        let Some(snapshot) = store.load()? else { return Ok(true); };
+        ensure!(
+            snapshot.manifest.activation_id == identity.activation_id
+                && snapshot.generation == identity.generation,
+            "a different activation replaced the recovery service generation"
+        );
+        Ok(snapshot.phase == super::recovery::SupervisorPhase::Cleaned)
+    }
+
     fn active_state(&self, identity: &SupervisorIdentity) -> Result<Option<String>> {
         self.validate_identity(identity)?;
         let output = Command::new(&self.systemctl)
@@ -102,6 +126,7 @@ impl SystemdRecoverySupervisor {
 impl RecoverySupervisor for SystemdRecoverySupervisor {
     fn start(&mut self, identity: &SupervisorIdentity) -> Result<()> {
         self.validate_identity(identity)?;
+        self.validate_running_manifest(identity)?;
         if self.active_state(identity)?.is_some() { return Ok(()); }
         let unit_arg = format!("--unit={}", Self::unit(identity));
         let output = Command::new(&self.systemd_run)
@@ -122,7 +147,7 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
         // until the exact transient unit is visible as active/activating before returning.
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
-            if self.active_state(identity)?.is_some() {
+            if self.active_state(identity)?.is_some() || self.generation_is_cleaned(identity)? {
                 return Ok(());
             }
             ensure!(Instant::now() < deadline,
