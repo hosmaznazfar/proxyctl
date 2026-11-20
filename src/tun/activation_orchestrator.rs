@@ -144,6 +144,24 @@ impl<'a> ActivationOrchestrator<'a> {
             }
         };
 
+        // Start the independent supervisor while the manifest is still Prepared. It waits
+        // boundedly for this generation to become Running, or recovers it if the CLI vanishes.
+        let prepared_activation = ManagedActivation {
+            token: token.clone(),
+            activation_message: "prepared activation awaiting core startup".into(),
+        };
+        if let Err(error) = self.start_recovery_supervisor(&prepared_activation) {
+            let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
+            return match recovery {
+                Ok(response) if response.success =>
+                    Err(error).context("recovery supervisor could not start; Prepared TUN resources were recovered"),
+                Ok(response) =>
+                    Err(anyhow::anyhow!("recovery supervisor startup failed ({error:#}); broker recovery failed: {}", response.message)),
+                Err(recovery_error) =>
+                    Err(anyhow::anyhow!("recovery supervisor startup failed ({error:#}); broker recovery request failed: {recovery_error:#}")),
+            };
+        }
+
         let (mut child, process) = match super::xray_launcher::spawn_xray_with_verified_attachment(
             self.helper, &request.activation_id, request.generation,
             executable, config, &request.interface_name, expected_ifindex, attachment_timeout,
@@ -187,20 +205,6 @@ impl<'a> ActivationOrchestrator<'a> {
             }
         };
 
-        if let Err(error) = self.start_recovery_supervisor(&managed) {
-            let termination = super::xray_launcher::terminate_and_reap_xray(&mut child, &process);
-            let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
-            return match (termination, recovery) {
-                (Ok(()), Ok(response)) if response.success =>
-                    Err(error).context("systemd recovery supervisor could not be started; Xray was terminated and TUN resources were recovered"),
-                (Err(stop_error), Ok(response)) if response.success =>
-                    Err(anyhow::anyhow!("recovery supervisor start failed ({error:#}); Xray termination failed: {stop_error:#}; TUN resources were recovered")),
-                (stop_result, Ok(response)) =>
-                    Err(anyhow::anyhow!("recovery supervisor start failed ({error:#}); Xray termination: {}; broker recovery failed: {}", stop_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()), response.message)),
-                (stop_result, Err(recovery_error)) =>
-                    Err(anyhow::anyhow!("recovery supervisor start failed ({error:#}); Xray termination: {}; broker recovery request failed: {recovery_error:#}", stop_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()))),
-            };
-        }
         Ok(XrayActivation { child, managed })
     }
 
