@@ -81,16 +81,25 @@ impl SystemdRecoverySupervisor {
 
     fn unit(identity: &SupervisorIdentity) -> String { format!("{}.service", identity.service_name) }
 
-    fn validate_running_manifest(&self, identity: &SupervisorIdentity) -> Result<()> {
+    fn validate_startable_manifest(&self, identity: &SupervisorIdentity) -> Result<()> {
         let store = super::manifest_store::ManifestStore::open(self.runtime.clone())?;
         let snapshot = store.load()?.context("cannot start recovery service without a durable activation manifest")?;
         ensure!(
             snapshot.manifest.activation_id == identity.activation_id
-                && snapshot.generation == identity.generation
-                && snapshot.phase == super::recovery::SupervisorPhase::Running
-                && snapshot.core_process.is_some(),
-            "recovery service identity does not match a Running activation with a bound core process"
+                && snapshot.generation == identity.generation,
+            "recovery service identity does not match the persisted activation generation"
         );
+        match snapshot.phase {
+            super::recovery::SupervisorPhase::Prepared => ensure!(
+                snapshot.core_process.is_none(),
+                "Prepared activation unexpectedly has a bound core process"
+            ),
+            super::recovery::SupervisorPhase::Running => ensure!(
+                snapshot.core_process.is_some(),
+                "Running activation has no bound core process"
+            ),
+            phase => anyhow::bail!("cannot start a recovery service for activation phase {phase:?}"),
+        }
         Ok(())
     }
 
@@ -129,7 +138,7 @@ impl SystemdRecoverySupervisor {
 impl RecoverySupervisor for SystemdRecoverySupervisor {
     fn start(&mut self, identity: &SupervisorIdentity) -> Result<()> {
         self.validate_identity(identity)?;
-        self.validate_running_manifest(identity)?;
+        self.validate_startable_manifest(identity)?;
         if self.active_state(identity)?.is_some() { return Ok(()); }
         let unit_arg = format!("--unit={}", Self::unit(identity));
         let output = Command::new(&self.systemd_run)
