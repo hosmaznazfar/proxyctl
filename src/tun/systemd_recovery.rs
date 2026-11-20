@@ -62,7 +62,10 @@ impl SystemdRecoverySupervisor {
         let executable = fs::symlink_metadata(&self.executable).context("cannot inspect recovery supervisor executable")?;
         ensure!(executable.is_file() && !executable.file_type().is_symlink(), "recovery supervisor executable must be a regular non-symlink file");
         // SAFETY: geteuid is a read-only query of the current effective user.
-        ensure!(executable.uid() == unsafe { libc::geteuid() }, "recovery supervisor executable must be owned by the activation user");
+        ensure!(
+            executable.uid() == 0 || executable.uid() == unsafe { libc::geteuid() },
+            "recovery supervisor executable must be owned by root or the activation user"
+        );
         ensure!(executable.permissions().mode() & 0o111 != 0, "recovery supervisor executable is not executable");
         ensure!(executable.permissions().mode() & 0o022 == 0, "recovery supervisor executable must not be group- or world-writable");
         for tool in [&self.systemd_run, &self.systemctl] {
