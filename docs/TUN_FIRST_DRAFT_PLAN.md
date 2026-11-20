@@ -163,3 +163,8 @@ Added `tun::xray_launcher::spawn_xray_from_broker`. It obtains the exact generat
 ## Xray kernel-backed attachment check (2026-11-20)
 
 Added `verify_xray_tun_attachment`: it checks the expected kernel TUN interface and ifindex, pins the exact Xray process, and requires an `iff:` record for that interface in one of the process's fdinfo entries, followed by a second process-identity/pidfd check. This can verify that Xray actually holds the broker-created TUN device, not merely that a same-named interface exists. It is not yet wired into activation orchestration or combined with the bounded proxied-traffic check.
+
+
+## Xray readiness composition (2026-11-20)
+
+Added `verify_xray_readiness`: verifies the process holds the exact TUN interface, refreshes listener/interface/routing-policy evidence, validates the bounded traffic observation against activation ID/generation/process identity, and delegates socket-mark plus complete evidence validation to the common readiness gate. Caller-supplied host DNS/firewall and physical-egress evidence remain required; no field is synthesized from a successful connection alone. This is a post-launch gate, not public activation wiring.

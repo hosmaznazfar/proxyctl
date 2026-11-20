@@ -1198,3 +1198,8 @@ Added a Linux Xray launcher that requests the exact activation generation's desc
 ## Xray kernel attachment verification (2026-11-20)
 
 Added a Linux verifier that pins the exact Xray process identity, checks the expected interface's kernel TUN marker and ifindex, then scans that process's `/proc/PID/fdinfo` records for an exact `iff:` interface-name match. It verifies the process identity and pidfd state again after inspection. This is stronger than checking that the interface merely exists: it establishes that Xray holds a descriptor attached to the expected TUN interface. It still does not prove that packets traverse the proxy dataplane; bounded proxied-traffic verification remains required.
+
+
+## Xray composed readiness gate (2026-11-20)
+
+Added `verify_xray_readiness` to compose Xray's exact process/fdinfo attachment check with fresh core-listener ownership, kernel TUN interface identity, live route-policy inspection, generation/process-bound bounded traffic observation, and the shared socket-mark/readiness validator. Host DNS/firewall and physical-egress evidence remain explicit caller inputs and must come from their independent probes. A SOCKS5 CONNECT alone is not promoted to successful proxied traffic. The function does not yet launch or mutate the host network; it is the fail-closed post-launch readiness gate.

@@ -121,3 +121,57 @@ mod attachment_tests {
         assert!(!fdinfo_names_interface("pos:\t0\n", "tun-proxyctl"));
     }
 }
+
+
+/// Compose Xray's kernel-backed descriptor check with the shared live TUN readiness gate.
+///
+/// The caller must supply independently collected host-network, physical-egress, and socket-mark
+/// evidence plus an application-level traffic observation. This function refreshes the process,
+/// listener, interface, and route-policy evidence itself; it never infers traffic success from a
+/// successful SOCKS handshake.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_xray_readiness(
+    process: &ProcessIdentity,
+    interface_name: &str,
+    expected: &super::readiness::ReadinessExpectation<'_>,
+    evidence: &super::readiness::ReadinessEvidence,
+    listener: std::net::SocketAddr,
+    listener_timeout: std::time::Duration,
+    plan: &super::route_policy::RoutingPolicyPlan,
+    socket_mark_response: &super::privilege_broker::SocketMarkBrokerResponse,
+    expected_peer: std::net::SocketAddr,
+    expected_transport: super::privilege_broker::BrokerSocketTransport,
+    traffic: &super::readiness::ProxyTrafficObservation,
+    activation_id: &str,
+    generation: u64,
+    maximum_traffic_duration: std::time::Duration,
+    maximum_response_bytes: usize,
+) -> Result<()> {
+    ensure!(expected.interface_name == interface_name, "Xray readiness interface differs from the manifest-bound expectation");
+    ensure!(plan.interface_name == interface_name && plan.interface_index == expected.interface_index,
+        "Xray routing plan does not match the expected TUN interface identity");
+    ensure!(process.verify()?, "Xray process identity is not live before readiness verification");
+
+    verify_xray_tun_attachment(process, interface_name, expected.interface_index)
+        .context("Xray has not adopted the expected broker-owned TUN interface")?;
+    let live_listener = super::readiness::probe_core_listener(process, listener, listener_timeout)?;
+    let live_interface = super::readiness::probe_tun_interface(interface_name, expected.interface_index)?;
+    super::readiness::probe_routing_policy(plan)?;
+
+    super::readiness::validate_proxy_traffic_observation(
+        traffic, activation_id, generation, process,
+        maximum_traffic_duration, maximum_response_bytes,
+    ).context("Xray proxied-traffic observation is invalid")?;
+
+    let mut complete = evidence.clone();
+    complete.core_process_verified = true;
+    complete.local_listener = Some(live_listener);
+    complete.tun_interface = Some(live_interface);
+    complete.route_policy_verified = true;
+    complete.proxied_traffic_verified = true;
+    super::readiness::verify_readiness_with_socket_mark(
+        expected, &complete, socket_mark_response, expected_peer, expected_transport,
+    ).context("Xray readiness evidence failed the shared TUN readiness gate")?;
+    ensure!(process.verify()?, "Xray process identity changed during readiness verification");
+    Ok(())
+}
