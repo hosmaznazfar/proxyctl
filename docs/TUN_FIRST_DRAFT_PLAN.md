@@ -94,3 +94,16 @@ The unified activation façade now validates request-local invariants (activatio
 ## Orchestrator monitoring and allocation validation (2026-11-20)
 
 The unified façade now exposes a monitor entrypoint that loads the persisted Running snapshot, pins its recorded process identity, and delegates exit-triggered exact-generation cleanup. Activation requests now validate canonical UUID identity, interface-name character/length constraints, and allocation-floor constraints for routing tables and policy priorities, in addition to the mark constraints. This still does not launch the core, verify native TUN attachment, or perform dataplane readiness evidence; public activation remains gated.
+
+
+## Work batches applied in continuation (2026-11-20)
+
+This continuation added façade-level monitoring, stricter request and recovery identity/allocation validation, and focused request tests, and updated the README, architecture review, and TUN documents. These are incremental integration components, not completion of Phases 1–6. Next work is ordered to avoid unsafe network activation:
+
+1. Establish a core-specific externally supplied TUN attachment contract for broker-owned descriptors (or replace the competing allocation design with a supported single-owner mechanism).
+2. Implement a launcher that coordinates descriptor/device handoff, generated config, outbound mark, process identity capture, and generation-scoped cleanup.
+3. Connect readiness to a listener owned by the core and an actual bounded proxied response/traffic check; reject ambiguous evidence.
+4. Connect public start/status/stop to the unified orchestrator without exposing host network mutations before safety checks pass.
+5. Implement and validate CLI-independent recovery supervision for supported service manager(s), then revisit the release gate.
+
+No local build, tests, host network mutation, or TUN activation was performed in this continuation.
