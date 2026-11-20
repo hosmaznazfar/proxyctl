@@ -318,6 +318,10 @@ impl CoreAdapter for MihomoAdapter {
         json_config(document)
     }
 
+    fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
+        super::TunAttachmentMode::Unsupported
+    }
+
     fn generate_tun_activation_config(
         &self,
         _node: &ProxyNode,
@@ -364,6 +368,7 @@ mod config_contract_tests {
 
     #[test]
     fn mihomo_activation_benchmark_and_tun_options_stay_core_native() {
+        assert_eq!(super::MihomoAdapter.tun_attachment_mode(), super::TunAttachmentMode::Unsupported);
         let capabilities = std::hint::black_box(CAPABILITIES);
         assert!(capabilities.hysteria2 && capabilities.xhttp);
         assert!(

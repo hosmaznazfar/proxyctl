@@ -582,6 +582,22 @@ mod tests {
     }
 
     #[test]
+    fn descriptor_export_envelope_is_generation_bound() {
+        let request = MutationRequest::AttachDescriptor {
+            version: VERSION,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 8,
+        };
+        assert!(request.validate().is_ok());
+        let stale = MutationRequest::AttachDescriptor {
+            version: VERSION,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 0,
+        };
+        assert!(stale.validate().is_err());
+    }
+
+    #[test]
     fn recovery_envelope_requires_canonical_activation_identity() {
         let request = MutationRequest::Recover {
             version: VERSION,
