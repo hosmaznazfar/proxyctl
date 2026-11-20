@@ -64,9 +64,18 @@ impl SystemdRecoverySupervisor {
             .args(["--user", "show", "--property=ActiveState", "--value"])
             .arg(Self::unit(identity)).output()
             .context("could not query the systemd user service state")?;
-        if !output.status.success() { return Ok(None); }
-        let state = String::from_utf8(output.stdout).context("systemd returned a non-UTF-8 service state")?.trim().to_owned();
-        Ok((!state.is_empty() && state != "inactive" && state != "failed").then_some(state))
+        ensure!(output.status.success(),
+            "systemctl could not query the TUN recovery service: {}",
+            String::from_utf8_lossy(&output.stderr).trim());
+        let state = String::from_utf8(output.stdout)
+            .context("systemd returned a non-UTF-8 service state")?
+            .trim()
+            .to_owned();
+        match state.as_str() {
+            "active" | "activating" | "reloading" | "deactivating" => Ok(Some(state)),
+            "inactive" | "failed" => Ok(None),
+            _ => anyhow::bail!("systemd returned an unrecognized service state: {state:?}"),
+        }
     }
 }
 
