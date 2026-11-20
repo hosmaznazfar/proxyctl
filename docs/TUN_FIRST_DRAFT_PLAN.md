@@ -89,3 +89,8 @@ The orchestrator is not yet wired into `services::activation::activate`; that pu
 ## Orchestrator validation and recovery draft batch
 
 The unified activation façade now validates request-local invariants (activation ID/generation, Linux interface-name length, positive and distinct policy priorities, table ID, and mark/mask constraints) before invoking broker mutations. It rejects an existing manifest before a new activation and offers explicit-current-generation recovery. Added compact unit checks for request validation. This remains a draft: the public activation service is still gated, and native core TUN attachment to the broker-retained descriptor is not established. No host networking changes, build, or tests were run by the authoring workflow.
+
+
+## Orchestrator monitoring and allocation validation (2026-11-20)
+
+The unified façade now exposes a monitor entrypoint that loads the persisted Running snapshot, pins its recorded process identity, and delegates exit-triggered exact-generation cleanup. Activation requests now validate canonical UUID identity, interface-name character/length constraints, and allocation-floor constraints for routing tables and policy priorities, in addition to the mark constraints. This still does not launch the core, verify native TUN attachment, or perform dataplane readiness evidence; public activation remains gated.
