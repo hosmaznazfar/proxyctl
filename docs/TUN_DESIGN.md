@@ -1133,3 +1133,12 @@ A draft unified orchestrator façade is now present in `src/tun/activation_orche
 Routing policy transaction integration is composed through the existing `MutationHelper::activate` request, whose broker path creates the interface, binds routes to the kernel-assigned ifindex, installs route/rule policy, and commits its ownership manifest. The façade provides recover/resume entry points for generation-bound cleanup and supervision.
 
 This remains a draft integration layer, not a complete end-to-end activation pipeline: core launch/configuration ordering and native TUN attachment behavior are not reconciled here, nor are traffic-flow readiness checks connected. No tests or local builds were run.
+
+
+
+
+## Integration continuation checkpoint (2026-11-20)
+
+Repository access was re-established and the current main branch was inspected. The draft `ActivationOrchestrator` composes the typed broker transaction, Prepared-manifest adoption, core-process identity binding, Running transition, exact-generation recovery, and supervision-resume entry points. Its routing activation delegates to the mutation broker, which retains the TUN descriptor and applies the journal-backed route/rule transaction against kernel-assigned interface identity.
+
+The orchestrator is not yet wired into `services::activation::activate`; that public path still rejects TUN mode before config generation. The device handoff is still a blocking integration issue: adapter-native TUN config requests a named interface while the broker separately creates an exclusive TUN attachment. There is no established descriptor transfer or attachment proof between those implementations. Simply enabling the public path or calling the orchestrator after launching the core would risk duplicate/conflicting interfaces and incorrect activation ordering. Therefore the next concrete integration must define and implement one attachment contract (or use a core-supported externally supplied TUN descriptor), then connect launch/stop/readiness around it. No local tests/builds or host networking actions were run.
