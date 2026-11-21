@@ -196,13 +196,31 @@ fn write_frame<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<()> {
 }
 
 fn read_frame<T: for<'de> Deserialize<'de>>(stream: &mut UnixStream) -> Result<T> {
+    let deadline = std::time::Instant::now() + HANDOFF_IO_TIMEOUT;
     let mut header = [0u8; 4];
-    stream.read_exact(&mut header).context("cannot read attachment frame length")?;
+    read_exact_until(stream, &mut header, deadline).context("cannot read attachment frame length")?;
     let length = u32::from_le_bytes(header) as usize;
     ensure!(length > 0 && length <= MAX_FRAME, "attachment frame length is invalid");
     let mut payload = vec![0u8; length];
-    stream.read_exact(&mut payload).context("cannot read attachment frame payload")?;
+    read_exact_until(stream, &mut payload, deadline).context("cannot read attachment frame payload")?;
     serde_json::from_slice(&payload).context("attachment frame is malformed or contains unknown fields")
+}
+
+fn read_exact_until(stream: &mut UnixStream, mut bytes: &mut [u8], deadline: std::time::Instant) -> Result<()> {
+    use std::io::ErrorKind;
+    while !bytes.is_empty() {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "attachment frame exceeded its deadline");
+        stream.set_read_timeout(Some(remaining))?;
+        match stream.read(bytes) {
+            Ok(0) => anyhow::bail!("attachment frame ended before completion"),
+            Ok(count) => bytes = &mut bytes[count..],
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => anyhow::bail!("attachment frame exceeded its deadline"),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }
 
 fn validate_identity(activation_id: &str, generation: u64, interface_name: &str) -> Result<()> {
