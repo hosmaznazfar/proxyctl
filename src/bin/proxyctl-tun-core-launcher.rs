@@ -303,6 +303,18 @@ fn validate_tun_descriptor(fd: i32, interface: &str, expected_ifindex: u32) -> R
     ensure!(status >= 0 && status & libc::O_ACCMODE == libc::O_RDWR,
         "received TUN descriptor must be open for read/write packet I/O");
 
+    const TUNGETOWNER: libc::c_ulong = 0x8004_54cc;
+    const TUNGETGROUP: libc::c_ulong = 0x8004_54ce;
+    let mut owner: libc::c_int = -1;
+    let mut group: libc::c_int = -1;
+    // SAFETY: TUNGETOWNER/TUNGETGROUP write one integer to the supplied live pointers.
+    ensure!(unsafe { libc::ioctl(fd, TUNGETOWNER, &mut owner) } == 0
+        && unsafe { libc::ioctl(fd, TUNGETGROUP, &mut group) } == 0,
+        "cannot inspect TUN descriptor owner and group");
+    ensure!(owner >= 0 && owner as u32 == unsafe { libc::getuid() }
+        && group >= 0 && group as u32 == unsafe { libc::getgid() },
+        "received TUN descriptor owner/group does not match the isolated Xray service identity");
+
     let interface_path = Path::new("/sys/class/net").join(interface);
     ensure!(interface_path.join("tun_flags").is_file(),
         "expected interface is not a kernel TUN device");
