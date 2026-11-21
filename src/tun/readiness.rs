@@ -395,6 +395,7 @@ fn read_http_header_block(
 ) -> Result<Vec<u8>> {
     use std::io::Read;
     let mut headers = Vec::new();
+    headers.try_reserve_exact(maximum).context("cannot reserve bounded HTTP response headers")?;
     let mut byte = [0u8; 1];
     while headers.len() < maximum {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
