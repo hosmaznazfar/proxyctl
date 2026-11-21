@@ -161,10 +161,20 @@ impl PersistentTunOwner {
     }
 
     /// Borrow the live descriptor for the exact activation generation.
-    pub fn descriptor(&self, activation_id: &str, generation: u64) -> Result<std::os::fd::BorrowedFd<'_>> {
+    pub fn descriptor(
+        &self,
+        activation_id: &str,
+        generation: u64,
+    ) -> Result<std::os::fd::BorrowedFd<'_>> {
         validate_identity(activation_id, generation)?;
-        self.devices.get(&OwnerKey { activation_id: activation_id.to_owned(), generation })
-            .filter(|owned| owned.device.name() == owned.interface.name && owned.interface.index > 0)
+        self.devices
+            .get(&OwnerKey {
+                activation_id: activation_id.to_owned(),
+                generation,
+            })
+            .filter(|owned| {
+                owned.device.name() == owned.interface.name && owned.interface.index > 0
+            })
             .map(|owned| owned.device.as_fd())
             .context("activation generation does not own a consistent retained TUN descriptor")
     }
@@ -207,8 +217,6 @@ mod tests {
     }
 }
 
-
-
 /// Stable kernel-visible alias used to recover a persistent TUN after a broker crash.
 pub fn generation_alias(activation_id: &str, generation: u64) -> Result<String> {
     validate_identity(activation_id, generation)?;
@@ -227,14 +235,35 @@ pub struct NativePersistentTunOwner {
 }
 
 impl NativePersistentTunOwner {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn create(&mut self, activation_id: &str, generation: u64, name: &str, uid: u32, gid: u32) -> Result<KernelInterfaceRecord> {
+    pub fn create(
+        &mut self,
+        activation_id: &str,
+        generation: u64,
+        name: &str,
+        uid: u32,
+        gid: u32,
+    ) -> Result<KernelInterfaceRecord> {
         validate_identity(activation_id, generation)?;
-        let key = OwnerKey { activation_id: activation_id.to_owned(), generation };
-        ensure!(!self.devices.contains_key(&key), "native TUN generation is already registered");
-        ensure!(self.devices.len() < MAX_RETAINED_TUN_DEVICES, "native TUN registry limit reached");
-        ensure!(!self.devices.values().any(|device| device.name == name), "native TUN name is already owned");
+        let key = OwnerKey {
+            activation_id: activation_id.to_owned(),
+            generation,
+        };
+        ensure!(
+            !self.devices.contains_key(&key),
+            "native TUN generation is already registered"
+        );
+        ensure!(
+            self.devices.len() < MAX_RETAINED_TUN_DEVICES,
+            "native TUN registry limit reached"
+        );
+        ensure!(
+            !self.devices.values().any(|device| device.name == name),
+            "native TUN name is already owned"
+        );
 
         let alias = generation_alias(activation_id, generation)?;
         super::tun_device::create_persistent(name, uid, gid, &alias)
@@ -245,18 +274,32 @@ impl NativePersistentTunOwner {
         // interface behind while the broker reports activation failure.
         let verified = (|| -> Result<KernelInterfaceRecord> {
             let snapshot = kernel_inventory::inspect_snapshot()?;
-            let mut matches = snapshot.interfaces.iter()
+            let mut matches = snapshot
+                .interfaces
+                .iter()
                 .filter(|interface| interface.name == name && interface.is_tun)
                 .cloned();
-            let interface = matches.next()
+            let interface = matches
+                .next()
                 .context("persistent native TUN interface is absent from fresh kernel inventory")?;
-            ensure!(matches.next().is_none(), "kernel inventory contains duplicate native TUN names");
-            ensure!(interface.index > 0, "persistent native TUN interface has an invalid ifindex");
+            ensure!(
+                matches.next().is_none(),
+                "kernel inventory contains duplicate native TUN names"
+            );
+            ensure!(
+                interface.index > 0,
+                "persistent native TUN interface has an invalid ifindex"
+            );
             let live_index = super::tun_device::current_interface_index(name)?;
-            ensure!(live_index == interface.index, "persistent native TUN ifindex changed during verification");
+            ensure!(
+                live_index == interface.index,
+                "persistent native TUN ifindex changed during verification"
+            );
             let live_alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))?;
-            ensure!(live_alias.trim_end_matches(['\r', '\n']) == alias,
-                "persistent native TUN generation alias does not match the requested activation");
+            ensure!(
+                live_alias.trim_end_matches(['\r', '\n']) == alias,
+                "persistent native TUN generation alias does not match the requested activation"
+            );
             Ok(interface)
         })();
 
@@ -266,7 +309,9 @@ impl NativePersistentTunOwner {
                 let rollback = super::tun_device::current_interface_index(name)
                     .and_then(|index| super::tun_device::remove_persistent(name, index, &alias));
                 return match rollback {
-                    Ok(()) => Err(error).context("native TUN verification failed; persistent interface was rolled back"),
+                    Ok(()) => Err(error).context(
+                        "native TUN verification failed; persistent interface was rolled back",
+                    ),
                     Err(cleanup) => anyhow::bail!(
                         "native TUN verification failed ({error:#}); persistent-interface rollback also failed ({cleanup:#})"
                     ),
@@ -279,24 +324,52 @@ impl NativePersistentTunOwner {
 
     pub fn identity(&self, activation_id: &str, generation: u64) -> Result<&KernelInterfaceRecord> {
         validate_identity(activation_id, generation)?;
-        self.devices.get(&OwnerKey { activation_id: activation_id.to_owned(), generation })
+        self.devices
+            .get(&OwnerKey {
+                activation_id: activation_id.to_owned(),
+                generation,
+            })
             .filter(|interface| interface.index > 0)
             .context("native TUN generation is not registered")
     }
 
     /// Remove the persistent device only after the caller has stopped its exact core service.
-    pub fn release(&mut self, activation_id: &str, generation: u64, name: &str, index: u32) -> Result<()> {
+    pub fn release(
+        &mut self,
+        activation_id: &str,
+        generation: u64,
+        name: &str,
+        index: u32,
+    ) -> Result<()> {
         validate_identity(activation_id, generation)?;
-        let key = OwnerKey { activation_id: activation_id.to_owned(), generation };
-        let owned = self.devices.get(&key).context("native TUN generation is not registered")?;
-        ensure!(owned.name == name && owned.index == index && index > 0,
-            "refusing to remove a native TUN device with mismatched durable identity");
+        let key = OwnerKey {
+            activation_id: activation_id.to_owned(),
+            generation,
+        };
+        let owned = self
+            .devices
+            .get(&key)
+            .context("native TUN generation is not registered")?;
+        ensure!(
+            owned.name == name && owned.index == index && index > 0,
+            "refusing to remove a native TUN device with mismatched durable identity"
+        );
         let snapshot = kernel_inventory::inspect_snapshot()?;
-        let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name);
-        let live = matches.next().context("native TUN interface disappeared before cleanup")?;
-        ensure!(matches.next().is_none(), "kernel inventory contains duplicate interface names");
-        ensure!(live.is_tun && live.index == index,
-            "native TUN interface identity changed; refusing persistent cleanup");
+        let mut matches = snapshot
+            .interfaces
+            .iter()
+            .filter(|interface| interface.name == name);
+        let live = matches
+            .next()
+            .context("native TUN interface disappeared before cleanup")?;
+        ensure!(
+            matches.next().is_none(),
+            "kernel inventory contains duplicate interface names"
+        );
+        ensure!(
+            live.is_tun && live.index == index,
+            "native TUN interface identity changed; refusing persistent cleanup"
+        );
         let alias = generation_alias(activation_id, generation)?;
         super::tun_device::remove_persistent(name, index, &alias)
             .context("cannot clear persistence from the exact owned native TUN interface")?;
@@ -306,42 +379,80 @@ impl NativePersistentTunOwner {
 
     /// Recover or release a journal-owned persistent device after the exact core service stopped.
     /// This path intentionally works after broker restart, when the process-local registry is empty.
-    pub fn release_recovered(&mut self, name: &str, index: u32, expected_alias: &str) -> Result<()> {
+    pub fn release_recovered(
+        &mut self,
+        name: &str,
+        index: u32,
+        expected_alias: &str,
+    ) -> Result<()> {
         super::tun_device::validate_name(name)?;
-        ensure!(index > 0, "persistent TUN recovery requires a non-zero ifindex");
+        ensure!(
+            index > 0,
+            "persistent TUN recovery requires a non-zero ifindex"
+        );
         let snapshot = kernel_inventory::inspect_snapshot()?;
-        let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name);
-        let live = matches.next().context("journal-owned persistent TUN interface is absent")?;
-        ensure!(matches.next().is_none(), "kernel inventory contains duplicate interface names");
-        ensure!(live.is_tun && live.index == index,
-            "persistent TUN recovery identity changed; refusing cleanup");
+        let mut matches = snapshot
+            .interfaces
+            .iter()
+            .filter(|interface| interface.name == name);
+        let live = matches
+            .next()
+            .context("journal-owned persistent TUN interface is absent")?;
+        ensure!(
+            matches.next().is_none(),
+            "kernel inventory contains duplicate interface names"
+        );
+        ensure!(
+            live.is_tun && live.index == index,
+            "persistent TUN recovery identity changed; refusing cleanup"
+        );
         let alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))?;
-        ensure!(alias.trim_end_matches(['\r', '\n']) == expected_alias,
-            "persistent TUN generation alias changed; refusing recovery cleanup");
+        ensure!(
+            alias.trim_end_matches(['\r', '\n']) == expected_alias,
+            "persistent TUN generation alias changed; refusing recovery cleanup"
+        );
         super::tun_device::remove_persistent(name, index, expected_alias)
             .context("cannot clear persistence from journal-owned native TUN interface")?;
         let after = kernel_inventory::inspect_snapshot()?;
-        ensure!(!after.interfaces.iter().any(|interface| interface.name == name || interface.index == index),
-            "persistent TUN interface remains after persistence was cleared");
-        self.devices.retain(|_, device| device.name != name || device.index != index);
+        ensure!(
+            !after
+                .interfaces
+                .iter()
+                .any(|interface| interface.name == name || interface.index == index),
+            "persistent TUN interface remains after persistence was cleared"
+        );
+        self.devices
+            .retain(|_, device| device.name != name || device.index != index);
         Ok(())
     }
 
     /// Drop only stale process-local bookkeeping after a fresh inventory proves the device absent.
     pub fn forget_if_absent(&mut self, name: &str, index: u32) -> Result<()> {
         super::tun_device::validate_name(name)?;
-        ensure!(index > 0, "native TUN stale-entry cleanup requires a non-zero ifindex");
+        ensure!(
+            index > 0,
+            "native TUN stale-entry cleanup requires a non-zero ifindex"
+        );
         let snapshot = kernel_inventory::inspect_snapshot()?;
-        ensure!(!snapshot.interfaces.iter().any(|interface| interface.name == name || interface.index == index),
-            "cannot forget native TUN ownership while its name or ifindex is still present");
-        self.devices.retain(|_, device| device.name != name || device.index != index);
+        ensure!(
+            !snapshot
+                .interfaces
+                .iter()
+                .any(|interface| interface.name == name || interface.index == index),
+            "cannot forget native TUN ownership while its name or ifindex is still present"
+        );
+        self.devices
+            .retain(|_, device| device.name != name || device.index != index);
         Ok(())
     }
 
-    pub fn len(&self) -> usize { self.devices.len() }
-    pub fn is_empty(&self) -> bool { self.devices.is_empty() }
+    pub fn len(&self) -> usize {
+        self.devices.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.devices.is_empty()
+    }
 }
-
 
 #[cfg(test)]
 mod native_owner_tests {
@@ -352,24 +463,59 @@ mod native_owner_tests {
         let owner = NativePersistentTunOwner::new();
         assert!(owner.is_empty());
         assert_eq!(owner.len(), 0);
-        assert!(owner.identity("12345678-1234-4234-8234-123456789abc", 1).is_err());
+        assert!(
+            owner
+                .identity("12345678-1234-4234-8234-123456789abc", 1)
+                .is_err()
+        );
     }
 
     #[test]
     fn native_registry_release_requires_exact_name_and_ifindex_before_kernel_access() {
         let mut owner = NativePersistentTunOwner::new();
-        let key = OwnerKey { activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 9 };
-        owner.devices.insert(key, KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 17, is_tun: true });
-        assert!(owner.release("12345678-1234-4234-8234-123456789abc", 9, "tun-other", 17).is_err());
-        assert!(owner.release("12345678-1234-4234-8234-123456789abc", 9, "tun-proxyctl", 18).is_err());
+        let key = OwnerKey {
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 9,
+        };
+        owner.devices.insert(
+            key,
+            KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 17,
+                is_tun: true,
+            },
+        );
+        assert!(
+            owner
+                .release("12345678-1234-4234-8234-123456789abc", 9, "tun-other", 17)
+                .is_err()
+        );
+        assert!(
+            owner
+                .release(
+                    "12345678-1234-4234-8234-123456789abc",
+                    9,
+                    "tun-proxyctl",
+                    18
+                )
+                .is_err()
+        );
         assert_eq!(owner.len(), 1);
     }
 
     #[test]
     fn native_registry_rejects_stale_generation_and_invalid_uuid() {
         let owner = NativePersistentTunOwner::new();
-        assert!(owner.identity("12345678-1234-4234-8234-123456789ABC", 1).is_err());
-        assert!(owner.identity("12345678-1234-4234-8234-123456789abc", 0).is_err());
+        assert!(
+            owner
+                .identity("12345678-1234-4234-8234-123456789ABC", 1)
+                .is_err()
+        );
+        assert!(
+            owner
+                .identity("12345678-1234-4234-8234-123456789abc", 0)
+                .is_err()
+        );
     }
 }
 
@@ -381,10 +527,27 @@ mod native_owner_capacity_tests {
     fn native_registry_rejects_duplicate_interface_name_without_kernel_access() {
         let mut owner = NativePersistentTunOwner::new();
         owner.devices.insert(
-            OwnerKey { activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 1 },
-            KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 12, is_tun: true },
+            OwnerKey {
+                activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+                generation: 1,
+            },
+            KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 12,
+                is_tun: true,
+            },
         );
-        assert!(owner.create("12345678-1234-4234-8234-123456789def", 2, "tun-proxyctl", 1000, 1000).is_err());
+        assert!(
+            owner
+                .create(
+                    "12345678-1234-4234-8234-123456789def",
+                    2,
+                    "tun-proxyctl",
+                    1000,
+                    1000
+                )
+                .is_err()
+        );
         assert_eq!(owner.len(), 1);
     }
 
@@ -392,10 +555,27 @@ mod native_owner_capacity_tests {
     fn native_registry_rejects_duplicate_generation_without_kernel_access() {
         let mut owner = NativePersistentTunOwner::new();
         owner.devices.insert(
-            OwnerKey { activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 1 },
-            KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 12, is_tun: true },
+            OwnerKey {
+                activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+                generation: 1,
+            },
+            KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 12,
+                is_tun: true,
+            },
         );
-        assert!(owner.create("12345678-1234-4234-8234-123456789abc", 1, "tun-other", 1000, 1000).is_err());
+        assert!(
+            owner
+                .create(
+                    "12345678-1234-4234-8234-123456789abc",
+                    1,
+                    "tun-other",
+                    1000,
+                    1000
+                )
+                .is_err()
+        );
         assert_eq!(owner.len(), 1);
     }
 }
@@ -408,7 +588,10 @@ mod generation_alias_tests {
     fn generation_alias_is_canonical_and_generation_bound() {
         let id = "12345678-1234-4234-8234-123456789abc";
         assert_eq!(generation_alias(id, 7).unwrap(), format!("proxyctl:{id}:7"));
-        assert_ne!(generation_alias(id, 7).unwrap(), generation_alias(id, 8).unwrap());
+        assert_ne!(
+            generation_alias(id, 7).unwrap(),
+            generation_alias(id, 8).unwrap()
+        );
         assert!(generation_alias("12345678-1234-4234-8234-123456789ABC", 7).is_err());
         assert!(generation_alias(id, 0).is_err());
     }
