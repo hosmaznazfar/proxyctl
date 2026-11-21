@@ -378,11 +378,13 @@ mod validation_tests {
 
     #[test]
     fn persistent_interface_intent_is_recoverable_only_with_exact_generation_alias() {
-        let value = journal(vec![operation(
+        let mut value = journal(vec![operation(
             0,
             JournalOperationKind::CreatePersistentInterface,
             "interface:tun-proxyctl",
         )]);
+        value.operations[0].state = JournalOperationState::Intent;
+        value.operations[0].fingerprint = None;
         let fingerprint = serde_json::json!({
             "alias": "proxyctl:12345678-1234-4234-8234-123456789abc:1",
             "ifindex": 77,
@@ -400,11 +402,13 @@ mod validation_tests {
 
     #[test]
     fn persistent_interface_intent_with_foreign_alias_remains_a_conflict() {
-        let value = journal(vec![operation(
+        let mut value = journal(vec![operation(
             0,
             JournalOperationKind::CreatePersistentInterface,
             "interface:tun-proxyctl",
         )]);
+        value.operations[0].state = JournalOperationState::Intent;
+        value.operations[0].fingerprint = None;
         let fingerprint = serde_json::json!({
             "alias": "foreign:activation",
             "ifindex": 77,
