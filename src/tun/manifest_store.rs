@@ -241,7 +241,7 @@ impl ManifestStore {
         bytes
             .try_reserve_exact(metadata.len() as usize)
             .context("cannot reserve bounded TUN manifest read buffer")?;
-        file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
+        (&file).take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
         ensure!(
             bytes.len() as u64 <= MAX_MANIFEST_BYTES,
             "TUN manifest exceeds size limit"
