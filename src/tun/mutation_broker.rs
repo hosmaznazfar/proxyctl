@@ -438,7 +438,10 @@ fn read_request(stream: &mut UnixStream) -> Result<MutationRequest> {
         length > 0 && length <= MAX_FRAME,
         "mutation request frame length is invalid"
     );
-    let mut payload = vec![0u8; length];
+    let mut payload = Vec::new();
+    payload.try_reserve_exact(length)
+        .context("cannot reserve bounded mutation request payload")?;
+    payload.resize(length, 0);
     read_exact_deadline(stream, &mut payload, deadline)?;
     serde_json::from_slice(&payload).context("mutation request JSON is malformed")
 }
