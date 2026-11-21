@@ -1269,3 +1269,7 @@ The transient user service applies a restrictive systemd sandbox (private tempor
 
 The service has not been exercised against a live systemd user manager, process crash, or reboot. The startup timeout and systemd sandbox still require host verification. Public TUN activation remains gated; Xray native descriptor support/readiness is not runtime-verified, and sing-box/Mihomo attachment remains unresolved.
 \n\n## Commit-failure compensation (draft implementation)\n\nIf binding a ready Xray process to the durable Running manifest fails, orchestration now terminates/reaps the exact child and requests broker recovery for the same activation ID and generation. Error reporting preserves both termination and recovery outcomes. This compensation path is implemented but not runtime-verified. The readiness callback remains caller-bounded and cancellation of arbitrary blocking callback code is not guaranteed.\n
+
+## Activation preflight and runtime directory hardening (2026-11-21)
+
+Activation request validation now rejects a core-bypass policy priority that is not strictly earlier than the proxy-routing priority before any broker mutation is requested. The helper and recovery-supervisor runtime paths are canonicalized and require a caller-owned, private directory with owner read/write/search permissions. This reduces path ambiguity and avoids entering startup paths with unusable directory permissions. These are local preflight checks only; they do not validate kernel policy or core dataplane behavior.
