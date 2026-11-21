@@ -141,7 +141,7 @@ impl RouteNetlink {
                     self.fd.as_raw_fd(),
                     buffer.as_mut_ptr().cast(),
                     buffer.len(),
-                    libc::MSG_TRUNC,
+                    libc::MSG_TRUNC | libc::MSG_DONTWAIT,
                     (&mut sender as *mut libc::sockaddr_nl).cast(),
                     &mut sender_len,
                 )
