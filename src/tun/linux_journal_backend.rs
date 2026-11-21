@@ -488,8 +488,10 @@ fn parse_rule_key(key: &str) -> Result<(AddressFamily, u32)> {
     let (family, priority) = rest.split_once(':').context("invalid rule priority")?;
     let parsed_priority = priority.parse::<u32>()?;
     ensure!(
-        parsed_priority > 0 && parsed_priority.to_string() == priority,
-        "rule priority is not canonical"
+        parsed_priority > 0
+            && parsed_priority <= i32::MAX as u32
+            && parsed_priority.to_string() == priority,
+        "rule priority is not canonical or exceeds the native signed range"
     );
     Ok((parse_family(family)?, parsed_priority))
 }
