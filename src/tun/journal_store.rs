@@ -202,12 +202,33 @@ impl JournalStore {
         );
         verify_owner(&metadata)?;
         verify_private_file(&metadata)?;
-        let mut bytes = Vec::with_capacity(metadata.len() as usize);
-        file.take(MAX_JOURNAL_BYTES + 1).read_to_end(&mut bytes)?;
+        let mut bytes = Vec::new();
+        bytes.try_reserve_exact(metadata.len() as usize)
+            .context("cannot reserve bounded TUN journal read buffer")?;
+        (&file).take(MAX_JOURNAL_BYTES + 1).read_to_end(&mut bytes)?;
         ensure!(
             bytes.len() as u64 <= MAX_JOURNAL_BYTES,
             "TUN transaction journal exceeds size limit"
         );
+        let after_read = file.metadata()?;
+        ensure!(
+            bytes.len() as u64 == metadata.len() && after_read.len() == metadata.len(),
+            "TUN transaction journal changed size while it was being read"
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            ensure!(
+                metadata.dev() == after_read.dev()
+                    && metadata.ino() == after_read.ino()
+                    && metadata.mtime() == after_read.mtime()
+                    && metadata.mtime_nsec() == after_read.mtime_nsec()
+                    && metadata.ctime() == after_read.ctime()
+                    && metadata.ctime_nsec() == after_read.ctime_nsec(),
+                "TUN transaction journal changed while it was being read"
+            );
+        }
+        ensure!(!bytes.is_empty(), "TUN transaction journal file is empty");
         let journal: TransactionJournal =
             serde_json::from_slice(&bytes).context("TUN transaction journal is malformed")?;
         journal.validate()?;
