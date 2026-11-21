@@ -94,6 +94,39 @@ impl<'a> ActivationOrchestrator<'a> {
         ).context("unified TUN activation failed")
     }
 
+    /// Core-dispatched node activation. Only adapters with a concrete broker-owned
+    /// descriptor contract may enter this path; native self-created TUN and unsupported
+    /// adapters are rejected before a broker mutation is requested.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate_core_node_with_readiness<F>(
+        &self,
+        core_id: CoreId,
+        request: ActivationRequest,
+        node: &ProxyNode,
+        listen_port: u16,
+        executable: &Path,
+        attachment_timeout: Duration,
+        readiness: F,
+    ) -> Result<XrayActivation>
+    where
+        F: FnOnce(&ProcessIdentity, &ActivationToken) -> Result<()>,
+    {
+        match (core_id, adapter(core_id).tun_attachment_mode()) {
+            (CoreId::Xray, mode)
+                if mode.external_descriptor_environment() == Some(XRAY_TUN_FD_ENV) =>
+            {
+                self.activate_xray_node_with_readiness(
+                    request, node, listen_port, executable, attachment_timeout, readiness,
+                )
+            }
+            (CoreId::SingBox, super::super::cores::adapters::TunAttachmentMode::NativeDeviceCreation) =>
+                anyhow::bail!("sing-box creates its own named TUN device and has no verified broker-owned descriptor adoption path; refusing to start it in this lifecycle"),
+            (CoreId::Mihomo, super::super::cores::adapters::TunAttachmentMode::Unsupported) =>
+                anyhow::bail!("Mihomo has no verified marked TUN attachment contract; refusing TUN activation"),
+            _ => anyhow::bail!("{core_id} does not expose a supported broker-owned TUN descriptor contract"),
+        }
+    }
+
     /// Generate, validate, and launch Xray from the selected Proxyctl node using the
     /// broker-owned descriptor path. The temporary config is private (0600) and is kept
     /// alive through startup/readiness; no caller-supplied config can silently omit the TUN
