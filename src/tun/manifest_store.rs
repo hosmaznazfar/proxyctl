@@ -207,6 +207,10 @@ impl ManifestStore {
             bytes.len() as u64 <= MAX_MANIFEST_BYTES,
             "TUN manifest exceeds size limit"
         );
+        ensure!(
+            bytes.len() as u64 == metadata.len(),
+            "TUN manifest changed size while it was being read"
+        );
         let snapshot: ManifestSnapshot =
             serde_json::from_slice(&bytes).context("TUN manifest is malformed")?;
         snapshot.validate()?;
