@@ -514,9 +514,10 @@ pub(crate) fn verify_xray_end_to_end_readiness(
 ) -> Result<super::readiness::ProxyTrafficObservation> {
     super::readiness::probe_unmarked_route_to_tun(plan, target.destination.ip())
         .context("kernel does not route the unmarked application probe through the owned TUN table")?;
-    let traffic = super::readiness::probe_tun_routed_http_traffic(
+    let traffic_probe = super::readiness::probe_tun_routed_http_traffic(
         process, target, activation_id, generation, probe_timeout, maximum_response_bytes,
     ).context("direct application traffic did not traverse the Xray TUN dataplane")?;
+    let traffic = &traffic_probe.observation;
     let preflight = super::readiness::collect_managed_preflight_with_response(
         runtime_directory, activation_id, process, listener, listener_timeout, plan,
         expected_peers, transport, baseline_host, current_host,
@@ -524,10 +525,10 @@ pub(crate) fn verify_xray_end_to_end_readiness(
     let observed_peer = preflight.socket_mark_response.expected_peer;
     verify_xray_readiness(
         process, interface_name, expected, &preflight.evidence, listener, listener_timeout,
-        plan, &preflight.socket_mark_response, observed_peer, transport, &traffic,
+        plan, &preflight.socket_mark_response, observed_peer, transport, traffic,
         activation_id, generation, probe_timeout, maximum_response_bytes,
     ).context("Xray full readiness verification failed")?;
-    Ok(traffic)
+    Ok(traffic.clone())
 }
 
 /// Wait for Xray to expose the exact TUN attachment in kernel fdinfo.
