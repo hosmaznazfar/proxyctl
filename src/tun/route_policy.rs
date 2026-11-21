@@ -85,6 +85,27 @@ pub struct KernelInventory {
     pub rule_priorities: Vec<(AddressFamily, u32)>,
 }
 
+/// Allocate a free private table and consecutive policy priorities from one live snapshot.
+///
+/// The caller must still let the broker re-check conflicts transactionally because another
+/// network manager can change the kernel inventory between this read-only selection and commit.
+pub fn allocate_policy_identifiers(inventory: &KernelInventory) -> Result<(u32, u32, u32)> {
+    let table = (RT_TABLE_MIN_PROXYCTL..=RT_TABLE_MIN_PROXYCTL + 4095)
+        .find(|candidate| !inventory.occupied_tables.contains(candidate))
+        .ok_or_else(|| anyhow::anyhow!("no free Proxyctl routing table is available in the private allocation range"))?;
+    let priority_pair = (RPDB_PRIORITY_MIN_PROXYCTL..=32_000u32)
+        .find(|priority| {
+            let Some(next) = priority.checked_add(1) else { return false; };
+            next <= 32_000
+                && [AddressFamily::Ipv4, AddressFamily::Ipv6].iter().all(|family| {
+                    !inventory.rule_priorities.contains(&(*family, *priority))
+                        && !inventory.rule_priorities.contains(&(*family, next))
+                })
+        })
+        .ok_or_else(|| anyhow::anyhow!("no consecutive free Proxyctl policy priorities are available"))?;
+    Ok((table, priority_pair, priority_pair + 1))
+}
+
 impl RoutingPolicyPlan {
     /// Build an explicit dual-stack plan. Core sockets must set the configured SO_MARK value.
     pub fn new(
@@ -299,6 +320,22 @@ impl RoutingPolicyPlan {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn allocates_a_free_table_and_dual_stack_priority_pair() {
+        let inventory = KernelInventory {
+            occupied_tables: vec![RT_TABLE_MIN_PROXYCTL],
+            rule_priorities: vec![
+                (AddressFamily::Ipv4, RPDB_PRIORITY_MIN_PROXYCTL),
+                (AddressFamily::Ipv6, RPDB_PRIORITY_MIN_PROXYCTL),
+                (AddressFamily::Ipv4, RPDB_PRIORITY_MIN_PROXYCTL + 1),
+            ],
+        };
+        assert_eq!(
+            allocate_policy_identifiers(&inventory).unwrap(),
+            (RT_TABLE_MIN_PROXYCTL + 1, RPDB_PRIORITY_MIN_PROXYCTL + 2, RPDB_PRIORITY_MIN_PROXYCTL + 3)
+        );
+    }
+
     use super::*;
 
     fn sample_plan() -> RoutingPolicyPlan {
