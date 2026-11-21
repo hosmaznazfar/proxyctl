@@ -142,39 +142,65 @@ pub fn spawn_native_core_service(
 
     let deadline = Instant::now() + START_TIMEOUT;
     loop {
-        let output = run_bounded(
+        // A non-zero MainPID can briefly remain observable while a unit is stopping.
+        // Require the service to be actively running before binding the lifecycle to it.
+        let state = run_bounded(
             SUDO,
             &[
                 "-n",
                 "--",
                 SYSTEMCTL,
                 "show",
-                "--property=MainPID",
+                "--property=ActiveState",
+                "--property=SubState",
                 "--value",
                 &unit,
             ],
             INSPECT_TIMEOUT,
             true,
         )?;
-        if output.success {
-            if let Ok(pid) = std::str::from_utf8(&output.stdout)
+        if state.success
+            && std::str::from_utf8(&state.stdout)
                 .unwrap_or_default()
-                .trim()
-                .parse::<u32>()
-                && pid > 0
-            {
-                let identity = ProcessIdentity::capture(pid)
-                    .context("cannot capture native core systemd MainPID identity")?;
-                ensure!(
-                    identity.executable == executable && identity.verify()?,
-                    "native core systemd MainPID does not match the requested executable"
-                );
-                return Ok(identity);
+                .lines()
+                .map(str::trim)
+                .collect::<Vec<_>>()
+                == ["active", "running"]
+        {
+            let output = run_bounded(
+                SUDO,
+                &[
+                    "-n",
+                    "--",
+                    SYSTEMCTL,
+                    "show",
+                    "--property=MainPID",
+                    "--value",
+                    &unit,
+                ],
+                INSPECT_TIMEOUT,
+                true,
+            )?;
+            if output.success {
+                if let Ok(pid) = std::str::from_utf8(&output.stdout)
+                    .unwrap_or_default()
+                    .trim()
+                    .parse::<u32>()
+                    && pid > 0
+                {
+                    let identity = ProcessIdentity::capture(pid)
+                        .context("cannot capture native core systemd MainPID identity")?;
+                    ensure!(
+                        identity.executable == executable && identity.verify()?,
+                        "native core systemd MainPID does not match the requested executable"
+                    );
+                    return Ok(identity);
+                }
             }
         }
         ensure!(
             Instant::now() < deadline,
-            "native core service did not expose a verified MainPID before its startup deadline"
+            "native core service did not reach active/running with a verified MainPID before its startup deadline"
         );
         std::thread::sleep(Duration::from_millis(25));
     }
