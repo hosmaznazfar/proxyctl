@@ -406,6 +406,130 @@ fn launch_managed(
     Ok(())
 }
 
+/// Activate one managed Xray node through the generation-bound broker TUN lifecycle.
+#[cfg(target_os = "linux")]
+pub fn activate_tun_xray(
+    node_id: u64,
+    port_override: Option<u16>,
+    probe_url: &str,
+    expected_status: u16,
+) -> anyhow::Result<()> {
+    use std::net::ToSocketAddrs;
+
+    let (runtime, state_path) = paths()?;
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    ensure!(!state_path.exists(),
+        "a Proxyctl-managed core state file already exists; stop it before starting TUN mode");
+
+    let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
+    ensure!(store.load()?.is_none(),
+        "a TUN activation manifest already exists; stop or recover it before starting another generation");
+
+    let db = NodeDatabase::open(default_database_path()?)?;
+    let record = db.get_node(node_id)?
+        .with_context(|| format!("node #{node_id} not found"))?;
+    ensure!(!record.is_deleted(), "node #{node_id} is deleted; restore it first");
+    let node = record.node;
+    drop(db);
+
+    let core = CoreId::Xray;
+    let executable = core_binary_path(core)?;
+    ensure!(executable.is_file(), "Xray is not installed by Proxyctl; run setup --core xray");
+    let executable = fs::canonicalize(executable)?;
+    let managed_root = fs::canonicalize(managed_cores_path()?)?;
+    ensure!(executable.starts_with(&managed_root),
+        "refusing to run Xray outside Proxyctl's managed-core directory");
+    let adapter = adapters::adapter(core);
+    let compatibility = adapter.compatibility(&node);
+    ensure!(compatibility.is_supported(), "Xray does not support this node: {}",
+        compatibility.reason.as_deref().unwrap_or("unsupported configuration"));
+
+    let listen_port = match port_override {
+        Some(port) => port,
+        None => crate::services::listener_config::listen_port()?,
+    };
+    validate_listen_port(listen_port)?;
+    ensure_port_available(listen_port)?;
+
+    let expected_peer = (node.server.as_str(), node.port).to_socket_addrs()
+        .context("cannot resolve the selected Xray node endpoint before TUN activation")?
+        .find(|peer| !peer.ip().is_unspecified() && !peer.ip().is_multicast())
+        .context("selected Xray node did not resolve to a usable endpoint")?;
+
+    let probe = url::Url::parse(probe_url)
+        .context("TUN readiness probe URL is invalid")?;
+    ensure!(probe.scheme() == "http" && probe.username().is_empty()
+        && probe.password().is_none() && probe.query().is_none() && probe.fragment().is_none(),
+        "TUN readiness probe must be a plain HTTP URL without credentials, query, or fragment");
+    let probe_host = probe.host().context("TUN readiness probe URL has no host")?;
+    let probe_port = probe.port_or_known_default()
+        .context("TUN readiness probe URL has no usable port")?;
+    let probe_destination = match probe_host {
+        url::Host::Ipv4(address) => std::net::SocketAddr::from((address, probe_port)),
+        url::Host::Ipv6(address) => std::net::SocketAddr::from((address, probe_port)),
+        url::Host::Domain(domain) => (domain, probe_port).to_socket_addrs()
+            .context("cannot resolve TUN readiness probe endpoint before activation")?
+            .next().context("TUN readiness probe host has no address")?,
+    };
+    let traffic_target = crate::tun::readiness::HttpConnectProbeTarget {
+        destination: probe_destination,
+        host_header: probe.host_str().context("TUN readiness probe URL has no host")?.to_owned(),
+        path: if probe.path().is_empty() { "/".into() } else { probe.path().to_owned() },
+        expected_status,
+        expected_body_marker: Vec::new(),
+    };
+    traffic_target.validate()?;
+
+    let activation_id = fs::read_to_string("/proc/sys/kernel/random/uuid")
+        .context("cannot obtain a kernel-generated activation UUID")?
+        .trim().to_ascii_lowercase();
+    let generation = u64::try_from(
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos()
+    ).context("system clock produced an activation generation outside the supported range")?;
+    let (table_id, bypass_priority, proxy_priority) =
+        crate::tun::route_policy::allocate_policy_identifiers(&crate::tun::kernel_inventory::inspect()?)?;
+    let (core_mark, core_mark_mask) =
+        crate::tun::route_policy::mark_for_activation_id(&activation_id)?;
+
+    let request = crate::tun::activation_orchestrator::ActivationRequest {
+        activation_id,
+        generation,
+        interface_name: crate::cores::adapters::XRAY_TUN_INTERFACE_NAME.to_owned(),
+        owner_uid: unsafe { libc::getuid() },
+        owner_gid: unsafe { libc::getgid() },
+        table_id,
+        bypass_priority,
+        proxy_priority,
+        core_mark,
+        core_mark_mask,
+    };
+    let helper = crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(&runtime)
+        .context("cannot start or connect to the TUN mutation helper")?;
+    let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
+    let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
+    let activation = orchestrator.activate_xray_node_end_to_end(
+        request, &node, listen_port, &executable,
+        Duration::from_secs(5), expected_peer, traffic_target,
+        Duration::from_secs(10), 64 * 1024,
+    ).context("Xray TUN activation failed its broker handoff or end-to-end readiness gate")?;
+
+    println!(
+        "Activated Proxyctl Xray TUN for node #{node_id} on 127.0.0.1:{listen_port} (generation {}).",
+        activation.managed.token.generation()
+    );
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn activate_tun_xray(
+    _node_id: u64,
+    _port_override: Option<u16>,
+    _probe_url: &str,
+    _expected_status: u16,
+) -> anyhow::Result<()> {
+    anyhow::bail!("managed Xray TUN activation is supported only on Linux");
+}
+
 fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
     ensure!(
         !tun_enabled,
