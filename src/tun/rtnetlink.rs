@@ -823,6 +823,26 @@ mod tests {
     }
 
     #[test]
+    fn rejects_malformed_or_filtered_link_dump_payloads() {
+        let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
+        request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        request[NETLINK_HEADER_LEN + 4] = 1;
+        assert!(validate_request(&request).is_err());
+
+        request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
+        request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        request.truncate(NETLINK_HEADER_LEN);
+        request[0..4].copy_from_slice(&(NETLINK_HEADER_LEN as u32).to_ne_bytes());
+        assert!(validate_request(&request).is_err());
+
+        request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
+        request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        request.extend([0u8; 4]);
+        request[0..4].copy_from_slice(&(request.len() as u32).to_ne_bytes());
+        assert!(validate_request(&request).is_err());
+    }
+
+    #[test]
     fn rejects_extra_or_missing_netlink_request_flags() {
         let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
         for flags in [NLM_F_REQUEST, NLM_F_DUMP, NLM_F_REQUEST | NLM_F_DUMP | 0x4] {
