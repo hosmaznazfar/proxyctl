@@ -8,7 +8,7 @@ use anyhow::{Context, Result, ensure};
 use std::{io::Write, path::Path, process::Child, time::Duration};
 
 use crate::{
-    cores::{CoreId, adapters::{adapter, CoreAdapter, TunOutboundMark, XRAY_TUN_INTERFACE_NAME, XRAY_TUN_FD_ENV}},
+    cores::{CoreId, adapters::{adapter, CoreAdapter, TunAttachmentMode, TunOutboundMark, XRAY_TUN_INTERFACE_NAME, XRAY_TUN_FD_ENV}},
     domain::ProxyNode,
 };
 
@@ -119,9 +119,9 @@ impl<'a> ActivationOrchestrator<'a> {
                     request, node, listen_port, executable, attachment_timeout, readiness,
                 )
             }
-            (CoreId::SingBox, super::super::cores::adapters::TunAttachmentMode::NativeDeviceCreation) =>
+            (CoreId::SingBox, TunAttachmentMode::NativeDeviceCreation) =>
                 anyhow::bail!("sing-box creates its own named TUN device and has no verified broker-owned descriptor adoption path; refusing to start it in this lifecycle"),
-            (CoreId::Mihomo, super::super::cores::adapters::TunAttachmentMode::Unsupported) =>
+            (CoreId::Mihomo, TunAttachmentMode::Unsupported) =>
                 anyhow::bail!("Mihomo has no verified marked TUN attachment contract; refusing TUN activation"),
             _ => anyhow::bail!("{core_id:?} does not expose a supported broker-owned TUN descriptor contract"),
         }
