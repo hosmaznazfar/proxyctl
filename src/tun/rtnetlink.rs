@@ -823,6 +823,13 @@ mod tests {
     }
 
     #[test]
+    fn accepts_only_canonical_unfiltered_link_dump_request() {
+        let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
+        request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        validate_request(&request).unwrap();
+    }
+
+    #[test]
     fn rejects_malformed_or_filtered_link_dump_payloads() {
         let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
         request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
