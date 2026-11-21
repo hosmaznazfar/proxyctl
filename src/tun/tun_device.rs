@@ -294,6 +294,10 @@ pub fn remove_persistent(name: &str, expected_index: u32) -> Result<()> {
         returned_name == name.as_bytes(),
         "kernel attached an unexpected TUN interface during persistent cleanup"
     );
+    ensure!(
+        (req.flags as u16) & (IFF_TUN | IFF_NO_PI) == (IFF_TUN | IFF_NO_PI),
+        "persistent cleanup attached an interface with unexpected TUN packet flags"
+    );
     let c_name = std::ffi::CString::new(name)?;
     // Resolve the interface index after TUNSETIFF has attached this descriptor.
     // This closes the name-reuse window before persistence is cleared.
