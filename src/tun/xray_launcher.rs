@@ -76,7 +76,15 @@ pub fn spawn_xray_from_broker(
     const SYSTEMD_RUN: &str = "/usr/bin/systemd-run";
     const SYSTEMCTL: &str = "/usr/bin/systemctl";
     const LAUNCHER: &str = "/usr/libexec/proxyctl-tun-core-launcher";
-    for path in [Path::new(SUDO), Path::new(SYSTEMD_RUN), Path::new(SYSTEMCTL), Path::new(LAUNCHER)] {
+    let sudo_metadata = fs::symlink_metadata(SUDO)
+        .context("required sudo executable is missing")?;
+    ensure!(sudo_metadata.file_type().is_file() && sudo_metadata.uid() == 0
+        && sudo_metadata.permissions().mode() & 0o111 != 0
+        && sudo_metadata.permissions().mode() & 0o022 == 0
+        && sudo_metadata.permissions().mode() & 0o3000 == 0,
+        "sudo must be a root-owned, non-writable regular executable (the conventional setuid bit is permitted)");
+
+    for path in [Path::new(SYSTEMD_RUN), Path::new(SYSTEMCTL), Path::new(LAUNCHER)] {
         let metadata = fs::symlink_metadata(path)
             .with_context(|| format!("required TUN service executable is missing: {}", path.display()))?;
         ensure!(metadata.file_type().is_file() && metadata.uid() == 0
