@@ -138,7 +138,7 @@ impl<'a> ActivationOrchestrator<'a> {
         executable: &Path,
         attachment_timeout: Duration,
         expected_peers: Vec<std::net::SocketAddr>,
-        traffic_target: super::readiness::HttpConnectProbeTarget,
+        traffic_target: super::readiness::HttpProbeTarget,
         probe_timeout: Duration,
         maximum_response_bytes: usize,
     ) -> Result<XrayActivation> {
