@@ -823,6 +823,15 @@ mod tests {
     }
 
     #[test]
+    fn rejects_extra_or_missing_netlink_request_flags() {
+        let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
+        for flags in [NLM_F_REQUEST, NLM_F_DUMP, NLM_F_REQUEST | NLM_F_DUMP | 0x4] {
+            request[6..8].copy_from_slice(&flags.to_ne_bytes());
+            assert!(validate_request(&request).is_err());
+        }
+    }
+
+    #[test]
     fn rejects_non_read_only_netlink_request_types() {
         let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
         request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
