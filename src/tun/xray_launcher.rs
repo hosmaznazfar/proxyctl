@@ -548,9 +548,11 @@ pub fn probe_and_verify_xray_readiness(
     probe_timeout: std::time::Duration,
     maximum_response_bytes: usize,
 ) -> Result<super::readiness::ProxyTrafficObservation> {
-    let observation = super::readiness::probe_http_connect_traffic(
-        process, listener, target, activation_id, generation, probe_timeout, maximum_response_bytes,
-    ).context("Xray end-to-end HTTP CONNECT probe failed")?;
+    super::readiness::probe_unmarked_route_to_tun(plan, target.destination.ip())
+        .context("kernel does not route the unmarked application probe through the owned TUN table")?;
+    let observation = super::readiness::probe_tun_routed_http_traffic(
+        process, target, activation_id, generation, probe_timeout, maximum_response_bytes,
+    ).context("direct application traffic did not traverse the Xray TUN dataplane")?;
     verify_xray_readiness(
         process, interface_name, expected, evidence, listener, listener_timeout, plan,
         socket_mark_response, expected_peer, expected_transport, &observation,
