@@ -410,6 +410,37 @@ impl<'a> ActivationOrchestrator<'a> {
         Ok(())
     }
 
+    /// Stop the exact managed Xray service before asking the broker to remove its TUN routes.
+    ///
+    /// The helper recovery request is never sent while the recorded Xray process is still live.
+    pub fn stop_current_xray(&self) -> Result<()> {
+        let Some(current) = self.coordinator.load_current()?
+            else { return Ok(()); };
+        ensure!(matches!(
+            current.snapshot.phase,
+            super::recovery::SupervisorPhase::Prepared
+                | super::recovery::SupervisorPhase::Running
+                | super::recovery::SupervisorPhase::CleanupPending
+        ), "current activation is not in a stoppable lifecycle phase");
+        let process = current.snapshot.core_process.as_ref();
+        if let Some(identity) = process {
+            ensure!(identity.executable == std::fs::canonicalize(
+                crate::cores::core_binary_path(CoreId::Xray)?
+            )?, "current activation is not owned by the managed Xray executable");
+        }
+        super::xray_launcher::stop_xray_generation(
+            current.token.activation_id(),
+            current.token.generation(),
+            process,
+        ).context("could not stop the exact Xray service before TUN cleanup")?;
+        let response = self.helper.recover(
+            current.token.activation_id().to_owned(),
+            current.token.generation(),
+        )?;
+        ensure!(response.success, "exact-generation Xray TUN cleanup failed: {}", response.message);
+        Ok(())
+    }
+
     /// Recover only the explicitly supplied activation generation.
     pub fn recover(&self, activation_id: &str, generation: u64) -> Result<()> {
         ensure!(canonical_activation_id(activation_id) && generation > 0, "invalid recovery identity");
