@@ -417,6 +417,7 @@ mod tests {
         empty_fingerprint_at: Option<usize>,
         foreign_on_remove: Option<String>,
         assigned_interface_index: Option<u32>,
+        native_create_count: usize,
         fail_create_after_intent: bool,
         route_interface_indexes: Vec<u32>,
     }
@@ -440,6 +441,17 @@ mod tests {
             }
             self.interface = Some(interface.clone());
             Ok(interface)
+        }
+
+        fn create_persistent_owned_interface(
+            &mut self,
+            id: &str,
+            name: &str,
+            uid: u32,
+            gid: u32,
+        ) -> Result<KernelInterfaceRecord> {
+            self.native_create_count += 1;
+            self.create_owned_interface(id, name, uid, gid)
         }
 
         fn add_owned_route(&mut self, _id: &str, route: &PlannedRoute) -> Result<String> {
@@ -552,6 +564,35 @@ mod tests {
             owner_uid: 1000,
             owner_gid: 1000,
         }
+    }
+
+    #[test]
+    fn native_transaction_uses_persistent_device_backend_entrypoint() {
+        let transaction = transaction();
+        let mut backend = FakeBackend::default();
+        let applied = apply_native(&transaction, &mut backend).unwrap();
+        assert_eq!(backend.native_create_count, 1);
+        assert_eq!(applied.manifest.interface_name, transaction.policy.interface_name);
+        assert_eq!(backend.interface.as_ref().unwrap().index, applied.manifest.interface_index);
+    }
+
+    #[test]
+    fn persistent_device_mode_fails_closed_for_backends_without_native_support() {
+        struct UnsupportedBackend;
+        impl KernelTransactionBackend for UnsupportedBackend {
+            fn create_owned_interface(&mut self, _: &str, _: &str, _: u32, _: u32) -> Result<KernelInterfaceRecord> {
+                anyhow::bail!("not used")
+            }
+            fn add_owned_route(&mut self, _: &str, _: &PlannedRoute) -> Result<String> { anyhow::bail!("not used") }
+            fn add_owned_rule(&mut self, _: &str, _: &PlannedRule) -> Result<String> { anyhow::bail!("not used") }
+            fn remove_resource_if_matches(&mut self, _: &str, _: &str, _: &str) -> Result<ResourceState> { anyhow::bail!("not used") }
+            fn remove_interface_if_matches(&mut self, _: &str, _: &str, _: u32) -> Result<ResourceState> { anyhow::bail!("not used") }
+            fn retain_recovery_journal(&mut self, _: &str) -> Result<()> { Ok(()) }
+            fn commit_manifest(&mut self, _: &RouteManifest) -> Result<()> { Ok(()) }
+            fn finish_transaction(&mut self, _: &str) -> Result<()> { Ok(()) }
+        }
+        let mut backend = UnsupportedBackend;
+        assert!(apply_native(&transaction(), &mut backend).is_err());
     }
 
     #[test]
