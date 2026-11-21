@@ -177,7 +177,7 @@ pub fn spawn_xray_from_broker(
         }
     };
     if let Err(error) = start_result {
-        let _ = Command::new(SUDO).args(["-n", "--", SYSTEMCTL, "stop", &unit]).status();
+        let _ = Command::new(SUDO).args(["-n", "--", SYSTEMCTL, "stop"]).arg(&unit).status();
         return Err(error).context("Xray transient service startup failed");
     }
 
@@ -200,7 +200,8 @@ pub fn spawn_xray_from_broker(
         ensure!(peer.uid == uid && peer.gid == gid && peer.pid > 0,
             "Xray core launcher peer credentials do not match the activation user");
         let main_pid = Command::new(SUDO)
-            .args(["-n", "--", SYSTEMCTL, "show", "--property=MainPID", "--value", &unit])
+            .args(["-n", "--", SYSTEMCTL, "show", "--property=MainPID", "--value"])
+            .arg(&unit)
             .output()
             .context("cannot verify Xray systemd service main process")?;
         ensure!(main_pid.status.success(), "cannot inspect the exact Xray systemd service");
