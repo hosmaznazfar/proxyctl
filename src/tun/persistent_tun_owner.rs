@@ -255,7 +255,7 @@ impl NativePersistentTunOwner {
             let live_index = super::tun_device::current_interface_index(name)?;
             ensure!(live_index == interface.index, "persistent native TUN ifindex changed during verification");
             let live_alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))?;
-            ensure!(live_alias.trim_end_matches(['\\r', '\\n']) == alias,
+            ensure!(live_alias.trim_end_matches(['\r', '\n']) == alias,
                 "persistent native TUN generation alias does not match the requested activation");
             Ok(interface)
         })();
@@ -316,7 +316,7 @@ impl NativePersistentTunOwner {
         ensure!(live.is_tun && live.index == index,
             "persistent TUN recovery identity changed; refusing cleanup");
         let alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))?;
-        ensure!(alias.trim_end_matches(['\\r', '\\n']) == expected_alias,
+        ensure!(alias.trim_end_matches(['\r', '\n']) == expected_alias,
             "persistent TUN generation alias changed; refusing recovery cleanup");
         super::tun_device::remove_persistent(name, index, expected_alias)
             .context("cannot clear persistence from journal-owned native TUN interface")?;
