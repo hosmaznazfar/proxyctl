@@ -70,19 +70,14 @@ impl LifecycleCoordinator {
     /// The broker owns kernel transaction creation; the unprivileged lifecycle coordinator
     /// must not create a competing manifest. Adoption is allowed only for the exact
     /// activation generation and only before a core process has been bound.
-    pub fn adopt_prepared(
-        &self,
-        activation_id: &str,
-        generation: u64,
-    ) -> Result<ActivationToken> {
+    pub fn adopt_prepared(&self, activation_id: &str, generation: u64) -> Result<ActivationToken> {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         let snapshot = self
             .store
             .load()?
             .context("mutation broker did not commit an ownership manifest")?;
         ensure!(
-            snapshot.manifest.activation_id == activation_id
-                && snapshot.generation == generation,
+            snapshot.manifest.activation_id == activation_id && snapshot.generation == generation,
             "broker manifest identity does not match the requested activation generation"
         );
         ensure!(
@@ -99,7 +94,9 @@ impl LifecycleCoordinator {
 
     /// Return the private directory containing this coordinator's durable manifest.
     pub fn runtime_directory(&self) -> Result<PathBuf> {
-        self.store.path().parent()
+        self.store
+            .path()
+            .parent()
             .map(std::path::Path::to_path_buf)
             .context("TUN manifest path has no parent directory")
     }
