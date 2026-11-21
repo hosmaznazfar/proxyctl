@@ -823,6 +823,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_acknowledgement_for_a_different_embedded_request() {
+        let mut payload = 0i32.to_ne_bytes().to_vec();
+        let mut original = vec![0u8; NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN];
+        let length = original.len() as u32;
+        original[0..4].copy_from_slice(&length.to_ne_bytes());
+        original[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+        original[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        original[8..12].copy_from_slice(&8u32.to_ne_bytes());
+        payload.extend(original);
+        assert!(parse_datagram(&message(NLMSG_ERROR, 7, &payload), 7).is_err());
+    }
+
+    #[test]
     fn rejects_unrepresentable_netlink_error_code_without_panicking() {
         for error in [i32::MIN, 1] {
             let bytes = message(NLMSG_ERROR, 7, &error.to_ne_bytes());
