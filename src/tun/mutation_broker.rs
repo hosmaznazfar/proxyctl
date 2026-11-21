@@ -187,7 +187,8 @@ impl MutationResponse {
 }
 
 /// Run until the service is stopped. The backend map is deliberately process-lifetime state:
-/// it retains each active TUN descriptor between independent client connections.
+/// it retains descriptor-backed devices or native persistent-device ownership bookkeeping
+/// between independent client connections; the journal remains authoritative after restart.
 pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
     let metadata = std::fs::symlink_metadata(runtime_directory)?;
     ensure!(
@@ -268,7 +269,7 @@ fn execute(
             core_mark_mask,
             ..
         } => {
-            // The kernel policy and persistent TUN owner are process-lifetime resources.
+            // The kernel policy and attachment owner are process-lifetime resources.
             // A second generation must not coexist with them: replacement first recovers the
             // previous journal, then starts a fresh activation under the same broker.
             ensure!(
