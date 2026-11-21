@@ -11,7 +11,7 @@ use std::{
     fs,
     io::{Read, Seek, SeekFrom},
     os::unix::fs::{MetadataExt, PermissionsExt},
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
@@ -73,8 +73,9 @@ pub fn spawn_native_core_service(
     validate_root_executable(Path::new(SUDO), true)?;
     validate_root_executable(Path::new(SYSTEMD_RUN), false)?;
     validate_root_executable(Path::new(SYSTEMCTL), false)?;
-    let authorization = run_bounded(SUDO, &["-v"], Duration::from_secs(30), false)?;
-    ensure!(authorization.success, "sudo authorization was not granted for native TUN core service");
+    let authorization = Command::new(SUDO).arg("-v").status()
+        .context("cannot request authorization for native TUN core service")?;
+    ensure!(authorization.success(), "sudo authorization was not granted for native TUN core service");
 
     let uid = unsafe { libc::getuid() };
     let gid = unsafe { libc::getgid() };
