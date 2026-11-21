@@ -155,7 +155,10 @@ impl ProcessHandle {
         };
         let result = loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
-            let timeout_ms = remaining.as_millis().min(i32::MAX as u128) as i32;
+            let timeout_ms = remaining
+                .as_millis()
+                .saturating_add(u128::from(remaining.subsec_nanos() % 1_000_000 != 0))
+                .min(i32::MAX as u128) as i32;
             let result = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
             if result >= 0 {
                 break result;
