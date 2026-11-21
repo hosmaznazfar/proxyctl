@@ -169,7 +169,7 @@ fn set_link_up(name: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_name(name: &str) -> Result<()> {
+pub(crate) fn validate_name(name: &str) -> Result<()> {
     ensure!(
         !name.is_empty()
             && name.len() < IFNAMSIZ
