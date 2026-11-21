@@ -42,14 +42,31 @@ impl SystemdRecoverySupervisor {
         ))
     }
 
-    pub fn new(systemd_run: impl Into<PathBuf>, systemctl: impl Into<PathBuf>, executable: impl Into<PathBuf>, runtime: impl Into<PathBuf>) -> Self {
-        Self { systemd_run: systemd_run.into(), systemctl: systemctl.into(), executable: executable.into(), runtime: runtime.into() }
+    pub fn new(
+        systemd_run: impl Into<PathBuf>,
+        systemctl: impl Into<PathBuf>,
+        executable: impl Into<PathBuf>,
+        runtime: impl Into<PathBuf>,
+    ) -> Self {
+        Self {
+            systemd_run: systemd_run.into(),
+            systemctl: systemctl.into(),
+            executable: executable.into(),
+            runtime: runtime.into(),
+        }
     }
 
     fn validate_identity(&self, identity: &SupervisorIdentity) -> Result<()> {
         identity.validate()?;
-        ensure!(identity.manifest_path == self.runtime.join("tun-manifest.json").to_string_lossy().as_ref(),
-            "supervisor identity points outside the configured runtime directory");
+        ensure!(
+            identity.manifest_path
+                == self
+                    .runtime
+                    .join("tun-manifest.json")
+                    .to_string_lossy()
+                    .as_ref(),
+            "supervisor identity points outside the configured runtime directory"
+        );
         ensure!(
             self.runtime.is_absolute() && self.runtime.as_os_str().len() <= 4096,
             "supervisor runtime directory must be a bounded absolute path"
@@ -66,45 +83,87 @@ impl SystemdRecoverySupervisor {
                 "recovery supervisor and systemd command paths must be normalized absolute file paths"
             );
         }
-        let runtime = fs::symlink_metadata(&self.runtime).context("cannot inspect supervisor runtime directory")?;
-        ensure!(runtime.is_dir() && !runtime.file_type().is_symlink(), "supervisor runtime must be a real directory");
-        ensure!(fs::canonicalize(&self.runtime)? == self.runtime,
-            "supervisor runtime path must not contain symlinked or non-canonical components");
+        let runtime = fs::symlink_metadata(&self.runtime)
+            .context("cannot inspect supervisor runtime directory")?;
+        ensure!(
+            runtime.is_dir() && !runtime.file_type().is_symlink(),
+            "supervisor runtime must be a real directory"
+        );
+        ensure!(
+            fs::canonicalize(&self.runtime)? == self.runtime,
+            "supervisor runtime path must not contain symlinked or non-canonical components"
+        );
         // SAFETY: geteuid is a read-only query of the current effective user.
-        ensure!(runtime.uid() == unsafe { libc::geteuid() }, "supervisor runtime directory has a foreign owner");
-        ensure!(runtime.permissions().mode() & 0o077 == 0, "supervisor runtime directory must be private");
-        ensure!(runtime.permissions().mode() & 0o7000 == 0, "supervisor runtime directory must not have special permission bits");
-        ensure!(runtime.permissions().mode() & 0o700 == 0o700, "supervisor runtime directory must be owner-readable, writable, and searchable");
+        ensure!(
+            runtime.uid() == unsafe { libc::geteuid() },
+            "supervisor runtime directory has a foreign owner"
+        );
+        ensure!(
+            runtime.permissions().mode() & 0o077 == 0,
+            "supervisor runtime directory must be private"
+        );
+        ensure!(
+            runtime.permissions().mode() & 0o7000 == 0,
+            "supervisor runtime directory must not have special permission bits"
+        );
+        ensure!(
+            runtime.permissions().mode() & 0o700 == 0o700,
+            "supervisor runtime directory must be owner-readable, writable, and searchable"
+        );
 
-        let executable = fs::symlink_metadata(&self.executable).context("cannot inspect recovery supervisor executable")?;
-        ensure!(executable.is_file() && !executable.file_type().is_symlink(), "recovery supervisor executable must be a regular non-symlink file");
+        let executable = fs::symlink_metadata(&self.executable)
+            .context("cannot inspect recovery supervisor executable")?;
+        ensure!(
+            executable.is_file() && !executable.file_type().is_symlink(),
+            "recovery supervisor executable must be a regular non-symlink file"
+        );
         // SAFETY: geteuid is a read-only query of the current effective user.
         ensure!(
             executable.uid() == 0 || executable.uid() == unsafe { libc::geteuid() },
             "recovery supervisor executable must be owned by root or the activation user"
         );
-        ensure!(executable.permissions().mode() & 0o111 != 0, "recovery supervisor executable is not executable");
-        ensure!(executable.permissions().mode() & 0o022 == 0, "recovery supervisor executable must not be group- or world-writable");
-        ensure!(executable.permissions().mode() & 0o7000 == 0, "recovery supervisor executable must not have special permission bits");
-        ensure!(executable.nlink() == 1, "recovery supervisor executable must not have external hard links");
+        ensure!(
+            executable.permissions().mode() & 0o111 != 0,
+            "recovery supervisor executable is not executable"
+        );
+        ensure!(
+            executable.permissions().mode() & 0o022 == 0,
+            "recovery supervisor executable must not be group- or world-writable"
+        );
+        ensure!(
+            executable.permissions().mode() & 0o7000 == 0,
+            "recovery supervisor executable must not have special permission bits"
+        );
+        ensure!(
+            executable.nlink() == 1,
+            "recovery supervisor executable must not have external hard links"
+        );
         for tool in [&self.systemd_run, &self.systemctl] {
-            let metadata = fs::symlink_metadata(tool).with_context(|| format!("cannot inspect {}", tool.display()))?;
-            ensure!(metadata.is_file() && !metadata.file_type().is_symlink()
-                && metadata.uid() == 0
-                && metadata.permissions().mode() & 0o111 != 0
-                && metadata.permissions().mode() & 0o022 == 0
-                && metadata.permissions().mode() & 0o7000 == 0
-                && metadata.nlink() == 1,
-                "systemd command must be a root-owned, non-writable executable regular file");
+            let metadata = fs::symlink_metadata(tool)
+                .with_context(|| format!("cannot inspect {}", tool.display()))?;
+            ensure!(
+                metadata.is_file()
+                    && !metadata.file_type().is_symlink()
+                    && metadata.uid() == 0
+                    && metadata.permissions().mode() & 0o111 != 0
+                    && metadata.permissions().mode() & 0o022 == 0
+                    && metadata.permissions().mode() & 0o7000 == 0
+                    && metadata.nlink() == 1,
+                "systemd command must be a root-owned, non-writable executable regular file"
+            );
         }
         Ok(())
     }
 
-    fn unit(identity: &SupervisorIdentity) -> String { format!("{}.service", identity.service_name) }
+    fn unit(identity: &SupervisorIdentity) -> String {
+        format!("{}.service", identity.service_name)
+    }
 
     fn validate_startable_manifest(&self, identity: &SupervisorIdentity) -> Result<()> {
         let store = super::manifest_store::ManifestStore::open(self.runtime.clone())?;
-        let snapshot = store.load()?.context("cannot start recovery service without a durable activation manifest")?;
+        let snapshot = store
+            .load()?
+            .context("cannot start recovery service without a durable activation manifest")?;
         ensure!(
             snapshot.manifest.activation_id == identity.activation_id
                 && snapshot.generation == identity.generation,
@@ -119,14 +178,18 @@ impl SystemdRecoverySupervisor {
                 snapshot.core_process.is_some(),
                 "Running activation has no bound core process"
             ),
-            phase => anyhow::bail!("cannot start a recovery service for activation phase {phase:?}"),
+            phase => {
+                anyhow::bail!("cannot start a recovery service for activation phase {phase:?}")
+            }
         }
         Ok(())
     }
 
     fn generation_is_cleaned(&self, identity: &SupervisorIdentity) -> Result<bool> {
         let store = super::manifest_store::ManifestStore::open(self.runtime.clone())?;
-        let Some(snapshot) = store.load()? else { return Ok(true); };
+        let Some(snapshot) = store.load()? else {
+            return Ok(true);
+        };
         ensure!(
             snapshot.manifest.activation_id == identity.activation_id
                 && snapshot.generation == identity.generation,
@@ -149,7 +212,9 @@ impl SystemdRecoverySupervisor {
         if output.status.success() {
             return match state.as_str() {
                 "active" | "activating" | "reloading" | "deactivating" => Ok(Some(state)),
-                _ => anyhow::bail!("systemd returned an unrecognized active service state: {state:?}"),
+                _ => anyhow::bail!(
+                    "systemd returned an unrecognized active service state: {state:?}"
+                ),
             };
         }
         match output.status.code() {
@@ -168,7 +233,9 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
     fn start(&mut self, identity: &SupervisorIdentity) -> Result<()> {
         self.validate_identity(identity)?;
         self.validate_startable_manifest(identity)?;
-        if self.active_state(identity)?.is_some() { return Ok(()); }
+        if self.active_state(identity)?.is_some() {
+            return Ok(());
+        }
         let unit_arg = format!("--unit={}", Self::unit(identity));
         let output = Command::new(&self.systemd_run)
             .arg("--user")
@@ -183,7 +250,10 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             .arg("--property=PrivateTmp=yes")
             .arg("--property=ProtectSystem=full")
             .arg("--property=ProtectHome=read-only")
-            .arg(format!("--property=ReadWritePaths={}", self.runtime.display()))
+            .arg(format!(
+                "--property=ReadWritePaths={}",
+                self.runtime.display()
+            ))
             .arg("--property=ProtectKernelTunables=yes")
             .arg("--property=ProtectKernelModules=yes")
             .arg("--property=ProtectControlGroups=yes")
@@ -201,8 +271,10 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             // A concurrent start may have won after the initial state query. Accept only
             // when systemd now reports this exact generation's unit as active/activating.
             if self.active_state(identity)?.is_none() {
-                anyhow::bail!("systemd-run rejected the TUN recovery service: {}",
-                    String::from_utf8_lossy(&output.stderr).trim());
+                anyhow::bail!(
+                    "systemd-run rejected the TUN recovery service: {}",
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
             }
         }
 
@@ -213,8 +285,10 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             if self.active_state(identity)?.is_some() || self.generation_is_cleaned(identity)? {
                 return Ok(());
             }
-            ensure!(Instant::now() < deadline,
-                "systemd accepted the recovery service but it did not become active before the startup deadline");
+            ensure!(
+                Instant::now() < deadline,
+                "systemd accepted the recovery service but it did not become active before the startup deadline"
+            );
             thread::sleep(Duration::from_millis(50));
         }
     }
@@ -234,14 +308,19 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
                 "refusing to stop the recovery supervisor while its activation is not durably cleaned"
             );
         }
-        if self.active_state(identity)?.is_none() { return Ok(()); }
+        if self.active_state(identity)?.is_none() {
+            return Ok(());
+        }
         let output = Command::new(&self.systemctl)
             .args(["--user", "stop", "--no-block"])
             .arg(Self::unit(identity))
             .output()
             .context("could not request stop of the TUN recovery supervisor user service")?;
-        ensure!(output.status.success(), "systemctl could not stop the TUN recovery service: {}",
-            String::from_utf8_lossy(&output.stderr).trim());
+        ensure!(
+            output.status.success(),
+            "systemctl could not stop the TUN recovery service: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
 
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
@@ -257,7 +336,6 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,7 +346,8 @@ mod tests {
             "12345678-1234-4234-8234-123456789abc",
             "/run/user/1000/proxyctl/tun-manifest.json",
             4,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(
             SystemdRecoverySupervisor::unit(&identity),
             "proxyctl-tun-12345678-1234-4234-8234-123456789abc.service"
