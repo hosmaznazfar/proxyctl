@@ -453,11 +453,6 @@ impl<'a> ActivationOrchestrator<'a> {
                 | super::recovery::SupervisorPhase::CleanupPending
         ), "current activation is not in a stoppable lifecycle phase");
         let process = current.snapshot.core_process.as_ref();
-        if let Some(identity) = process {
-            ensure!(identity.executable == std::fs::canonicalize(
-                crate::cores::core_binary_path(CoreId::Xray)?
-            )?, "current activation is not owned by the managed Xray executable");
-        }
         super::xray_launcher::stop_xray_generation(
             current.token.activation_id(),
             current.token.generation(),
