@@ -99,20 +99,29 @@ impl RouteNetlink {
                     self.fd.as_raw_fd(),
                     request.as_ptr().cast(),
                     request.len(),
-                    0,
+                    libc::MSG_DONTWAIT,
                     (&kernel as *const libc::sockaddr_nl).cast(),
                     std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
                 )
             };
-            if result < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+            if result >= 0 {
+                break result;
+            }
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                ensure!(std::time::Instant::now() < deadline, "NETLINK_ROUTE request transmission timed out");
                 continue;
             }
-            break result;
+            if error.kind() == io::ErrorKind::WouldBlock {
+                wait_for_socket(self.fd.as_raw_fd(), libc::POLLOUT, deadline)?;
+                continue;
+            }
+            return Err(error).context("NETLINK_ROUTE send failed");
         };
         ensure!(
             sent == request.len() as isize,
-            "NETLINK_ROUTE send failed or was short: {}",
-            if sent < 0 { io::Error::last_os_error() } else { io::Error::from(io::ErrorKind::WriteZero) }
+            "NETLINK_ROUTE send was short: {}",
+            io::Error::from(io::ErrorKind::WriteZero)
         );
 
         ensure!(
@@ -478,6 +487,28 @@ fn validate_response_budget(current: &[Vec<u8>], incoming: &[Vec<u8>]) -> Result
         "NETLINK_ROUTE response contains too many messages"
     );
     Ok(())
+}
+
+fn wait_for_socket(fd: i32, events: i16, deadline: std::time::Instant) -> Result<()> {
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "NETLINK_ROUTE socket operation timed out");
+        let millis = remaining.as_millis().clamp(1, i32::MAX as u128) as i32;
+        let mut pollfd = libc::pollfd { fd, events, revents: 0 };
+        // SAFETY: pollfd points to one initialized poll descriptor.
+        let ready = unsafe { libc::poll(&mut pollfd, 1, millis) };
+        if ready < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
+        ensure!(ready >= 0, "NETLINK_ROUTE poll failed: {}", io::Error::last_os_error());
+        ensure!(ready > 0, "NETLINK_ROUTE socket operation timed out");
+        ensure!(
+            pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0,
+            "NETLINK_ROUTE socket reported an error"
+        );
+        ensure!(pollfd.revents & events != 0, "NETLINK_ROUTE socket readiness did not match the requested operation");
+        return Ok(());
+    }
 }
 
 fn validate_kernel_sender(sender: &libc::sockaddr_nl, sender_len: libc::socklen_t) -> Result<()> {
