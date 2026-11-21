@@ -304,6 +304,17 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn refuses_lifecycle_lock_symlink() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("target");
+        let path = directory.path().join(LOCK_FILE);
+        std::fs::write(&target, "").unwrap();
+        std::os::unix::fs::symlink(&target, &path).unwrap();
+        assert!(LifecycleLock::acquire(&path, Duration::from_millis(50)).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn refuses_lifecycle_lock_with_external_hard_link() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(LOCK_FILE);
