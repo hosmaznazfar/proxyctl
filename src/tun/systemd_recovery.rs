@@ -51,10 +51,17 @@ impl SystemdRecoverySupervisor {
         ensure!(identity.manifest_path == self.runtime.join("tun-manifest.json").to_string_lossy().as_ref(),
             "supervisor identity points outside the configured runtime directory");
         ensure!(self.runtime.is_absolute(), "supervisor runtime directory must be absolute");
-        ensure!(
-            self.executable.is_absolute() && self.systemd_run.is_absolute() && self.systemctl.is_absolute(),
-            "recovery supervisor and systemd command paths must be absolute"
-        );
+        for path in [&self.executable, &self.systemd_run, &self.systemctl] {
+            ensure!(
+                path.is_absolute()
+                    && path.components().all(|component| matches!(
+                        component,
+                        std::path::Component::RootDir | std::path::Component::Normal(_)
+                    ))
+                    && path.file_name().is_some(),
+                "recovery supervisor and systemd command paths must be normalized absolute file paths"
+            );
+        }
         let runtime = fs::symlink_metadata(&self.runtime).context("cannot inspect supervisor runtime directory")?;
         ensure!(runtime.is_dir() && !runtime.file_type().is_symlink(), "supervisor runtime must be a real directory");
         ensure!(fs::canonicalize(&self.runtime)? == self.runtime,
