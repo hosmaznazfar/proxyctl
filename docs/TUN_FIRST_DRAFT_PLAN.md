@@ -245,3 +245,20 @@ The readiness path now includes an explicit numeric-address HTTP CONNECT probe t
 - No build, tests, real core startup, real traffic, fault injection, crash/reboot, or Linux host validation has been run. The public TUN gate must remain closed.
 
 This is real Xray orchestration/readiness progress, not completion of Phases 1–6. The next work is to connect a safe public Xray start/stop path, define the native-device backend for sing-box/Mihomo (or explicitly scope the release to Xray only), and then validate the whole lifecycle on Linux.
+
+
+## Xray public start/stop integration checkpoint (2026-11-21)
+
+The public `use NODE --core xray --tun` path now invokes the managed Xray TUN orchestrator instead of the old unconditional gate. It:
+
+- refuses an existing loopback activation state or TUN manifest;
+- resolves the selected node endpoint before route activation;
+- allocates a free private route table and dual-stack rule-priority pair from a read-only kernel inventory (the broker still rechecks conflicts during commit);
+- derives a per-generation private socket mark from the activation UUID;
+- validates the managed Xray node config and launches through the broker-owned FD path;
+- runs the bounded HTTP CONNECT readiness probe and live route/socket/egress/DNS/firewall checks before committing Running;
+- relies on the systemd user recovery supervisor for CLI-independent generation monitoring.
+
+The `stop` service now detects a persisted TUN manifest, stops only the exact generation's transient Xray system service, verifies the recorded core identity is gone, and only then requests broker cleanup. The installer now includes the core-launch shim and recovery supervisor in addition to the privileged mutation helper. The CLI exposes `--tun-probe-url` and `--tun-probe-status` so the HTTP readiness target can be changed.
+
+**Release limitations remain:** this public path is Xray-only and Linux/systemd-only. sing-box and Mihomo still lack a verified broker-owned descriptor contract and remain rejected. The HTTP probe is plain HTTP (default connectivity-check endpoint), not a cryptographically authenticated TLS test. Build/tests, fault injection, core runtime startup, traffic validation, stop/reboot recovery, and real host-network validation have not been run. Do not describe TUN as production-validated until those checks pass.
