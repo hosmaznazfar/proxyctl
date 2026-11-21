@@ -262,6 +262,33 @@ impl HttpProbeTarget {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn parse_http_status(response: &[u8]) -> Result<u16> {
+    let line_end = response.windows(2).position(|window| window == b"\r\n")
+        .context("HTTP response has no complete status line")?;
+    let line = std::str::from_utf8(&response[..line_end])
+        .context("HTTP response status line is not valid ASCII")?;
+    let mut fields = line.split_ascii_whitespace();
+    ensure!(matches!(fields.next(), Some("HTTP/1.0" | "HTTP/1.1")),
+        "HTTP response uses an unsupported protocol version");
+    let status = fields.next().context("HTTP response has no status code")?
+        .parse::<u16>().context("HTTP response status code is invalid")?;
+    ensure!((100..=599).contains(&status), "HTTP response status code is outside the valid range");
+    Ok(status)
+}
+
+#[cfg(target_os = "linux")]
+fn http_response_body(response: &[u8]) -> Result<&[u8]> {
+    let offset = response.windows(4).position(|window| window == b"\r\n\r\n")
+        .context("HTTP response has no complete header block")?;
+    Ok(&response[offset + 4..])
+}
+
+#[cfg(target_os = "linux")]
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
+}
+
 /// Validate bounded traffic-probe evidence against the activation identity and limits.
 ///
 /// The API requires a non-zero generation, a concrete destination, bounded duration,
