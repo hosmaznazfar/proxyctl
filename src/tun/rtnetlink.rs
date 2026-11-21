@@ -502,6 +502,10 @@ fn validate_request(bytes: &[u8]) -> Result<()> {
         "netlink request length does not match its header"
     );
     let kind = u16::from_ne_bytes(bytes[4..6].try_into()?);
+    ensure!(
+        kind == RTM_GETLINK,
+        "NETLINK_ROUTE transport accepts only read-only RTM_GETLINK requests"
+    );
     let flags = u16::from_ne_bytes(bytes[6..8].try_into()?);
     let sequence = u32::from_ne_bytes(bytes[8..12].try_into()?);
     let port_id = u32::from_ne_bytes(bytes[12..16].try_into()?);
