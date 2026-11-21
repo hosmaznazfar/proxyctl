@@ -226,12 +226,15 @@ fn validate_private_runtime_socket(socket: &Path) -> Result<()> {
     let directory = fs::symlink_metadata(parent)?;
     ensure!(directory.is_dir() && !directory.file_type().is_symlink()
         && directory.uid() == unsafe { libc::geteuid() }
-        && directory.permissions().mode() & 0o077 == 0,
+        && directory.permissions().mode() & 0o077 == 0
+        && directory.permissions().mode() & 0o7000 == 0
+        && directory.permissions().mode() & 0o700 == 0o700,
         "descriptor socket parent must be a caller-owned private directory");
     let metadata = fs::symlink_metadata(socket)?;
     ensure!(metadata.file_type().is_socket()
         && metadata.uid() == unsafe { libc::geteuid() }
         && metadata.permissions().mode() & 0o777 == 0o600
+        && metadata.permissions().mode() & 0o7000 == 0
         && metadata.nlink() == 1,
         "descriptor socket must be a caller-owned 0600 Unix socket");
     Ok(())
@@ -246,18 +249,23 @@ fn validate_xray_paths(executable: &Path, config: &Path) -> Result<()> {
         "core launcher may execute only Proxyctl's managed Xray binary");
     let binary = fs::symlink_metadata(executable)?;
     ensure!(binary.file_type().is_file() && binary.uid() == unsafe { libc::geteuid() }
-        && binary.permissions().mode() & 0o111 != 0,
+        && binary.permissions().mode() & 0o111 != 0
+        && binary.permissions().mode() & 0o022 == 0
+        && binary.permissions().mode() & 0o7000 == 0,
         "managed Xray executable must be a caller-owned regular executable");
     let config_metadata = fs::symlink_metadata(config)?;
     ensure!(config_metadata.file_type().is_file()
         && config_metadata.uid() == unsafe { libc::geteuid() }
-        && config_metadata.permissions().mode() & 0o077 == 0,
+        && config_metadata.permissions().mode() & 0o077 == 0
+        && config_metadata.permissions().mode() & 0o7000 == 0,
         "Xray config must be a caller-owned private regular file");
     let runtime = config.parent().context("Xray config has no runtime parent")?;
     let runtime_metadata = fs::symlink_metadata(runtime)?;
     ensure!(runtime_metadata.is_dir() && !runtime_metadata.file_type().is_symlink()
         && runtime_metadata.uid() == unsafe { libc::geteuid() }
-        && runtime_metadata.permissions().mode() & 0o077 == 0,
+        && runtime_metadata.permissions().mode() & 0o077 == 0
+        && runtime_metadata.permissions().mode() & 0o7000 == 0
+        && runtime_metadata.permissions().mode() & 0o700 == 0o700,
         "Xray config must reside in the caller-owned private runtime directory");
     Ok(())
 }
