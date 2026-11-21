@@ -92,19 +92,23 @@ pub fn commit_managed_process(
         coordinator.apply_event(token, SupervisorEvent::StartCommitted)?;
         Ok(())
     })();
-    if let Err(error) = commit
-    {
+    if let Err(error) = commit {
+        if let Err(termination_error) = terminate_process_identity(&process) {
+            return Err(anyhow::anyhow!(
+                "managed core commit failed ({error:#}); the core could not be confirmed stopped ({termination_error:#}); TUN resources were retained for the independent recovery supervisor"
+            ));
+        }
         let recovery = helper.recover(token.activation_id().to_owned(), token.generation());
         return match recovery {
             Ok(result) if result.success => Err(error).context(
-                "managed core binding failed; the exact broker activation was recovered",
+                "managed core commit failed; the exact process was stopped and broker resources were recovered",
             ),
             Ok(result) => Err(anyhow::anyhow!(
-                "managed core binding failed ({error:#}); generation recovery failed: {}",
+                "managed core commit failed ({error:#}); process stopped but generation recovery failed: {}",
                 result.message
             )),
             Err(recovery_error) => Err(anyhow::anyhow!(
-                "managed core binding failed ({error:#}); generation recovery request failed: {recovery_error:#}"
+                "managed core commit failed ({error:#}); process stopped but generation recovery request failed: {recovery_error:#}"
             )),
         };
     }
@@ -194,25 +198,33 @@ fn terminate_prepared_core_process(
     if !identity.verify()? {
         return Ok(());
     }
+    terminate_process_identity(&identity)
+        .context("cannot terminate the orphaned Prepared core process")
+}
+
+fn terminate_process_identity(identity: &ProcessIdentity) -> Result<()> {
+    if !identity.verify()? {
+        return Ok(());
+    }
     let process = match ProcessHandle::open(identity.clone()) {
         Ok(process) => process,
         Err(_error) if !identity.verify()? => return Ok(()),
-        Err(error) => return Err(error).context("cannot pin orphaned Prepared core process"),
+        Err(error) => return Err(error).context("cannot pin managed core process for termination"),
     };
     if !process.wait_exit(std::time::Duration::ZERO)? {
         if let Err(error) = process.signal(libc::SIGTERM) {
             if identity.verify()? {
-                return Err(error).context("cannot request termination of orphaned Prepared core");
+                return Err(error).context("cannot request termination of managed core process");
             }
         }
         if !process.wait_exit(std::time::Duration::from_secs(1))? {
             process.signal(libc::SIGKILL)
-                .context("cannot force-stop orphaned Prepared core")?;
+                .context("cannot force-stop managed core process")?;
             ensure!(process.wait_exit(std::time::Duration::from_secs(2))?,
-                "orphaned Prepared core did not exit within the termination deadline");
+                "managed core process did not exit within the termination deadline");
         }
     }
-    ensure!(!identity.verify()?, "orphaned Prepared core identity remains live after termination");
+    ensure!(!identity.verify()?, "managed core process identity remains live after termination");
     Ok(())
 }
 
