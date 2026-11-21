@@ -236,7 +236,7 @@ fn stop_core_service_for_generation(
     token: &ActivationToken,
     process: Option<&ProcessIdentity>,
 ) -> Result<()> {
-    super::xray_launcher::stop_xray_generation(
+    super::xray_launcher::stop_core_service_generation(
         token.activation_id(), token.generation(), process,
     ).context("cannot confirm stop of the generation-bound Xray system service")
 }
