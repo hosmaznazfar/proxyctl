@@ -415,12 +415,25 @@ fn http_response_allows_keepalive(response: &[u8]) -> Result<bool> {
         .context("HTTP response has no complete header block")?;
     let headers = std::str::from_utf8(&response[..end])
         .context("HTTP response headers are not valid ASCII")?;
-    Ok(!headers.lines().skip(1).any(|line| {
-        line.split_once(':').is_some_and(|(name, value)| {
-            name.eq_ignore_ascii_case("connection")
-                && value.split(',').any(|token| token.trim().eq_ignore_ascii_case("close"))
-        })
-    }))
+    let mut lines = headers.lines();
+    let status_line = lines.next().context("HTTP response has no status line")?;
+    let protocol = status_line.split_ascii_whitespace().next().unwrap_or_default();
+    let mut keep_alive = protocol == "HTTP/1.1";
+    for line in lines {
+        if let Some((name, value)) = line.split_once(':') {
+            if name.eq_ignore_ascii_case("connection") {
+                for token in value.split(',').map(str::trim) {
+                    if token.eq_ignore_ascii_case("close") {
+                        return Ok(false);
+                    }
+                    if token.eq_ignore_ascii_case("keep-alive") {
+                        keep_alive = true;
+                    }
+                }
+            }
+        }
+    }
+    Ok(keep_alive)
 }
 
 #[cfg(target_os = "linux")]
