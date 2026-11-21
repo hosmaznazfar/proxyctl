@@ -86,7 +86,12 @@ impl RouteNetlink {
             .context("netlink sequence exhausted")?;
         let sequence = self.sequence;
         let deadline = std::time::Instant::now() + timeout.min(DEFAULT_TIMEOUT);
-        let mut request = request.to_vec();
+        let mut owned_request = Vec::new();
+        owned_request
+            .try_reserve_exact(request.len())
+            .context("cannot allocate NETLINK_ROUTE request buffer")?;
+        owned_request.extend_from_slice(request);
+        let request = owned_request;
         request[8..12].copy_from_slice(&sequence.to_ne_bytes());
 
         // SAFETY: zero is a valid initial representation for sockaddr_nl.
