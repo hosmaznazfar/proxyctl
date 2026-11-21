@@ -227,6 +227,10 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
         "TUN lifecycle lock permissions are not private"
     );
     ensure!(
+        metadata.permissions().mode() & 0o7000 == 0,
+        "TUN lifecycle lock must not have special permission bits"
+    );
+    ensure!(
         metadata.permissions().mode() & 0o700 == 0o600,
         "TUN lifecycle lock must be owner-readable and writable"
     );
