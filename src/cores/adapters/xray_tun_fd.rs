@@ -28,7 +28,9 @@ impl XrayTunDescriptor {
             std::io::Error::last_os_error()
         );
         // SAFETY: F_DUPFD_CLOEXEC returned a new descriptor owned by this value.
-        Ok(Self { descriptor: unsafe { OwnedFd::from_raw_fd(raw) } })
+        Ok(Self {
+            descriptor: unsafe { OwnedFd::from_raw_fd(raw) },
+        })
     }
 
     /// Configure a Command so only its child inherits the descriptor and Xray receives
@@ -82,7 +84,9 @@ mod tests {
         let duplicate = XrayTunDescriptor::duplicate(source.as_fd()).unwrap();
         let mut command = Command::new("xray");
         duplicate.configure_command(&mut command).unwrap();
-        let configured = command.get_envs().find(|(key, _)| *key == "XRAY_TUN_FD")
+        let configured = command
+            .get_envs()
+            .find(|(key, _)| *key == "XRAY_TUN_FD")
             .and_then(|(_, value)| value)
             .and_then(|value| value.to_str())
             .unwrap();
