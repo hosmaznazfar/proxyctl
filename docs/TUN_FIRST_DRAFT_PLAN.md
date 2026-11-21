@@ -235,7 +235,7 @@ The Xray path now has a concrete broker-owned descriptor launch sequence:
 4. The shim duplicates the descriptor for the Xray child through the documented `XRAY_TUN_FD` environment contract, verifies the child executable and capability boundary, and persists the exact process identity while the manifest remains Prepared.
 5. The orchestrator waits for kernel-visible attachment in the Xray process fdinfo, then requires readiness before committing Running. Recovery terminates a persisted Prepared core before requesting route cleanup.
 
-The readiness path now includes an explicit numeric-address HTTP CONNECT probe through the process-owned local listener. It verifies the CONNECT tunnel, expected HTTP status, optional bounded response marker, and process identity before producing generation-bound traffic evidence. A composed Xray readiness function then collects the exact interface/index, route and policy rules, marked outbound socket evidence, physical-egress bypass, and unchanged DNS/firewall snapshots before allowing Running.
+The readiness path now includes an explicit numeric-address direct TUN-routed HTTP probe through the process-owned local listener. It verifies the CONNECT tunnel, expected HTTP status, optional bounded response marker, and process identity before producing generation-bound traffic evidence. A composed Xray readiness function then collects the exact interface/index, route and policy rules, marked outbound socket evidence, physical-egress bypass, and unchanged DNS/firewall snapshots before allowing Running.
 
 **Still incomplete:**
 
@@ -256,7 +256,7 @@ The public `use NODE --core xray --tun` path now invokes the managed Xray TUN or
 - allocates a free private route table and dual-stack rule-priority pair from a read-only kernel inventory (the broker still rechecks conflicts during commit);
 - derives a per-generation private socket mark from the activation UUID;
 - validates the managed Xray node config and launches through the broker-owned FD path;
-- runs the bounded HTTP CONNECT readiness probe and live route/socket/egress/DNS/firewall checks before committing Running;
+- runs the direct unmarked HTTP application probe through the TUN route and live route/socket/egress/DNS/firewall checks before committing Running;
 - relies on the systemd user recovery supervisor for CLI-independent generation monitoring.
 
 The `stop` service now detects a persisted TUN manifest, stops only the exact generation's transient Xray system service, verifies the recorded core identity is gone, and only then requests broker cleanup. The installer now includes the core-launch shim and recovery supervisor in addition to the privileged mutation helper. The CLI exposes `--tun-probe-url` and `--tun-probe-status` so the HTTP readiness target can be changed.
