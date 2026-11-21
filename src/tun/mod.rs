@@ -5,14 +5,16 @@
 //!
 //! Runtime service-manager discovery is also read-only and distro-agnostic.
 
+#[cfg(target_os = "linux")]
+pub mod activation_orchestrator;
+#[cfg(target_os = "linux")]
+pub mod attachment_contract;
+#[cfg(target_os = "linux")]
+pub mod attachment_protocol;
 pub mod broker_executor;
 pub mod broker_transport;
 #[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
-#[cfg(target_os = "linux")]
-pub mod attachment_protocol;
-#[cfg(target_os = "linux")]
-pub mod xray_launcher;
 pub mod egress_probe;
 pub mod journal;
 pub mod journal_recovery_executor;
@@ -25,10 +27,6 @@ pub mod lifecycle_coordinator;
 pub mod linux_journal_backend;
 #[cfg(target_os = "linux")]
 pub mod managed_activation;
-#[cfg(target_os = "linux")]
-pub mod activation_orchestrator;
-#[cfg(target_os = "linux")]
-pub mod attachment_contract;
 pub(crate) mod manifest_fs;
 pub mod manifest_store;
 #[cfg(target_os = "linux")]
@@ -45,8 +43,6 @@ pub mod privilege_broker;
 pub mod process;
 pub mod readiness;
 pub mod recovery;
-#[cfg(target_os = "linux")]
-pub mod systemd_recovery;
 pub mod resource_snapshot;
 pub mod route_policy;
 #[cfg(target_os = "linux")]
@@ -69,7 +65,11 @@ pub mod socket_peer;
 #[cfg(target_os = "linux")]
 pub mod supervisor;
 #[cfg(target_os = "linux")]
+pub mod systemd_recovery;
+#[cfg(target_os = "linux")]
 pub mod tun_device;
+#[cfg(target_os = "linux")]
+pub mod xray_launcher;
 
 #[cfg(target_os = "linux")]
 use std::{
