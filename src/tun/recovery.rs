@@ -139,6 +139,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn supervisor_identity_wire_format_rejects_unknown_fields() {
+        let identity = br#"{"activation_id":"12345678-1234-4234-8234-123456789abc","service_name":"proxyctl-tun-12345678-1234-4234-8234-123456789abc","manifest_path":"/run/user/1000/proxyctl/tun-manifest.json","generation":1,"extra":true}"#;
+        assert!(serde_json::from_slice::<SupervisorIdentity>(identity).is_err());
+    }
+
+    #[test]
     fn service_manager_selection_is_explicit_and_never_falls_back() {
         for (manager, expected) in [
             (ServiceManager::Systemd, RecoveryBackendKind::Systemd),
