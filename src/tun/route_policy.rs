@@ -209,16 +209,14 @@ impl RoutingPolicyPlan {
         );
 
         for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
-            let routes = self
-                .routes
-                .iter()
-                .filter(|route| route.family == family)
-                .collect::<Vec<_>>();
+            let mut routes = self.routes.iter().filter(|route| route.family == family);
+            let route = routes
+                .next()
+                .context("routing plan is missing a family route")?;
             ensure!(
-                routes.len() == 1,
-                "routing plan has a missing or duplicate family route"
+                routes.next().is_none(),
+                "routing plan has duplicate family routes"
             );
-            let route = routes[0];
             ensure!(
                 route.destination == family.default_prefix()
                     && route.table_id == self.table_id
