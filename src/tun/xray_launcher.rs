@@ -74,8 +74,11 @@ pub fn spawn_xray_from_broker(
         .context("cannot inspect Xray config path")?;
     ensure!(config_metadata.file_type().is_file(), "Xray config must be a regular non-symlink file");
     ensure!(config_metadata.uid() == unsafe { libc::geteuid() }
-        && config_metadata.permissions().mode() & 0o077 == 0,
-        "Xray config must be owned by the current user and have private permissions");
+        && config_metadata.permissions().mode() & 0o700 == 0o600
+        && config_metadata.permissions().mode() & 0o077 == 0
+        && config_metadata.permissions().mode() & 0o7000 == 0
+        && config_metadata.nlink() == 1,
+        "Xray config must be a caller-owned, single-link 0600 regular file");
     let executable = fs::canonicalize(executable).context("cannot canonicalize Xray executable")?;
     let config = fs::canonicalize(config).context("cannot canonicalize Xray config")?;
 
