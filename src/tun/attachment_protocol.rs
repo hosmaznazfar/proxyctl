@@ -205,7 +205,7 @@ fn read_frame<T: for<'de> Deserialize<'de>>(stream: &mut UnixStream) -> Result<T
     let mut header = [0u8; 4];
     read_exact_until(stream, &mut header, deadline).context("cannot read attachment frame length")?;
     let length = u32::from_le_bytes(header) as usize;
-    ensure!(length > 0 && length <= MAX_FRAME, "attachment frame length is invalid");
+    ensure!(length >= 2 && length <= MAX_FRAME, "attachment frame length is invalid");
     let mut payload = vec![0u8; length];
     read_exact_until(stream, &mut payload, deadline).context("cannot read attachment frame payload")?;
     serde_json::from_slice(&payload).context("attachment frame is malformed or contains unknown fields")
