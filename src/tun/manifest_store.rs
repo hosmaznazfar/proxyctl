@@ -198,7 +198,10 @@ impl ManifestStore {
         );
         verify_owner(&metadata)?;
         verify_private_file(&metadata)?;
-        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(metadata.len() as usize)
+            .context("cannot reserve bounded TUN manifest read buffer")?;
         file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
         ensure!(
             bytes.len() as u64 <= MAX_MANIFEST_BYTES,
