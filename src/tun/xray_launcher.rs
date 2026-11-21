@@ -252,7 +252,7 @@ pub fn spawn_xray_from_broker(
 ///
 /// Recovery must not run until systemd confirms the unit stop and the recorded Xray process
 /// identity is no longer live.
-pub fn stop_xray_generation(
+pub fn stop_core_service_generation(
     activation_id: &str,
     generation: u64,
     process: Option<&ProcessIdentity>,
@@ -268,7 +268,7 @@ pub fn stop_xray_generation(
     }
     const SUDO: &str = "/usr/bin/sudo";
     const SYSTEMCTL: &str = "/usr/bin/systemctl";
-    let sudo_metadata = fs::symlink_metadata(SUDO).context("cannot inspect sudo executable for Xray service stop")?;
+    let sudo_metadata = fs::symlink_metadata(SUDO).context("cannot inspect sudo executable for core service stop")?;
     ensure!(sudo_metadata.file_type().is_file() && sudo_metadata.uid() == 0
         && sudo_metadata.permissions().mode() & 0o111 != 0
         && sudo_metadata.permissions().mode() & 0o022 == 0
@@ -289,30 +289,30 @@ pub fn stop_xray_generation(
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     let active = run_bounded_command_status(
         &mut active_command, Duration::from_secs(3),
-        "cannot inspect the exact Xray TUN service state",
+        "cannot inspect the exact managed TUN core service state",
     )?;
     match active.code() {
         Some(0) => {}
         Some(3) | Some(4) => {
             if let Some(identity) = process {
                 ensure!(!identity.verify()?,
-                    "Xray service is inactive or missing but its recorded process identity remains live");
+                    "managed core service is inactive or missing but its recorded process identity remains live");
             }
             return Ok(());
         }
-        _ => anyhow::bail!("systemd could not determine the exact Xray TUN service state"),
+        _ => anyhow::bail!("systemd could not determine the exact managed TUN core service state"),
     }
     let mut command = Command::new(SUDO);
     command.args(["-n", "--", SYSTEMCTL, "stop"]).arg(&unit)
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     let status = run_bounded_command_status(
         &mut command, Duration::from_secs(8),
-        "systemd Xray service stop exceeded its eight-second deadline",
+        "systemd managed core service stop exceeded its eight-second deadline",
     )?;
     ensure!(status.success(), "systemd did not confirm stop of the exact Xray TUN service");
     if let Some(identity) = process {
         ensure!(!identity.verify()?,
-            "Xray process identity remains live after systemd confirmed service stop");
+            "managed core process identity remains live after systemd confirmed service stop");
     }
     Ok(())
 }
@@ -621,4 +621,13 @@ pub fn terminate_and_reap_xray(child: &mut Child, process: &ProcessIdentity) -> 
     }
     child.wait().context("cannot reap terminated Xray child")?;
     Ok(())
+}
+
+/// Backwards-compatible Xray-named wrapper for the shared generation-bound core service stop.
+pub fn stop_xray_generation(
+    activation_id: &str,
+    generation: u64,
+    process: Option<&ProcessIdentity>,
+) -> Result<()> {
+    stop_core_service_generation(activation_id, generation, process)
 }
