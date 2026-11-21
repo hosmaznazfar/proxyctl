@@ -22,6 +22,30 @@ use std::{
 const JOURNAL_FILE: &str = "tun-transaction-journal.json";
 const MAX_JOURNAL_BYTES: u64 = 256 * 1024;
 
+struct BoundedJournalWriter<'a> {
+    file: &'a mut tempfile::NamedTempFile,
+    written: u64,
+}
+
+impl Write for BoundedJournalWriter<'_> {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        let remaining = MAX_JOURNAL_BYTES.saturating_sub(self.written);
+        if buffer.len() as u64 > remaining {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::WriteZero,
+                "TUN transaction journal exceeds size limit",
+            ));
+        }
+        let written = self.file.write(buffer)?;
+        self.written += written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
 /// Private persistence for the write-ahead kernel transaction journal.
 #[derive(Debug, Clone)]
 pub struct JournalStore {
@@ -272,15 +296,19 @@ impl JournalStore {
             verify_owner(&metadata)?;
             verify_private_file(&metadata)?;
         }
-        let bytes = serde_json::to_vec_pretty(journal)?;
-        ensure!(
-            bytes.len() as u64 <= MAX_JOURNAL_BYTES,
-            "TUN transaction journal exceeds size limit"
-        );
         let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)
             .context("cannot create private TUN transaction journal")?;
         set_private_file(temporary.as_file())?;
-        temporary.write_all(&bytes)?;
+        let temporary_metadata = temporary.as_file().metadata()?;
+        verify_owner(&temporary_metadata)?;
+        verify_private_file(&temporary_metadata)?;
+        let mut bounded = BoundedJournalWriter {
+            file: &mut temporary,
+            written: 0,
+        };
+        serde_json::to_writer_pretty(&mut bounded, journal)
+            .context("cannot serialize bounded TUN transaction journal")?;
+        drop(bounded);
         temporary.as_file().sync_all()?;
         temporary
             .persist(&destination)
