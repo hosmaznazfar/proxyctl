@@ -4,7 +4,7 @@
 //! does not create a TUN device, authenticate the peer, launch a core, or prove
 //! that a receiving core adopted the descriptor.
 #![cfg(target_os = "linux")]
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use std::{mem, os::{fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd}, unix::net::UnixStream}, time::Duration};
 const MARKER: u8 = 0xA7;
 
@@ -116,7 +116,6 @@ mod tests {
     }
     #[test]
     fn rejects_multiple_descriptors_without_leaking_them() {
-        use std::os::fd::AsFd;
         let (sender, receiver) = UnixStream::pair().unwrap();
         let first = File::open("/dev/null").unwrap();
         let second = File::open("/dev/null").unwrap();
