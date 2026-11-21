@@ -360,6 +360,15 @@ mod validation_tests {
     }
 
     #[test]
+    fn journal_wire_types_reject_unknown_fields() {
+        let operation = br#"{"sequence":0,"kind":"create_interface","resource_key":"interface:tun-proxyctl","state":"intent","fingerprint":null,"extra":true}"#;
+        assert!(serde_json::from_slice::<JournalOperation>(operation).is_err());
+
+        let journal = br#"{"schema_version":1,"activation_id":"12345678-1234-4234-8234-123456789abc","generation":1,"operations":[],"extra":true}"#;
+        assert!(serde_json::from_slice::<TransactionJournal>(journal).is_err());
+    }
+
+    #[test]
     fn journal_activation_id_must_use_canonical_lowercase_hex() {
         let mut value = journal(Vec::new());
         value.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
