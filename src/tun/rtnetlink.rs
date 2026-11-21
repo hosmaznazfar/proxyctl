@@ -642,7 +642,12 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
             messages
                 .try_reserve(1)
                 .context("cannot reserve parsed NETLINK_ROUTE message capacity")?;
-            messages.push(message.to_vec());
+            let mut owned = Vec::new();
+            owned
+                .try_reserve_exact(message.len())
+                .context("cannot allocate parsed NETLINK_ROUTE message")?;
+            owned.extend_from_slice(message);
+            messages.push(owned);
         }
         let aligned_length = length
             .checked_add(3)
