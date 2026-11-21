@@ -1321,15 +1321,14 @@ mod http_tun_probe_tests {
     }
 
     #[test]
-    fn rejects_unsafe_http_probe_destinations_and_unbounded_markers() {
+    fn rejects_unspecified_http_probe_destinations() {
         let mut value = target();
         value.destination = "0.0.0.0:80".parse().unwrap();
         assert!(value.validate().is_err());
-        value = target();
     }
 
     #[test]
-    fn parses_http_status_and_body_without_accepting_malformed_responses() {
+    fn parses_http_status_without_accepting_malformed_responses() {
         let response = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n";
         assert_eq!(parse_http_status(response).unwrap(), 200);
         assert!(parse_http_status(b"not-http\r\n").is_err());
