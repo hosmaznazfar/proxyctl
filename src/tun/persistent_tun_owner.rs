@@ -149,7 +149,10 @@ impl PersistentTunOwner {
             .get(&key)
             .context("activation generation does not own a retained TUN device")?;
         ensure!(
-            owned.interface.name == name && owned.interface.index == index,
+            owned.device.name() == owned.interface.name
+                && owned.interface.index > 0
+                && owned.interface.name == name
+                && owned.interface.index == index,
             "refusing to release a TUN descriptor with a mismatched interface identity"
         );
         let owned = self.devices.remove(&key).expect("entry checked above");
