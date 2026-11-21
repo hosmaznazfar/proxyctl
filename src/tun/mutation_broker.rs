@@ -522,6 +522,7 @@ pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationRes
         response.version == VERSION,
         "mutation broker response version mismatch"
     );
+    ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
     ensure!(
         response.success,
         "mutation broker rejected request: {}",
