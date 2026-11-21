@@ -291,6 +291,26 @@ pub fn observe_journal_resources(
     journal: &super::journal::TransactionJournal,
     snapshot: &KernelSnapshot,
 ) -> Result<std::collections::BTreeMap<String, Option<String>>> {
+    let mut aliases = std::collections::BTreeMap::new();
+    for operation in &journal.operations {
+        if operation.kind == super::journal::JournalOperationKind::CreatePersistentInterface {
+            let name = operation.resource_key.strip_prefix("interface:")
+                .context("invalid persistent TUN journal interface key")?;
+            if let Ok(alias) = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias")) {
+                let alias = alias.trim_end_matches(['\\r', '\\n']).to_owned();
+                if !alias.is_empty() { aliases.insert(name.to_owned(), alias); }
+            }
+        }
+    }
+    observe_journal_resources_with_aliases(journal, snapshot, &aliases)
+}
+
+/// Testable recovery observation path; production obtains aliases from kernel sysfs.
+pub fn observe_journal_resources_with_aliases(
+    journal: &super::journal::TransactionJournal,
+    snapshot: &KernelSnapshot,
+    aliases: &std::collections::BTreeMap<String, String>,
+) -> Result<std::collections::BTreeMap<String, Option<String>>> {
     use super::journal::JournalOperationKind;
 
     journal.validate()?;
@@ -298,23 +318,30 @@ pub fn observe_journal_resources(
     for operation in &journal.operations {
         let fingerprint = match operation.kind {
             JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
-                let name = operation
-                    .resource_key
-                    .strip_prefix("interface:")
+                let name = operation.resource_key.strip_prefix("interface:")
                     .context("invalid journal interface key")?;
-                let matches = snapshot
-                    .interfaces
-                    .iter()
+                let matches = snapshot.interfaces.iter()
                     .filter(|interface| interface.name == name)
                     .collect::<Vec<_>>();
                 match matches.as_slice() {
                     [] => None,
                     [interface] if interface.is_tun => {
-                        Some(serde_json::to_string(&serde_json::json!({
-                            "ifindex": interface.index,
-                            "kind": "tun",
-                            "name": interface.name
-                        }))?)
+                        if operation.kind == JournalOperationKind::CreatePersistentInterface {
+                            let alias = aliases.get(name)
+                                .context("persistent TUN generation alias is unavailable for recovery")?;
+                            Some(serde_json::to_string(&serde_json::json!({
+                                "alias": alias,
+                                "ifindex": interface.index,
+                                "kind": "tun",
+                                "name": interface.name
+                            }))?)
+                        } else {
+                            Some(serde_json::to_string(&serde_json::json!({
+                                "ifindex": interface.index,
+                                "kind": "tun",
+                                "name": interface.name
+                            }))?)
+                        }
                     }
                     _ => anyhow::bail!("journal interface identity is changed or ambiguous"),
                 }
