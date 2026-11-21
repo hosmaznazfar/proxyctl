@@ -164,6 +164,13 @@ impl RouteNetlink {
             ensure!(received > 0, "NETLINK_ROUTE returned an empty datagram");
             buffer.truncate(received as usize);
             let (batch, terminal) = parse_datagram(&buffer, sequence)?;
+            ensure!(
+                batch.iter().all(|message| {
+                    message.len() >= NETLINK_HEADER_LEN
+                        && u16::from_ne_bytes([message[4], message[5]]) == RTM_NEWLINK
+                }),
+                "NETLINK_ROUTE link dump returned an unexpected message type"
+            );
             validate_response_budget(&messages, &batch)?;
             messages.extend(batch);
             if terminal {
