@@ -537,7 +537,7 @@ pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u6
     let request = MutationRequest::AttachDescriptor { version: VERSION, activation_id: activation_id.to_owned(), generation };
     request.validate()?;
     let payload = serde_json::to_vec(&request)?;
-    ensure!(payload.len() <= MAX_FRAME, "mutation request exceeds frame limit");
+    ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME, "mutation request exceeds frame limit");
     let mut stream = UnixStream::connect(socket_path).context("cannot connect to mutation broker for TUN descriptor attachment")?;
     stream.set_read_timeout(Some(IO_TIMEOUT))?;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
