@@ -270,15 +270,30 @@ pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
         .find_map(|line| line.strip_prefix("Uid:"))
         .context("process status is missing UID credentials")?;
     let mut fields = uid_line.split_whitespace();
-    let real = fields.next().context("process status is missing real UID")?
-        .parse::<u32>().context("process status contains an invalid real UID")?;
-    let effective = fields.next().context("process status is missing effective UID")?
-        .parse::<u32>().context("process status contains an invalid effective UID")?;
-    let saved = fields.next().context("process status is missing saved UID")?
-        .parse::<u32>().context("process status contains an invalid saved UID")?;
-    let filesystem = fields.next().context("process status is missing filesystem UID")?
-        .parse::<u32>().context("process status contains an invalid filesystem UID")?;
-    ensure!(fields.next().is_none(), "process status has an unexpected UID field count");
+    let real = fields
+        .next()
+        .context("process status is missing real UID")?
+        .parse::<u32>()
+        .context("process status contains an invalid real UID")?;
+    let effective = fields
+        .next()
+        .context("process status is missing effective UID")?
+        .parse::<u32>()
+        .context("process status contains an invalid effective UID")?;
+    let saved = fields
+        .next()
+        .context("process status is missing saved UID")?
+        .parse::<u32>()
+        .context("process status contains an invalid saved UID")?;
+    let filesystem = fields
+        .next()
+        .context("process status is missing filesystem UID")?
+        .parse::<u32>()
+        .context("process status contains an invalid filesystem UID")?;
+    ensure!(
+        fields.next().is_none(),
+        "process status has an unexpected UID field count"
+    );
     ensure!(
         real == effective && real == saved && real == filesystem,
         "process has divergent real/effective/saved/filesystem UIDs"
@@ -314,7 +329,10 @@ fn read_start_ticks(pid: u32) -> Result<u64> {
     file.take(64 * 1024 + 1)
         .read_to_string(&mut stat)
         .with_context(|| format!("cannot read process identity for PID {pid}"))?;
-    ensure!(stat.len() <= 64 * 1024, "process stat exceeds the bounded read limit");
+    ensure!(
+        stat.len() <= 64 * 1024,
+        "process stat exceeds the bounded read limit"
+    );
     let close = stat
         .rfind(')')
         .context("process stat has no closing command delimiter")?;
