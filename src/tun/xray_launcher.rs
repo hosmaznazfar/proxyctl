@@ -400,6 +400,42 @@ pub fn verify_xray_readiness(
 }
 
 
+/// Execute the complete Xray readiness sequence from live observations rather than
+/// caller-authored boolean evidence: traffic first, then process/socket/route/host inspection.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_xray_end_to_end_readiness(
+    runtime_directory: &Path,
+    process: &ProcessIdentity,
+    interface_name: &str,
+    expected: &super::readiness::ReadinessExpectation<'_>,
+    listener: std::net::SocketAddr,
+    listener_timeout: Duration,
+    plan: &super::route_policy::RoutingPolicyPlan,
+    expected_peer: std::net::SocketAddr,
+    transport: super::privilege_broker::BrokerSocketTransport,
+    target: &super::readiness::HttpConnectProbeTarget,
+    activation_id: &str,
+    generation: u64,
+    probe_timeout: Duration,
+    maximum_response_bytes: usize,
+    baseline_host: &super::NetworkStatus,
+    current_host: &super::NetworkStatus,
+) -> Result<super::readiness::ProxyTrafficObservation> {
+    let traffic = super::readiness::probe_http_connect_traffic(
+        process, listener, target, activation_id, generation, probe_timeout, maximum_response_bytes,
+    ).context("Xray end-to-end HTTP CONNECT probe failed")?;
+    let preflight = super::readiness::collect_managed_preflight_with_response(
+        runtime_directory, activation_id, process, listener, listener_timeout, plan,
+        expected_peer, transport, baseline_host, current_host,
+    ).context("Xray managed preflight evidence collection failed")?;
+    verify_xray_readiness(
+        process, interface_name, expected, &preflight.evidence, listener, listener_timeout,
+        plan, &preflight.socket_mark_response, expected_peer, transport, &traffic,
+        activation_id, generation, probe_timeout, maximum_response_bytes,
+    ).context("Xray full readiness verification failed")?;
+    Ok(traffic)
+}
+
 /// Run a real bounded HTTP CONNECT probe through Xray, then promote only its measured
 /// response into the complete process/route/mark/host readiness gate.
 #[allow(clippy::too_many_arguments)]
