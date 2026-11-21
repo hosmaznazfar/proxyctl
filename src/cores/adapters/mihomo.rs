@@ -383,7 +383,10 @@ mod config_contract_tests {
 
     #[test]
     fn mihomo_activation_benchmark_and_tun_options_stay_core_native() {
-        assert_eq!(super::MihomoAdapter.tun_attachment_mode(), super::TunAttachmentMode::NativeDeviceCreation);
+        assert_eq!(
+            super::MihomoAdapter.tun_attachment_mode(),
+            super::TunAttachmentMode::NativeDeviceCreation
+        );
         let capabilities = std::hint::black_box(CAPABILITIES);
         assert!(capabilities.hysteria2 && capabilities.xhttp);
         assert!(
@@ -418,9 +421,12 @@ mod config_contract_tests {
 
         let mark = super::super::TunOutboundMark::new(0x42, 0xff).unwrap();
         let tun: serde_json::Value = serde_json::from_slice(
-            &MihomoAdapter.generate_tun_activation_config(&node, 43128, mark)
-                .unwrap().content,
-        ).unwrap();
+            &MihomoAdapter
+                .generate_tun_activation_config(&node, 43128, mark)
+                .unwrap()
+                .content,
+        )
+        .unwrap();
         assert_eq!(tun["mixed-port"], 43128);
         assert_eq!(tun["tun"]["enable"], true);
         assert_eq!(tun["tun"]["device"], "tun-proxyctl");
