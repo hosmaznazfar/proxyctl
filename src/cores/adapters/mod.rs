@@ -182,6 +182,24 @@ mod tun_mark_tests {
     use super::{TunAttachmentMode, TunOutboundMark};
 
     #[test]
+    fn core_tun_attachment_inventory_matches_verified_launch_contracts() {
+        assert_eq!(
+            super::adapter(crate::cores::CoreId::Xray)
+                .tun_attachment_mode()
+                .external_descriptor_environment(),
+            Some(super::XRAY_TUN_FD_ENV)
+        );
+        assert_eq!(
+            super::adapter(crate::cores::CoreId::SingBox).tun_attachment_mode(),
+            TunAttachmentMode::NativeDeviceCreation
+        );
+        assert_eq!(
+            super::adapter(crate::cores::CoreId::Mihomo).tun_attachment_mode(),
+            TunAttachmentMode::Unsupported
+        );
+    }
+
+    #[test]
     fn only_external_descriptor_modes_advertise_broker_fd_adoption() {
         assert_eq!(
             TunAttachmentMode::ExternalDescriptorEnvironment { variable: "XRAY_TUN_FD" }
