@@ -202,7 +202,7 @@ pub fn activate(
         ensure_port_available(port)?;
         let generated = if tun_enabled {
             anyhow::bail!(
-                "public TUN activation remains gated until the Xray broker lifecycle is wired to the CLI and independent readiness/recovery validation is complete"
+                "TUN activation must use the dedicated generation-bound Xray broker lifecycle, not the loopback activation path"
             );
         } else {
             adapter.generate_activation_config(&node, port)
@@ -536,7 +536,7 @@ pub fn activate_tun_xray(
 fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
     ensure!(
         !tun_enabled,
-        "public TUN activation remains disabled: Xray has a broker-owned descriptor launch path, but it is not wired to the CLI and independent dataplane readiness, crash recovery, and real Linux validation remain outstanding. Ordinary loopback activation and 'proxyctl tun status' remain available; no network or process changes were made."
+        "TUN activation must use activate_tun_xray, which composes the broker-owned descriptor, readiness, and recovery lifecycle. The generic loopback activation path cannot start TUN mode."
     );
     Ok(())
 }
@@ -897,8 +897,8 @@ mod tests {
     fn tun_activation_is_rejected_before_any_network_or_process_operation() {
         assert!(ensure_tun_mode_disabled(false).is_ok());
         let error = ensure_tun_mode_disabled(true).unwrap_err().to_string();
-        assert!(error.contains("public TUN activation remains disabled"));
-        assert!(error.contains("not wired to the CLI"));
+        assert!(error.contains("dedicated generation-bound Xray broker lifecycle"));
+        assert!(error.contains("not the loopback activation path"));
     }
 
     #[cfg(target_os = "linux")]
