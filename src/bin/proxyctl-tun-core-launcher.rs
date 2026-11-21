@@ -196,6 +196,7 @@ fn verify_capability_boundary() -> Result<()> {
     let mut effective = None;
     let mut permitted = None;
     let mut bounding = None;
+    let mut inheritable = None;
     let mut ambient = None;
     let mut no_new_privileges = None;
     for line in status.lines() {
@@ -205,6 +206,8 @@ fn verify_capability_boundary() -> Result<()> {
             permitted = Some(u64::from_str_radix(value.trim(), 16)?);
         } else if let Some(value) = line.strip_prefix("CapBnd:") {
             bounding = Some(u64::from_str_radix(value.trim(), 16)?);
+        } else if let Some(value) = line.strip_prefix("CapInh:") {
+            inheritable = Some(u64::from_str_radix(value.trim(), 16)?);
         } else if let Some(value) = line.strip_prefix("CapAmb:") {
             ambient = Some(u64::from_str_radix(value.trim(), 16)?);
         } else if let Some(value) = line.strip_prefix("NoNewPrivs:") {
@@ -214,6 +217,7 @@ fn verify_capability_boundary() -> Result<()> {
     ensure!(effective == Some(CAP_NET_ADMIN)
         && permitted == Some(CAP_NET_ADMIN)
         && bounding == Some(CAP_NET_ADMIN)
+        && inheritable == Some(CAP_NET_ADMIN)
         && ambient == Some(CAP_NET_ADMIN)
         && no_new_privileges == Some(true),
         "core launcher must run with exactly ambient/effective/permitted/bounding CAP_NET_ADMIN and NoNewPrivileges");
