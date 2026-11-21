@@ -264,8 +264,9 @@ pub fn create_persistent(name: &str, uid: u32, gid: u32) -> Result<PersistentTun
 /// The interface name is validated and the kernel-returned TUN identity is checked
 /// before TUNSETPERSIST(0). The caller must additionally compare the live ifindex
 /// against its durable manifest immediately before invoking this operation.
-pub fn remove_persistent(name: &str) -> Result<()> {
+pub fn remove_persistent(name: &str, expected_index: u32) -> Result<()> {
     validate_name(name)?;
+    ensure!(expected_index > 0, "persistent TUN cleanup requires a non-zero expected ifindex");
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -293,6 +294,11 @@ pub fn remove_persistent(name: &str) -> Result<()> {
         returned_name == name.as_bytes(),
         "kernel attached an unexpected TUN interface during persistent cleanup"
     );
+    let c_name = std::ffi::CString::new(name)?;
+    // Resolve the interface index after TUNSETIFF has attached this descriptor.
+    // This closes the name-reuse window before persistence is cleared.
+    let live_index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
+    ensure!(live_index == expected_index, "persistent TUN ifindex changed before cleanup; refusing to clear persistence");
     let rc = ioctl_retry(fd.as_raw_fd(), TUNSETPERSIST, 0)?;
     ensure!(rc == 0, "TUNSETPERSIST(0) failed: {}", std::io::Error::last_os_error());
     Ok(())
