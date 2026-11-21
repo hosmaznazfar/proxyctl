@@ -70,6 +70,41 @@ pub fn prepare_managed_activation(
     Ok((token, response.message))
 }
 
+/// Prepare a persistent named TUN transaction for a native core.
+pub fn prepare_native_managed_activation(
+    helper: &MutationHelper,
+    coordinator: &LifecycleCoordinator,
+    activation_id: String,
+    generation: u64,
+    interface_name: String,
+    owner_uid: u32,
+    owner_gid: u32,
+    table_id: u32,
+    bypass_priority: u32,
+    proxy_priority: u32,
+    core_mark: u32,
+    core_mark_mask: u32,
+) -> Result<(ActivationToken, String)> {
+    let response = helper.activate_native(
+        activation_id.clone(), generation, interface_name, owner_uid, owner_gid,
+        table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
+    )?;
+    ensure!(response.success,
+        "privileged native TUN activation failed: {}; inspect and recover this generation if its durable journal was retained",
+        response.message);
+    let token = match coordinator.adopt_prepared(&activation_id, generation) {
+        Ok(token) => token,
+        Err(error) => {
+            match helper.recover(activation_id, generation) {
+                Ok(result) if result.success => return Err(error).context("native activation manifest adoption failed; broker recovery completed"),
+                Ok(result) => anyhow::bail!("native activation manifest adoption failed ({error:#}); broker recovery failed: {}", result.message),
+                Err(recovery_error) => anyhow::bail!("native activation manifest adoption failed ({error:#}); broker recovery request failed: {recovery_error:#}"),
+            }
+        }
+    };
+    Ok((token, response.message))
+}
+
 /// Commit a process after readiness without performing broker recovery.
 ///
 /// Xray's systemd service must be stopped by the orchestrator before its broker routes are
