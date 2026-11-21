@@ -171,6 +171,7 @@ impl RouteNetlink {
                 received as usize <= buffer.len(),
                 "NETLINK_ROUTE datagram exceeded the size limit"
             );
+            ensure!(received > 0, "NETLINK_ROUTE returned an empty datagram");
             buffer.truncate(received as usize);
             let (batch, terminal) = parse_datagram(&buffer, sequence)?;
             validate_response_budget(&messages, &batch)?;
