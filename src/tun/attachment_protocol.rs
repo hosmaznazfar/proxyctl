@@ -197,8 +197,9 @@ fn write_frame<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<()> {
     configure_handoff_timeouts(stream)?;
     let payload = serde_json::to_vec(value).context("cannot encode attachment protocol frame")?;
     ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME, "attachment frame exceeds its size bound");
-    stream.write_all(&(payload.len() as u32).to_le_bytes()).context("cannot write attachment frame length")?;
-    stream.write_all(&payload).context("cannot write attachment frame payload")?;
+    let deadline = std::time::Instant::now() + HANDOFF_IO_TIMEOUT;
+    write_exact_until(stream, &(payload.len() as u32).to_le_bytes(), deadline).context("cannot write attachment frame length")?;
+    write_exact_until(stream, &payload, deadline).context("cannot write attachment frame payload")?;
     stream.flush().context("cannot flush attachment frame")
 }
 
