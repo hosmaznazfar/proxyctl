@@ -303,7 +303,7 @@ fn valid_route_destination(key: &str, destination: &str) -> bool {
 
 fn valid_journal_resource_key(kind: JournalOperationKind, key: &str) -> bool {
     match kind {
-        JournalOperationKind::CreateInterface => {
+        JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
             let Some(name) = key.strip_prefix("interface:") else {
                 return false;
             };
