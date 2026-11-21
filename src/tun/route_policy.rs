@@ -212,7 +212,7 @@ impl RoutingPolicyPlan {
             let mut routes = self.routes.iter().filter(|route| route.family == family);
             let route = routes
                 .next()
-                .context("routing plan is missing a family route")?;
+                .ok_or_else(|| anyhow::anyhow!("routing plan is missing a family route"))?;
             ensure!(
                 routes.next().is_none(),
                 "routing plan has duplicate family routes"
