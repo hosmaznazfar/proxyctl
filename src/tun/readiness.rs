@@ -309,7 +309,6 @@ fn validate_unmarked_route_record(
 }
 
 /// A verified TUN-routed HTTP response whose TCP stream remains open while socket marks are inspected.
-#[cfg(target_os = "linux")]
 pub struct TunTrafficProbe {
     pub observation: ProxyTrafficObservation,
     _stream: TcpStream,
@@ -324,7 +323,7 @@ pub fn probe_tun_routed_http_traffic(
     generation: u64,
     timeout: Duration,
     maximum_response_bytes: usize,
- ) -> Result<TunTrafficProbe> {
+) -> Result<TunTrafficProbe> {
     use std::{io::Write, net::TcpStream, time::Instant};
 
     target.validate()?;
@@ -389,7 +388,7 @@ pub fn probe_tun_routed_http_traffic(
     _generation: u64,
     _timeout: Duration,
     _maximum_response_bytes: usize,
-) -> Result<ProxyTrafficObservation> {
+) -> Result<TunTrafficProbe> {
     anyhow::bail!("direct TUN-routed HTTP probing is supported only on Linux");
 }
 
