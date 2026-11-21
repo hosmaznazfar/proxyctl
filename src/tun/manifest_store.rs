@@ -226,6 +226,14 @@ impl ManifestStore {
         );
         verify_owner(&metadata)?;
         verify_private_file(&metadata)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            ensure!(
+                metadata.permissions().mode() & 0o7000 == 0,
+                "TUN manifest must not have special permission bits"
+            );
+        }
         let mut bytes = Vec::new();
         bytes
             .try_reserve_exact(metadata.len() as usize)
