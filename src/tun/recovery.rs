@@ -52,6 +52,7 @@ impl RecoveryBackendKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SupervisorIdentity {
     pub activation_id: String,
     pub service_name: String,
