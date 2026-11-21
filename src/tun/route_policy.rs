@@ -332,6 +332,15 @@ mod tests {
     }
 
     #[test]
+    fn rejects_dot_only_interface_names() {
+        for name in [".", ".."] {
+            let mut plan = sample_plan();
+            plan.interface_name = name.to_owned();
+            assert!(plan.validate().is_err(), "accepted interface name {name:?}");
+        }
+    }
+
+    #[test]
     fn rejects_invalid_mark_and_mask() {
         let mut plan = sample_plan();
         plan.core_mark_mask = 0;
