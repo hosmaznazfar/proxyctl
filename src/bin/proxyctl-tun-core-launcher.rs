@@ -10,7 +10,7 @@ use std::{
     env, fs,
     io::Write,
     os::{
-        fd::{AsFd, AsRawFd, OwnedFd},
+        fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
         unix::{fs::{MetadataExt, PermissionsExt}, net::UnixStream, process::CommandExt},
     },
     path::{Path, PathBuf},
@@ -279,11 +279,32 @@ fn validate_xray_paths(executable: &Path, config: &Path) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn validate_tun_descriptor(fd: i32, interface: &str, expected_ifindex: u32) -> Result<()> {
+    ensure!(fd >= 0, "received TUN descriptor is invalid");
     let fdinfo = fs::read_to_string(format!("/proc/self/fdinfo/{fd}"))
         .context("cannot inspect received TUN descriptor metadata")?;
     ensure!(fdinfo.lines().any(|line| line.strip_prefix("iff:")
         .is_some_and(|value| value.trim() == interface)),
         "received descriptor is not bound to the expected TUN interface");
+
+    // TUNGETIFF reports the kernel's actual device mode. Do not accept TAP, PI-enabled,
+    // or vnet-header descriptors: the Xray TUN inbound contract expects packet-mode TUN.
+    const TUNGETIFF: libc::c_ulong = 0x8004_54d2;
+    const IFF_TUN: u16 = 0x0001;
+    const IFF_TAP: u16 = 0x0002;
+    const IFF_NO_PI: u16 = 0x1000;
+    const IFF_VNET_HDR: u16 = 0x4000;
+    let mut request = [0u8; 40];
+    // SAFETY: request is a writable Linux ifreq-sized buffer and fd is a received live fd.
+    let result = unsafe { libc::ioctl(fd, TUNGETIFF, request.as_mut_ptr()) };
+    ensure!(result == 0, "received descriptor does not support TUNGETIFF");
+    let flags = u16::from_ne_bytes([request[16], request[17]]);
+    ensure!(flags & IFF_TUN != 0 && flags & IFF_TAP == 0
+        && flags & IFF_NO_PI != 0 && flags & IFF_VNET_HDR == 0,
+        "received descriptor must be IFF_TUN|IFF_NO_PI without TAP or VNET_HDR");
+    let status = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    ensure!(status >= 0 && status & libc::O_ACCMODE == libc::O_RDWR,
+        "received TUN descriptor must be open for read/write packet I/O");
+
     let interface_path = Path::new("/sys/class/net").join(interface);
     ensure!(interface_path.join("tun_flags").is_file(),
         "expected interface is not a kernel TUN device");
