@@ -464,13 +464,31 @@ fn read_exact_deadline(
     Ok(())
 }
 
+fn write_exact_deadline(stream: &mut UnixStream, mut bytes: &[u8], deadline: std::time::Instant) -> Result<()> {
+    use std::io::ErrorKind;
+    while !bytes.is_empty() {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "mutation response exceeded its frame deadline");
+        stream.set_write_timeout(Some(remaining))?;
+        match stream.write(bytes) {
+            Ok(0) => anyhow::bail!("mutation response socket closed during frame write"),
+            Ok(count) => bytes = &bytes[count..],
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => anyhow::bail!("mutation response exceeded its frame deadline"),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
 fn write_response(stream: &mut UnixStream, response: &MutationResponse) -> Result<()> {
     let payload = serde_json::to_vec(response)?;
     ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME,
         "mutation response exceeds frame limit"
     );
-    stream.write_all(&(payload.len() as u32).to_le_bytes())?;
-    stream.write_all(&payload)?;
+    let deadline = std::time::Instant::now() + IO_TIMEOUT;
+    write_exact_deadline(stream, &(payload.len() as u32).to_le_bytes(), deadline)?;
+    write_exact_deadline(stream, &payload, deadline)?;
     stream.flush()?;
     Ok(())
 }
@@ -487,8 +505,7 @@ fn read_response_frame(stream: &mut UnixStream) -> Result<Vec<u8>> {
 }
 
 fn validate_response_envelope(response: &MutationResponse) -> Result<()> {
-    ensure!(response.version == VERSION, "mutation broker response version mismatch");
-    ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
+    validate_response_envelope(&response)?;
     ensure!(!response.message.is_empty(), "mutation broker response message is empty");
     Ok(())
 }
@@ -580,6 +597,48 @@ mod tests {
     }
 
     #[test]
+    fn rejects_truncated_response_frame_payload() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        sender.write_all(&8u32.to_le_bytes()).unwrap();
+        sender.write_all(b"short").unwrap();
+        drop(sender);
+        assert!(read_response_frame(&mut receiver).is_err());
+    }
+
+    #[test]
+    fn rejects_truncated_response_frame_header() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        sender.write_all(&[1, 2]).unwrap();
+        drop(sender);
+        assert!(read_response_frame(&mut receiver).is_err());
+    }
+
+    #[test]
+    fn rejects_response_frame_length_below_minimum() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        sender.write_all(&1u32.to_le_bytes()).unwrap();
+        sender.write_all(b"x").unwrap();
+        assert!(read_response_frame(&mut receiver).is_err());
+    }
+
+    #[test]
+    fn rejects_response_frame_length_over_limit() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        sender.write_all(&((MAX_FRAME as u32) + 1).to_le_bytes()).unwrap();
+        assert!(read_response_frame(&mut receiver).is_err());
+    }
+
+    #[test]
+    fn rejects_malformed_response_json_from_frame() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        let bytes = b"not-json";
+        sender.write_all(&(bytes.len() as u32).to_le_bytes()).unwrap();
+        sender.write_all(bytes).unwrap();
+        let frame = read_response_frame(&mut receiver).unwrap();
+        assert!(serde_json::from_slice::<MutationResponse>(&frame).is_err());
+    }
+
+    #[test]
     fn rejects_response_with_unknown_fields() {
         let malformed = br#"{"version":1,"success":true,"message":"ok","extra":true}"#;
         assert!(serde_json::from_slice::<MutationResponse>(malformed).is_err());
@@ -592,6 +651,12 @@ mod tests {
     }
 
     #[test]
+    fn accepts_bounded_failure_response_envelope() {
+        let response = MutationResponse { version: VERSION, success: false, message: "denied".into() };
+        assert!(validate_response_envelope(&response).is_ok());
+    }
+
+    #[test]
     fn rejects_empty_response_message() {
         let response = MutationResponse { version: VERSION, success: true, message: String::new() };
         assert!(validate_response_envelope(&response).is_err());
@@ -601,6 +666,12 @@ mod tests {
     fn rejects_response_version_mismatch() {
         let response = MutationResponse { version: VERSION + 1, success: true, message: "ok".into() };
         assert!(validate_response_envelope(&response).is_err());
+    }
+
+    #[test]
+    fn rejects_ping_protocol_version_mismatch() {
+        assert!(MutationRequest::Ping { version: VERSION + 1 }.validate().is_err());
+        assert!(MutationRequest::Ping { version: VERSION }.validate().is_ok());
     }
 
     #[test]
