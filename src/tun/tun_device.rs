@@ -59,17 +59,14 @@ impl TunDevice {
             "TUNSETIFF failed: {}",
             std::io::Error::last_os_error()
         );
-        let bytes = req
-            .name
-            .iter()
-            .take_while(|c| **c != 0)
-            .map(|c| *c as u8)
-            .collect::<Vec<_>>();
-        let actual = String::from_utf8(bytes).context("kernel returned invalid interface name")?;
+        let returned_name = req.name.iter()
+            .take_while(|character| **character != 0)
+            .map(|character| *character as u8);
         ensure!(
-            actual == name,
+            returned_name.eq(name.bytes()),
             "kernel allocated unexpected interface identity"
         );
+        let actual = name.to_owned();
         // SAFETY: TUNSETOWNER/GROUP accept scalar uid/gid on the attached fd.
         let rc = ioctl_retry(fd.as_raw_fd(), TUNSETOWNER, uid as usize)?;
         ensure!(
