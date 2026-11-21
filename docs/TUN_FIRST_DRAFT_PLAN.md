@@ -223,3 +223,25 @@ The systemd transient unit has additional sandbox properties. The service stop o
 ### Implementation continuation — preflight and runtime directory hardening (2026-11-21)
 
 The activation request now rejects invalid ordering of core-bypass and proxy-routing priorities before mutation. Helper startup and detached supervisor discovery require canonical, private runtime directories with owner read/write/search permissions. These local preflight checks are not a substitute for runtime validation. No build, test, systemd host validation, or network mutation was performed.
+
+
+## Xray descriptor and dataplane integration continuation (2026-11-21)
+
+The Xray path now has a concrete broker-owned descriptor launch sequence:
+
+1. The broker commits a generation-bound Prepared TUN manifest and retains the device descriptor.
+2. A capability-confined transient systemd service starts the installed core-launch shim as the activation UID/GID.
+3. The shim authenticates the controller peer, receives exactly one close-on-exec descriptor through SCM_RIGHTS, and validates the TUN interface name/index, kernel TUN mode, packet flags, read/write access, and TUN owner/group.
+4. The shim duplicates the descriptor for the Xray child through the documented `XRAY_TUN_FD` environment contract, verifies the child executable and capability boundary, and persists the exact process identity while the manifest remains Prepared.
+5. The orchestrator waits for kernel-visible attachment in the Xray process fdinfo, then requires readiness before committing Running. Recovery terminates a persisted Prepared core before requesting route cleanup.
+
+The readiness path now includes an explicit numeric-address HTTP CONNECT probe through the process-owned local listener. It verifies the CONNECT tunnel, expected HTTP status, optional bounded response marker, and process identity before producing generation-bound traffic evidence. A composed Xray readiness function then collects the exact interface/index, route and policy rules, marked outbound socket evidence, physical-egress bypass, and unchanged DNS/firewall snapshots before allowing Running.
+
+**Still incomplete:**
+
+- The end-to-end Xray readiness API is not wired to `services::activation::activate` or the public `use --tun` command.
+- sing-box's documented TUN inbound creates/opens a named device; its public TUN configuration does not expose the Xray-style external descriptor environment contract. It needs a separate native-device ownership design before activation.
+- Mihomo's documented Linux TUN path is also native device creation; its file-descriptor option is not established as a supported Linux external-FD contract. It remains fail-closed.
+- No build, tests, real core startup, real traffic, fault injection, crash/reboot, or Linux host validation has been run. The public TUN gate must remain closed.
+
+This is real Xray orchestration/readiness progress, not completion of Phases 1–6. The next work is to connect a safe public Xray start/stop path, define the native-device backend for sing-box/Mihomo (or explicitly scope the release to Xray only), and then validate the whole lifecycle on Linux.
