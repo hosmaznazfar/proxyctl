@@ -239,7 +239,10 @@ pub fn inspect_links() -> Result<Vec<NetlinkLinkRecord>> {
 
     let mut socket = RouteNetlink::open()?;
     let messages = socket.transact(&request, DEFAULT_TIMEOUT)?;
-    let mut links = Vec::with_capacity(messages.len());
+    let mut links = Vec::new();
+    links
+        .try_reserve_exact(messages.len())
+        .context("cannot reserve NETLINK_ROUTE link inventory capacity")?;
     let mut names = std::collections::BTreeSet::new();
     let mut indices = std::collections::BTreeSet::new();
     for message in messages {
