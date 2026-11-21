@@ -378,11 +378,17 @@ impl<'a> ActivationOrchestrator<'a> {
     fn start_recovery_supervisor(&self, activation: &ManagedActivation) -> Result<()> {
         let runtime = self.coordinator.runtime_directory()?;
         let manifest = runtime.join("tun-manifest.json");
-        let executable = std::env::current_exe()
-            .context("cannot locate the Proxyctl executable for supervisor discovery")?
-            .canonicalize()
-            .context("cannot canonicalize the Proxyctl executable path")?
-            .with_file_name("proxyctl-tun-supervisor");
+        const SUPERVISOR: &str = "/usr/libexec/proxyctl-tun-supervisor";
+        let executable = Path::new(SUPERVISOR);
+        let metadata = std::fs::symlink_metadata(executable)
+            .context("installed TUN recovery supervisor is missing; install the Proxyctl TUN helper bundle")?;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        ensure!(metadata.file_type().is_file() && metadata.uid() == 0
+            && metadata.permissions().mode() & 0o111 != 0
+            && metadata.permissions().mode() & 0o022 == 0
+            && metadata.permissions().mode() & 0o7000 == 0
+            && metadata.nlink() == 1,
+            "TUN recovery supervisor must be a root-owned, non-writable, single-link executable");
         let identity = SupervisorIdentity::for_activation(
             activation.token.activation_id(),
             manifest.to_string_lossy().into_owned(),
