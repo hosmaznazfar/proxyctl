@@ -143,6 +143,10 @@ impl RouteNetlink {
                 pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0,
                 "NETLINK_ROUTE socket reported an error"
             );
+            ensure!(
+                pollfd.revents & libc::POLLIN != 0,
+                "NETLINK_ROUTE poll returned without readable data"
+            );
 
             let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
             // SAFETY: buffer and sender storage are writable for their declared lengths.
