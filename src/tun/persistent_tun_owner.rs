@@ -236,7 +236,8 @@ impl NativePersistentTunOwner {
         ensure!(self.devices.len() < MAX_RETAINED_TUN_DEVICES, "native TUN registry limit reached");
         ensure!(!self.devices.values().any(|device| device.name == name), "native TUN name is already owned");
 
-        super::tun_device::create_persistent(name, uid, gid)
+        let alias = generation_alias(activation_id, generation)?;
+        super::tun_device::create_persistent(name, uid, gid, &alias)
             .with_context(|| format!("cannot create persistent native TUN interface {name}"))?;
 
         // Any failure after TUNSETPERSIST(1) must attempt exact cleanup. Without
@@ -253,6 +254,9 @@ impl NativePersistentTunOwner {
             ensure!(interface.index > 0, "persistent native TUN interface has an invalid ifindex");
             let live_index = super::tun_device::current_interface_index(name)?;
             ensure!(live_index == interface.index, "persistent native TUN ifindex changed during verification");
+            let live_alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))?;
+            ensure!(live_alias.trim_end_matches(['\\r', '\\n']) == alias,
+                "persistent native TUN generation alias does not match the requested activation");
             Ok(interface)
         })();
 
@@ -260,7 +264,7 @@ impl NativePersistentTunOwner {
             Ok(interface) => interface,
             Err(error) => {
                 let rollback = super::tun_device::current_interface_index(name)
-                    .and_then(|index| super::tun_device::remove_persistent(name, index));
+                    .and_then(|index| super::tun_device::remove_persistent(name, index, &alias));
                 return match rollback {
                     Ok(()) => Err(error).context("native TUN verification failed; persistent interface was rolled back"),
                     Err(cleanup) => anyhow::bail!(
@@ -293,7 +297,8 @@ impl NativePersistentTunOwner {
         ensure!(matches.next().is_none(), "kernel inventory contains duplicate interface names");
         ensure!(live.is_tun && live.index == index,
             "native TUN interface identity changed; refusing persistent cleanup");
-        super::tun_device::remove_persistent(name, index)
+        let alias = generation_alias(activation_id, generation)?;
+        super::tun_device::remove_persistent(name, index, &alias)
             .context("cannot clear persistence from the exact owned native TUN interface")?;
         self.devices.remove(&key);
         Ok(())
@@ -301,7 +306,7 @@ impl NativePersistentTunOwner {
 
     /// Recover or release a journal-owned persistent device after the exact core service stopped.
     /// This path intentionally works after broker restart, when the process-local registry is empty.
-    pub fn release_recovered(&mut self, name: &str, index: u32) -> Result<()> {
+    pub fn release_recovered(&mut self, name: &str, index: u32, expected_alias: &str) -> Result<()> {
         ensure!(index > 0, "persistent TUN recovery requires a non-zero ifindex");
         let snapshot = kernel_inventory::inspect_snapshot()?;
         let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name);
@@ -309,7 +314,10 @@ impl NativePersistentTunOwner {
         ensure!(matches.next().is_none(), "kernel inventory contains duplicate interface names");
         ensure!(live.is_tun && live.index == index,
             "persistent TUN recovery identity changed; refusing cleanup");
-        super::tun_device::remove_persistent(name, index)
+        let alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))?;
+        ensure!(alias.trim_end_matches(['\\r', '\\n']) == expected_alias,
+            "persistent TUN generation alias changed; refusing recovery cleanup");
+        super::tun_device::remove_persistent(name, index, expected_alias)
             .context("cannot clear persistence from journal-owned native TUN interface")?;
         let after = kernel_inventory::inspect_snapshot()?;
         ensure!(!after.interfaces.iter().any(|interface| interface.name == name || interface.index == index),
