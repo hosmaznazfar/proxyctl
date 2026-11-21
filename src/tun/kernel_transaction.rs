@@ -100,6 +100,18 @@ pub trait KernelTransactionBackend {
         gid: u32,
     ) -> Result<KernelInterfaceRecord>;
 
+    /// Create a persistent named device for a core that cannot accept an external TUN fd.
+    /// Backends that do not support this mode must fail closed.
+    fn create_persistent_owned_interface(
+        &mut self,
+        _activation_id: &str,
+        _name: &str,
+        _uid: u32,
+        _gid: u32,
+    ) -> Result<KernelInterfaceRecord> {
+        anyhow::bail!("persistent native TUN devices are not supported by this backend")
+    }
+
     fn add_owned_route(&mut self, activation_id: &str, route: &PlannedRoute) -> Result<String>;
 
     fn add_owned_rule(&mut self, activation_id: &str, rule: &PlannedRule) -> Result<String>;
@@ -140,16 +152,41 @@ pub fn apply<B: KernelTransactionBackend>(
     transaction: &KernelTransaction,
     backend: &mut B,
 ) -> Result<AppliedKernelTransaction> {
+    apply_with_device_mode(transaction, backend, false)
+}
+
+/// Apply a transaction using a persistent named TUN device rather than a retained fd.
+pub fn apply_native<B: KernelTransactionBackend>(
+    transaction: &KernelTransaction,
+    backend: &mut B,
+) -> Result<AppliedKernelTransaction> {
+    apply_with_device_mode(transaction, backend, true)
+}
+
+fn apply_with_device_mode<B: KernelTransactionBackend>(
+    transaction: &KernelTransaction,
+    backend: &mut B,
+    persistent_device: bool,
+) -> Result<AppliedKernelTransaction> {
     transaction.validate()?;
     let activation_id = &transaction.activation_id;
     let policy = &transaction.policy;
 
-    let interface = match backend.create_owned_interface(
-        activation_id,
-        &policy.interface_name,
-        transaction.owner_uid,
-        transaction.owner_gid,
-    ) {
+    let interface = match if persistent_device {
+        backend.create_persistent_owned_interface(
+            activation_id,
+            &policy.interface_name,
+            transaction.owner_uid,
+            transaction.owner_gid,
+        )
+    } else {
+        backend.create_owned_interface(
+            activation_id,
+            &policy.interface_name,
+            transaction.owner_uid,
+            transaction.owner_gid,
+        )
+    } {
         Ok(interface) => interface,
         Err(error) => {
             backend
