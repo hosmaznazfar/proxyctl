@@ -257,7 +257,11 @@ pub fn inspect_links() -> Result<Vec<NetlinkLinkRecord>> {
         );
         links.push(link);
     }
-    links.sort_by(|left, right| left.name.cmp(&right.name));
+    links.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| left.index.cmp(&right.index))
+    });
     Ok(links)
 }
 
