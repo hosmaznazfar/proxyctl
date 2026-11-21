@@ -389,6 +389,15 @@ mod tests {
     }
 
     #[test]
+    fn zero_duration_pidfd_wait_reports_a_live_process_as_not_exited() {
+        let child = child();
+        let (_identity, handle) = pin_live_child(&child);
+        assert!(!handle.wait_exit(Duration::ZERO).unwrap());
+        drop(handle);
+        drop(child);
+    }
+
+    #[test]
     fn pidfd_wait_observes_only_the_pinned_child_exit() {
         let mut child = child();
         let (_identity, handle) = pin_live_child(&child);
