@@ -915,6 +915,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_zero_netlink_transaction_timeout() {
+        let mut socket = RouteNetlink::open().unwrap();
+        let mut request = vec![0u8; NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN];
+        let length = request.len() as u32;
+        request[0..4].copy_from_slice(&length.to_ne_bytes());
+        request[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+        request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        assert!(socket.transact(&request, Duration::ZERO).is_err());
+    }
+
+    #[test]
     fn read_only_link_probe_request_uses_dump_flags() {
         let mut request = vec![0u8; NETLINK_HEADER_LEN + 16];
         let length = request.len() as u32;
