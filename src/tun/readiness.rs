@@ -253,9 +253,6 @@ impl HttpProbeTarget {
             "HTTP probe path must be an absolute-path without control characters");
         ensure!((200..=599).contains(&self.expected_status),
             "HTTP probe expected status must be a final 2xx–5xx response");
-        ensure!(self.expected_body_marker.len() <= 1024
-            && !self.expected_body_marker.iter().any(|byte| *byte == b'\r' || *byte == b'\n'),
-            "HTTP probe body marker exceeds its bound or contains line breaks");
         Ok(())
     }
 }
