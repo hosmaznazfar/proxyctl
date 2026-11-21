@@ -889,3 +889,51 @@ mod tests {
         assert!(request.validate().is_err());
     }
 }
+
+    #[test]
+    fn native_activation_envelope_is_generation_and_policy_validated() {
+        let request = MutationRequest::ActivateNative {
+            version: VERSION,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 8,
+            interface_name: "tun-proxyctl".into(),
+            owner_uid: 1000,
+            owner_gid: 1000,
+            table_id: 42420,
+            bypass_priority: 42410,
+            proxy_priority: 42420,
+            core_mark: 0x42,
+            core_mark_mask: 0xff,
+        };
+        assert!(request.validate().is_ok());
+        let mut stale = request.clone();
+        if let MutationRequest::ActivateNative { generation, .. } = &mut stale {
+            *generation = 0;
+        }
+        assert!(stale.validate().is_err());
+        let mut invalid_name = request;
+        if let MutationRequest::ActivateNative { interface_name, .. } = &mut invalid_name {
+            *interface_name = "bad/name".into();
+        }
+        assert!(invalid_name.validate().is_err());
+    }
+
+    #[test]
+    fn native_activation_wire_operation_is_distinct_from_descriptor_activation() {
+        let native = MutationRequest::ActivateNative {
+            version: VERSION,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 8,
+            interface_name: "tun-proxyctl".into(),
+            owner_uid: 1000,
+            owner_gid: 1000,
+            table_id: 42420,
+            bypass_priority: 42410,
+            proxy_priority: 42420,
+            core_mark: 0x42,
+            core_mark_mask: 0xff,
+        };
+        let encoded = serde_json::to_value(&native).unwrap();
+        assert_eq!(encoded.get("operation").and_then(serde_json::Value::as_str), Some("activate_native"));
+        assert!(serde_json::from_value::<MutationRequest>(encoded).unwrap().validate().is_ok());
+    }
