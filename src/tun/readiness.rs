@@ -306,7 +306,7 @@ pub fn probe_http_connect_traffic(
         target.host_header
     );
     stream.write_all(connect.as_bytes()).context("cannot send bounded HTTP CONNECT request")?;
-    let connect_headers = read_http_header_block(&mut stream, 16 * 1024)
+    let connect_headers = read_http_header_block(&mut stream, 16 * 1024, deadline)
         .context("cannot read HTTP CONNECT response headers")?;
     let connect_status = parse_http_status(&connect_headers)?;
     ensure!(connect_status == 200,
@@ -370,11 +370,14 @@ pub fn probe_http_connect_traffic(
 }
 
 #[cfg(target_os = "linux")]
-fn read_http_header_block(stream: &mut std::net::TcpStream, maximum: usize) -> Result<Vec<u8>> {
+fn read_http_header_block(stream: &mut std::net::TcpStream, maximum: usize, deadline: std::time::Instant) -> Result<Vec<u8>> {
     use std::io::Read;
     let mut headers = Vec::new();
     let mut byte = [0u8; 1];
     while headers.len() < maximum {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "HTTP response headers exceeded the aggregate probe deadline");
+        stream.set_read_timeout(Some(remaining))?;
         stream.read_exact(&mut byte).context("HTTP response ended before its header terminator")?;
         headers.push(byte[0]);
         if headers.ends_with(b"\r\n\r\n") {
