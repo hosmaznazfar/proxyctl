@@ -64,7 +64,9 @@ impl TunDevice {
             (req.flags as u16) & (IFF_TUN | IFF_NO_PI) == (IFF_TUN | IFF_NO_PI),
             "kernel returned unexpected TUN interface flags"
         );
-        let returned_name = req.name.iter()
+        let returned_name = req
+            .name
+            .iter()
             .take_while(|character| **character != 0)
             .map(|character| *character as u8);
         ensure!(
@@ -103,8 +105,15 @@ impl TunDevice {
 fn ensure_descriptor_cloexec(fd: std::os::fd::RawFd) -> Result<()> {
     // SAFETY: fcntl reads descriptor flags for the caller-owned descriptor.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-    ensure!(flags >= 0, "cannot inspect TUN descriptor flags: {}", std::io::Error::last_os_error());
-    ensure!(flags & libc::FD_CLOEXEC != 0, "TUN descriptor is not close-on-exec");
+    ensure!(
+        flags >= 0,
+        "cannot inspect TUN descriptor flags: {}",
+        std::io::Error::last_os_error()
+    );
+    ensure!(
+        flags & libc::FD_CLOEXEC != 0,
+        "TUN descriptor is not close-on-exec"
+    );
     Ok(())
 }
 
@@ -116,7 +125,11 @@ fn ensure_tun_character_device(file: &std::fs::File) -> Result<()> {
     Ok(())
 }
 
-fn ioctl_retry(fd: std::os::fd::RawFd, request: libc::c_ulong, argument: usize) -> Result<libc::c_int> {
+fn ioctl_retry(
+    fd: std::os::fd::RawFd,
+    request: libc::c_ulong,
+    argument: usize,
+) -> Result<libc::c_int> {
     loop {
         // SAFETY: callers provide the argument shape required by the specific ioctl request.
         let result = unsafe { libc::ioctl(fd, request, argument) };
@@ -133,9 +146,8 @@ fn ioctl_retry(fd: std::os::fd::RawFd, request: libc::c_ulong, argument: usize) 
 fn set_link_up(name: &str) -> Result<()> {
     let socket = loop {
         // SAFETY: socket receives a valid address family, type, and protocol.
-        let result = unsafe {
-            libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0)
-        };
+        let result =
+            unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
         if result >= 0 {
             break result;
         }
@@ -153,14 +165,22 @@ fn set_link_up(name: &str) -> Result<()> {
     for (dst, src) in req.name.iter_mut().zip(name.bytes()) {
         *dst = src as libc::c_char;
     }
-    let rc = ioctl_retry(fd.as_raw_fd(), SIOCGIFFLAGS, (&mut req as *mut IfReq) as usize)?;
+    let rc = ioctl_retry(
+        fd.as_raw_fd(),
+        SIOCGIFFLAGS,
+        (&mut req as *mut IfReq) as usize,
+    )?;
     ensure!(
         rc == 0,
         "SIOCGIFFLAGS failed: {}",
         std::io::Error::last_os_error()
     );
     req.flags |= IFF_UP;
-    let rc = ioctl_retry(fd.as_raw_fd(), SIOCSIFFLAGS, (&req as *const IfReq) as usize)?;
+    let rc = ioctl_retry(
+        fd.as_raw_fd(),
+        SIOCSIFFLAGS,
+        (&req as *const IfReq) as usize,
+    )?;
     ensure!(
         rc == 0,
         "SIOCSIFFLAGS failed: {}",
@@ -231,7 +251,6 @@ mod tests {
     }
 }
 
-
 /// A named TUN device whose kernel lifetime is independent of the creating descriptor.
 ///
 /// Native cores such as sing-box and Mihomo attach by interface name rather than
@@ -247,9 +266,20 @@ pub struct PersistentTunIdentity {
 ///
 /// This is intentionally a low-level primitive. Callers must durably journal the
 /// returned name and ifindex before installing routes or starting a native core.
-pub fn create_persistent(name: &str, uid: u32, gid: u32, alias: &str) -> Result<PersistentTunIdentity> {
-    ensure!(!alias.is_empty() && alias.len() <= 240 && !alias.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
-        "persistent TUN generation alias is invalid");
+pub fn create_persistent(
+    name: &str,
+    uid: u32,
+    gid: u32,
+    alias: &str,
+) -> Result<PersistentTunIdentity> {
+    ensure!(
+        !alias.is_empty()
+            && alias.len() <= 240
+            && !alias
+                .bytes()
+                .any(|byte| byte == 0 || byte.is_ascii_control()),
+        "persistent TUN generation alias is invalid"
+    );
     let device = TunDevice::create(name, uid, gid)?;
     let index = current_interface_index(name)?;
     super::rtnetlink_mutations::set_interface_alias(index, alias)
@@ -258,8 +288,14 @@ pub fn create_persistent(name: &str, uid: u32, gid: u32, alias: &str) -> Result<
     // link-up all succeeded. If this ioctl fails, dropping the descriptor removes
     // the non-persistent interface created above.
     let result = ioctl_retry(device.as_raw_fd(), TUNSETPERSIST, 1)?;
-    ensure!(result == 0, "TUNSETPERSIST(1) failed: {}", std::io::Error::last_os_error());
-    let identity = PersistentTunIdentity { name: device.name().to_owned() };
+    ensure!(
+        result == 0,
+        "TUNSETPERSIST(1) failed: {}",
+        std::io::Error::last_os_error()
+    );
+    let identity = PersistentTunIdentity {
+        name: device.name().to_owned(),
+    };
     drop(device);
     Ok(identity)
 }
@@ -271,9 +307,18 @@ pub fn create_persistent(name: &str, uid: u32, gid: u32, alias: &str) -> Result<
 /// against its durable manifest immediately before invoking this operation.
 pub fn remove_persistent(name: &str, expected_index: u32, expected_alias: &str) -> Result<()> {
     validate_name(name)?;
-    ensure!(expected_index > 0, "persistent TUN cleanup requires a non-zero expected ifindex");
-    ensure!(!expected_alias.is_empty() && expected_alias.len() <= 240 && !expected_alias.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
-        "persistent TUN cleanup requires a valid generation alias");
+    ensure!(
+        expected_index > 0,
+        "persistent TUN cleanup requires a non-zero expected ifindex"
+    );
+    ensure!(
+        !expected_alias.is_empty()
+            && expected_alias.len() <= 240
+            && !expected_alias
+                .bytes()
+                .any(|byte| byte == 0 || byte.is_ascii_control()),
+        "persistent TUN cleanup requires a valid generation alias"
+    );
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -292,8 +337,14 @@ pub fn remove_persistent(name: &str, expected_index: u32, expected_alias: &str) 
         *dst = src as libc::c_char;
     }
     let rc = ioctl_retry(fd.as_raw_fd(), TUNSETIFF, (&mut req as *mut IfReq) as usize)?;
-    ensure!(rc == 0, "TUNSETIFF attach for persistent cleanup failed: {}", std::io::Error::last_os_error());
-    let returned_name = req.name.iter()
+    ensure!(
+        rc == 0,
+        "TUNSETIFF attach for persistent cleanup failed: {}",
+        std::io::Error::last_os_error()
+    );
+    let returned_name = req
+        .name
+        .iter()
         .take_while(|character| **character != 0)
         .map(|character| *character as u8)
         .collect::<Vec<_>>();
@@ -309,16 +360,24 @@ pub fn remove_persistent(name: &str, expected_index: u32, expected_alias: &str) 
     // Resolve the interface index after TUNSETIFF has attached this descriptor.
     // This closes the name-reuse window before persistence is cleared.
     let live_index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
-    ensure!(live_index == expected_index, "persistent TUN ifindex changed before cleanup; refusing to clear persistence");
+    ensure!(
+        live_index == expected_index,
+        "persistent TUN ifindex changed before cleanup; refusing to clear persistence"
+    );
     let live_alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))
         .context("cannot read persistent TUN generation alias before cleanup")?;
-    ensure!(live_alias.trim_end_matches(['\r', '\n']) == expected_alias,
-        "persistent TUN generation alias changed; refusing to clear persistence");
+    ensure!(
+        live_alias.trim_end_matches(['\r', '\n']) == expected_alias,
+        "persistent TUN generation alias changed; refusing to clear persistence"
+    );
     let rc = ioctl_retry(fd.as_raw_fd(), TUNSETPERSIST, 0)?;
-    ensure!(rc == 0, "TUNSETPERSIST(0) failed: {}", std::io::Error::last_os_error());
+    ensure!(
+        rc == 0,
+        "TUNSETPERSIST(0) failed: {}",
+        std::io::Error::last_os_error()
+    );
     Ok(())
 }
-
 
 #[cfg(test)]
 mod persistent_tests {
@@ -346,6 +405,10 @@ pub fn current_interface_index(name: &str) -> Result<u32> {
     validate_name(name)?;
     let c_name = std::ffi::CString::new(name)?;
     let index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
-    ensure!(index > 0, "cannot resolve current TUN interface index: {}", std::io::Error::last_os_error());
+    ensure!(
+        index > 0,
+        "cannot resolve current TUN interface index: {}",
+        std::io::Error::last_os_error()
+    );
     Ok(index)
 }
