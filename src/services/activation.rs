@@ -451,10 +451,13 @@ pub fn activate_tun_xray(
     validate_listen_port(listen_port)?;
     ensure_port_available(listen_port)?;
 
-    let expected_peer = (node.server.as_str(), node.port).to_socket_addrs()
+    let expected_peers = (node.server.as_str(), node.port).to_socket_addrs()
         .context("cannot resolve the selected Xray node endpoint before TUN activation")?
-        .find(|peer| !peer.ip().is_unspecified() && !peer.ip().is_multicast())
-        .context("selected Xray node did not resolve to a usable endpoint")?;
+        .filter(|peer| !peer.ip().is_unspecified() && !peer.ip().is_multicast())
+        .take(8)
+        .collect::<Vec<_>>();
+    ensure!(!expected_peers.is_empty(),
+        "selected Xray node did not resolve to a usable endpoint");
 
     let probe = url::Url::parse(probe_url)
         .context("TUN readiness probe URL is invalid")?;
@@ -509,7 +512,7 @@ pub fn activate_tun_xray(
     let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
     let activation = orchestrator.activate_xray_node_end_to_end(
         request, &node, listen_port, &executable,
-        Duration::from_secs(5), expected_peer, traffic_target,
+        Duration::from_secs(5), expected_peers, traffic_target,
         Duration::from_secs(10), 64 * 1024,
     ).context("Xray TUN activation failed its broker handoff or end-to-end readiness gate")?;
 
