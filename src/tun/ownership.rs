@@ -327,6 +327,7 @@ mod tests {
     fn cleanup_rejects_malformed_live_fingerprints_before_mutation() {
         let invalid_fingerprints = [
             String::new(),
+            "   ".to_owned(),
             "bad\nfingerprint".to_owned(),
             "x".repeat(MAX_RESOURCE_FINGERPRINT_BYTES + 1),
         ];
