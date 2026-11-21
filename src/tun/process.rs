@@ -194,6 +194,10 @@ impl ProcessHandle {
             "refusing an invalid or signal-zero pidfd operation"
         );
         ensure!(
+            !self.is_exited()?,
+            "refusing to signal a process that has already exited"
+        );
+        ensure!(
             self.identity.verify()?,
             "refusing to signal a process whose identity no longer matches"
         );
