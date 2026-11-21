@@ -49,8 +49,14 @@ pub fn receive_descriptor(stream: &UnixStream) -> Result<OwnedFd> {
     let mut message: libc::msghdr = unsafe { mem::zeroed() };
     message.msg_iov = &mut iov; message.msg_iovlen = 1;
     message.msg_control = control.as_mut_ptr().cast(); message.msg_controllen = bytes;
-    let received = unsafe { libc::recvmsg(stream.as_raw_fd(), &mut message, libc::MSG_CMSG_CLOEXEC) };
-    ensure!(received == 1, "SCM_RIGHTS recvmsg failed or peer closed: {}", std::io::Error::last_os_error());
+    let received = loop {
+        let result = unsafe { libc::recvmsg(stream.as_raw_fd(), &mut message, libc::MSG_CMSG_CLOEXEC) };
+        if result >= 0 { break result; }
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted { continue; }
+        return Err(error).context("SCM_RIGHTS recvmsg failed");
+    };
+    ensure!(received == 1, "SCM_RIGHTS peer closed before transferring its marker byte");
     // Convert every installed SCM_RIGHTS descriptor to RAII ownership before checking
     // the envelope. This guarantees that malformed messages cannot leak extra fds.
     let mut descriptors = Vec::new();
