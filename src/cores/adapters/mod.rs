@@ -196,7 +196,7 @@ mod tun_mark_tests {
         );
         assert_eq!(
             super::adapter(crate::cores::CoreId::Mihomo).tun_attachment_mode(),
-            TunAttachmentMode::Unsupported
+            TunAttachmentMode::NativeDeviceCreation
         );
     }
 
