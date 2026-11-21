@@ -5,7 +5,7 @@
 //! Keep this guard alive until Command::spawn returns.
 #![cfg(target_os = "linux")]
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use std::{
     os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd},
     os::unix::process::CommandExt,
