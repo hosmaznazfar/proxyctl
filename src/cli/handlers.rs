@@ -58,6 +58,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             core,
             tun,
             port,
+            tun_probe_url,
+            tun_probe_status,
         } => {
             let core = parse_core(Some(&core))?
                 .ok_or_else(|| anyhow::anyhow!("--core is required for activation"))?;
@@ -70,7 +72,15 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             let stable_id = *selected
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
-            crate::services::activation::activate(stable_id, core, tun, port)?;
+            if tun {
+                anyhow::ensure!(core == crate::cores::CoreId::Xray,
+                    "managed broker-owned TUN activation currently supports only Xray; sing-box and Mihomo remain fail-closed");
+                crate::services::activation::activate_tun_xray(
+                    stable_id, port, &tun_probe_url, tun_probe_status,
+                )?;
+            } else {
+                crate::services::activation::activate(stable_id, core, false, port)?;
+            }
             return Ok(());
         }
         Command::Config { action } => {
