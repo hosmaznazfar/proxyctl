@@ -74,7 +74,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
             if tun {
                 crate::services::activation::activate_tun_core(
-                    stable_id, core, port, &tun_probe_url, tun_probe_status,
+                    stable_id,
+                    core,
+                    port,
+                    &tun_probe_url,
+                    tun_probe_status,
                 )?;
             } else {
                 crate::services::activation::activate(stable_id, core, false, port)?;
