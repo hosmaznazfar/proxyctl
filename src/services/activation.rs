@@ -202,7 +202,7 @@ pub fn activate(
         ensure_port_available(port)?;
         let generated = if tun_enabled {
             anyhow::bail!(
-                "TUN activation is disabled until a runtime-assigned outbound mark and live readiness evidence are available"
+                "public TUN activation remains gated until the Xray broker lifecycle is wired to the CLI and independent readiness/recovery validation is complete"
             );
         } else {
             adapter.generate_activation_config(&node, port)
@@ -398,7 +398,7 @@ fn launch_managed(
 fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
     ensure!(
         !tun_enabled,
-        "TUN activation is temporarily disabled: the current implementation can detect incomplete network cleanup but cannot safely restore Proxyctl-owned routes after a core exits or is force-killed. Ordinary loopback activation and 'proxyctl tun status' remain available."
+        "public TUN activation remains disabled: Xray has a broker-owned descriptor launch path, but it is not wired to the CLI and independent dataplane readiness, crash recovery, and real Linux validation remain outstanding. Ordinary loopback activation and 'proxyctl tun status' remain available; no network or process changes were made."
     );
     Ok(())
 }
@@ -759,8 +759,8 @@ mod tests {
     fn tun_activation_is_rejected_before_any_network_or_process_operation() {
         assert!(ensure_tun_mode_disabled(false).is_ok());
         let error = ensure_tun_mode_disabled(true).unwrap_err().to_string();
-        assert!(error.contains("temporarily disabled"));
-        assert!(error.contains("cannot safely restore"));
+        assert!(error.contains("public TUN activation remains disabled"));
+        assert!(error.contains("not wired to the CLI"));
     }
 
     #[cfg(target_os = "linux")]
