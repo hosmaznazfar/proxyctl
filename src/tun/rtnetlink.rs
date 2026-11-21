@@ -114,7 +114,10 @@ impl RouteNetlink {
             if sent < 0 { io::Error::last_os_error() } else { io::Error::from(io::ErrorKind::WriteZero) }
         );
 
-        let deadline = std::time::Instant::now() + timeout.min(DEFAULT_TIMEOUT);
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "NETLINK_ROUTE request transmission timed out"
+        );
         let mut messages = Vec::new();
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
