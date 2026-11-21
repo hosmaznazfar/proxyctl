@@ -127,6 +127,128 @@ impl<'a> ActivationOrchestrator<'a> {
         }
     }
 
+    /// Prepare and launch sing-box or Mihomo with a broker-owned persistent named TUN device.
+    ///
+    /// The caller must provide a full readiness callback. No native core is committed Running
+    /// until its process identity and traffic/routing evidence have been checked.
+    pub fn activate_native_core_node_with_readiness<F>(
+        &self,
+        core_id: CoreId,
+        request: ActivationRequest,
+        node: &ProxyNode,
+        listen_port: u16,
+        executable: &Path,
+        readiness: F,
+    ) -> Result<ManagedActivation>
+    where
+        F: FnOnce(&ProcessIdentity, &ActivationToken) -> Result<()>,
+    {
+        ensure!(matches!(core_id, CoreId::SingBox | CoreId::Mihomo),
+            "native persistent-device activation supports only sing-box and Mihomo");
+        request.validate().context("invalid native TUN activation request")?;
+        ensure!(request.interface_name == "tun-proxyctl",
+            "native TUN adapters currently require the interface name tun-proxyctl");
+        ensure!(adapter(core_id).tun_attachment_mode() == TunAttachmentMode::NativeDeviceCreation,
+            "selected core does not advertise native TUN device creation");
+        ensure!(self.coordinator.load_current()?.is_none(),
+            "an activation manifest already exists; recover it before creating another");
+
+        let core = adapter(core_id);
+        let mark = TunOutboundMark::new(request.core_mark, request.core_mark_mask)
+            .context("invalid native-core proxy outbound socket mark")?;
+        let generated = core.generate_tun_activation_config(node, listen_port, mark)
+            .with_context(|| format!("cannot generate {core_id} native TUN configuration"))?;
+        let runtime = self.coordinator.runtime_directory()
+            .context("cannot resolve private native TUN runtime directory")?;
+        let mut config = tempfile::Builder::new()
+            .prefix("proxyctl-native-tun-")
+            .tempfile_in(&runtime)
+            .context("cannot create private native TUN configuration")?;
+        config.write_all(&generated.content)?;
+        config.flush()?;
+        core.validate_config(executable, config.path())
+            .with_context(|| format!("{core_id} rejected its generated native TUN configuration"))?;
+
+        let (token, _) = managed_activation::prepare_native_managed_activation(
+            self.helper, self.coordinator,
+            request.activation_id.clone(), request.generation, request.interface_name.clone(),
+            request.owner_uid, request.owner_gid, request.table_id,
+            request.bypass_priority, request.proxy_priority,
+            request.core_mark, request.core_mark_mask,
+        ).context("could not prepare persistent native TUN resources")?;
+
+        let expected_ifindex = match self.coordinator.load_current()? {
+            Some(current) if current.token == token
+                && current.snapshot.phase == super::recovery::SupervisorPhase::Prepared
+                && current.snapshot.manifest.interface_name == request.interface_name
+                && current.snapshot.manifest.table_id == request.table_id
+                && current.snapshot.manifest.interface_index > 0 =>
+                    current.snapshot.manifest.interface_index,
+            _ => {
+                self.helper.recover(request.activation_id.clone(), request.generation)?;
+                anyhow::bail!("native TUN manifest does not match the exact Prepared generation");
+            }
+        };
+
+        let prepared = ManagedActivation {
+            token: token.clone(),
+            activation_message: "native TUN resources prepared; awaiting core startup".into(),
+        };
+        if let Err(error) = self.start_recovery_supervisor(&prepared) {
+            let _ = self.helper.recover(request.activation_id.clone(), request.generation);
+            return Err(error).context("native TUN recovery supervisor could not start");
+        }
+
+        let process = match super::native_core_launcher::spawn_native_core_service(
+            core_id, &request.activation_id, request.generation, executable, config.path(),
+        ) {
+            Ok(process) => process,
+            Err(error) => {
+                self.stop_core_and_recover_generation(&request.activation_id, request.generation, None)?;
+                return Err(error).context("native core service launch failed; exact-generation recovery completed");
+            }
+        };
+        if let Err(error) = readiness(&process, &token) {
+            self.stop_core_and_recover_generation(&request.activation_id, request.generation, Some(&process))?;
+            return Err(error).context("native core readiness failed; exact service stopped before broker cleanup");
+        }
+        let managed = match managed_activation::commit_prepared_managed_process(
+            self.coordinator, &token, process.clone(),
+        ) {
+            Ok(managed) => managed,
+            Err(error) => {
+                self.stop_core_and_recover_generation(&request.activation_id, request.generation, Some(&process))?;
+                return Err(error).context("native core process commit failed; exact service stopped before broker cleanup");
+            }
+        };
+        ensure!(expected_ifindex > 0, "native TUN ifindex became invalid before activation commit");
+        Ok(managed)
+    }
+
+    fn stop_core_and_recover_generation(
+        &self,
+        activation_id: &str,
+        generation: u64,
+        process: Option<&ProcessIdentity>,
+    ) -> Result<()> {
+        super::xray_launcher::stop_core_service_generation(activation_id, generation, process)
+            .context("cannot confirm that the exact managed core service has stopped")?;
+        let recovery = self.helper.recover(activation_id.to_owned(), generation);
+        if matches!(recovery.as_ref(), Ok(response) if response.success) {
+            return Ok(());
+        }
+        let store = super::manifest_store::ManifestStore::open(
+            self.coordinator.runtime_directory().to_path_buf()
+        )?;
+        let message = match &recovery {
+            Ok(response) => response.message.clone(),
+            Err(error) => format!("{error:#}"),
+        };
+        ensure!(store.load()?.is_none() && store.load_transaction_journal()?.is_none(),
+            "exact-generation native TUN cleanup is incomplete: {message}");
+        Ok(())
+    }
+
     /// Activate Xray only after a concrete HTTP CONNECT probe and independently collected
     /// process, route, mark, physical-egress, DNS, and firewall evidence all pass.
     #[allow(clippy::too_many_arguments)]
