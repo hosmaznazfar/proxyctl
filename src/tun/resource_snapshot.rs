@@ -631,3 +631,60 @@ mod tests {
         );
     }
 }
+
+    #[test]
+    fn persistent_interface_journal_observation_uses_exact_live_tun_identity() {
+        use crate::tun::journal::{JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal};
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 4,
+            operations: vec![JournalOperation {
+                sequence: 0,
+                kind: JournalOperationKind::CreatePersistentInterface,
+                resource_key: "interface:tun-proxyctl".into(),
+                state: JournalOperationState::Intent,
+                fingerprint: None,
+            }],
+        };
+        let snapshot = KernelSnapshot {
+            interfaces: vec![KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 81,
+                is_tun: true,
+            }],
+            ..KernelSnapshot::default()
+        };
+        let observed = observe_journal_resources(&journal, &snapshot).unwrap();
+        let fingerprint = observed.get("interface:tun-proxyctl").unwrap().as_ref().unwrap();
+        let value: Value = serde_json::from_str(fingerprint).unwrap();
+        assert_eq!(value.get("name").and_then(Value::as_str), Some("tun-proxyctl"));
+        assert_eq!(value.get("ifindex").and_then(Value::as_u64), Some(81));
+        assert_eq!(value.get("kind").and_then(Value::as_str), Some("tun"));
+    }
+
+    #[test]
+    fn persistent_interface_journal_observation_rejects_foreign_link_type() {
+        use crate::tun::journal::{JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal};
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 4,
+            operations: vec![JournalOperation {
+                sequence: 0,
+                kind: JournalOperationKind::CreatePersistentInterface,
+                resource_key: "interface:tun-proxyctl".into(),
+                state: JournalOperationState::Intent,
+                fingerprint: None,
+            }],
+        };
+        let snapshot = KernelSnapshot {
+            interfaces: vec![KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 81,
+                is_tun: false,
+            }],
+            ..KernelSnapshot::default()
+        };
+        assert!(observe_journal_resources(&journal, &snapshot).is_err());
+    }
