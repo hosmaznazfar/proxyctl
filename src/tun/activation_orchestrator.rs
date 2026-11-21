@@ -121,10 +121,12 @@ impl<'a> ActivationOrchestrator<'a> {
             .context("invalid Xray proxy-outbound socket mark")?;
         let generated = core.generate_tun_activation_config(node, listen_port, mark)
             .context("cannot generate the native Xray TUN activation configuration")?;
+        let runtime = self.coordinator.runtime_directory()
+            .context("cannot resolve the private TUN activation runtime directory")?;
         let mut config = tempfile::Builder::new()
             .prefix("proxyctl-xray-tun-")
-            .tempfile()
-            .context("cannot create a private temporary Xray TUN configuration")?;
+            .tempfile_in(&runtime)
+            .context("cannot create a private Xray TUN configuration in the shared service runtime")?;
         config.write_all(&generated.content)
             .context("cannot write the generated Xray TUN configuration")?;
         config.flush().context("cannot flush the generated Xray TUN configuration")?;
