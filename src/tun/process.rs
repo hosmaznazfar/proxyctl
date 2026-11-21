@@ -174,7 +174,8 @@ impl ProcessHandle {
             return Ok(false);
         }
         ensure!(
-            descriptor.revents & (libc::POLLIN | libc::POLLHUP) != 0,
+            descriptor.revents & (libc::POLLERR | libc::POLLNVAL) == 0
+                && descriptor.revents & (libc::POLLIN | libc::POLLHUP) != 0,
             "pidfd returned an unexpected poll event"
         );
         Ok(true)
