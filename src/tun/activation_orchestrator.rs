@@ -250,27 +250,29 @@ impl<'a> ActivationOrchestrator<'a> {
         ) {
             Ok(started) => started,
             Err(error) => {
-                let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
-                return match recovery {
-                    Ok(response) if response.success => Err(error).context("Xray launch/attachment failed; exact-generation TUN resources were recovered"),
-                    Ok(response) => Err(anyhow::anyhow!("Xray launch/attachment failed ({error:#}); broker recovery failed: {}", response.message)),
-                    Err(recovery_error) => Err(anyhow::anyhow!("Xray launch/attachment failed ({error:#}); broker recovery request failed: {recovery_error:#}")),
-                };
+                // The core launcher persists its process identity before acknowledging the
+                // handoff. Leave Prepared state for the already-running independent supervisor;
+                // never remove routes while a failed-to-reap core might still hold the TUN fd.
+                return Err(error).context(
+                    "Xray launch/attachment failed; Prepared resources were retained for independent recovery",
+                );
             }
         };
 
         if let Err(error) = readiness(&process, &token) {
-            let reap = super::xray_launcher::terminate_and_reap_xray(&mut child, &process);
+            if let Err(reap_error) = super::xray_launcher::terminate_and_reap_xray(&mut child, &process) {
+                return Err(anyhow::anyhow!(
+                    "Xray readiness failed ({error:#}); child termination could not be confirmed ({reap_error:#}); Prepared resources were retained for independent recovery"
+                ));
+            }
             let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
-            return match (reap, recovery) {
-                (Ok(()), Ok(response)) if response.success =>
+            return match recovery {
+                Ok(response) if response.success =>
                     Err(error).context("Xray readiness failed; child was reaped and exact-generation TUN resources were recovered"),
-                (Err(reap_error), Ok(response)) if response.success =>
-                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child reaping failed: {reap_error}; TUN resources were recovered")),
-                (reap_result, Ok(response)) =>
-                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child reaping: {}; broker recovery failed: {}", reap_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()), response.message)),
-                (reap_result, Err(recovery_error)) =>
-                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child reaping: {}; broker recovery request failed: {recovery_error:#}", reap_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()))),
+                Ok(response) =>
+                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child was reaped but broker recovery failed: {}", response.message)),
+                Err(recovery_error) =>
+                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child was reaped but broker recovery request failed: {recovery_error:#}")),
             };
         }
 
@@ -279,18 +281,12 @@ impl<'a> ActivationOrchestrator<'a> {
         ) {
             Ok(managed) => managed,
             Err(error) => {
-                let termination = super::xray_launcher::terminate_and_reap_xray(&mut child, &process);
-                let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
-                return match (termination, recovery) {
-                    (Ok(()), Ok(response)) if response.success =>
-                        Err(error).context("Xray process commit failed; child was terminated and exact-generation resources recovered"),
-                    (Err(termination_error), Ok(response)) if response.success =>
-                        Err(anyhow::anyhow!("Xray process commit failed ({error:#}); termination/reaping failed: {termination_error:#}; TUN resources recovered")),
-                    (termination_result, Ok(response)) =>
-                        Err(anyhow::anyhow!("Xray process commit failed ({error:#}); termination/reaping: {}; broker recovery failed: {}", termination_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()), response.message)),
-                    (termination_result, Err(recovery_error)) =>
-                        Err(anyhow::anyhow!("Xray process commit failed ({error:#}); termination/reaping: {}; broker recovery request failed: {recovery_error:#}", termination_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()))),
-                };
+                // commit_managed_process has already attempted exact-process termination and
+                // only recovers the broker after that termination is confirmed.
+                let _ = child.try_wait();
+                return Err(error).context(
+                    "Xray process commit failed; exact-process cleanup was attempted and unresolved state remains supervisor-owned",
+                );
             }
         };
 
