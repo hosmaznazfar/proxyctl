@@ -100,13 +100,20 @@ pub struct ProcessHandle {
 impl ProcessHandle {
     pub fn open(identity: ProcessIdentity) -> Result<Self> {
         identity.validate()?;
-        let raw = unsafe {
-            libc::syscall(libc::SYS_pidfd_open, identity.pid as libc::pid_t, 0u32) as libc::c_int
+        let raw = loop {
+            let result = unsafe {
+                libc::syscall(libc::SYS_pidfd_open, identity.pid as libc::pid_t, 0u32)
+                    as libc::c_int
+            };
+            if result >= 0 {
+                break result;
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error).context("pidfd_open is unavailable or process cannot be opened");
         };
-        ensure!(
-            raw >= 0,
-            "pidfd_open is unavailable or process cannot be opened"
-        );
         // SAFETY: successful pidfd_open returns a new owned file descriptor.
         let pidfd = unsafe { OwnedFd::from_raw_fd(raw) };
         let handle = Self { identity, pidfd };
