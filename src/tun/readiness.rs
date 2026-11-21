@@ -609,6 +609,90 @@ pub fn collect_managed_preflight_with_response(
     })
 }
 
+/// Verify a native named-device core using the same direct TUN dataplane and marked
+/// outbound-socket evidence required by the Xray descriptor path.
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+pub fn verify_native_core_end_to_end_readiness(
+    runtime_directory: &std::path::Path,
+    process: &super::process::ProcessIdentity,
+    interface_name: &str,
+    interface_index: u32,
+    core_mark: u32,
+    core_mark_mask: u32,
+    listener: SocketAddr,
+    listener_timeout: Duration,
+    plan: &super::route_policy::RoutingPolicyPlan,
+    expected_peers: &[SocketAddr],
+    transport: super::privilege_broker::BrokerSocketTransport,
+    target: &HttpProbeTarget,
+    activation_id: &str,
+    generation: u64,
+    probe_timeout: Duration,
+    maximum_response_bytes: usize,
+    baseline_host: &super::NetworkStatus,
+    current_host: &super::NetworkStatus,
+) -> Result<ReadinessEvidence> {
+    ensure!(plan.interface_name == interface_name && plan.interface_index == interface_index,
+        "native TUN readiness plan does not match the exact persistent interface identity");
+    ensure!(plan.core_mark == core_mark && plan.core_mark_mask == core_mark_mask,
+        "native TUN readiness plan does not match the core outbound mark");
+    ensure!(!expected_peers.is_empty() && expected_peers.len() <= 8
+        && expected_peers.iter().all(|peer| !peer.ip().is_unspecified()
+            && !peer.ip().is_multicast() && peer.port() > 0),
+        "native core outbound peer candidates must contain one to eight unicast endpoints");
+    target.validate()?;
+    plan.validate()?;
+    probe_unmarked_route_to_tun(plan, target.destination.ip())?;
+    let traffic = probe_tun_routed_http_traffic(
+        process, target, activation_id, generation, probe_timeout, maximum_response_bytes,
+    )?;
+    let mut preflight = collect_managed_preflight_with_response(
+        runtime_directory, activation_id, process, listener, listener_timeout, plan,
+        expected_peers, transport, baseline_host, current_host,
+    )?;
+    ensure!(preflight.evidence.core_process_verified
+        && preflight.evidence.local_listener == Some(listener)
+        && preflight.evidence.tun_interface.as_ref().is_some_and(|interface|
+            interface.name == interface_name && interface.index == interface_index)
+        && preflight.evidence.route_policy_verified
+        && preflight.evidence.physical_egress_bypass_verified
+        && preflight.evidence.dns_unchanged
+        && preflight.evidence.firewall_unchanged,
+        "native core preflight did not produce all required independent evidence");
+    ensure!(preflight.socket_mark_response.expected_peer.port() > 0,
+        "native core socket-mark evidence has an invalid peer");
+    let _traffic_observation = traffic.observation;
+    preflight.evidence.proxied_traffic_verified = true;
+    ensure!(process.verify()?, "native core process identity changed during end-to-end readiness");
+    Ok(preflight.evidence)
+}
+
+#[cfg(not(target_os = "linux"))]
+#[allow(clippy::too_many_arguments)]
+pub fn verify_native_core_end_to_end_readiness(
+    _runtime_directory: &std::path::Path,
+    _process: &(),
+    _interface_name: &str,
+    _interface_index: u32,
+    _core_mark: u32,
+    _core_mark_mask: u32,
+    _listener: SocketAddr,
+    _listener_timeout: Duration,
+    _plan: &super::route_policy::RoutingPolicyPlan,
+    _expected_peers: &[SocketAddr],
+    _transport: (),
+    _target: &HttpProbeTarget,
+    _activation_id: &str,
+    _generation: u64,
+    _probe_timeout: Duration,
+    _maximum_response_bytes: usize,
+    _baseline_host: &super::NetworkStatus,
+    _current_host: &super::NetworkStatus,
+) -> Result<ReadinessEvidence> {
+    anyhow::bail!("native TUN readiness is supported only on Linux");
+}
+
 /// Collect independent read-only evidence for a managed activation preflight.
 ///
 /// This composes process/listener, TUN identity, routing-policy, marked physical-egress,
