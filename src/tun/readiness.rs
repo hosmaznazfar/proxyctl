@@ -227,7 +227,7 @@ pub struct ProxyTrafficObservation {
     pub expected_response_verified: bool,
 }
 
-/// An explicit, numeric-address HTTP target for a bounded probe through Xray's local HTTP proxy.
+/// An explicit, numeric-address HTTP target for a bounded application probe through the host TUN route.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpProbeTarget {
     pub destination: SocketAddr,
