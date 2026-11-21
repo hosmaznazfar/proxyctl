@@ -580,6 +580,18 @@ mod tests {
     }
 
     #[test]
+    fn rejects_response_with_unknown_fields() {
+        let malformed = br#"{\"version\":1,\"success\":true,\"message\":\"ok\",\"extra\":true}"#;
+        assert!(serde_json::from_slice::<MutationResponse>(malformed).is_err());
+    }
+
+    #[test]
+    fn rejects_oversized_response_message_after_decode() {
+        let response = MutationResponse { version: VERSION, success: true, message: "x".repeat(8 * 1024 + 1) };
+        assert!(response.message.len() > 8 * 1024);
+    }
+
+    #[test]
     fn validates_generation_bound_typed_activation_envelope() {
         assert!(activation().validate().is_ok());
         let mut invalid = activation();
