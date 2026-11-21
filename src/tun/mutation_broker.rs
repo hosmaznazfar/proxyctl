@@ -52,6 +52,19 @@ pub enum MutationRequest {
         core_mark: u32,
         core_mark_mask: u32,
     },
+    ActivateNative {
+        version: u32,
+        activation_id: String,
+        generation: u64,
+        interface_name: String,
+        owner_uid: u32,
+        owner_gid: u32,
+        table_id: u32,
+        bypass_priority: u32,
+        proxy_priority: u32,
+        core_mark: u32,
+        core_mark_mask: u32,
+    },
     Recover {
         version: u32,
         activation_id: String,
@@ -70,8 +83,7 @@ impl MutationRequest {
             Self::Ping { version } => {
                 ensure!(*version == VERSION, "unsupported mutation broker protocol version");
             }
-            Self::Activate {
-                version,
+            Self::Activate {\n                version,
                 activation_id,
                 generation,
                 interface_name,
@@ -97,6 +109,25 @@ impl MutationRequest {
                     1,
                 );
                 plan.validate()?;
+            }
+            Self::ActivateNative {
+                version,
+                activation_id,
+                generation,
+                interface_name,
+                table_id,
+                bypass_priority,
+                proxy_priority,
+                core_mark,
+                core_mark_mask,
+                ..
+            } => {
+                ensure!(*version == VERSION, "unsupported mutation broker protocol version");
+                validate_identity(activation_id, *generation)?;
+                RoutingPolicyPlan::new(
+                    *table_id, *bypass_priority, *proxy_priority,
+                    *core_mark, *core_mark_mask, interface_name, 1,
+                ).validate()?;
             }
             Self::Recover {
                 version,
@@ -195,11 +226,8 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
                 return Ok(());
             }
             let response = match request.validate().and_then(|()| {
-                if let MutationRequest::Activate {
-                    owner_uid,
-                    owner_gid,
-                    ..
-                } = &request
+                if let MutationRequest::Activate { owner_uid, owner_gid, .. }
+                    | MutationRequest::ActivateNative { owner_uid, owner_gid, .. } = &request
                 {
                     ensure!(
                         *owner_uid == peer.uid && *owner_gid == peer.gid,
@@ -299,6 +327,52 @@ fn execute(
         }
         MutationRequest::AttachDescriptor { .. } => {
             anyhow::bail!("descriptor attachment requests must use the authenticated SCM_RIGHTS response path")
+        }
+        MutationRequest::ActivateNative {
+            activation_id,
+            generation,
+            interface_name,
+            owner_uid,
+            owner_gid,
+            table_id,
+            bypass_priority,
+            proxy_priority,
+            core_mark,
+            core_mark_mask,
+            ..
+        } => {
+            ensure!(backends.is_empty(),
+                "another TUN activation still has a live broker backend; recover it first");
+            let key = (activation_id.clone(), generation);
+            ensure!(!backends.contains_key(&key), "activation generation already has a live broker backend");
+            let policy = RoutingPolicyPlan::new(
+                table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
+                interface_name, 1,
+            );
+            let inventory = kernel_inventory::inspect_snapshot()?;
+            policy.validate_against(&inventory.inventory)?;
+            let store = ManifestStore::open(directory)?;
+            let mut backend = LinuxJournalBackend::new_native(store.clone(), &activation_id, generation)?;
+            let transaction = KernelTransaction {
+                activation_id: activation_id.clone(),
+                policy,
+                owner_uid,
+                owner_gid,
+            };
+            match kernel_transaction::apply_native(&transaction, &mut backend) {
+                Ok(_) => {
+                    backends.insert(key, backend);
+                    Ok(format!("native activation {activation_id} generation {generation} committed"))
+                }
+                Err(error) => {
+                    let fully_rolled_back = matches!(
+                        (store.load_transaction_journal(), store.load()),
+                        (Ok(None), Ok(None))
+                    );
+                    if !fully_rolled_back { backends.insert(key, backend); }
+                    Err(error)
+                }
+            }
         }
         MutationRequest::Recover {
             activation_id,
