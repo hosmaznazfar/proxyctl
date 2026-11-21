@@ -87,7 +87,7 @@ pub fn commit_managed_process(
                 ensure!(persisted == &process && persisted.verify()?,
                     "persisted core process identity differs from the launched process");
             }
-            None => coordinator.bind_core_process(token, process)?,
+            None => coordinator.bind_core_process(token, process.clone())?,
         }
         coordinator.apply_event(token, SupervisorEvent::StartCommitted)?;
         Ok(())
