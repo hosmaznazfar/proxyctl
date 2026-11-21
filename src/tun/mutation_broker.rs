@@ -604,6 +604,18 @@ mod tests {
     }
 
     #[test]
+    fn refuses_group_accessible_runtime_directory_before_accepting_clients() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o750))
+            .unwrap();
+        let socket = directory.path().join("broker.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        assert!(serve(&listener, directory.path()).is_err());
+    }
+
+    #[test]
     fn rejects_truncated_response_frame_payload() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         sender.write_all(&8u32.to_le_bytes()).unwrap();
