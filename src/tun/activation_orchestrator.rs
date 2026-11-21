@@ -8,7 +8,7 @@ use anyhow::{Context, Result, ensure};
 use std::{io::Write, path::Path, process::Child, time::Duration};
 
 use crate::{
-    cores::{CoreId, adapters::{adapter, CoreAdapter, TunAttachmentMode, TunOutboundMark, XRAY_TUN_INTERFACE_NAME, XRAY_TUN_FD_ENV}},
+    cores::{CoreId, adapters::{adapter, CoreAdapter, TunOutboundMark, XRAY_TUN_INTERFACE_NAME, XRAY_TUN_FD_ENV}},
     domain::ProxyNode,
 };
 
@@ -115,9 +115,8 @@ impl<'a> ActivationOrchestrator<'a> {
         ensure!(request.interface_name == XRAY_TUN_INTERFACE_NAME,
             "Xray adapter currently binds its external TUN descriptor to tun-proxyctl");
         let core = adapter(CoreId::Xray);
-        ensure!(core.tun_attachment_mode() == TunAttachmentMode::ExternalDescriptorEnvironment {
-            variable: XRAY_TUN_FD_ENV
-        }, "Xray adapter does not expose the verified Linux descriptor environment contract");
+        ensure!(core.tun_attachment_mode().external_descriptor_environment() == Some(XRAY_TUN_FD_ENV),
+            "Xray adapter does not expose the verified Linux descriptor environment contract");
         let mark = TunOutboundMark::new(request.core_mark, request.core_mark_mask)
             .context("invalid Xray proxy-outbound socket mark")?;
         let generated = core.generate_tun_activation_config(node, listen_port, mark)
