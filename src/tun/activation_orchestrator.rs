@@ -198,9 +198,16 @@ impl<'a> ActivationOrchestrator<'a> {
             Ok(managed) => managed,
             Err(error) => {
                 let termination = super::xray_launcher::terminate_and_reap_xray(&mut child, &process);
-                return match termination {
-                    Ok(()) => Err(error).context("Xray process could not be committed after readiness; child was terminated and reaped"),
-                    Err(termination_error) => Err(anyhow::anyhow!("Xray process commit failed ({error:#}); bounded child termination/reaping failed: {termination_error:#}")),
+                let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
+                return match (termination, recovery) {
+                    (Ok(()), Ok(response)) if response.success =>
+                        Err(error).context("Xray process commit failed; child was terminated and exact-generation resources recovered"),
+                    (Err(termination_error), Ok(response)) if response.success =>
+                        Err(anyhow::anyhow!("Xray process commit failed ({error:#}); termination/reaping failed: {termination_error:#}; TUN resources recovered")),
+                    (termination_result, Ok(response)) =>
+                        Err(anyhow::anyhow!("Xray process commit failed ({error:#}); termination/reaping: {}; broker recovery failed: {}", termination_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()), response.message)),
+                    (termination_result, Err(recovery_error)) =>
+                        Err(anyhow::anyhow!("Xray process commit failed ({error:#}); termination/reaping: {}; broker recovery request failed: {recovery_error:#}", termination_result.err().map(|e| e.to_string()).unwrap_or_else(|| "ok".into()))),
                 };
             }
         };
