@@ -500,6 +500,19 @@ fn validate_request(bytes: &[u8]) -> Result<()> {
         declared as usize == bytes.len(),
         "netlink request length does not match its header"
     );
+    let kind = u16::from_ne_bytes(bytes[4..6].try_into()?);
+    let flags = u16::from_ne_bytes(bytes[6..8].try_into()?);
+    let sequence = u32::from_ne_bytes(bytes[8..12].try_into()?);
+    let port_id = u32::from_ne_bytes(bytes[12..16].try_into()?);
+    ensure!(kind != 0, "netlink request has an unspecified message type");
+    ensure!(
+        flags & NLM_F_REQUEST != 0,
+        "netlink request is missing NLM_F_REQUEST"
+    );
+    ensure!(
+        sequence == 0 && port_id == 0,
+        "netlink request must not supply sequence or port identity"
+    );
     Ok(())
 }
 
