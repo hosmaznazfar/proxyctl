@@ -291,7 +291,7 @@ impl CoreAdapter for XrayAdapter {
             .push(json!({
                 "tag": "tun-in", "protocol": "tun",
                 "settings": {
-                    "name": "tun-proxyctl", "mtu": 1500,
+                    "name": super::XRAY_TUN_INTERFACE_NAME, "mtu": 1500,
                     "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
                     "autoSystemRoutingTable": [], "autoOutboundsInterface": "auto",
                     "autoSystemDnsToGateway": false
