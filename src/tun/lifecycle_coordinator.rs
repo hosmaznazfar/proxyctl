@@ -197,6 +197,14 @@ impl Drop for LifecycleLock {
 
 #[cfg(unix)]
 fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<File> {
+    ensure!(
+        path.is_absolute() && path.as_os_str().len() <= 4096,
+        "TUN lifecycle lock path must be a bounded absolute path"
+    );
+    ensure!(
+        !timeout.is_zero() && timeout <= Duration::from_secs(60),
+        "TUN lifecycle lock timeout must be between 1ms and 60s"
+    );
     use std::os::{
         fd::AsRawFd,
         unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
