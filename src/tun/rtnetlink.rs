@@ -178,6 +178,10 @@ impl RouteNetlink {
                 return Err(error).context("NETLINK_ROUTE receive failed");
             }
             ensure!(received >= 0, "NETLINK_ROUTE receive returned an invalid length");
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "NETLINK_ROUTE response receive timed out"
+            );
             validate_kernel_sender(&sender, sender_len)?;
             ensure!(
                 received as usize <= buffer.len(),
