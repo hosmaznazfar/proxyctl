@@ -360,6 +360,7 @@ pub fn resume_managed_supervision_after_startup(
                 if current.snapshot.phase == SupervisorPhase::Prepared {
                     terminate_prepared_core_process(coordinator, &current.token)?;
                 }
+                stop_core_service_for_generation(&current.token, current.snapshot.core_process.as_ref())?;
                 let response = helper.recover(activation_id.to_owned(), generation)?;
                 ensure!(response.success, "orphaned activation recovery failed: {}", response.message);
                 return Ok(());
