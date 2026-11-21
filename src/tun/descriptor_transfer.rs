@@ -100,6 +100,33 @@ mod tests {
         assert_ne!(flags & libc::FD_CLOEXEC, 0);
     }
     #[test]
+    fn rejects_multiple_descriptors_without_leaking_them() {
+        use std::os::fd::AsFd;
+        let (sender, receiver) = UnixStream::pair().unwrap();
+        let first = File::open("/dev/null").unwrap();
+        let second = File::open("/dev/null").unwrap();
+        let mut marker = MARKER;
+        let mut iov = libc::iovec { iov_base: (&mut marker as *mut u8).cast(), iov_len: 1 };
+        let bytes = unsafe { libc::CMSG_SPACE((2 * mem::size_of::<libc::c_int>()) as u32) } as usize;
+        let mut control = vec![0usize; bytes.div_ceil(mem::size_of::<usize>())];
+        let mut message: libc::msghdr = unsafe { mem::zeroed() };
+        message.msg_iov = &mut iov; message.msg_iovlen = 1;
+        message.msg_control = control.as_mut_ptr().cast(); message.msg_controllen = bytes;
+        let header = unsafe { libc::CMSG_FIRSTHDR(&message) };
+        assert!(!header.is_null());
+        unsafe {
+            (*header).cmsg_level = libc::SOL_SOCKET;
+            (*header).cmsg_type = libc::SCM_RIGHTS;
+            (*header).cmsg_len = libc::CMSG_LEN((2 * mem::size_of::<libc::c_int>()) as u32) as usize;
+            let data = libc::CMSG_DATA(header).cast::<libc::c_int>();
+            std::ptr::write_unaligned(data, first.as_fd().as_raw_fd());
+            std::ptr::write_unaligned(data.add(1), second.as_fd().as_raw_fd());
+        }
+        assert_eq!(unsafe { libc::sendmsg(sender.as_raw_fd(), &message, libc::MSG_NOSIGNAL) }, 1);
+        assert!(receive_descriptor(&receiver).is_err());
+    }
+
+    #[test]
     fn rejects_marker_without_descriptor() {
         use std::io::Write;
         let (sender, receiver) = UnixStream::pair().unwrap();
