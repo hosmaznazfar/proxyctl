@@ -616,6 +616,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_zero_length_request_frame() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        sender.write_all(&0u32.to_le_bytes()).unwrap();
+        assert!(read_request(&mut receiver).is_err());
+    }
+
+    #[test]
     fn rejects_truncated_response_frame_payload() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         sender.write_all(&8u32.to_le_bytes()).unwrap();
