@@ -19,6 +19,7 @@ const MAX_RESOURCE_FINGERPRINT_BYTES: usize = 16 * 1024;
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OwnedResource {
     pub key: String,
     pub fingerprint: String,
