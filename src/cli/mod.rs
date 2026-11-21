@@ -204,7 +204,7 @@ enum Command {
         /// Request managed Linux TUN activation (currently supported only by the Xray descriptor backend).
         #[arg(long)]
         tun: bool,
-        /// Plain HTTP endpoint used for a bounded end-to-end TUN readiness probe.
+        /// Plain HTTP endpoint used for a bounded direct TUN probe; it must return the expected 2xx status and keep the HTTP connection alive.
         #[arg(long, default_value = "http://connectivitycheck.gstatic.com/generate_204")]
         tun_probe_url: String,
         /// Expected final HTTP status from the TUN readiness endpoint.
