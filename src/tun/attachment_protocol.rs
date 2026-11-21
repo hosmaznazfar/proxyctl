@@ -4,15 +4,18 @@
 //! descriptor handoff to an activation UUID, generation, interface, and random nonce.
 //! The receiver must call its real core-specific adoption function before acknowledging.
 #![cfg(target_os = "linux")]
+use super::{descriptor_transfer, process::ProcessIdentity};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{Read, Write},
-    os::{fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd}, unix::net::UnixStream},
+    os::{
+        fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
+        unix::net::UnixStream,
+    },
     time::Duration,
 };
-use super::{descriptor_transfer, process::ProcessIdentity};
 
 const VERSION: u8 = 1;
 const MAX_FRAME: usize = 4096;
@@ -47,14 +50,29 @@ impl AttachmentOffer {
             .context("cannot open kernel random source for attachment nonce")?
             .read_exact(&mut nonce)
             .context("cannot read attachment nonce")?;
-        ensure!(nonce.iter().any(|byte| *byte != 0), "kernel returned an all-zero attachment nonce");
-        Ok(Self { version: VERSION, activation_id, generation, interface_name, nonce })
+        ensure!(
+            nonce.iter().any(|byte| *byte != 0),
+            "kernel returned an all-zero attachment nonce"
+        );
+        Ok(Self {
+            version: VERSION,
+            activation_id,
+            generation,
+            interface_name,
+            nonce,
+        })
     }
 
     pub fn validate(&self) -> Result<()> {
-        ensure!(self.version == VERSION, "unsupported attachment protocol version");
+        ensure!(
+            self.version == VERSION,
+            "unsupported attachment protocol version"
+        );
         validate_identity(&self.activation_id, self.generation, &self.interface_name)?;
-        ensure!(self.nonce.iter().any(|byte| *byte != 0), "attachment nonce is invalid");
+        ensure!(
+            self.nonce.iter().any(|byte| *byte != 0),
+            "attachment nonce is invalid"
+        );
         Ok(())
     }
 }
@@ -73,12 +91,28 @@ pub fn verify_peer_process(stream: &UnixStream, expected: &ProcessIdentity) -> R
             &mut length,
         )
     };
-    ensure!(result == 0, "SO_PEERCRED failed: {}", std::io::Error::last_os_error());
-    ensure!(length as usize == std::mem::size_of::<libc::ucred>(), "SO_PEERCRED returned an invalid credential size");
-    ensure!(credentials.pid > 0 && credentials.pid as u32 == expected.pid, "attachment peer PID does not match the expected child");
-    ensure!(credentials.uid == unsafe { libc::geteuid() }, "attachment peer UID does not match the current user");
+    ensure!(
+        result == 0,
+        "SO_PEERCRED failed: {}",
+        std::io::Error::last_os_error()
+    );
+    ensure!(
+        length as usize == std::mem::size_of::<libc::ucred>(),
+        "SO_PEERCRED returned an invalid credential size"
+    );
+    ensure!(
+        credentials.pid > 0 && credentials.pid as u32 == expected.pid,
+        "attachment peer PID does not match the expected child"
+    );
+    ensure!(
+        credentials.uid == unsafe { libc::geteuid() },
+        "attachment peer UID does not match the current user"
+    );
     let actual = ProcessIdentity::capture(credentials.pid as u32)?;
-    ensure!(actual == *expected && actual.verify()?, "attachment peer process identity changed");
+    ensure!(
+        actual == *expected && actual.verify()?,
+        "attachment peer process identity changed"
+    );
     Ok(())
 }
 
@@ -117,10 +151,19 @@ pub fn receive_adoption_ack(stream: &mut UnixStream, offer: &AttachmentOffer) ->
     offer.validate()?;
     configure_handoff_timeouts(stream)?;
     let ack: AttachmentAck = read_frame(stream)?;
-    ensure!(ack.version == VERSION, "unsupported attachment acknowledgement version");
+    ensure!(
+        ack.version == VERSION,
+        "unsupported attachment acknowledgement version"
+    );
     validate_identity(&ack.activation_id, ack.generation, &ack.interface_name)?;
-    ensure!(ack.nonce.iter().any(|byte| *byte != 0), "acknowledgement nonce is invalid");
-    ensure!(ack.adopted, "core-side adapter rejected descriptor adoption");
+    ensure!(
+        ack.nonce.iter().any(|byte| *byte != 0),
+        "acknowledgement nonce is invalid"
+    );
+    ensure!(
+        ack.adopted,
+        "core-side adapter rejected descriptor adoption"
+    );
     ensure!(
         ack.activation_id == offer.activation_id
             && ack.generation == offer.generation
@@ -130,7 +173,6 @@ pub fn receive_adoption_ack(stream: &mut UnixStream, offer: &AttachmentOffer) ->
     );
     Ok(())
 }
-
 
 /// Send an offer, transfer the descriptor, and require a matching adoption receipt.
 /// The socket peer must be the exact expected child process.
@@ -160,7 +202,10 @@ where
     configure_handoff_timeouts(stream)?;
     verify_peer_process(stream, expected_parent)?;
     let received_offer = receive_offer(stream)?;
-    ensure!(&received_offer == expected_offer, "received attachment offer differs from expected activation");
+    ensure!(
+        &received_offer == expected_offer,
+        "received attachment offer differs from expected activation"
+    );
     let descriptor = descriptor_transfer::receive_descriptor(stream)?;
     adopt(&received_offer, descriptor).context("core-specific descriptor adoption failed")?;
     send_adoption_ack(stream, &received_offer)
@@ -179,16 +224,20 @@ where
 {
     configure_handoff_timeouts(stream)?;
     let received = receive_offer(stream)?;
-    ensure!(&received == expected, "received attachment offer differs from the expected activation");
+    ensure!(
+        &received == expected,
+        "received attachment offer differs from the expected activation"
+    );
     adopt(&received, descriptor).context("core-specific descriptor adoption failed")?;
     send_adoption_ack(stream, &received)
 }
 
-
 fn configure_handoff_timeouts(stream: &UnixStream) -> Result<()> {
-    stream.set_read_timeout(Some(HANDOFF_IO_TIMEOUT))
+    stream
+        .set_read_timeout(Some(HANDOFF_IO_TIMEOUT))
         .context("cannot set attachment protocol read deadline")?;
-    stream.set_write_timeout(Some(HANDOFF_IO_TIMEOUT))
+    stream
+        .set_write_timeout(Some(HANDOFF_IO_TIMEOUT))
         .context("cannot set attachment protocol write deadline")?;
     Ok(())
 }
@@ -196,55 +245,85 @@ fn configure_handoff_timeouts(stream: &UnixStream) -> Result<()> {
 fn write_frame<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<()> {
     configure_handoff_timeouts(stream)?;
     let payload = serde_json::to_vec(value).context("cannot encode attachment protocol frame")?;
-    ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME, "attachment frame exceeds its size bound");
+    ensure!(
+        !payload.is_empty() && payload.len() <= MAX_FRAME,
+        "attachment frame exceeds its size bound"
+    );
     let deadline = std::time::Instant::now() + HANDOFF_IO_TIMEOUT;
-    write_exact_until(stream, &(payload.len() as u32).to_le_bytes(), deadline).context("cannot write attachment frame length")?;
-    write_exact_until(stream, &payload, deadline).context("cannot write attachment frame payload")?;
+    write_exact_until(stream, &(payload.len() as u32).to_le_bytes(), deadline)
+        .context("cannot write attachment frame length")?;
+    write_exact_until(stream, &payload, deadline)
+        .context("cannot write attachment frame payload")?;
     stream.flush().context("cannot flush attachment frame")
 }
 
 fn read_frame<T: for<'de> Deserialize<'de>>(stream: &mut UnixStream) -> Result<T> {
     let deadline = std::time::Instant::now() + HANDOFF_IO_TIMEOUT;
     let mut header = [0u8; 4];
-    read_exact_until(stream, &mut header, deadline).context("cannot read attachment frame length")?;
+    read_exact_until(stream, &mut header, deadline)
+        .context("cannot read attachment frame length")?;
     let length = u32::from_le_bytes(header) as usize;
-    ensure!(length >= 2 && length <= MAX_FRAME, "attachment frame length is invalid");
+    ensure!(
+        length >= 2 && length <= MAX_FRAME,
+        "attachment frame length is invalid"
+    );
     let mut payload = Vec::new();
-    payload.try_reserve_exact(length)
+    payload
+        .try_reserve_exact(length)
         .context("cannot reserve bounded attachment frame payload")?;
     payload.resize(length, 0);
-    read_exact_until(stream, &mut payload, deadline).context("cannot read attachment frame payload")?;
-    serde_json::from_slice(&payload).context("attachment frame is malformed or contains unknown fields")
+    read_exact_until(stream, &mut payload, deadline)
+        .context("cannot read attachment frame payload")?;
+    serde_json::from_slice(&payload)
+        .context("attachment frame is malformed or contains unknown fields")
 }
 
-fn write_exact_until(stream: &mut UnixStream, mut bytes: &[u8], deadline: std::time::Instant) -> Result<()> {
+fn write_exact_until(
+    stream: &mut UnixStream,
+    mut bytes: &[u8],
+    deadline: std::time::Instant,
+) -> Result<()> {
     use std::io::ErrorKind;
     while !bytes.is_empty() {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        ensure!(!remaining.is_zero(), "attachment frame write exceeded its deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "attachment frame write exceeded its deadline"
+        );
         stream.set_write_timeout(Some(remaining))?;
         match stream.write(bytes) {
             Ok(0) => anyhow::bail!("attachment socket closed during frame write"),
             Ok(count) => bytes = &bytes[count..],
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => anyhow::bail!("attachment frame write exceeded its deadline"),
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                anyhow::bail!("attachment frame write exceeded its deadline")
+            }
             Err(error) => return Err(error.into()),
         }
     }
     Ok(())
 }
 
-fn read_exact_until(stream: &mut UnixStream, mut bytes: &mut [u8], deadline: std::time::Instant) -> Result<()> {
+fn read_exact_until(
+    stream: &mut UnixStream,
+    mut bytes: &mut [u8],
+    deadline: std::time::Instant,
+) -> Result<()> {
     use std::io::ErrorKind;
     while !bytes.is_empty() {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        ensure!(!remaining.is_zero(), "attachment frame exceeded its deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "attachment frame exceeded its deadline"
+        );
         stream.set_read_timeout(Some(remaining))?;
         match stream.read(bytes) {
             Ok(0) => anyhow::bail!("attachment frame ended before completion"),
             Ok(count) => bytes = &mut bytes[count..],
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => anyhow::bail!("attachment frame exceeded its deadline"),
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                anyhow::bail!("attachment frame exceeded its deadline")
+            }
             Err(error) => return Err(error.into()),
         }
     }
@@ -255,8 +334,11 @@ fn validate_identity(activation_id: &str, generation: u64, interface_name: &str)
     ensure!(
         activation_id.len() == 36
             && activation_id.bytes().enumerate().all(|(index, byte)| {
-                if [8, 13, 18, 23].contains(&index) { byte == b'-' }
-                else { byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase() }
+                if [8, 13, 18, 23].contains(&index) {
+                    byte == b'-'
+                } else {
+                    byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                }
             }),
         "attachment activation ID must be a canonical lowercase UUID"
     );
@@ -264,7 +346,9 @@ fn validate_identity(activation_id: &str, generation: u64, interface_name: &str)
     ensure!(
         !interface_name.is_empty()
             && interface_name.len() < 16
-            && interface_name.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')),
+            && interface_name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')),
         "attachment interface name is invalid"
     );
     Ok(())
@@ -280,7 +364,8 @@ mod tests {
             "12345678-1234-4234-8234-123456789abc".into(),
             7,
             "tun-proxyctl".into(),
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     #[test]
@@ -319,7 +404,14 @@ mod tests {
         let expected = offer();
         let mut malformed = expected.clone();
         malformed.activation_id = "not-a-uuid".into();
-        let ack = AttachmentAck { version: VERSION, activation_id: malformed.activation_id, generation: malformed.generation, interface_name: malformed.interface_name, nonce: malformed.nonce, adopted: true };
+        let ack = AttachmentAck {
+            version: VERSION,
+            activation_id: malformed.activation_id,
+            generation: malformed.generation,
+            interface_name: malformed.interface_name,
+            nonce: malformed.nonce,
+            adopted: true,
+        };
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         write_frame(&mut sender, &ack).unwrap();
         assert!(receive_adoption_ack(&mut receiver, &expected).is_err());
@@ -341,10 +433,12 @@ mod tests {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         let descriptor = std::fs::File::open("/dev/null").unwrap().into();
         let offer_copy = expected.clone();
-        let worker = std::thread::spawn(move || adopt_and_ack(&mut receiver, descriptor, &offer_copy, |_offer, fd| {
-            ensure!(fd.as_fd().as_raw_fd() >= 0, "invalid received descriptor");
-            Ok(())
-        }));
+        let worker = std::thread::spawn(move || {
+            adopt_and_ack(&mut receiver, descriptor, &offer_copy, |_offer, fd| {
+                ensure!(fd.as_fd().as_raw_fd() >= 0, "invalid received descriptor");
+                Ok(())
+            })
+        });
         send_offer(&mut sender, &expected).unwrap();
         worker.join().unwrap().unwrap();
         receive_adoption_ack(&mut sender, &expected).unwrap();
