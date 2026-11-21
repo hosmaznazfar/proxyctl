@@ -84,12 +84,21 @@ fn run() -> Result<()> {
     drop(descriptor);
 
     // Command::spawn returns only after exec succeeded. Capture the actual Xray executable,
-    // not this shim, so the returned identity remains valid after the handoff.
-    let identity = proxyctl::tun::process::ProcessIdentity::capture(child.id())
-        .context("cannot capture the spawned Xray process identity")?;
-    ensure!(identity.executable == fs::canonicalize(&executable)?,
-        "spawned process did not become the expected managed Xray executable");
-    send_process_identity(&mut stream, &identity)?;
+    // not this shim, so the returned identity remains valid after the handoff. Any failure
+    // before the identity receipt is delivered must terminate and reap this exact child.
+    let startup = (|| -> Result<()> {
+        let identity = proxyctl::tun::process::ProcessIdentity::capture(child.id())
+            .context("cannot capture the spawned Xray process identity")?;
+        ensure!(identity.executable == fs::canonicalize(&executable)?,
+            "spawned process did not become the expected managed Xray executable");
+        send_process_identity(&mut stream, &identity)?;
+        Ok(())
+    })();
+    if let Err(error) = startup {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error).context("Xray startup identity handoff failed; child was terminated and reaped");
+    }
     let status = child.wait().context("cannot wait for the Xray child process")?;
     ensure!(status.success(), "managed Xray exited unsuccessfully");
     Ok(())
