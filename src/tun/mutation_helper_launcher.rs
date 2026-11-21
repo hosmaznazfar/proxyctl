@@ -154,6 +154,7 @@ fn acquire_start_lock(path: &Path) -> Result<fs::File> {
     ensure!(metadata.is_file(), "TUN helper startup lock is not a regular file");
     ensure!(metadata.uid() == unsafe { libc::geteuid() }, "TUN helper startup lock has a foreign owner");
     ensure!(metadata.permissions().mode() & 0o077 == 0, "TUN helper startup lock is not private");
+    ensure!(metadata.permissions().mode() & 0o7000 == 0, "TUN helper startup lock has special permission bits");
     ensure!(metadata.permissions().mode() & 0o700 == 0o600, "TUN helper startup lock must be owner-readable and writable only");
     ensure!(metadata.nlink() == 1, "TUN helper startup lock has external hard links");
 
