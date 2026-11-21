@@ -3,9 +3,9 @@
 //! The service manager grants only CAP_NET_ADMIN to this process. It receives one
 //! generation-scoped TUN descriptor from the unprivileged controller, validates the
 //! interface identity, starts the managed Xray child, then drops its own capabilities.
-#![cfg(target_os = "linux")]
-
+#[cfg(target_os = "linux")]
 use anyhow::{Context, Result, ensure};
+#[cfg(target_os = "linux")]
 use std::{
     env, fs,
     io::Write,
@@ -17,8 +17,10 @@ use std::{
     process::Command,
 };
 
+#[cfg(target_os = "linux")]
 const CAP_NET_ADMIN: u64 = 1 << 12;
 
+#[cfg(target_os = "linux")]
 fn main() {
     if let Err(error) = run() {
         eprintln!("proxyctl-tun-core-launcher: {error:#}");
@@ -26,6 +28,7 @@ fn main() {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn run() -> Result<()> {
     let mut args = env::args_os().skip(1);
     ensure!(args.next().as_deref() == Some(std::ffi::OsStr::new("--socket")),
@@ -134,6 +137,7 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn send_process_identity(stream: &mut UnixStream, identity: &proxyctl::tun::process::ProcessIdentity) -> Result<()> {
     let payload = serde_json::to_vec(identity).context("cannot encode Xray process identity")?;
     ensure!(!payload.is_empty() && payload.len() <= 4096,
@@ -145,6 +149,7 @@ fn send_process_identity(stream: &mut UnixStream, identity: &proxyctl::tun::proc
     stream.flush().context("cannot flush Xray process identity frame")
 }
 
+#[cfg(target_os = "linux")]
 fn drop_launcher_capabilities() -> Result<()> {
     #[repr(C)]
     struct CapHeader {
@@ -181,6 +186,7 @@ fn drop_launcher_capabilities() -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn verify_capability_boundary() -> Result<()> {
     let status = fs::read_to_string("/proc/self/status")
         .context("cannot inspect core launcher capability state")?;
@@ -211,6 +217,7 @@ fn verify_capability_boundary() -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn validate_private_runtime_socket(socket: &Path) -> Result<()> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
     ensure!(socket.is_absolute() && socket.as_os_str().len() < 108,
@@ -230,6 +237,7 @@ fn validate_private_runtime_socket(socket: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn validate_xray_paths(executable: &Path, config: &Path) -> Result<()> {
     ensure!(executable.is_absolute() && config.is_absolute(),
         "Xray executable and config paths must be absolute");
@@ -254,6 +262,7 @@ fn validate_xray_paths(executable: &Path, config: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 fn validate_tun_descriptor(fd: i32, interface: &str, expected_ifindex: u32) -> Result<()> {
     let fdinfo = fs::read_to_string(format!("/proc/self/fdinfo/{fd}"))
         .context("cannot inspect received TUN descriptor metadata")?;
