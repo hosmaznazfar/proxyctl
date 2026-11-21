@@ -14,8 +14,7 @@ pub fn send_descriptor(stream: &UnixStream, descriptor: BorrowedFd<'_>) -> Resul
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
     let mut marker = MARKER;
     let mut iov = libc::iovec { iov_base: (&mut marker as *mut u8).cast(), iov_len: 1 };
-    const MAX_RECEIVED_DESCRIPTORS: usize = 16;
-    let bytes = unsafe { libc::CMSG_SPACE((mem::size_of::<libc::c_int>() * MAX_RECEIVED_DESCRIPTORS) as u32) } as usize;
+    let bytes = unsafe { libc::CMSG_SPACE(mem::size_of::<libc::c_int>() as u32) } as usize;
     let mut control = vec![0usize; bytes.div_ceil(mem::size_of::<usize>())];
     let mut message: libc::msghdr = unsafe { mem::zeroed() };
     message.msg_iov = &mut iov; message.msg_iovlen = 1;
