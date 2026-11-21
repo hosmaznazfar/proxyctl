@@ -11,7 +11,7 @@ use std::{
     io::Read,
     os::unix::{fs::{MetadataExt, PermissionsExt}, net::UnixListener},
     os::fd::AsFd,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::Duration,
 };
@@ -149,14 +149,26 @@ pub fn spawn_xray_from_broker(
         .context("cannot start the capability-confined Xray TUN service")?;
 
     let start_deadline = std::time::Instant::now() + Duration::from_secs(10);
-    loop {
-        if let Some(status) = service_command.try_wait()? {
-            ensure!(status.success(), "systemd refused to start the Xray TUN service");
-            break;
+    let start_result = loop {
+        match service_command.try_wait() {
+            Ok(Some(status)) if status.success() => break Ok(()),
+            Ok(Some(_)) => break Err(anyhow::anyhow!("systemd refused to start the Xray TUN service")),
+            Ok(None) if std::time::Instant::now() >= start_deadline => {
+                let _ = service_command.kill();
+                let _ = service_command.wait();
+                break Err(anyhow::anyhow!("systemd-run did not finish starting the Xray TUN service before its deadline"));
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            Err(error) => {
+                let _ = service_command.kill();
+                let _ = service_command.wait();
+                break Err(error.into());
+            }
         }
-        ensure!(std::time::Instant::now() < start_deadline,
-            "systemd-run did not finish starting the Xray TUN service before its deadline");
-        std::thread::sleep(Duration::from_millis(20));
+    };
+    if let Err(error) = start_result {
+        let _ = Command::new(SUDO).args(["-n", "--", SYSTEMCTL, "stop", &unit]).status();
+        return Err(error).context("Xray transient service startup failed");
     }
 
     let handoff_result = (|| -> Result<ProcessIdentity> {
