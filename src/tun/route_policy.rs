@@ -197,6 +197,14 @@ impl RoutingPolicyPlan {
             self.rules.len() == 4,
             "routing plan must contain bypass and proxy rules per family"
         );
+        ensure!(
+            self.routes.iter().all(|route| route.interface_index == self.interface_index && route.interface_name == self.interface_name && route.table_id == self.table_id),
+            "all routes must bind the plan's interface identity and dedicated table"
+        );
+        ensure!(
+            self.rules.iter().all(|rule| rule.priority >= RPDB_PRIORITY_MIN_PROXYCTL),
+            "every rule priority must be in the Proxyctl allocation range"
+        );
 
         for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
             let routes = self
