@@ -364,6 +364,29 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn manifest_phase_requires_consistent_core_process_identity() {
+        let mut value = snapshot();
+        value.core_process = Some(ProcessIdentity {
+            pid: 42,
+            start_ticks: 100,
+            executable: PathBuf::from("/usr/bin/sing-box"),
+        });
+        assert!(value.validate().is_err());
+
+        value.core_process = None;
+        value.phase = SupervisorPhase::Running;
+        assert!(value.validate().is_err());
+
+        value.core_process = Some(ProcessIdentity {
+            pid: 42,
+            start_ticks: 100,
+            executable: PathBuf::from("/usr/bin/sing-box"),
+        });
+        assert!(value.validate().is_ok());
+    }
+
     #[cfg(unix)]
     #[test]
     fn persists_atomically_with_private_permissions_and_round_trips() {
