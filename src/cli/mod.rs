@@ -205,7 +205,10 @@ enum Command {
         #[arg(long)]
         tun: bool,
         /// Plain HTTP endpoint used for a bounded direct TUN probe; it must return the expected 2xx status and keep the HTTP connection alive.
-        #[arg(long, default_value = "http://connectivitycheck.gstatic.com/generate_204")]
+        #[arg(
+            long,
+            default_value = "http://connectivitycheck.gstatic.com/generate_204"
+        )]
         tun_probe_url: String,
         /// Expected final HTTP status from the TUN readiness endpoint.
         #[arg(long, default_value_t = 204, value_parser = clap::value_parser!(u16).range(200..=299))]
