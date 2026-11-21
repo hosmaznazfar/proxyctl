@@ -404,7 +404,16 @@ impl KernelTransactionBackend for LinuxJournalBackend {
         let key = format!("interface:{name}");
         let fp =
             serde_json::to_string(&serde_json::json!({"ifindex":index,"kind":"tun","name":name}))?;
-        let state = self.remove_live(JournalOperationKind::CreateInterface, &key, &fp)?;
+        let journal = self.store.load_transaction_journal()?
+            .context("transaction journal is missing while removing the TUN interface")?;
+        let interface_kind = journal.operations.iter()
+            .find(|operation| operation.resource_key == key)
+            .map(|operation| operation.kind)
+            .context("journal has no interface creation operation")?;
+        ensure!(matches!(interface_kind,
+            JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface),
+            "journal interface operation has an invalid kind");
+        let state = self.remove_live(interface_kind, &key, &fp)?;
         if matches!(state, ResourceState::Removed | ResourceState::AlreadyAbsent) {
             self.store
                 .mark_operation_removed(id, self.generation, &key)?;
