@@ -564,6 +564,29 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn native_transaction_rolls_back_persistent_device_after_route_failure() {
+        let mut backend = FakeBackend { fail_add_at: Some(1), ..Default::default() };
+        assert!(apply_native(&transaction(), &mut backend).is_err());
+        assert_eq!(backend.native_create_count, 1);
+        assert!(backend.interface.is_none());
+        assert!(backend.resources.is_empty());
+        assert!(backend.finalized);
+    }
+
+    #[test]
+    fn native_transaction_retains_journal_when_persistent_device_rollback_fails() {
+        let mut backend = FakeBackend {
+            fail_add_at: Some(1),
+            fail_remove: true,
+            ..Default::default()
+        };
+        assert!(apply_native(&transaction(), &mut backend).is_err());
+        assert!(backend.journal_retained);
+        assert!(backend.interface.is_some());
+        assert!(!backend.finalized);
+    }
     #[test]
     fn native_transaction_uses_persistent_device_backend_entrypoint() {
         let transaction = transaction();
