@@ -294,11 +294,15 @@ pub fn observe_journal_resources(
     let mut aliases = std::collections::BTreeMap::new();
     for operation in &journal.operations {
         if operation.kind == super::journal::JournalOperationKind::CreatePersistentInterface {
-            let name = operation.resource_key.strip_prefix("interface:")
+            let name = operation
+                .resource_key
+                .strip_prefix("interface:")
                 .context("invalid persistent TUN journal interface key")?;
             if let Ok(alias) = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias")) {
                 let alias = alias.trim_end_matches(['\r', '\n']).to_owned();
-                if !alias.is_empty() { aliases.insert(name.to_owned(), alias); }
+                if !alias.is_empty() {
+                    aliases.insert(name.to_owned(), alias);
+                }
             }
         }
     }
@@ -317,18 +321,24 @@ pub fn observe_journal_resources_with_aliases(
     let mut observations = std::collections::BTreeMap::new();
     for operation in &journal.operations {
         let fingerprint = match operation.kind {
-            JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
-                let name = operation.resource_key.strip_prefix("interface:")
+            JournalOperationKind::CreateInterface
+            | JournalOperationKind::CreatePersistentInterface => {
+                let name = operation
+                    .resource_key
+                    .strip_prefix("interface:")
                     .context("invalid journal interface key")?;
-                let matches = snapshot.interfaces.iter()
+                let matches = snapshot
+                    .interfaces
+                    .iter()
                     .filter(|interface| interface.name == name)
                     .collect::<Vec<_>>();
                 match matches.as_slice() {
                     [] => None,
                     [interface] if interface.is_tun => {
                         if operation.kind == JournalOperationKind::CreatePersistentInterface {
-                            let alias = aliases.get(name)
-                                .context("persistent TUN generation alias is unavailable for recovery")?;
+                            let alias = aliases.get(name).context(
+                                "persistent TUN generation alias is unavailable for recovery",
+                            )?;
                             Some(serde_json::to_string(&serde_json::json!({
                                 "alias": alias,
                                 "ifindex": interface.index,
@@ -659,89 +669,113 @@ mod tests {
     }
 }
 
-    #[test]
-    fn persistent_interface_journal_observation_uses_exact_live_tun_identity() {
-        use crate::tun::journal::{JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal};
-        let journal = TransactionJournal {
-            schema_version: 1,
-            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            generation: 4,
-            operations: vec![JournalOperation {
-                sequence: 0,
-                kind: JournalOperationKind::CreatePersistentInterface,
-                resource_key: "interface:tun-proxyctl".into(),
-                state: JournalOperationState::Intent,
-                fingerprint: None,
-            }],
-        };
-        let snapshot = KernelSnapshot {
-            interfaces: vec![KernelInterfaceRecord {
-                name: "tun-proxyctl".into(),
-                index: 81,
-                is_tun: true,
-            }],
-            ..KernelSnapshot::default()
-        };
-        let aliases = std::collections::BTreeMap::from([("tun-proxyctl".to_owned(), "proxyctl:12345678-1234-4234-8234-123456789abc:4".to_owned())]);
-        let observed = observe_journal_resources_with_aliases(&journal, &snapshot, &aliases).unwrap();
-        let fingerprint = observed.get("interface:tun-proxyctl").unwrap().as_ref().unwrap();
-        let value: Value = serde_json::from_str(fingerprint).unwrap();
-        assert_eq!(value.get("name").and_then(Value::as_str), Some("tun-proxyctl"));
-        assert_eq!(value.get("ifindex").and_then(Value::as_u64), Some(81));
-        assert_eq!(value.get("kind").and_then(Value::as_str), Some("tun"));
-        assert_eq!(value.get("alias").and_then(Value::as_str), Some("proxyctl:12345678-1234-4234-8234-123456789abc:4"));
-    }
+#[test]
+fn persistent_interface_journal_observation_uses_exact_live_tun_identity() {
+    use crate::tun::journal::{
+        JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal,
+    };
+    let journal = TransactionJournal {
+        schema_version: 1,
+        activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+        generation: 4,
+        operations: vec![JournalOperation {
+            sequence: 0,
+            kind: JournalOperationKind::CreatePersistentInterface,
+            resource_key: "interface:tun-proxyctl".into(),
+            state: JournalOperationState::Intent,
+            fingerprint: None,
+        }],
+    };
+    let snapshot = KernelSnapshot {
+        interfaces: vec![KernelInterfaceRecord {
+            name: "tun-proxyctl".into(),
+            index: 81,
+            is_tun: true,
+        }],
+        ..KernelSnapshot::default()
+    };
+    let aliases = std::collections::BTreeMap::from([(
+        "tun-proxyctl".to_owned(),
+        "proxyctl:12345678-1234-4234-8234-123456789abc:4".to_owned(),
+    )]);
+    let observed = observe_journal_resources_with_aliases(&journal, &snapshot, &aliases).unwrap();
+    let fingerprint = observed
+        .get("interface:tun-proxyctl")
+        .unwrap()
+        .as_ref()
+        .unwrap();
+    let value: Value = serde_json::from_str(fingerprint).unwrap();
+    assert_eq!(
+        value.get("name").and_then(Value::as_str),
+        Some("tun-proxyctl")
+    );
+    assert_eq!(value.get("ifindex").and_then(Value::as_u64), Some(81));
+    assert_eq!(value.get("kind").and_then(Value::as_str), Some("tun"));
+    assert_eq!(
+        value.get("alias").and_then(Value::as_str),
+        Some("proxyctl:12345678-1234-4234-8234-123456789abc:4")
+    );
+}
 
-    #[test]
-    fn persistent_interface_journal_observation_rejects_foreign_link_type() {
-        use crate::tun::journal::{JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal};
-        let journal = TransactionJournal {
-            schema_version: 1,
-            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            generation: 4,
-            operations: vec![JournalOperation {
-                sequence: 0,
-                kind: JournalOperationKind::CreatePersistentInterface,
-                resource_key: "interface:tun-proxyctl".into(),
-                state: JournalOperationState::Intent,
-                fingerprint: None,
-            }],
-        };
-        let snapshot = KernelSnapshot {
-            interfaces: vec![KernelInterfaceRecord {
-                name: "tun-proxyctl".into(),
-                index: 81,
-                is_tun: false,
-            }],
-            ..KernelSnapshot::default()
-        };
-        assert!(observe_journal_resources(&journal, &snapshot).is_err());
-    }
+#[test]
+fn persistent_interface_journal_observation_rejects_foreign_link_type() {
+    use crate::tun::journal::{
+        JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal,
+    };
+    let journal = TransactionJournal {
+        schema_version: 1,
+        activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+        generation: 4,
+        operations: vec![JournalOperation {
+            sequence: 0,
+            kind: JournalOperationKind::CreatePersistentInterface,
+            resource_key: "interface:tun-proxyctl".into(),
+            state: JournalOperationState::Intent,
+            fingerprint: None,
+        }],
+    };
+    let snapshot = KernelSnapshot {
+        interfaces: vec![KernelInterfaceRecord {
+            name: "tun-proxyctl".into(),
+            index: 81,
+            is_tun: false,
+        }],
+        ..KernelSnapshot::default()
+    };
+    assert!(observe_journal_resources(&journal, &snapshot).is_err());
+}
 
-    #[test]
-    fn persistent_interface_observation_fails_closed_without_generation_alias() {
-        use crate::tun::journal::{JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal};
-        let journal = TransactionJournal {
-            schema_version: 1,
-            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            generation: 4,
-            operations: vec![JournalOperation {
-                sequence: 0,
-                kind: JournalOperationKind::CreatePersistentInterface,
-                resource_key: "interface:tun-proxyctl".into(),
-                state: JournalOperationState::Intent,
-                fingerprint: None,
-            }],
-        };
-        let snapshot = KernelSnapshot {
-            interfaces: vec![KernelInterfaceRecord {
-                name: "tun-proxyctl".into(),
-                index: 81,
-                is_tun: true,
-            }],
-            ..KernelSnapshot::default()
-        };
-        assert!(observe_journal_resources_with_aliases(
-            &journal, &snapshot, &std::collections::BTreeMap::new(),
-        ).is_err());
-    }
+#[test]
+fn persistent_interface_observation_fails_closed_without_generation_alias() {
+    use crate::tun::journal::{
+        JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal,
+    };
+    let journal = TransactionJournal {
+        schema_version: 1,
+        activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+        generation: 4,
+        operations: vec![JournalOperation {
+            sequence: 0,
+            kind: JournalOperationKind::CreatePersistentInterface,
+            resource_key: "interface:tun-proxyctl".into(),
+            state: JournalOperationState::Intent,
+            fingerprint: None,
+        }],
+    };
+    let snapshot = KernelSnapshot {
+        interfaces: vec![KernelInterfaceRecord {
+            name: "tun-proxyctl".into(),
+            index: 81,
+            is_tun: true,
+        }],
+        ..KernelSnapshot::default()
+    };
+    assert!(
+        observe_journal_resources_with_aliases(
+            &journal,
+            &snapshot,
+            &std::collections::BTreeMap::new(),
+        )
+        .is_err()
+    );
+}
