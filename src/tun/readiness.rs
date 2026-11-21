@@ -729,6 +729,57 @@ pub fn probe_tun_interface(_interface_name: &str, _interface_index: u32) -> Resu
     anyhow::bail!("live TUN interface probing is supported only on Linux");
 }
 
+/// Verify the interface address and MTU contract emitted by the Xray TUN adapter.
+#[cfg(target_os = "linux")]
+pub fn probe_xray_tun_addressing(interface_name: &str, interface_index: u32) -> Result<()> {
+    ensure!(!interface_name.is_empty() && interface_name.len() <= 15 && interface_index > 0,
+        "Xray TUN interface identity is invalid");
+    let output = super::kernel_inventory::run_ip(&[
+        "-j", "address", "show", "dev", interface_name,
+    ]).context("cannot inspect Xray TUN interface addresses")?;
+    let value: serde_json::Value = serde_json::from_slice(&output)
+        .context("kernel returned invalid JSON for Xray TUN address inspection")?;
+    let records = value.as_array().context("Xray TUN address inspection did not return an array")?;
+    ensure!(records.len() == 1, "Xray TUN address record is missing or ambiguous");
+    validate_xray_tun_address_record(&records[0], interface_name, interface_index)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_xray_tun_addressing(_interface_name: &str, _interface_index: u32) -> Result<()> {
+    anyhow::bail!("Xray TUN address verification is supported only on Linux");
+}
+
+#[cfg(target_os = "linux")]
+fn validate_xray_tun_address_record(
+    record: &serde_json::Value,
+    interface_name: &str,
+    interface_index: u32,
+) -> Result<()> {
+    ensure!(record.get("ifname").and_then(serde_json::Value::as_str) == Some(interface_name)
+        && record.get("ifindex").and_then(serde_json::Value::as_u64) == Some(u64::from(interface_index)),
+        "Xray TUN address record does not match the manifest-bound interface identity");
+    ensure!(record.get("mtu").and_then(serde_json::Value::as_u64) == Some(1500),
+        "Xray TUN interface MTU differs from the generated adapter contract");
+    ensure!(record.get("flags").and_then(serde_json::Value::as_array)
+        .is_some_and(|flags| flags.iter().any(|flag| flag.as_str() == Some("UP"))),
+        "Xray TUN interface is not administratively up");
+    let addresses = record.get("addr_info").and_then(serde_json::Value::as_array)
+        .context("Xray TUN interface has no address inventory")?;
+    let ipv4 = addresses.iter().any(|address| {
+        address.get("family").and_then(serde_json::Value::as_str) == Some("inet")
+            && address.get("local").and_then(serde_json::Value::as_str) == Some("198.18.0.1")
+            && address.get("prefixlen").and_then(serde_json::Value::as_u64) == Some(30)
+    });
+    let ipv6 = addresses.iter().any(|address| {
+        address.get("family").and_then(serde_json::Value::as_str) == Some("inet6")
+            && address.get("local").and_then(serde_json::Value::as_str) == Some("fdfe:dcba:9876::1")
+            && address.get("prefixlen").and_then(serde_json::Value::as_u64) == Some(126)
+    });
+    ensure!(ipv4 && ipv6,
+        "Xray TUN interface is missing one or more configured dual-stack gateway addresses");
+    Ok(())
+}
+
 /// Compare the live kernel routes and policy rules with the exact activation plan.
 ///
 /// This is a read-only snapshot probe. It requires one matching default route and both
