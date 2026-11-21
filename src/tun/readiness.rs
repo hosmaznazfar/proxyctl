@@ -551,31 +551,10 @@ pub fn collect_managed_preflight(
     baseline_host: &super::NetworkStatus,
     current_host: &super::NetworkStatus,
 ) -> Result<ReadinessEvidence> {
-    ensure!(process.verify()?, "managed core identity is not live at preflight start");
-    let listener = probe_core_listener(process, listener, listener_timeout)?;
-    let interface = probe_tun_interface(&plan.interface_name, plan.interface_index)?;
-    probe_routing_policy(plan)?;
-    let egress = super::egress_probe::inspect_marked_egress(plan)?;
-    ensure!(egress.mark == plan.core_mark && egress.mask == plan.core_mark_mask,
-        "marked physical-egress evidence is bound to a different mark policy");
-    let mark = probe_core_outbound_socket_mark(
-        runtime_directory, activation_id, process, expected_peer, transport,
-        plan.core_mark, plan.core_mark_mask,
-    )?;
-    verify_host_network_unchanged(baseline_host, current_host)?;
-    ensure!(process.verify()?, "managed core identity changed during preflight");
-    Ok(ReadinessEvidence {
-        core_process_verified: true,
-        local_listener: Some(listener),
-        tun_interface: Some(interface),
-        route_policy_verified: true,
-        core_outbound_socket_mark: Some(mark),
-        physical_egress_bypass_verified: true,
-        // This collection does not synthesize or initiate an application-level proxy test.
-        proxied_traffic_verified: false,
-        dns_unchanged: true,
-        firewall_unchanged: true,
-    })
+    Ok(collect_managed_preflight_with_response(
+        runtime_directory, activation_id, process, listener, listener_timeout, plan,
+        expected_peer, transport, baseline_host, current_host,
+    )?.evidence)
 }
 
 #[cfg(not(target_os = "linux"))]
