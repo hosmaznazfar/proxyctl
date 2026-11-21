@@ -211,7 +211,7 @@ pub fn apply<B: KernelTransactionBackend>(
                 fingerprint,
             });
         }
-        for rule in &bound_policy.rules {
+        for rule in &ordered_rules {
             let fingerprint = match backend.add_owned_rule(activation_id, rule) {
                 Ok(fingerprint) => fingerprint,
                 Err(error) => {
