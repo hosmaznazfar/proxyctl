@@ -219,3 +219,7 @@ The systemd recovery service is now started immediately after broker preparation
 
 The systemd transient unit has additional sandbox properties. The service stop operation is bounded and only permitted after durable cleanup. This reduces the previous crash window between Running commit and service startup, but does not eliminate the smaller interval between broker preparation and service-start acceptance. The supervisor service still needs live host verification, and the readiness callback must remain bounded by its caller. Public activation remains gated.
 \n\n### Implementation checkpoint — commit compensation\n\nThe Xray Running-commit failure path now performs bounded child termination/reaping and exact-generation broker recovery, and reports both outcomes rather than leaving Prepared resources dependent solely on the supervisor. Runtime validation remains pending.\n
+
+### Implementation continuation — preflight and runtime directory hardening (2026-11-21)
+
+The activation request now rejects invalid ordering of core-bypass and proxy-routing priorities before mutation. Helper startup and detached supervisor discovery require canonical, private runtime directories with owner read/write/search permissions. These local preflight checks are not a substitute for runtime validation. No build, test, systemd host validation, or network mutation was performed.
