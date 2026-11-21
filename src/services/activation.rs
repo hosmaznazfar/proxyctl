@@ -432,6 +432,16 @@ pub fn activate_tun_xray(
     probe_url: &str,
     expected_status: u16,
 ) -> anyhow::Result<()> {
+    activate_tun_core(node_id, CoreId::Xray, port_override, probe_url, expected_status)
+}
+
+pub fn activate_tun_core(
+    node_id: u64,
+    core: CoreId,
+    port_override: Option<u16>,
+    probe_url: &str,
+    expected_status: u16,
+) -> anyhow::Result<()> {
     use std::net::ToSocketAddrs;
 
     let (runtime, state_path) = paths()?;
@@ -452,16 +462,16 @@ pub fn activate_tun_xray(
     let node = record.node;
     drop(db);
 
-    let core = CoreId::Xray;
+    ensure!(matches!(core, CoreId::Xray | CoreId::SingBox | CoreId::Mihomo), "unsupported TUN core");
     let executable = core_binary_path(core)?;
-    ensure!(executable.is_file(), "Xray is not installed by Proxyctl; run setup --core xray");
+    ensure!(executable.is_file(), "selected core is not installed by Proxyctl; run setup for the selected core");
     let executable = fs::canonicalize(executable)?;
     let managed_root = fs::canonicalize(managed_cores_path()?)?;
     ensure!(executable.starts_with(&managed_root),
-        "refusing to run Xray outside Proxyctl's managed-core directory");
+        "refusing to run the selected core outside Proxyctl's managed-core directory");
     let adapter = adapters::adapter(core);
     let compatibility = adapter.compatibility(&node);
-    ensure!(compatibility.is_supported(), "Xray does not support this node: {}",
+    ensure!(compatibility.is_supported(), "selected core does not support this node: {}",
         compatibility.reason.as_deref().unwrap_or("unsupported configuration"));
 
     let listen_port = match port_override {
@@ -472,12 +482,12 @@ pub fn activate_tun_xray(
     ensure_port_available(listen_port)?;
 
     let expected_peers = (node.server.as_str(), node.port).to_socket_addrs()
-        .context("cannot resolve the selected Xray node endpoint before TUN activation")?
+        .context("cannot resolve the selected proxy node endpoint before TUN activation")?
         .filter(|peer| !peer.ip().is_unspecified() && !peer.ip().is_multicast())
         .take(8)
         .collect::<Vec<_>>();
     ensure!(!expected_peers.is_empty(),
-        "selected Xray node did not resolve to a usable endpoint");
+        "selected node did not resolve to a usable endpoint");
 
     let probe = url::Url::parse(probe_url)
         .context("TUN readiness probe URL is invalid")?;
@@ -513,10 +523,14 @@ pub fn activate_tun_xray(
     let (core_mark, core_mark_mask) =
         crate::tun::route_policy::mark_for_activation_id(&activation_id)?;
 
+    let interface_name = match core {
+        CoreId::Xray => crate::cores::adapters::XRAY_TUN_INTERFACE_NAME,
+        CoreId::SingBox | CoreId::Mihomo => "tun-proxyctl",
+    };
     let request = crate::tun::activation_orchestrator::ActivationRequest {
         activation_id,
         generation,
-        interface_name: crate::cores::adapters::XRAY_TUN_INTERFACE_NAME.to_owned(),
+        interface_name: interface_name.to_owned(),
         owner_uid: unsafe { libc::getuid() },
         owner_gid: unsafe { libc::getgid() },
         table_id,
@@ -529,15 +543,22 @@ pub fn activate_tun_xray(
         .context("cannot start or connect to the TUN mutation helper")?;
     let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
     let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
-    let activation = orchestrator.activate_xray_node_end_to_end(
-        request, &node, listen_port, &executable,
-        Duration::from_secs(5), expected_peers, traffic_target,
-        Duration::from_secs(10), 64 * 1024,
-    ).context("Xray TUN activation failed its broker handoff or end-to-end readiness gate")?;
+    let generation = request.generation;
+    let activation = match core {
+        CoreId::Xray => orchestrator.activate_xray_node_end_to_end(
+            request, &node, listen_port, &executable,
+            Duration::from_secs(5), expected_peers, traffic_target,
+            Duration::from_secs(10), 64 * 1024,
+        ).map(|activation| activation.managed),
+        CoreId::SingBox | CoreId::Mihomo => orchestrator.activate_native_core_node_end_to_end(
+            core, request, &node, listen_port, &executable,
+            expected_peers, traffic_target, Duration::from_secs(10), 64 * 1024,
+        ),
+    }.with_context(|| format!("{core} TUN activation failed its broker transaction or end-to-end readiness gate"))?;
 
     println!(
-        "Activated Proxyctl Xray TUN for node #{node_id} on 127.0.0.1:{listen_port} (generation {}).",
-        activation.managed.token.generation()
+        "Activated Proxyctl {core} TUN for node #{node_id} on 127.0.0.1:{listen_port} (generation {}).",
+        activation.token.generation()
     );
     Ok(())
 }
@@ -552,10 +573,21 @@ pub fn activate_tun_xray(
     anyhow::bail!("managed Xray TUN activation is supported only on Linux");
 }
 
+#[cfg(not(target_os = "linux"))]
+pub fn activate_tun_core(
+    _node_id: u64,
+    _core: CoreId,
+    _port_override: Option<u16>,
+    _probe_url: &str,
+    _expected_status: u16,
+) -> anyhow::Result<()> {
+    anyhow::bail!("managed native TUN activation is supported only on Linux");
+}
+
 fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
     ensure!(
         !tun_enabled,
-        "TUN activation must use activate_tun_xray, which composes the broker-owned descriptor, readiness, and recovery lifecycle. The generic loopback activation path cannot start TUN mode."
+        "TUN activation must use activate_tun_core, which composes the broker-owned device, readiness, and recovery lifecycle. The generic loopback activation path cannot start TUN mode."
     );
     Ok(())
 }
