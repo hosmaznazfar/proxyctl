@@ -297,7 +297,7 @@ pub fn observe_journal_resources(
     let mut observations = std::collections::BTreeMap::new();
     for operation in &journal.operations {
         let fingerprint = match operation.kind {
-            JournalOperationKind::CreateInterface => {
+            JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
                 let name = operation
                     .resource_key
                     .strip_prefix("interface:")
