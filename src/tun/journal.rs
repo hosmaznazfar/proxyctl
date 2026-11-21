@@ -107,15 +107,27 @@ pub fn plan_journal_recovery(
                 } else if operation.kind == JournalOperationKind::CreatePersistentInterface
                     && let Some(actual) = current
                 {
-                    let expected_alias = format!("proxyctl:{}:{}", journal.activation_id, journal.generation);
-                    let identity: serde_json::Value = serde_json::from_str(&actual).unwrap_or_default();
-                    let expected_name = operation.resource_key.strip_prefix("interface:").unwrap_or_default();
-                    if identity.get("name").and_then(serde_json::Value::as_str) == Some(expected_name)
+                    let expected_alias =
+                        format!("proxyctl:{}:{}", journal.activation_id, journal.generation);
+                    let identity: serde_json::Value =
+                        serde_json::from_str(&actual).unwrap_or_default();
+                    let expected_name = operation
+                        .resource_key
+                        .strip_prefix("interface:")
+                        .unwrap_or_default();
+                    if identity.get("name").and_then(serde_json::Value::as_str)
+                        == Some(expected_name)
                         && identity.get("kind").and_then(serde_json::Value::as_str) == Some("tun")
-                        && identity.get("alias").and_then(serde_json::Value::as_str) == Some(expected_alias.as_str())
-                        && identity.get("ifindex").and_then(serde_json::Value::as_u64).is_some_and(|index| index > 0)
+                        && identity.get("alias").and_then(serde_json::Value::as_str)
+                            == Some(expected_alias.as_str())
+                        && identity
+                            .get("ifindex")
+                            .and_then(serde_json::Value::as_u64)
+                            .is_some_and(|index| index > 0)
                     {
-                        JournalRecoveryDecision::CompareAndDelete { expected_fingerprint: actual }
+                        JournalRecoveryDecision::CompareAndDelete {
+                            expected_fingerprint: actual,
+                        }
                     } else {
                         JournalRecoveryDecision::PreserveAndReportConflict
                     }
@@ -169,7 +181,8 @@ impl TransactionJournal {
         let mut cleanup_started = false;
         for (index, operation) in self.operations.iter().enumerate() {
             match operation.kind {
-                JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
+                JournalOperationKind::CreateInterface
+                | JournalOperationKind::CreatePersistentInterface => {
                     ensure!(
                         index == 0 && !interface_seen,
                         "interface creation must be the first and only interface operation"
@@ -228,12 +241,11 @@ impl TransactionJournal {
                         "applied operations cannot follow an unresolved intent or cleanup"
                     );
                     ensure!(
-                        operation
-                            .fingerprint
-                            .as_ref()
-                            .is_some_and(|value| !value.trim().is_empty()
-                                && value.len() <= 16 * 1024
-                                && !value.chars().any(char::is_control)),
+                        operation.fingerprint.as_ref().is_some_and(|value| !value
+                            .trim()
+                            .is_empty()
+                            && value.len() <= 16 * 1024
+                            && !value.chars().any(char::is_control)),
                         "applied journal operation requires a valid fingerprint"
                     );
                 }
@@ -375,7 +387,6 @@ mod validation_tests {
         }
     }
 
-
     #[test]
     fn persistent_interface_intent_is_recoverable_only_with_exact_generation_alias() {
         let mut value = journal(vec![operation(
@@ -390,14 +401,19 @@ mod validation_tests {
             "ifindex": 77,
             "kind": "tun",
             "name": "tun-proxyctl"
-        }).to_string();
-        let observed = std::collections::BTreeMap::from([
-            ("interface:tun-proxyctl".to_owned(), Some(fingerprint.clone())),
-        ]);
+        })
+        .to_string();
+        let observed = std::collections::BTreeMap::from([(
+            "interface:tun-proxyctl".to_owned(),
+            Some(fingerprint.clone()),
+        )]);
         let decisions = plan_journal_recovery(&value, &observed).unwrap();
-        assert_eq!(decisions[0].1, JournalRecoveryDecision::CompareAndDelete {
-            expected_fingerprint: fingerprint,
-        });
+        assert_eq!(
+            decisions[0].1,
+            JournalRecoveryDecision::CompareAndDelete {
+                expected_fingerprint: fingerprint,
+            }
+        );
     }
 
     #[test]
@@ -414,12 +430,17 @@ mod validation_tests {
             "ifindex": 77,
             "kind": "tun",
             "name": "tun-proxyctl"
-        }).to_string();
-        let observed = std::collections::BTreeMap::from([
-            ("interface:tun-proxyctl".to_owned(), Some(fingerprint)),
-        ]);
+        })
+        .to_string();
+        let observed = std::collections::BTreeMap::from([(
+            "interface:tun-proxyctl".to_owned(),
+            Some(fingerprint),
+        )]);
         let decisions = plan_journal_recovery(&value, &observed).unwrap();
-        assert_eq!(decisions[0].1, JournalRecoveryDecision::PreserveAndReportConflict);
+        assert_eq!(
+            decisions[0].1,
+            JournalRecoveryDecision::PreserveAndReportConflict
+        );
     }
     #[test]
     fn journal_wire_types_reject_unknown_fields() {
@@ -698,11 +719,22 @@ mod persistent_journal_tests {
     use super::*;
 
     fn journal(operations: Vec<JournalOperation>) -> TransactionJournal {
-        TransactionJournal { schema_version: 1, activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 1, operations }
+        TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 1,
+            operations,
+        }
     }
 
     fn operation(sequence: u32, kind: JournalOperationKind, key: &str) -> JournalOperation {
-        JournalOperation { sequence, kind, resource_key: key.into(), state: JournalOperationState::Applied, fingerprint: Some("fixture-fingerprint".into()) }
+        JournalOperation {
+            sequence,
+            kind,
+            resource_key: key.into(),
+            state: JournalOperationState::Applied,
+            fingerprint: Some("fixture-fingerprint".into()),
+        }
     }
 
     #[test]
@@ -715,7 +747,10 @@ mod persistent_journal_tests {
         assert!(value.validate().is_ok());
         let encoded = serde_json::to_vec(&value).unwrap();
         let decoded: TransactionJournal = serde_json::from_slice(&encoded).unwrap();
-        assert_eq!(decoded.operations[0].kind, JournalOperationKind::CreatePersistentInterface);
+        assert_eq!(
+            decoded.operations[0].kind,
+            JournalOperationKind::CreatePersistentInterface
+        );
     }
 
     #[test]
@@ -727,5 +762,4 @@ mod persistent_journal_tests {
         )]);
         assert!(value.validate().is_err());
     }
-
 }
