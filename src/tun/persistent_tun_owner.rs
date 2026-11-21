@@ -193,3 +193,16 @@ fn validate_identity(activation_id: &str, generation: u64) -> Result<()> {
     ensure!(generation > 0, "activation generation must be non-zero");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_generation_scoped_owner_identity() {
+        assert!(validate_identity("12345678-1234-4234-8234-123456789abc", 1).is_ok());
+        assert!(validate_identity("12345678-1234-4234-8234-123456789ABC", 1).is_err());
+        assert!(validate_identity("not-a-uuid", 1).is_err());
+        assert!(validate_identity("12345678-1234-4234-8234-123456789abc", 0).is_err());
+    }
+}
