@@ -268,6 +268,15 @@ mod tests {
     }
 
     #[test]
+    fn ownership_wire_types_reject_unknown_fields() {
+        let resource = br#"{"key":"route:v4-default","fingerprint":"fp","extra":true}"#;
+        assert!(serde_json::from_slice::<OwnedResource>(resource).is_err());
+
+        let manifest = br#"{"version":1,"activation_id":"12345678-1234-4234-8234-123456789abc","table_id":42420,"rule_priority":42420,"interface_name":"tun-proxyctl","interface_index":77,"resources":[],"extra":true}"#;
+        assert!(serde_json::from_slice::<RouteManifest>(manifest).is_err());
+    }
+
+    #[test]
     fn manifest_round_trip_and_validation_preserve_exact_resource_identity() {
         let original = manifest();
         assert_eq!(
