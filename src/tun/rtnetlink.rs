@@ -517,6 +517,7 @@ fn validate_request(bytes: &[u8]) -> Result<()> {
 }
 
 fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>, bool)> {
+    ensure!(!bytes.is_empty(), "empty NETLINK_ROUTE response datagram");
     let mut offset = 0usize;
     let mut messages = Vec::new();
     let mut terminal = false;
