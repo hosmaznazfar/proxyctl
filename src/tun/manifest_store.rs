@@ -227,10 +227,25 @@ impl ManifestStore {
             bytes.len() as u64 <= MAX_MANIFEST_BYTES,
             "TUN manifest exceeds size limit"
         );
+        let after_read = file.metadata()?;
         ensure!(
-            bytes.len() as u64 == metadata.len(),
+            bytes.len() as u64 == metadata.len()
+                && after_read.len() == metadata.len(),
             "TUN manifest changed size while it was being read"
         );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            ensure!(
+                metadata.dev() == after_read.dev()
+                    && metadata.ino() == after_read.ino()
+                    && metadata.mtime() == after_read.mtime()
+                    && metadata.mtime_nsec() == after_read.mtime_nsec()
+                    && metadata.ctime() == after_read.ctime()
+                    && metadata.ctime_nsec() == after_read.ctime_nsec(),
+                "TUN manifest changed while it was being read"
+            );
+        }
         ensure!(!bytes.is_empty(), "TUN manifest file is empty");
         let snapshot: ManifestSnapshot =
             serde_json::from_slice(&bytes).context("TUN manifest is malformed")?;
