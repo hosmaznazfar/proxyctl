@@ -1273,3 +1273,8 @@ The service has not been exercised against a live systemd user manager, process 
 ## Activation preflight and runtime directory hardening (2026-11-21)
 
 Activation request validation now rejects a core-bypass policy priority that is not strictly earlier than the proxy-routing priority before any broker mutation is requested. The helper and recovery-supervisor runtime paths are canonicalized and require a caller-owned, private directory with owner read/write/search permissions. This reduces path ambiguity and avoids entering startup paths with unusable directory permissions. These are local preflight checks only; they do not validate kernel policy or core dataplane behavior.
+
+
+## Routing-plan and manifest-store preflight continuation (2026-11-21)
+
+Pure routing-policy validation now additionally checks consistency of route identity fields and ensures all rule priorities remain within the signed native priority range. The manifest store canonicalizes its runtime directory after private-directory validation, so subsequent file operations use the resolved absolute directory. A focused priority-bound unit test was added; tests remain unexecuted.
