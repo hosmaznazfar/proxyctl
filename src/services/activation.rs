@@ -616,7 +616,6 @@ pub fn activate_tun_core(
     let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
     let orchestrator =
         crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
-    let generation = request.generation;
     let activation = match core {
         CoreId::Xray => orchestrator
             .activate_xray_node_end_to_end(
