@@ -284,8 +284,14 @@ fn is_process_gone(error: &anyhow::Error) -> bool {
 }
 
 fn read_start_ticks(pid: u32) -> Result<u64> {
-    let stat = fs::read_to_string(format!("/proc/{pid}/stat"))
+    use std::io::Read;
+    let file = fs::File::open(format!("/proc/{pid}/stat"))
         .with_context(|| format!("cannot read process identity for PID {pid}"))?;
+    let mut stat = String::new();
+    file.take(64 * 1024 + 1)
+        .read_to_string(&mut stat)
+        .with_context(|| format!("cannot read process identity for PID {pid}"))?;
+    ensure!(stat.len() <= 64 * 1024, "process stat exceeds the bounded read limit");
     let close = stat
         .rfind(')')
         .context("process stat has no closing command delimiter")?;
