@@ -366,6 +366,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_priorities_outside_signed_native_range() {
+        let mut plan = sample_plan();
+        plan.proxy_priority = i32::MAX as u32 + 1;
+        assert!(plan.validate().is_err());
+    }
+
+    #[test]
     fn rejects_bypass_rule_after_proxy_rule() {
         let mut plan = sample_plan();
         plan.bypass_priority = 50_000;
