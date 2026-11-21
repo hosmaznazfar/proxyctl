@@ -8,7 +8,7 @@ use anyhow::{Context, Result, ensure};
 use std::{io::Write, path::Path, process::Child, time::Duration};
 
 use crate::{
-    cores::{CoreId, adapters::{adapter, CoreAdapter, TunAttachmentMode, TunOutboundMark}},
+    cores::{CoreId, adapters::{adapter, CoreAdapter, TunAttachmentMode, TunOutboundMark, XRAY_TUN_INTERFACE_NAME}},
     domain::ProxyNode,
 };
 
@@ -112,7 +112,7 @@ impl<'a> ActivationOrchestrator<'a> {
         F: FnOnce(&ProcessIdentity, &ActivationToken) -> Result<()>,
     {
         request.validate().context("invalid Xray TUN activation request")?;
-        ensure!(request.interface_name == "tun-proxyctl",
+        ensure!(request.interface_name == XRAY_TUN_INTERFACE_NAME,
             "Xray adapter currently binds its external TUN descriptor to tun-proxyctl");
         let core = adapter(CoreId::Xray);
         ensure!(core.tun_attachment_mode() == TunAttachmentMode::ExternalDescriptorEnvironment {
