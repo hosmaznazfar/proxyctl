@@ -475,6 +475,23 @@ fn write_response(stream: &mut UnixStream, response: &MutationResponse) -> Resul
     Ok(())
 }
 
+fn read_response_frame(stream: &mut UnixStream) -> Result<Vec<u8>> {
+    let deadline = std::time::Instant::now() + IO_TIMEOUT;
+    let mut header = [0u8; 4];
+    read_exact_deadline(stream, &mut header, deadline)?;
+    let length = u32::from_le_bytes(header) as usize;
+    ensure!(length >= 2 && length <= MAX_FRAME, "mutation response frame length is invalid");
+    let mut bytes = vec![0u8; length];
+    read_exact_deadline(stream, &mut bytes, deadline)?;
+    Ok(bytes)
+}
+
+fn validate_response_envelope(response: &MutationResponse) -> Result<()> {
+    validate_response_envelope(&response)?;
+    ensure!(!response.message.is_empty(), "mutation broker response message is empty");
+    Ok(())
+}
+
 fn validate_identity(id: &str, generation: u64) -> Result<()> {
     ensure!(
         id.len() == 36
@@ -505,23 +522,10 @@ pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationRes
     stream.write_all(&(payload.len() as u32).to_le_bytes())?;
     stream.write_all(&payload)?;
     stream.flush()?;
-    let mut header = [0u8; 4];
-    stream.read_exact(&mut header)?;
-    let length = u32::from_le_bytes(header) as usize;
-    ensure!(
-        length >= 2 && length <= MAX_FRAME,
-        "mutation response frame length is invalid"
-    );
-    let mut bytes = vec![0u8; length];
-    stream.read_exact(&mut bytes)?;
+    let bytes = read_response_frame(&mut stream)?;
     let response: MutationResponse =
         serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
-    ensure!(
-        response.version == VERSION,
-        "mutation broker response version mismatch"
-    );
-    ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
-    ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
+    validate_response_envelope(&response)?;
     ensure!(
         response.success,
         "mutation broker rejected request: {}",
@@ -544,12 +548,7 @@ pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u6
     stream.write_all(&(payload.len() as u32).to_le_bytes())?;
     stream.write_all(&payload)?;
     stream.flush()?;
-    let mut header = [0u8; 4];
-    stream.read_exact(&mut header)?;
-    let length = u32::from_le_bytes(header) as usize;
-    ensure!(length >= 2 && length <= MAX_FRAME, "mutation response frame length is invalid");
-    let mut bytes = vec![0u8; length];
-    stream.read_exact(&mut bytes)?;
+    let bytes = read_response_frame(&mut stream)?;
     let response: MutationResponse = serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
     ensure!(response.version == VERSION, "mutation broker response version mismatch");
     ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
@@ -581,14 +580,26 @@ mod tests {
 
     #[test]
     fn rejects_response_with_unknown_fields() {
-        let malformed = br#"{\"version\":1,\"success\":true,\"message\":\"ok\",\"extra\":true}"#;
+        let malformed = br#"{"version":1,"success":true,"message":"ok","extra":true}"#;
         assert!(serde_json::from_slice::<MutationResponse>(malformed).is_err());
     }
 
     #[test]
     fn rejects_oversized_response_message_after_decode() {
         let response = MutationResponse { version: VERSION, success: true, message: "x".repeat(8 * 1024 + 1) };
-        assert!(response.message.len() > 8 * 1024);
+        assert!(validate_response_envelope(&response).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_response_message() {
+        let response = MutationResponse { version: VERSION, success: true, message: String::new() };
+        assert!(validate_response_envelope(&response).is_err());
+    }
+
+    #[test]
+    fn rejects_response_version_mismatch() {
+        let response = MutationResponse { version: VERSION + 1, success: true, message: "ok".into() };
+        assert!(validate_response_envelope(&response).is_err());
     }
 
     #[test]
