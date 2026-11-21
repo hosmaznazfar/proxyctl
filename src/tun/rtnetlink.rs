@@ -567,7 +567,7 @@ fn validate_kernel_sender(sender: &libc::sockaddr_nl, sender_len: libc::socklen_
     };
     ensure!(
         sender_len as usize == std::mem::size_of::<libc::sockaddr_nl>()
-            && bytes.get(2..4) == Some(&[0, 0])
+            && bytes.get(2..4) == Some(&[0u8, 0u8][..])
             && sender.nl_family == libc::AF_NETLINK as u16
             && sender.nl_pid == 0
             && sender.nl_groups == 0,
