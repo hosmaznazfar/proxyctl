@@ -70,52 +70,63 @@ pub fn prepare_managed_activation(
     Ok((token, response.message))
 }
 
-/// Commit a process after readiness, accepting an identity already persisted by a core launcher.
+/// Commit a process after readiness without performing broker recovery.
+///
+/// Xray's systemd service must be stopped by the orchestrator before its broker routes are
+/// recovered; this primitive therefore changes only the durable lifecycle phase.
+pub fn commit_prepared_managed_process(
+    coordinator: &LifecycleCoordinator,
+    token: &ActivationToken,
+    process: ProcessIdentity,
+) -> Result<ManagedActivation> {
+    let current = coordinator.load_current()?
+        .context("prepared activation manifest disappeared before process commit")?;
+    ensure!(current.token == *token,
+        "managed process commit token does not match the current activation");
+    match current.snapshot.core_process {
+        Some(ref persisted) => {
+            ensure!(persisted == &process && persisted.verify()?,
+                "persisted core process identity differs from the launched process");
+        }
+        None => coordinator.bind_core_process(token, process)?,
+    }
+    coordinator.apply_event(token, SupervisorEvent::StartCommitted)?;
+    Ok(ManagedActivation {
+        token: token.clone(),
+        activation_message: "managed core process committed after readiness".into(),
+    })
+}
+
+/// Compatibility commit for callers that own process termination and broker recovery directly.
 pub fn commit_managed_process(
     helper: &MutationHelper,
     coordinator: &LifecycleCoordinator,
     token: &ActivationToken,
     process: ProcessIdentity,
 ) -> Result<ManagedActivation> {
-    let commit = (|| -> Result<()> {
-        let current = coordinator.load_current()?
-            .context("prepared activation manifest disappeared before process commit")?;
-        ensure!(current.token == *token,
-            "managed process commit token does not match the current activation");
-        match current.snapshot.core_process {
-            Some(ref persisted) => {
-                ensure!(persisted == &process && persisted.verify()?,
-                    "persisted core process identity differs from the launched process");
+    match commit_prepared_managed_process(coordinator, token, process.clone()) {
+        Ok(activation) => Ok(activation),
+        Err(error) => {
+            if let Err(termination_error) = terminate_process_identity(&process) {
+                return Err(anyhow::anyhow!(
+                    "managed core commit failed ({error:#}); the core could not be confirmed stopped ({termination_error:#}); TUN resources were retained for the independent recovery supervisor"
+                ));
             }
-            None => coordinator.bind_core_process(token, process.clone())?,
+            let recovery = helper.recover(token.activation_id().to_owned(), token.generation());
+            match recovery {
+                Ok(result) if result.success => Err(error).context(
+                    "managed core commit failed; the exact process was stopped and broker resources were recovered",
+                ),
+                Ok(result) => Err(anyhow::anyhow!(
+                    "managed core commit failed ({error:#}); process stopped but generation recovery failed: {}",
+                    result.message
+                )),
+                Err(recovery_error) => Err(anyhow::anyhow!(
+                    "managed core commit failed ({error:#}); process stopped but generation recovery request failed: {recovery_error:#}"
+                )),
+            }
         }
-        coordinator.apply_event(token, SupervisorEvent::StartCommitted)?;
-        Ok(())
-    })();
-    if let Err(error) = commit {
-        if let Err(termination_error) = terminate_process_identity(&process) {
-            return Err(anyhow::anyhow!(
-                "managed core commit failed ({error:#}); the core could not be confirmed stopped ({termination_error:#}); TUN resources were retained for the independent recovery supervisor"
-            ));
-        }
-        let recovery = helper.recover(token.activation_id().to_owned(), token.generation());
-        return match recovery {
-            Ok(result) if result.success => Err(error).context(
-                "managed core commit failed; the exact process was stopped and broker resources were recovered",
-            ),
-            Ok(result) => Err(anyhow::anyhow!(
-                "managed core commit failed ({error:#}); process stopped but generation recovery failed: {}",
-                result.message
-            )),
-            Err(recovery_error) => Err(anyhow::anyhow!(
-                "managed core commit failed ({error:#}); process stopped but generation recovery request failed: {recovery_error:#}"
-            )),
-        };
     }
-    Ok(ManagedActivation {
-        token: token.clone(),
-        activation_message: "managed core process committed after readiness".into(),
-    })
 }
 
 /// Compatibility composition for callers that have already launched and validated a core.
