@@ -170,6 +170,11 @@ pub fn apply<B: KernelTransactionBackend>(
             );
         }
     };
+    let mut ordered_routes = bound_policy.routes.clone();
+    ordered_routes.sort_by_key(|route| match route.family {
+        super::route_policy::AddressFamily::Ipv4 => 0u8,
+        super::route_policy::AddressFamily::Ipv6 => 1u8,
+    });
     let mut resources = Vec::new();
     if let Err(error) = resources.try_reserve(bound_policy.routes.len() + bound_policy.rules.len()) {
         backend.retain_recovery_journal(activation_id).context(
