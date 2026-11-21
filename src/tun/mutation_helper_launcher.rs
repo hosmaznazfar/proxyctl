@@ -37,6 +37,8 @@ impl MutationHelper {
             "helper runtime directory must be a caller-owned directory");
         ensure!(metadata.permissions().mode() & 0o077 == 0,
             "helper runtime directory must not be accessible to other users");
+        ensure!(metadata.permissions().mode() & 0o7000 == 0,
+            "helper runtime directory must not have special permission bits");
         ensure!(metadata.permissions().mode() & 0o700 == 0o700,
             "helper runtime directory must be owner-readable, writable, and searchable");
         let runtime = fs::canonicalize(runtime).context("cannot canonicalize helper runtime directory")?;
