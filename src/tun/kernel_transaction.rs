@@ -175,6 +175,14 @@ pub fn apply<B: KernelTransactionBackend>(
         super::route_policy::AddressFamily::Ipv4 => 0u8,
         super::route_policy::AddressFamily::Ipv6 => 1u8,
     });
+    let mut ordered_rules = bound_policy.rules.clone();
+    ordered_rules.sort_by_key(|rule| (
+        match rule.family {
+            super::route_policy::AddressFamily::Ipv4 => 0u8,
+            super::route_policy::AddressFamily::Ipv6 => 1u8,
+        },
+        rule.priority,
+    ));
     let mut resources = Vec::new();
     if let Err(error) = resources.try_reserve(bound_policy.routes.len() + bound_policy.rules.len()) {
         backend.retain_recovery_journal(activation_id).context(
