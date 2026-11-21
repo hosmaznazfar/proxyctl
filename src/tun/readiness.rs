@@ -308,6 +308,13 @@ fn validate_unmarked_route_record(
     Ok(())
 }
 
+/// A verified TUN-routed HTTP response whose TCP stream remains open while socket marks are inspected.
+#[cfg(target_os = "linux")]
+pub struct TunTrafficProbe {
+    pub observation: ProxyTrafficObservation,
+    _stream: TcpStream,
+}
+
 /// Send a direct application HTTP request through the host's unmarked TUN route.
 #[cfg(target_os = "linux")]
 pub fn probe_tun_routed_http_traffic(
@@ -317,16 +324,18 @@ pub fn probe_tun_routed_http_traffic(
     generation: u64,
     timeout: Duration,
     maximum_response_bytes: usize,
-) -> Result<ProxyTrafficObservation> {
-    use std::{io::{Read, Write}, net::TcpStream, time::Instant};
+ ) -> Result<TunTrafficProbe> {
+    use std::{io::Write, net::TcpStream, time::Instant};
 
     target.validate()?;
     ensure!(!activation_id.is_empty() && generation > 0,
         "TUN HTTP probe activation identity is invalid");
     ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(30),
         "TUN HTTP probe timeout must be between zero and thirty seconds");
-    ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
-        "TUN HTTP response bound must be within one MiB");
+    ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 16 * 1024,
+        "TUN HTTP response-header bound must be within sixteen KiB");
+    ensure!(target.expected_body_marker.is_empty(),
+        "persistent TUN readiness probes currently verify the HTTP status line and headers only");
     ensure!(process.verify()?, "managed core identity is not live before TUN traffic probe");
     let started = Instant::now();
     let deadline = started + timeout;
@@ -345,43 +354,30 @@ pub fn probe_tun_routed_http_traffic(
         format!("{}:{}", target.host_header, target.destination.port())
     };
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept: */*\r\n\r\n",
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: keep-alive\r\nAccept: */*\r\n\r\n",
         target.path, authority
     );
     stream.write_all(request.as_bytes())
         .context("cannot send HTTP request through the host TUN route")?;
-    let mut response = Vec::new();
-    let mut chunk = [0u8; 4096];
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        ensure!(!remaining.is_zero(), "TUN HTTP probe exceeded its aggregate deadline");
-        stream.set_read_timeout(Some(remaining))?;
-        let count = stream.read(&mut chunk)
-            .context("cannot read HTTP response from the TUN-routed application flow")?;
-        if count == 0 { break; }
-        ensure!(response.len().saturating_add(count) <= maximum_response_bytes,
-            "TUN HTTP response exceeded its configured bound");
-        response.try_reserve(count).context("cannot reserve bounded TUN HTTP response")?;
-        response.extend_from_slice(&chunk[..count]);
-    }
-    let status = parse_http_status(&response)?;
+    let response_headers = read_http_header_block(&mut stream, maximum_response_bytes, deadline)
+        .context("cannot read HTTP response headers from the TUN-routed application flow")?;
+    let status = parse_http_status(&response_headers)?;
     ensure!(status == target.expected_status,
         "TUN-routed HTTP probe returned an unexpected status");
-    let body = http_response_body(&response)?;
-    ensure!(target.expected_body_marker.is_empty()
-        || contains_bytes(body, &target.expected_body_marker),
-        "TUN-routed HTTP response did not contain its expected body marker");
     ensure!(Instant::now() <= deadline, "TUN HTTP probe exceeded its aggregate deadline");
     ensure!(process.verify()?, "managed core identity changed during TUN traffic probe");
-    Ok(ProxyTrafficObservation {
-        activation_id: activation_id.to_owned(),
-        generation,
-        process: process.clone(),
-        destination: target.destination,
-        completed: true,
-        elapsed: started.elapsed(),
-        response_bytes: response.len(),
-        expected_response_verified: true,
+    Ok(TunTrafficProbe {
+        observation: ProxyTrafficObservation {
+            activation_id: activation_id.to_owned(),
+            generation,
+            process: process.clone(),
+            destination: target.destination,
+            completed: true,
+            elapsed: started.elapsed(),
+            response_bytes: response_headers.len(),
+            expected_response_verified: true,
+        },
+        _stream: stream,
     })
 }
 
@@ -395,6 +391,28 @@ pub fn probe_tun_routed_http_traffic(
     _maximum_response_bytes: usize,
 ) -> Result<ProxyTrafficObservation> {
     anyhow::bail!("direct TUN-routed HTTP probing is supported only on Linux");
+}
+
+#[cfg(target_os = "linux")]
+fn read_http_header_block(
+    stream: &mut TcpStream,
+    maximum: usize,
+    deadline: std::time::Instant,
+) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut headers = Vec::new();
+    let mut byte = [0u8; 1];
+    while headers.len() < maximum {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "HTTP response headers exceeded the TUN probe deadline");
+        stream.set_read_timeout(Some(remaining))?;
+        stream.read_exact(&mut byte).context("HTTP response ended before its header terminator")?;
+        headers.push(byte[0]);
+        if headers.ends_with(b"\r\n\r\n") {
+            return Ok(headers);
+        }
+    }
+    anyhow::bail!("HTTP response headers exceeded their configured bound")
 }
 
 #[cfg(target_os = "linux")]
