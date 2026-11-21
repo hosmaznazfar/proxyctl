@@ -5,7 +5,12 @@
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
-use std::{path::Path, process::Child, time::Duration};
+use std::{io::Write, path::Path, process::Child, time::Duration};
+
+use crate::{
+    cores::{CoreId, adapters::{adapter, CoreAdapter, TunAttachmentMode, TunOutboundMark}},
+    domain::ProxyNode,
+};
 
 use super::{
     managed_activation::{self, ManagedActivation},
@@ -87,6 +92,48 @@ impl<'a> ActivationOrchestrator<'a> {
             request.bypass_priority, request.proxy_priority,
             request.core_mark, request.core_mark_mask, process,
         ).context("unified TUN activation failed")
+    }
+
+    /// Generate, validate, and launch Xray from the selected Proxyctl node using the
+    /// broker-owned descriptor path. The temporary config is private (0600) and is kept
+    /// alive through startup/readiness; no caller-supplied config can silently omit the TUN
+    /// inbound or outbound socket mark.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate_xray_node_with_readiness<F>(
+        &self,
+        request: ActivationRequest,
+        node: &ProxyNode,
+        listen_port: u16,
+        executable: &Path,
+        attachment_timeout: Duration,
+        readiness: F,
+    ) -> Result<XrayActivation>
+    where
+        F: FnOnce(&ProcessIdentity, &ActivationToken) -> Result<()>,
+    {
+        request.validate().context("invalid Xray TUN activation request")?;
+        ensure!(request.interface_name == "tun-proxyctl",
+            "Xray adapter currently binds its external TUN descriptor to tun-proxyctl");
+        let core = adapter(CoreId::Xray);
+        ensure!(core.tun_attachment_mode() == TunAttachmentMode::ExternalDescriptorEnvironment {
+            variable: "XRAY_TUN_FD"
+        }, "Xray adapter does not expose the verified Linux descriptor environment contract");
+        let mark = TunOutboundMark::new(request.core_mark, request.core_mark_mask)
+            .context("invalid Xray proxy-outbound socket mark")?;
+        let generated = core.generate_tun_activation_config(node, listen_port, mark)
+            .context("cannot generate the native Xray TUN activation configuration")?;
+        let mut config = tempfile::Builder::new()
+            .prefix("proxyctl-xray-tun-")
+            .tempfile()
+            .context("cannot create a private temporary Xray TUN configuration")?;
+        config.write_all(&generated.content)
+            .context("cannot write the generated Xray TUN configuration")?;
+        config.flush().context("cannot flush the generated Xray TUN configuration")?;
+        core.validate_config(executable, config.path())
+            .context("Xray rejected the generated TUN configuration before activation")?;
+        self.activate_xray_with_readiness(
+            request, executable, config.path(), attachment_timeout, readiness,
+        )
     }
 
     /// Prepare broker-owned TUN resources, launch Xray with the retained descriptor, and
