@@ -2,7 +2,7 @@
 //!
 //! The service manager grants only CAP_NET_ADMIN to this process. It receives one
 //! generation-scoped TUN descriptor from the unprivileged controller, validates the
-//! interface identity, and execs the managed Xray binary without forking or reopening TUN.
+//! interface identity, starts the managed Xray child, then drops its own capabilities.
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
@@ -87,6 +87,8 @@ fn run() -> Result<()> {
     // not this shim, so the returned identity remains valid after the handoff. Any failure
     // before the identity receipt is delivered must terminate and reap this exact child.
     let startup = (|| -> Result<()> {
+        drop_launcher_capabilities()
+            .context("cannot drop the core launch shim's capabilities after Xray exec")?;
         let identity = proxyctl::tun::process::ProcessIdentity::capture(child.id())
             .context("cannot capture the spawned Xray process identity")?;
         ensure!(identity.executable == fs::canonicalize(&executable)?,
@@ -113,6 +115,42 @@ fn send_process_identity(stream: &mut UnixStream, identity: &proxyctl::tun::proc
         .context("cannot write Xray process identity frame length")?;
     stream.write_all(&payload).context("cannot write Xray process identity frame")?;
     stream.flush().context("cannot flush Xray process identity frame")
+}
+
+fn drop_launcher_capabilities() -> Result<()> {
+    #[repr(C)]
+    struct CapHeader {
+        version: u32,
+        pid: i32,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CapData {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+
+    // Linux capability ABI v3. The Xray child inherited its ambient CAP_NET_ADMIN at
+    // exec; the long-lived descriptor handoff shim no longer needs any capability.
+    let ambient = unsafe {
+        libc::prctl(libc::PR_CAP_AMBIENT, libc::PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0)
+    };
+    ensure!(ambient == 0, "cannot clear launcher ambient capabilities");
+    let header = CapHeader { version: 0x2008_0522, pid: 0 };
+    let data = [CapData { effective: 0, permitted: 0, inheritable: 0 }; 2];
+    let result = unsafe {
+        libc::syscall(libc::SYS_capset, &header as *const CapHeader, data.as_ptr())
+    };
+    ensure!(result == 0, "cannot drop launcher effective/permitted capabilities");
+    let status = fs::read_to_string("/proc/self/status")?;
+    for field in ["CapEff:", "CapPrm:", "CapInh:", "CapAmb:"] {
+        let value = status.lines().find_map(|line| line.strip_prefix(field))
+            .context("capability status is incomplete after dropping launcher privileges")?;
+        ensure!(u64::from_str_radix(value.trim(), 16)? == 0,
+            "core launcher retained a capability after dropping its privilege set");
+    }
+    Ok(())
 }
 
 fn verify_capability_boundary() -> Result<()> {
