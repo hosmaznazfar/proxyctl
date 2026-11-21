@@ -45,6 +45,7 @@ pub fn send_descriptor(stream: &UnixStream, descriptor: BorrowedFd<'_>) -> Resul
 /// Receive one descriptor and atomically set close-on-exec.
 pub fn receive_descriptor(stream: &UnixStream) -> Result<OwnedFd> {
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
     let mut marker = 0u8;
     let mut iov = libc::iovec { iov_base: (&mut marker as *mut u8).cast(), iov_len: 1 };
     let bytes = unsafe { libc::CMSG_SPACE(mem::size_of::<libc::c_int>() as u32) } as usize;
@@ -56,7 +57,10 @@ pub fn receive_descriptor(stream: &UnixStream) -> Result<OwnedFd> {
         let result = unsafe { libc::recvmsg(stream.as_raw_fd(), &mut message, libc::MSG_CMSG_CLOEXEC) };
         if result >= 0 { break result; }
         let error = std::io::Error::last_os_error();
-        if error.kind() == std::io::ErrorKind::Interrupted { continue; }
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            ensure!(std::time::Instant::now() < deadline, "SCM_RIGHTS receive exceeded its deadline");
+            continue;
+        }
         return Err(error).context("SCM_RIGHTS recvmsg failed");
     };
     ensure!(received == 1, "SCM_RIGHTS peer closed before transferring its marker byte");
