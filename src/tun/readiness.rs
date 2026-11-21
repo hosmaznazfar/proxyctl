@@ -251,8 +251,8 @@ impl HttpProbeTarget {
         ensure!(self.path.starts_with('/') && self.path.len() <= 2048
             && !self.path.bytes().any(|byte| byte.is_ascii_control() || byte == b' '),
             "HTTP probe path must be an absolute-path without control characters");
-        ensure!((200..=599).contains(&self.expected_status),
-            "HTTP probe expected status must be a final 2xx–5xx response");
+        ensure!((200..=299).contains(&self.expected_status),
+            "HTTP probe expected status must be a successful 2xx response");
         Ok(())
     }
 }
