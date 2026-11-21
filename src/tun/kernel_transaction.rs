@@ -47,7 +47,12 @@ impl KernelTransaction {
             uid: self.owner_uid,
             gid: self.owner_gid,
         }];
-        steps.extend(self.policy.routes.iter().cloned().map(ApplyStep::AddRoute));
+        let mut routes = self.policy.routes.clone();
+        routes.sort_by_key(|route| match route.family {
+            super::route_policy::AddressFamily::Ipv4 => 0u8,
+            super::route_policy::AddressFamily::Ipv6 => 1u8,
+        });
+        steps.extend(routes.into_iter().map(ApplyStep::AddRoute));
         steps.extend(self.policy.rules.iter().cloned().map(ApplyStep::AddRule));
         Ok(steps)
     }
