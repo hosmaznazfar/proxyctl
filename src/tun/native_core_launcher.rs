@@ -159,14 +159,7 @@ pub fn spawn_native_core_service(
             INSPECT_TIMEOUT,
             true,
         )?;
-        if state.success
-            && std::str::from_utf8(&state.stdout)
-                .unwrap_or_default()
-                .lines()
-                .map(str::trim)
-                .collect::<Vec<_>>()
-                == ["active", "running"]
-        {
+        if is_active_running_state(state.success, &state.stdout) {
             let output = run_bounded(
                 SUDO,
                 &[
@@ -204,6 +197,16 @@ pub fn spawn_native_core_service(
         );
         std::thread::sleep(Duration::from_millis(25));
     }
+}
+
+fn is_active_running_state(success: bool, output: &[u8]) -> bool {
+    success
+        && std::str::from_utf8(output)
+            .unwrap_or_default()
+            .lines()
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            == ["active", "running"]
 }
 
 pub fn core_service_unit(activation_id: &str, generation: u64) -> Result<String> {
@@ -317,6 +320,16 @@ fn run_command(mut command: Command, timeout: Duration, capture: bool) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn service_state_requires_exact_active_and_running_values() {
+        assert!(is_active_running_state(true, b"active\\nrunning\\n"));
+        assert!(!is_active_running_state(true, b"activating\\nstart\\n"));
+        assert!(!is_active_running_state(true, b"active\\nexited\\n"));
+        assert!(!is_active_running_state(false, b"active\\nrunning\\n"));
+        assert!(!is_active_running_state(true, b"active\\nrunning\\nextra\\n"));
+        assert!(!is_active_running_state(true, b"\\xff"));
+    }
 
     #[test]
     fn native_command_arguments_are_core_specific_and_absolute() {
