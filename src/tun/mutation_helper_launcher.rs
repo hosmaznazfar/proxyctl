@@ -127,6 +127,28 @@ impl MutationHelper {
         self.call(&MutationRequest::Activate { version: 1, activation_id, generation, interface_name, owner_uid, owner_gid, table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask })
     }
 
+    /// Create policy and a persistent named TUN device for a native core.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate_native(
+        &self,
+        activation_id: String,
+        generation: u64,
+        interface_name: String,
+        owner_uid: u32,
+        owner_gid: u32,
+        table_id: u32,
+        bypass_priority: u32,
+        proxy_priority: u32,
+        core_mark: u32,
+        core_mark_mask: u32,
+    ) -> Result<MutationResponse> {
+        self.call(&MutationRequest::ActivateNative {
+            version: 1, activation_id, generation, interface_name,
+            owner_uid, owner_gid, table_id, bypass_priority, proxy_priority,
+            core_mark, core_mark_mask,
+        })
+    }
+
     /// Export the retained TUN descriptor for one exact activation generation.
     pub fn attach_descriptor(&self, activation_id: &str, generation: u64) -> Result<std::os::fd::OwnedFd> {
         mutation_broker::attach_descriptor(&self.socket, activation_id, generation)
