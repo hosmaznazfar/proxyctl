@@ -229,7 +229,7 @@ pub struct ProxyTrafficObservation {
 
 /// An explicit, numeric-address HTTP target for a bounded probe through Xray's local HTTP proxy.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HttpConnectProbeTarget {
+pub struct HttpProbeTarget {
     pub destination: SocketAddr,
     pub host_header: String,
     pub path: String,
@@ -238,7 +238,7 @@ pub struct HttpConnectProbeTarget {
     pub expected_body_marker: Vec<u8>,
 }
 
-impl HttpConnectProbeTarget {
+impl HttpProbeTarget {
     pub fn validate(&self) -> Result<()> {
         ensure!(!self.destination.ip().is_unspecified()
             && !self.destination.ip().is_multicast()
@@ -272,7 +272,7 @@ impl HttpConnectProbeTarget {
 pub fn probe_http_connect_traffic(
     process: &super::process::ProcessIdentity,
     listener: SocketAddr,
-    target: &HttpConnectProbeTarget,
+    target: &HttpProbeTarget,
     activation_id: &str,
     generation: u64,
     timeout: Duration,
@@ -360,7 +360,7 @@ pub fn probe_http_connect_traffic(
 pub fn probe_http_connect_traffic(
     _process: &(),
     _listener: SocketAddr,
-    _target: &HttpConnectProbeTarget,
+    _target: &HttpProbeTarget,
     _activation_id: &str,
     _generation: u64,
     _timeout: Duration,
@@ -461,7 +461,7 @@ pub fn probe_unmarked_route_to_tun(
 #[cfg(target_os = "linux")]
 pub fn probe_tun_routed_http_traffic(
     process: &super::process::ProcessIdentity,
-    target: &HttpConnectProbeTarget,
+    target: &HttpProbeTarget,
     activation_id: &str,
     generation: u64,
     timeout: Duration,
@@ -535,7 +535,7 @@ pub fn probe_tun_routed_http_traffic(
 #[cfg(not(target_os = "linux"))]
 pub fn probe_tun_routed_http_traffic(
     _process: &(),
-    _target: &HttpConnectProbeTarget,
+    _target: &HttpProbeTarget,
     _activation_id: &str,
     _generation: u64,
     _timeout: Duration,
@@ -1298,8 +1298,8 @@ pub fn probe_socks5_connect_detailed(_process: &(), _listener: SocketAddr, _dest
 mod http_connect_probe_tests {
     use super::*;
 
-    fn target() -> HttpConnectProbeTarget {
-        HttpConnectProbeTarget {
+    fn target() -> HttpProbeTarget {
+        HttpProbeTarget {
             destination: "192.0.2.80:80".parse().unwrap(),
             host_header: "probe.example".into(),
             path: "/health".into(),
