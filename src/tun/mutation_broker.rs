@@ -653,6 +653,12 @@ mod tests {
     }
 
     #[test]
+    fn rejects_response_message_above_envelope_bound() {
+        let response = MutationResponse { version: VERSION, success: false, message: "x".repeat(8 * 1024 + 1) };
+        assert!(validate_response_envelope(&response).is_err());
+    }
+
+    #[test]
     fn accepts_bounded_failure_response_envelope() {
         let response = MutationResponse { version: VERSION, success: false, message: "denied".into() };
         assert!(validate_response_envelope(&response).is_ok());
