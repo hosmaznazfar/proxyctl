@@ -208,7 +208,7 @@ enum Command {
         #[arg(long, default_value = "http://connectivitycheck.gstatic.com/generate_204")]
         tun_probe_url: String,
         /// Expected final HTTP status from the TUN readiness endpoint.
-        #[arg(long, default_value_t = 204, value_parser = clap::value_parser!(u16).range(200..=599))]
+        #[arg(long, default_value_t = 204, value_parser = clap::value_parser!(u16).range(200..=299))]
         tun_probe_status: u16,
     },
     /// Show or change persistent listener settings.
