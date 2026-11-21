@@ -227,7 +227,6 @@ impl ProcessHandle {
             }
             return Err(error).context("pidfd_send_signal failed");
         }
-        Ok(())
     }
 }
 
