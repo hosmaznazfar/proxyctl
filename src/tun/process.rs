@@ -26,6 +26,10 @@ impl ProcessIdentity {
         let start_ticks = read_start_ticks(pid)?;
         let executable = fs::canonicalize(format!("/proc/{pid}/exe"))
             .with_context(|| format!("cannot resolve executable for process {pid}"))?;
+        ensure!(
+            read_start_ticks(pid)? == start_ticks,
+            "process identity changed while it was being captured"
+        );
         let identity = Self {
             pid,
             start_ticks,
