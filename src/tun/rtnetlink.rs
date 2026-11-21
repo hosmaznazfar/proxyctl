@@ -79,6 +79,7 @@ impl RouteNetlink {
     /// Callers must not expose arbitrary caller-provided bytes across the privilege boundary.
     pub(crate) fn transact(&mut self, request: &[u8], timeout: Duration) -> Result<Vec<Vec<u8>>> {
         validate_request(request)?;
+        ensure!(!timeout.is_zero(), "NETLINK_ROUTE timeout must be positive");
         self.sequence = self
             .sequence
             .checked_add(1)
