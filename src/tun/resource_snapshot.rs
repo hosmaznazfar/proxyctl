@@ -297,7 +297,7 @@ pub fn observe_journal_resources(
             let name = operation.resource_key.strip_prefix("interface:")
                 .context("invalid persistent TUN journal interface key")?;
             if let Ok(alias) = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias")) {
-                let alias = alias.trim_end_matches(['\\r', '\\n']).to_owned();
+                let alias = alias.trim_end_matches(['\r', '\n']).to_owned();
                 if !alias.is_empty() { aliases.insert(name.to_owned(), alias); }
             }
         }
