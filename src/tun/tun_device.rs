@@ -3,7 +3,10 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs::OpenOptions,
-    os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd},
+    os::{
+        fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd},
+        unix::fs::{FileTypeExt, OpenOptionsExt},
+    },
 };
 const TUNSETIFF: libc::c_ulong = 0x4004_54ca;
 const TUNSETOWNER: libc::c_ulong = 0x4004_54cc;
@@ -35,9 +38,19 @@ impl TunDevice {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
             .open("/dev/net/tun")
-            .context("open /dev/net/tun")?;
+            .context("securely open /dev/net/tun")?;
+        ensure!(
+            file.metadata()?.file_type().is_char_device(),
+            "/dev/net/tun is not a character device"
+        );
         let fd: OwnedFd = file.into();
+        // SAFETY: fcntl reads descriptor flags for the live descriptor owned by fd.
+        ensure!(
+            unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC != 0,
+            "TUN descriptor is not close-on-exec"
+        );
         let mut req = IfReq {
             name: [0; IFNAMSIZ],
             flags: (IFF_TUN | IFF_NO_PI | IFF_TUN_EXCL) as libc::c_short,
