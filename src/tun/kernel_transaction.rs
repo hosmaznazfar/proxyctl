@@ -518,6 +518,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_whitespace_only_backend_fingerprints() {
+        assert!(!valid_backend_fingerprint(""));
+        assert!(!valid_backend_fingerprint("   "));
+        assert!(!valid_backend_fingerprint("\\n\\t"));
+        assert!(valid_backend_fingerprint("fingerprint"));
+    }
+
+    #[test]
     fn transaction_activation_id_requires_canonical_lowercase_hex() {
         let mut transaction = transaction();
         transaction.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
