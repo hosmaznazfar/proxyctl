@@ -248,6 +248,10 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
         }
         let error = std::io::Error::last_os_error();
         if error.kind() == std::io::ErrorKind::Interrupted {
+            ensure!(
+                Instant::now() < deadline,
+                "timed out waiting for another Proxyctl TUN lifecycle operation"
+            );
             continue;
         }
         if !matches!(error.raw_os_error(), Some(libc::EWOULDBLOCK)) {
