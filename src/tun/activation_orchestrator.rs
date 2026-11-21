@@ -11,7 +11,7 @@ use crate::{
     cores::{
         CoreId,
         adapters::{
-            CoreAdapter, TunAttachmentMode, TunOutboundMark, XRAY_TUN_FD_ENV,
+            TunAttachmentMode, TunOutboundMark, XRAY_TUN_FD_ENV,
             XRAY_TUN_INTERFACE_NAME, adapter,
         },
     },
@@ -459,7 +459,7 @@ impl<'a> ActivationOrchestrator<'a> {
             return Ok(());
         }
         let store = super::manifest_store::ManifestStore::open(
-            self.coordinator.runtime_directory().to_path_buf(),
+            self.coordinator.runtime_directory()?,
         )?;
         let message = match &recovery {
             Ok(response) => response.message.clone(),
@@ -509,7 +509,7 @@ impl<'a> ActivationOrchestrator<'a> {
             .context("cannot resolve private TUN runtime directory")?;
         let activation_request = request.clone();
         let target = traffic_target.clone();
-        self.activate_xray_node_with_readiness(
+        self.activate_core_node_with_readiness(
             CoreId::Xray,
             request,
             node,
@@ -989,9 +989,9 @@ mod request_tests {
             interface_name: "tun-proxyctl".into(),
             owner_uid: 1000,
             owner_gid: 1000,
-            table_id: super::route_policy::RT_TABLE_MIN_PROXYCTL,
-            bypass_priority: super::route_policy::RPDB_PRIORITY_MIN_PROXYCTL,
-            proxy_priority: super::route_policy::RPDB_PRIORITY_MIN_PROXYCTL + 1,
+            table_id: crate::tun::route_policy::RT_TABLE_MIN_PROXYCTL,
+            bypass_priority: crate::tun::route_policy::RPDB_PRIORITY_MIN_PROXYCTL,
+            proxy_priority: crate::tun::route_policy::RPDB_PRIORITY_MIN_PROXYCTL + 1,
             core_mark: 0x42,
             core_mark_mask: 0xff,
         }
