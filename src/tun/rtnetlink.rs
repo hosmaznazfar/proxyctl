@@ -535,6 +535,11 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
         let kind = u16::from_ne_bytes(header[4..6].try_into()?);
         let flags = u16::from_ne_bytes(header[6..8].try_into()?);
         let sequence = u32::from_ne_bytes(header[8..12].try_into()?);
+        let port_id = u32::from_ne_bytes(header[12..16].try_into()?);
+        ensure!(
+            port_id == 0,
+            "NETLINK_ROUTE response message has a non-kernel port identity"
+        );
         ensure!(
             length >= NETLINK_HEADER_LEN && length <= bytes.len() - offset,
             "invalid netlink message length"
