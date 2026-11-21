@@ -179,6 +179,9 @@ impl ManifestStore {
             Err(error) => return Err(error).context("cannot inspect existing TUN manifest"),
         }
 
+        // RouteManifest::encode enforces its own aggregate resource bound before the
+        // enclosing snapshot serializer allocates its output buffer.
+        snapshot.manifest.encode()?;
         let bytes = serde_json::to_vec_pretty(snapshot)?;
         ensure!(
             bytes.len() as u64 <= MAX_MANIFEST_BYTES,
