@@ -433,7 +433,14 @@ pub fn probe_unmarked_route_to_tun(
         .context("kernel returned invalid JSON for the unmarked route lookup")?;
     let records = value.as_array().context("unmarked route lookup did not return an array")?;
     ensure!(records.len() == 1, "unmarked route lookup is missing or ambiguous");
-    let record = &records[0];
+    validate_unmarked_route_record(&records[0], plan)
+}
+
+#[cfg(target_os = "linux")]
+fn validate_unmarked_route_record(
+    record: &serde_json::Value,
+    plan: &super::route_policy::RoutingPolicyPlan,
+) -> Result<()> {
     ensure!(record.get("dev").and_then(serde_json::Value::as_str)
         == Some(plan.interface_name.as_str()),
         "kernel would not route the unmarked application flow through the owned TUN interface");
@@ -1296,6 +1303,24 @@ pub fn probe_socks5_connect_detailed(_process: &(), _listener: SocketAddr, _dest
 
 #[cfg(all(test, target_os = "linux"))]
 mod http_connect_probe_tests {
+    #[test]
+    fn validates_the_exact_unmarked_kernel_route_result() {
+        let plan = super::super::route_policy::RoutingPolicyPlan::new(
+            10001, 10002, 10003, 0x4123_4567, 0x7fff_ffff, "tun-proxyctl", 42,
+        );
+        let accepted: serde_json::Value = serde_json::json!({
+            "dev": "tun-proxyctl",
+            "table": 10001
+        });
+        assert!(super::validate_unmarked_route_record(&accepted, &plan).is_ok());
+        let wrong_device = serde_json::json!({"dev":"eth0","table":10001});
+        assert!(super::validate_unmarked_route_record(&wrong_device, &plan).is_err());
+        let wrong_table = serde_json::json!({"dev":"tun-proxyctl","table":254});
+        assert!(super::validate_unmarked_route_record(&wrong_table, &plan).is_err());
+        let incomplete = serde_json::json!({"dev":"tun-proxyctl"});
+        assert!(super::validate_unmarked_route_record(&incomplete, &plan).is_err());
+    }
+
     use super::*;
 
     fn target() -> HttpProbeTarget {
