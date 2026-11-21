@@ -135,10 +135,22 @@ impl MutationResponse {
         }
     }
     fn failure(error: impl std::fmt::Display) -> Self {
+        let mut message = error.to_string();
+        // Keep error envelopes bounded even when an error chain contains attacker-controlled
+        // strings (interface names, paths, or protocol input).
+        const MAX_MESSAGE_BYTES: usize = 8 * 1024;
+        if message.len() > MAX_MESSAGE_BYTES {
+            let mut boundary = MAX_MESSAGE_BYTES;
+            while !message.is_char_boundary(boundary) {
+                boundary -= 1;
+            }
+            message.truncate(boundary);
+            message.push_str("…");
+        }
         Self {
             version: VERSION,
             success: false,
-            message: error.to_string(),
+            message,
         }
     }
 }
