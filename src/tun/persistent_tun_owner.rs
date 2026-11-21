@@ -310,3 +310,30 @@ mod native_owner_tests {
         assert!(owner.identity("12345678-1234-4234-8234-123456789abc", 0).is_err());
     }
 }
+
+#[cfg(test)]
+mod native_owner_capacity_tests {
+    use super::*;
+
+    #[test]
+    fn native_registry_rejects_duplicate_interface_name_without_kernel_access() {
+        let mut owner = NativePersistentTunOwner::new();
+        owner.devices.insert(
+            OwnerKey { activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 1 },
+            KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 12, is_tun: true },
+        );
+        assert!(owner.create("12345678-1234-4234-8234-123456789def", 2, "tun-proxyctl", 1000, 1000).is_err());
+        assert_eq!(owner.len(), 1);
+    }
+
+    #[test]
+    fn native_registry_rejects_duplicate_generation_without_kernel_access() {
+        let mut owner = NativePersistentTunOwner::new();
+        owner.devices.insert(
+            OwnerKey { activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 1 },
+            KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 12, is_tun: true },
+        );
+        assert!(owner.create("12345678-1234-4234-8234-123456789abc", 1, "tun-other", 1000, 1000).is_err());
+        assert_eq!(owner.len(), 1);
+    }
+}
