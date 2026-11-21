@@ -616,6 +616,19 @@ mod tests {
     }
 
     #[test]
+    fn refuses_runtime_directory_without_owner_write_access() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o500))
+            .unwrap();
+        let socket = directory.path().join("broker.sock");
+        // Bind before restricting permissions so the test remains runnable as an unprivileged user.
+        let listener = UnixListener::bind(&socket).unwrap();
+        assert!(serve(&listener, directory.path()).is_err());
+    }
+
+    #[test]
     fn refuses_group_accessible_runtime_directory_before_accepting_clients() {
         use std::os::unix::fs::PermissionsExt;
 
