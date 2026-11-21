@@ -1,8 +1,8 @@
-//! Xray Linux launcher using the broker-owned TUN descriptor.
+//! Xray Linux launcher using a broker-owned TUN descriptor and a capability-confined systemd unit.
 //!
-//! This is a core-specific launch primitive. It does not activate routes, commit a lifecycle
-//! manifest, or prove traffic readiness; the caller must compose those steps and keep public
-//! activation gated until the full lifecycle is connected.
+//! The transient service receives only CAP_NET_ADMIN, accepts one authenticated descriptor
+//! handoff, and keeps the Xray child in its control group. This module does not activate routes,
+//! commit a lifecycle manifest, or prove traffic readiness.
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
@@ -11,7 +11,6 @@ use std::{
     io::Read,
     os::unix::{fs::{MetadataExt, PermissionsExt}, net::UnixListener},
     os::fd::AsFd,
-    os::unix::process::CommandExt,
     path::Path,
     process::{Child, Command, Stdio},
     time::Duration,
@@ -20,15 +19,29 @@ use std::{
 use super::descriptor_transfer;
 
 use crate::{
-    cores::adapters::xray_tun_fd::XrayTunDescriptor,
     tun::{mutation_helper_launcher::MutationHelper, process::{ProcessHandle, ProcessIdentity}},
 };
 
-/// Spawn Xray with the descriptor retained by the exact broker activation generation.
+/// Start Xray in a capability-confined transient service and pass its exact generation-bound TUN fd.
 ///
-/// Xray's documented Linux `XRAY_TUN_FD` input causes it to duplicate and consume this
-/// externally supplied TUN descriptor. The broker's original descriptor remains owned by
-/// the helper; this process receives a duplicate with close-on-exec cleared only in its child.
+/// The service shim duplicates the descriptor for Xray and returns the identity of the actual
+/// Xray child, not the shim or the systemd-run client.
+struct PrivateSocketCleanup(PathBuf);
+
+impl Drop for PrivateSocketCleanup {
+    fn drop(&mut self) {
+        use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+        if let Ok(metadata) = fs::symlink_metadata(&self.0)
+            && metadata.file_type().is_socket()
+            && metadata.uid() == unsafe { libc::geteuid() }
+            && metadata.permissions().mode() & 0o777 == 0o600
+            && metadata.nlink() == 1
+        {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+}
+
 pub fn spawn_xray_from_broker(
     helper: &MutationHelper,
     activation_id: &str,
@@ -83,6 +96,7 @@ pub fn spawn_xray_from_broker(
         "Xray descriptor socket path already exists; refusing to replace it");
     let listener = UnixListener::bind(&socket_path)
         .context("cannot bind private Xray descriptor socket")?;
+    let _socket_cleanup = PrivateSocketCleanup(socket_path.clone());
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .context("cannot restrict Xray descriptor socket permissions")?;
     let socket_metadata = fs::symlink_metadata(&socket_path)?;
@@ -165,25 +179,24 @@ pub fn spawn_xray_from_broker(
             "Xray core launcher peer credentials do not match the activation user");
         let launcher_identity = ProcessIdentity::capture(peer.pid)
             .context("cannot capture Xray core launcher process identity")?;
-        ensure!(launcher_identity.executable == fs::canonicalize(LAUNCHER)?,
-            "descriptor socket peer is not the installed Xray core launcher");
+        ensure!(launcher_identity.executable == fs::canonicalize(LAUNCHER)?
+            && launcher_identity.verify()?,
+            "descriptor socket peer is not the live installed Xray core launcher");
 
         let descriptor = helper.attach_descriptor(activation_id, generation)
             .context("cannot obtain the broker-owned TUN descriptor for Xray")?;
         descriptor_transfer::send_descriptor(&stream, descriptor.as_fd())
             .context("cannot transfer the broker-owned TUN descriptor to Xray")?;
-        receive_process_identity(&mut stream)
-            .context("Xray core launcher did not confirm the exec'd core identity")
+        let identity = receive_process_identity(&mut stream)
+            .context("Xray core launcher did not confirm the exec'd core identity")?;
+        ensure!(identity.executable == executable,
+            "Xray core launcher reported an unexpected executable identity");
+        ensure!(identity.verify()?, "Xray process identity is not live after descriptor handoff");
+        Ok(identity)
     })();
 
-    let _ = fs::remove_file(&socket_path);
     match handoff_result {
-        Ok(identity) => {
-            ensure!(identity.executable == executable,
-                "Xray core launcher reported an unexpected executable identity");
-            ensure!(identity.verify()?, "Xray process identity is not live after descriptor handoff");
-            Ok((service_command, identity))
-        }
+        Ok(identity) => Ok((service_command, identity)),
         Err(error) => {
             let _ = Command::new(SUDO).args(["-n", "--", SYSTEMCTL, "stop", &unit]).status();
             let _ = service_command.wait();
