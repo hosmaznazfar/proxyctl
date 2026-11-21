@@ -56,9 +56,14 @@ const IFLA_IFALIAS: u16 = 20;
 
 fn validate_interface_alias(index: u32, alias: &str) -> Result<()> {
     ensure!(index > 0, "interface alias requires a non-zero ifindex");
-    ensure!(!alias.is_empty() && alias.len() <= 240
-        && !alias.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
-        "interface alias is empty, oversized, or contains control characters");
+    ensure!(
+        !alias.is_empty()
+            && alias.len() <= 240
+            && !alias
+                .bytes()
+                .any(|byte| byte == 0 || byte.is_ascii_control()),
+        "interface alias is empty, oversized, or contains control characters"
+    );
     Ok(())
 }
 
