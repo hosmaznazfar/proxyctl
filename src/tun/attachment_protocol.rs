@@ -11,7 +11,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     os::{
-        fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
+        fd::{AsRawFd, BorrowedFd, OwnedFd},
         unix::net::UnixStream,
     },
     time::Duration,
