@@ -130,33 +130,7 @@ impl RouteNetlink {
         );
         let mut messages = Vec::new();
         loop {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            ensure!(!remaining.is_zero(), "NETLINK_ROUTE response timed out");
-            let millis = remaining.as_millis().clamp(1, i32::MAX as u128) as i32;
-            let mut pollfd = libc::pollfd {
-                fd: self.fd.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            };
-            // SAFETY: pollfd points to one initialized poll descriptor.
-            let ready = unsafe { libc::poll(&mut pollfd, 1, millis) };
-            if ready < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            ensure!(
-                ready >= 0,
-                "NETLINK_ROUTE poll failed: {}",
-                io::Error::last_os_error()
-            );
-            ensure!(ready > 0, "NETLINK_ROUTE response timed out");
-            ensure!(
-                pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0,
-                "NETLINK_ROUTE socket reported an error"
-            );
-            ensure!(
-                pollfd.revents & libc::POLLIN != 0,
-                "NETLINK_ROUTE poll returned without readable data"
-            );
+            wait_for_socket(self.fd.as_raw_fd(), libc::POLLIN, deadline)?;
 
             let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
             // SAFETY: buffer and sender storage are writable for their declared lengths.
