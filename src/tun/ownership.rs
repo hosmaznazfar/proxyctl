@@ -152,7 +152,7 @@ pub fn cleanup<B: OwnedResourceBackend>(
             None => {}
             Some(current) => {
                 ensure!(
-                    !current.is_empty()
+                    !current.trim().is_empty()
                         && current.len() <= MAX_RESOURCE_FINGERPRINT_BYTES
                         && !current.chars().any(char::is_control),
                     "backend returned an invalid live resource fingerprint"
