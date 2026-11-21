@@ -58,6 +58,7 @@ impl SystemdRecoverySupervisor {
         // SAFETY: geteuid is a read-only query of the current effective user.
         ensure!(runtime.uid() == unsafe { libc::geteuid() }, "supervisor runtime directory has a foreign owner");
         ensure!(runtime.permissions().mode() & 0o077 == 0, "supervisor runtime directory must be private");
+        ensure!(runtime.permissions().mode() & 0o700 == 0o700, "supervisor runtime directory must be owner-readable, writable, and searchable");
 
         let executable = fs::symlink_metadata(&self.executable).context("cannot inspect recovery supervisor executable")?;
         ensure!(executable.is_file() && !executable.file_type().is_symlink(), "recovery supervisor executable must be a regular non-symlink file");
