@@ -126,7 +126,10 @@ impl RouteNetlink {
             }
             let error = io::Error::last_os_error();
             if error.kind() == io::ErrorKind::Interrupted {
-                ensure!(std::time::Instant::now() < deadline, "NETLINK_ROUTE request transmission timed out");
+                ensure!(
+                    std::time::Instant::now() < deadline,
+                    "NETLINK_ROUTE request transmission timed out"
+                );
                 continue;
             }
             if error.kind() == io::ErrorKind::WouldBlock {
@@ -177,7 +180,10 @@ impl RouteNetlink {
                 }
                 return Err(error).context("NETLINK_ROUTE receive failed");
             }
-            ensure!(received >= 0, "NETLINK_ROUTE receive returned an invalid length");
+            ensure!(
+                received >= 0,
+                "NETLINK_ROUTE receive returned an invalid length"
+            );
             ensure!(
                 std::time::Instant::now() < deadline,
                 "NETLINK_ROUTE response receive timed out"
@@ -511,21 +517,35 @@ fn validate_response_budget(current: &[Vec<u8>], incoming: &[Vec<u8>]) -> Result
 fn wait_for_socket(fd: i32, events: i16, deadline: std::time::Instant) -> Result<()> {
     loop {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        ensure!(!remaining.is_zero(), "NETLINK_ROUTE socket operation timed out");
+        ensure!(
+            !remaining.is_zero(),
+            "NETLINK_ROUTE socket operation timed out"
+        );
         let millis = remaining.as_millis().clamp(1, i32::MAX as u128) as i32;
-        let mut pollfd = libc::pollfd { fd, events, revents: 0 };
+        let mut pollfd = libc::pollfd {
+            fd,
+            events,
+            revents: 0,
+        };
         // SAFETY: pollfd points to one initialized poll descriptor.
         let ready = unsafe { libc::poll(&mut pollfd, 1, millis) };
         if ready < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
             continue;
         }
-        ensure!(ready >= 0, "NETLINK_ROUTE poll failed: {}", io::Error::last_os_error());
+        ensure!(
+            ready >= 0,
+            "NETLINK_ROUTE poll failed: {}",
+            io::Error::last_os_error()
+        );
         ensure!(ready > 0, "NETLINK_ROUTE socket operation timed out");
         ensure!(
             pollfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0,
             "NETLINK_ROUTE socket reported an error"
         );
-        ensure!(pollfd.revents & events != 0, "NETLINK_ROUTE socket readiness did not match the requested operation");
+        ensure!(
+            pollfd.revents & events != 0,
+            "NETLINK_ROUTE socket readiness did not match the requested operation"
+        );
         ensure!(
             std::time::Instant::now() < deadline,
             "NETLINK_ROUTE socket operation timed out"
@@ -628,7 +648,8 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
             );
             let error =
                 i32::from_ne_bytes(message[NETLINK_HEADER_LEN..NETLINK_HEADER_LEN + 4].try_into()?);
-            let original = &message[NETLINK_HEADER_LEN + 4..NETLINK_HEADER_LEN + 4 + NETLINK_HEADER_LEN];
+            let original =
+                &message[NETLINK_HEADER_LEN + 4..NETLINK_HEADER_LEN + 4 + NETLINK_HEADER_LEN];
             ensure!(
                 u32::from_ne_bytes(original[0..4].try_into()?) as usize
                     == NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN
