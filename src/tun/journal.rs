@@ -104,6 +104,21 @@ pub fn plan_journal_recovery(
             JournalOperationState::Intent => {
                 if observed.contains_key(&operation.resource_key) && current.is_none() {
                     JournalRecoveryDecision::MarkAbsent
+                } else if operation.kind == JournalOperationKind::CreatePersistentInterface
+                    && let Some(actual) = current
+                {
+                    let expected_alias = format!("proxyctl:{}:{}", journal.activation_id, journal.generation);
+                    let identity: serde_json::Value = serde_json::from_str(&actual).unwrap_or_default();
+                    let expected_name = operation.resource_key.strip_prefix("interface:").unwrap_or_default();
+                    if identity.get("name").and_then(serde_json::Value::as_str) == Some(expected_name)
+                        && identity.get("kind").and_then(serde_json::Value::as_str) == Some("tun")
+                        && identity.get("alias").and_then(serde_json::Value::as_str) == Some(expected_alias.as_str())
+                        && identity.get("ifindex").and_then(serde_json::Value::as_u64).is_some_and(|index| index > 0)
+                    {
+                        JournalRecoveryDecision::CompareAndDelete { expected_fingerprint: actual }
+                    } else {
+                        JournalRecoveryDecision::PreserveAndReportConflict
+                    }
                 } else {
                     JournalRecoveryDecision::PreserveAndReportConflict
                 }
