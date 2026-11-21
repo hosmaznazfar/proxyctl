@@ -389,6 +389,15 @@ Quick accepts a useful partial download after one attempt. Accurate retries an i
 **TUN integration status:** The Xray path now composes broker-owned descriptor export, a capability-confined transient systemd service, the documented `XRAY_TUN_FD` consumer, kernel interface/index verification, and process-identity persistence while the manifest is still Prepared. The core launcher drops its own capabilities after spawning Xray; the Xray child retains only `CAP_NET_ADMIN` for marked outbound sockets. The public `use --tun` and `stop` paths now invoke this Xray lifecycle, including a direct unmarked HTTP flow through the TUN route, exact route lookup, interface addressing, marked outbound socket checks, and generation-bound recovery. It has not passed offline fault-injection or real Linux dataplane validation; see docs/TUN_FIRST_DRAFT_PLAN.md.
 
 
+For the Xray TUN path, build and install the complete helper bundle before using `--tun`:
+
+```bash
+cargo build --release --bin proxyctl --bin proxyctl-tun-helper --bin proxyctl-tun-core-launcher --bin proxyctl-tun-supervisor
+sudo packaging/install-tun-helper.sh
+```
+
+The installer places the privileged mutation helper, core-launch shim, and recovery supervisor in their required locations. The helper alone receives `CAP_NET_ADMIN`; the core-launch shim and supervisor have no file capabilities.
+
 **TUN handoff status:** A generation-bound, nonce-bearing descriptor offer/acknowledgement protocol remains available for adapters that can prove adoption. Xray now has a separate concrete SCM_RIGHTS-to-`XRAY_TUN_FD` launch path; the protocol itself is not treated as proof that sing-box or Mihomo adopted the broker descriptor.
 
 
