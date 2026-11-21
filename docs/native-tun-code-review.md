@@ -25,7 +25,7 @@ Applied source corrections for the reported diagnostics:
 - Corrected adapter contract test references to the parent `adapters` module.
 - Routed Xray end-to-end activation through the core-dispatch method, propagated runtime-directory errors correctly, and corrected route-policy references in request tests.
 - Added an IPv4/IPv6-aware link-local predicate for readiness target validation.
-- Avoided accessing libc's private `sockaddr_nl` padding field while retaining kernel family, PID, group, and sockaddr-length validation.
+- Preserved reserved `sockaddr_nl` padding validation through bounded ABI-byte inspection rather than accessing libc's private field; kernel family, PID, group, and sockaddr-length checks remain enforced.
 - Fixed the netlink test's overlapping mutable/immutable borrow and the descriptor-transfer test's mutable stream binding.
 - Fixed the moved-error handling in managed activation and removed unused variables/mutability.
 - Removed unreachable code after the pidfd signal retry loop and corrected the Xray socket file-type extension import and attachment-wait error handling.
