@@ -151,8 +151,18 @@ impl ProcessHandle {
             events: libc::POLLIN,
             revents: 0,
         };
-        let result = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
-        ensure!(result >= 0, "poll on process pidfd failed");
+        let result = loop {
+            let result = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
+            if result >= 0 {
+                break result;
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                descriptor.revents = 0;
+                continue;
+            }
+            return Err(error).context("poll on process pidfd failed");
+        };
         if result == 0 {
             return Ok(false);
         }
