@@ -182,6 +182,11 @@ fn validate_name(name: &str) -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn ioctl_retry_reports_invalid_descriptor_errors() {
+        assert!(ioctl_retry(-1, TUNSETIFF, 0).is_err());
+    }
+
+    #[test]
     fn rejects_descriptor_without_close_on_exec() {
         use std::os::fd::AsRawFd;
 
