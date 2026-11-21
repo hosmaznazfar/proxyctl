@@ -249,17 +249,18 @@ pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
         .lines()
         .find_map(|line| line.strip_prefix("Uid:"))
         .context("process status is missing UID credentials")?;
-    let values = uid_line
-        .split_whitespace()
-        .map(str::parse::<u32>)
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .context("process status contains invalid UID credentials")?;
+    let mut fields = uid_line.split_whitespace();
+    let real = fields.next().context("process status is missing real UID")?
+        .parse::<u32>().context("process status contains an invalid real UID")?;
+    let effective = fields.next().context("process status is missing effective UID")?
+        .parse::<u32>().context("process status contains an invalid effective UID")?;
+    let saved = fields.next().context("process status is missing saved UID")?
+        .parse::<u32>().context("process status contains an invalid saved UID")?;
+    let filesystem = fields.next().context("process status is missing filesystem UID")?
+        .parse::<u32>().context("process status contains an invalid filesystem UID")?;
+    ensure!(fields.next().is_none(), "process status has an unexpected UID field count");
     ensure!(
-        values.len() == 4,
-        "process status has an unexpected UID field count"
-    );
-    ensure!(
-        values.iter().all(|uid| *uid == values[0]),
+        real == effective && real == saved && real == filesystem,
         "process has divergent real/effective/saved/filesystem UIDs"
     );
     ensure!(
@@ -270,7 +271,7 @@ pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
         !handle.is_exited()?,
         "process exited during owner inspection"
     );
-    Ok(values[0])
+    Ok(real)
 }
 
 fn is_process_gone(error: &anyhow::Error) -> bool {
