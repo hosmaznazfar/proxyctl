@@ -528,39 +528,6 @@ pub(crate) fn verify_xray_end_to_end_readiness(
     Ok(traffic)
 }
 
-/// Run a real bounded HTTP CONNECT probe through Xray, then promote only its measured
-/// response into the complete process/route/mark/host readiness gate.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn probe_and_verify_xray_readiness(
-    process: &ProcessIdentity,
-    interface_name: &str,
-    expected: &super::readiness::ReadinessExpectation<'_>,
-    evidence: &super::readiness::ReadinessEvidence,
-    listener: std::net::SocketAddr,
-    listener_timeout: std::time::Duration,
-    plan: &super::route_policy::RoutingPolicyPlan,
-    socket_mark_response: &super::privilege_broker::SocketMarkBrokerResponse,
-    expected_peer: std::net::SocketAddr,
-    expected_transport: super::privilege_broker::BrokerSocketTransport,
-    target: &super::readiness::HttpProbeTarget,
-    activation_id: &str,
-    generation: u64,
-    probe_timeout: std::time::Duration,
-    maximum_response_bytes: usize,
-) -> Result<super::readiness::ProxyTrafficObservation> {
-    super::readiness::probe_unmarked_route_to_tun(plan, target.destination.ip())
-        .context("kernel does not route the unmarked application probe through the owned TUN table")?;
-    let observation = super::readiness::probe_tun_routed_http_traffic(
-        process, target, activation_id, generation, probe_timeout, maximum_response_bytes,
-    ).context("direct application traffic did not traverse the Xray TUN dataplane")?;
-    verify_xray_readiness(
-        process, interface_name, expected, evidence, listener, listener_timeout, plan,
-        socket_mark_response, expected_peer, expected_transport, &observation,
-        activation_id, generation, probe_timeout, maximum_response_bytes,
-    ).context("Xray full readiness verification failed")?;
-    Ok(observation)
-}
-
 /// Wait for Xray to expose the exact TUN attachment in kernel fdinfo.
 ///
 /// This is a bounded startup wait (maximum five seconds), not a traffic-readiness check.
