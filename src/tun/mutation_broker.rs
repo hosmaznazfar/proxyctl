@@ -495,8 +495,7 @@ fn validate_identity(id: &str, generation: u64) -> Result<()> {
 pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationResponse> {
     request.validate()?;
     let payload = serde_json::to_vec(request)?;
-    ensure!(
-        payload.len() <= MAX_FRAME,
+    ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME,
         "mutation request exceeds frame limit"
     );
     let mut stream =
