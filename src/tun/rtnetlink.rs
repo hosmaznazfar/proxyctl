@@ -129,10 +129,10 @@ impl RouteNetlink {
             "NETLINK_ROUTE request transmission timed out"
         );
         let mut messages = Vec::new();
+        let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
         loop {
             wait_for_socket(self.fd.as_raw_fd(), libc::POLLIN, deadline)?;
 
-            let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
             // SAFETY: buffer and sender storage are writable for their declared lengths.
             let mut sender: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
             let mut sender_len = std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t;
