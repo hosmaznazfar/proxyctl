@@ -287,6 +287,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_ack_with_invalid_identity_even_if_nonce_matches() {
+        let expected = offer();
+        let mut malformed = expected.clone();
+        malformed.activation_id = "not-a-uuid".into();
+        let ack = AttachmentAck { version: VERSION, activation_id: malformed.activation_id, generation: malformed.generation, interface_name: malformed.interface_name, nonce: malformed.nonce, adopted: true };
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        write_frame(&mut sender, &ack).unwrap();
+        assert!(receive_adoption_ack(&mut receiver, &expected).is_err());
+    }
+
+    #[test]
     fn rejects_ack_for_different_generation() {
         let expected = offer();
         let mut other = expected.clone();
