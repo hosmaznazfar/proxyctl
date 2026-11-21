@@ -511,8 +511,8 @@ fn validate_request(bytes: &[u8]) -> Result<()> {
     let port_id = u32::from_ne_bytes(bytes[12..16].try_into()?);
     ensure!(kind != 0, "netlink request has an unspecified message type");
     ensure!(
-        flags & NLM_F_REQUEST != 0,
-        "netlink request is missing NLM_F_REQUEST"
+        flags == (NLM_F_REQUEST | NLM_F_DUMP),
+        "NETLINK_ROUTE link inspection requires exact request and dump flags"
     );
     ensure!(
         sequence == 0 && port_id == 0,
