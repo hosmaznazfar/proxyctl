@@ -248,6 +248,60 @@ pub fn spawn_xray_from_broker(
     }
 }
 
+/// Stop only the transient system service belonging to one exact activation generation.
+///
+/// Recovery must not run until systemd confirms the unit stop and the recorded Xray process
+/// identity is no longer live.
+pub fn stop_xray_generation(
+    activation_id: &str,
+    generation: u64,
+    process: Option<&ProcessIdentity>,
+) -> Result<()> {
+    ensure!(generation > 0 && activation_id.len() == 36
+        && activation_id.bytes().enumerate().all(|(index, byte)| {
+            if [8, 13, 18, 23].contains(&index) { byte == b'-' }
+            else { byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase() }
+        }), "invalid Xray service activation identity");
+    if let Some(identity) = process {
+        identity.validate()?;
+        let _ = identity.verify()?;
+    }
+    const SUDO: &str = "/usr/bin/sudo";
+    const SYSTEMCTL: &str = "/usr/bin/systemctl";
+    let unit = format!("proxyctl-tun-core-{activation_id}-{generation}.service");
+    let mut command = Command::new(SUDO);
+    command.args(["-n", "--", SYSTEMCTL, "stop"]).arg(&unit)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let mut child = command.spawn().context("cannot request stop of the exact Xray TUN service")?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(8);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                ensure!(status.success(), "systemd did not confirm stop of the exact Xray TUN service");
+                break;
+            }
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                anyhow::bail!("systemd Xray service stop exceeded its eight-second deadline");
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("cannot inspect exact Xray service stop request");
+            }
+        }
+    }
+    if let Some(identity) = process {
+        ensure!(!identity.verify()?,
+            "Xray process identity remains live after systemd confirmed service stop");
+    }
+    Ok(())
+}
+
 fn verify_xray_capability_boundary(identity: &ProcessIdentity, expected_uid: u32) -> Result<()> {
     const CAP_NET_ADMIN: u64 = 1 << 12;
     let status = fs::read_to_string(format!("/proc/{}/status", identity.pid))
