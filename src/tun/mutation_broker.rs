@@ -81,7 +81,10 @@ impl MutationRequest {
     fn validate(&self) -> Result<()> {
         match self {
             Self::Ping { version } => {
-                ensure!(*version == VERSION, "unsupported mutation broker protocol version");
+                ensure!(
+                    *version == VERSION,
+                    "unsupported mutation broker protocol version"
+                );
             }
             Self::Activate {
                 version,
@@ -123,18 +126,28 @@ impl MutationRequest {
                 core_mark_mask,
                 ..
             } => {
-                ensure!(*version == VERSION, "unsupported mutation broker protocol version");
+                ensure!(
+                    *version == VERSION,
+                    "unsupported mutation broker protocol version"
+                );
                 validate_identity(activation_id, *generation)?;
                 RoutingPolicyPlan::new(
-                    *table_id, *bypass_priority, *proxy_priority,
-                    *core_mark, *core_mark_mask, interface_name, 1,
-                ).validate()?;
+                    *table_id,
+                    *bypass_priority,
+                    *proxy_priority,
+                    *core_mark,
+                    *core_mark_mask,
+                    interface_name,
+                    1,
+                )
+                .validate()?;
             }
             Self::Recover {
                 version,
                 activation_id,
                 generation,
-            } | Self::AttachDescriptor {
+            }
+            | Self::AttachDescriptor {
                 version,
                 activation_id,
                 generation,
@@ -217,10 +230,18 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
                 "mutation broker accepts requests only from its owning user"
             );
             let request = read_request(&mut stream)?;
-            if let MutationRequest::AttachDescriptor { version: _, activation_id, generation } = &request {
+            if let MutationRequest::AttachDescriptor {
+                version: _,
+                activation_id,
+                generation,
+            } = &request
+            {
                 request.validate()?;
-                let backend = backends.get(&(activation_id.clone(), *generation))
-                    .context("no live broker-owned TUN descriptor exists for this activation generation")?;
+                let backend = backends
+                    .get(&(activation_id.clone(), *generation))
+                    .context(
+                        "no live broker-owned TUN descriptor exists for this activation generation",
+                    )?;
                 let descriptor = backend.tun_descriptor(activation_id, *generation)?;
                 let response = MutationResponse::success("generation-bound TUN descriptor follows");
                 write_response(&mut stream, &response)?;
@@ -228,8 +249,16 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
                 return Ok(());
             }
             let response = match request.validate().and_then(|()| {
-                if let MutationRequest::Activate { owner_uid, owner_gid, .. }
-                    | MutationRequest::ActivateNative { owner_uid, owner_gid, .. } = &request
+                if let MutationRequest::Activate {
+                    owner_uid,
+                    owner_gid,
+                    ..
+                }
+                | MutationRequest::ActivateNative {
+                    owner_uid,
+                    owner_gid,
+                    ..
+                } = &request
                 {
                     ensure!(
                         *owner_uid == peer.uid && *owner_gid == peer.gid,
@@ -308,7 +337,9 @@ fn execute(
             match result {
                 Ok(_) => {
                     backends.insert(key, backend);
-                    Ok(format!("activation {activation_id} generation {generation} committed"))
+                    Ok(format!(
+                        "activation {activation_id} generation {generation} committed"
+                    ))
                 }
                 Err(error) => {
                     // A fully successful rollback removes the journal and never creates an
@@ -328,7 +359,9 @@ fn execute(
             }
         }
         MutationRequest::AttachDescriptor { .. } => {
-            anyhow::bail!("descriptor attachment requests must use the authenticated SCM_RIGHTS response path")
+            anyhow::bail!(
+                "descriptor attachment requests must use the authenticated SCM_RIGHTS response path"
+            )
         }
         MutationRequest::ActivateNative {
             activation_id,
@@ -343,18 +376,29 @@ fn execute(
             core_mark_mask,
             ..
         } => {
-            ensure!(backends.is_empty(),
-                "another TUN activation still has a live broker backend; recover it first");
+            ensure!(
+                backends.is_empty(),
+                "another TUN activation still has a live broker backend; recover it first"
+            );
             let key = (activation_id.clone(), generation);
-            ensure!(!backends.contains_key(&key), "activation generation already has a live broker backend");
+            ensure!(
+                !backends.contains_key(&key),
+                "activation generation already has a live broker backend"
+            );
             let policy = RoutingPolicyPlan::new(
-                table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
-                interface_name, 1,
+                table_id,
+                bypass_priority,
+                proxy_priority,
+                core_mark,
+                core_mark_mask,
+                interface_name,
+                1,
             );
             let inventory = kernel_inventory::inspect_snapshot()?;
             policy.validate_against(&inventory.inventory)?;
             let store = ManifestStore::open(directory)?;
-            let mut backend = LinuxJournalBackend::new_native(store.clone(), &activation_id, generation)?;
+            let mut backend =
+                LinuxJournalBackend::new_native(store.clone(), &activation_id, generation)?;
             let transaction = KernelTransaction {
                 activation_id: activation_id.clone(),
                 policy,
@@ -364,14 +408,18 @@ fn execute(
             match kernel_transaction::apply_native(&transaction, &mut backend) {
                 Ok(_) => {
                     backends.insert(key, backend);
-                    Ok(format!("native activation {activation_id} generation {generation} committed"))
+                    Ok(format!(
+                        "native activation {activation_id} generation {generation} committed"
+                    ))
                 }
                 Err(error) => {
                     let fully_rolled_back = matches!(
                         (store.load_transaction_journal(), store.load()),
                         (Ok(None), Ok(None))
                     );
-                    if !fully_rolled_back { backends.insert(key, backend); }
+                    if !fully_rolled_back {
+                        backends.insert(key, backend);
+                    }
                     Err(error)
                 }
             }
@@ -458,7 +506,6 @@ fn execute(
     }
 }
 
-
 /// Verify that the persistent broker can safely resume any durable generation.
 ///
 /// This is deliberately read-only: a restarted helper may have durable records but no
@@ -475,9 +522,9 @@ fn inspect_broker_readiness(
     let manifest = store.load()?;
     let journal = store.load_transaction_journal()?;
 
-    let manifest_identity = manifest.as_ref().map(|snapshot| {
-        (snapshot.manifest.activation_id.clone(), snapshot.generation)
-    });
+    let manifest_identity = manifest
+        .as_ref()
+        .map(|snapshot| (snapshot.manifest.activation_id.clone(), snapshot.generation));
     let journal_identity = journal
         .as_ref()
         .map(|entry| (entry.activation_id.clone(), entry.generation));
@@ -515,7 +562,8 @@ fn read_request(stream: &mut UnixStream) -> Result<MutationRequest> {
         "mutation request frame length is invalid"
     );
     let mut payload = Vec::new();
-    payload.try_reserve_exact(length)
+    payload
+        .try_reserve_exact(length)
         .context("cannot reserve bounded mutation request payload")?;
     payload.resize(length, 0);
     read_exact_deadline(stream, &mut payload, deadline)?;
@@ -548,17 +596,26 @@ fn read_exact_deadline(
     Ok(())
 }
 
-fn write_exact_deadline(stream: &mut UnixStream, mut bytes: &[u8], deadline: std::time::Instant) -> Result<()> {
+fn write_exact_deadline(
+    stream: &mut UnixStream,
+    mut bytes: &[u8],
+    deadline: std::time::Instant,
+) -> Result<()> {
     use std::io::ErrorKind;
     while !bytes.is_empty() {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        ensure!(!remaining.is_zero(), "mutation response exceeded its frame deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "mutation response exceeded its frame deadline"
+        );
         stream.set_write_timeout(Some(remaining))?;
         match stream.write(bytes) {
             Ok(0) => anyhow::bail!("mutation response socket closed during frame write"),
             Ok(count) => bytes = &bytes[count..],
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => anyhow::bail!("mutation response exceeded its frame deadline"),
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                anyhow::bail!("mutation response exceeded its frame deadline")
+            }
             Err(error) => return Err(error.into()),
         }
     }
@@ -567,7 +624,8 @@ fn write_exact_deadline(stream: &mut UnixStream, mut bytes: &[u8], deadline: std
 
 fn write_response(stream: &mut UnixStream, response: &MutationResponse) -> Result<()> {
     let payload = serde_json::to_vec(response)?;
-    ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME,
+    ensure!(
+        !payload.is_empty() && payload.len() <= MAX_FRAME,
         "mutation response exceeds frame limit"
     );
     let deadline = std::time::Instant::now() + IO_TIMEOUT;
@@ -582,9 +640,13 @@ fn read_response_frame(stream: &mut UnixStream) -> Result<Vec<u8>> {
     let mut header = [0u8; 4];
     read_exact_deadline(stream, &mut header, deadline)?;
     let length = u32::from_le_bytes(header) as usize;
-    ensure!(length >= 2 && length <= MAX_FRAME, "mutation response frame length is invalid");
+    ensure!(
+        length >= 2 && length <= MAX_FRAME,
+        "mutation response frame length is invalid"
+    );
     let mut bytes = Vec::new();
-    bytes.try_reserve_exact(length)
+    bytes
+        .try_reserve_exact(length)
         .context("cannot reserve bounded mutation response payload")?;
     bytes.resize(length, 0);
     read_exact_deadline(stream, &mut bytes, deadline)?;
@@ -592,9 +654,18 @@ fn read_response_frame(stream: &mut UnixStream) -> Result<Vec<u8>> {
 }
 
 fn validate_response_envelope(response: &MutationResponse) -> Result<()> {
-    ensure!(response.version == VERSION, "mutation broker response version mismatch");
-    ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
-    ensure!(!response.message.is_empty(), "mutation broker response message is empty");
+    ensure!(
+        response.version == VERSION,
+        "mutation broker response version mismatch"
+    );
+    ensure!(
+        response.message.len() <= 8 * 1024,
+        "mutation response message exceeds limit"
+    );
+    ensure!(
+        !response.message.is_empty(),
+        "mutation broker response message is empty"
+    );
     Ok(())
 }
 
@@ -618,7 +689,8 @@ fn validate_identity(id: &str, generation: u64) -> Result<()> {
 pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationResponse> {
     request.validate()?;
     let payload = serde_json::to_vec(request)?;
-    ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME,
+    ensure!(
+        !payload.is_empty() && payload.len() <= MAX_FRAME,
         "mutation request exceeds frame limit"
     );
     let mut stream =
@@ -643,13 +715,25 @@ pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationRes
 
 /// Request the descriptor retained by one exact activation generation.
 /// The broker authenticates the peer, sends a positive envelope, then transfers one fd.
-pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u64) -> Result<std::os::fd::OwnedFd> {
+pub fn attach_descriptor(
+    socket_path: &Path,
+    activation_id: &str,
+    generation: u64,
+) -> Result<std::os::fd::OwnedFd> {
     use std::os::fd::AsRawFd;
-    let request = MutationRequest::AttachDescriptor { version: VERSION, activation_id: activation_id.to_owned(), generation };
+    let request = MutationRequest::AttachDescriptor {
+        version: VERSION,
+        activation_id: activation_id.to_owned(),
+        generation,
+    };
     request.validate()?;
     let payload = serde_json::to_vec(&request)?;
-    ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME, "mutation request exceeds frame limit");
-    let mut stream = UnixStream::connect(socket_path).context("cannot connect to mutation broker for TUN descriptor attachment")?;
+    ensure!(
+        !payload.is_empty() && payload.len() <= MAX_FRAME,
+        "mutation request exceeds frame limit"
+    );
+    let mut stream = UnixStream::connect(socket_path)
+        .context("cannot connect to mutation broker for TUN descriptor attachment")?;
     stream.set_read_timeout(Some(IO_TIMEOUT))?;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
     let deadline = std::time::Instant::now() + IO_TIMEOUT;
@@ -657,11 +741,19 @@ pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u6
     write_exact_deadline(&mut stream, &payload, deadline)?;
     stream.flush()?;
     let bytes = read_response_frame(&mut stream)?;
-    let response: MutationResponse = serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
+    let response: MutationResponse =
+        serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
     validate_response_envelope(&response)?;
-    ensure!(response.success, "mutation broker rejected descriptor attachment: {}", response.message);
+    ensure!(
+        response.success,
+        "mutation broker rejected descriptor attachment: {}",
+        response.message
+    );
     let descriptor = super::descriptor_transfer::receive_descriptor(&stream)?;
-    ensure!(unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) } >= 0, "received TUN descriptor is not valid");
+    ensure!(
+        unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) } >= 0,
+        "received TUN descriptor is not valid"
+    );
     Ok(descriptor)
 }
 
@@ -702,8 +794,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let directory = tempfile::tempdir().unwrap();
-        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o500))
-            .unwrap();
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
         let socket = directory.path().join("broker.sock");
         // Bind before restricting permissions so the test remains runnable as an unprivileged user.
         let listener = UnixListener::bind(&socket).unwrap();
@@ -715,8 +806,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let directory = tempfile::tempdir().unwrap();
-        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o750))
-            .unwrap();
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o750)).unwrap();
         let socket = directory.path().join("broker.sock");
         let listener = UnixListener::bind(&socket).unwrap();
         assert!(serve(&listener, directory.path()).is_err());
@@ -725,7 +815,9 @@ mod tests {
     #[test]
     fn rejects_oversized_request_frame_before_allocating_payload() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
-        sender.write_all(&((MAX_FRAME as u32) + 1).to_le_bytes()).unwrap();
+        sender
+            .write_all(&((MAX_FRAME as u32) + 1).to_le_bytes())
+            .unwrap();
         assert!(read_request(&mut receiver).is_err());
     }
 
@@ -733,7 +825,9 @@ mod tests {
     fn rejects_malformed_request_json_after_bounded_frame_read() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         let payload = b"{not-json";
-        sender.write_all(&(payload.len() as u32).to_le_bytes()).unwrap();
+        sender
+            .write_all(&(payload.len() as u32).to_le_bytes())
+            .unwrap();
         sender.write_all(payload).unwrap();
         assert!(read_request(&mut receiver).is_err());
     }
@@ -773,7 +867,9 @@ mod tests {
     #[test]
     fn rejects_response_frame_length_over_limit() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
-        sender.write_all(&((MAX_FRAME as u32) + 1).to_le_bytes()).unwrap();
+        sender
+            .write_all(&((MAX_FRAME as u32) + 1).to_le_bytes())
+            .unwrap();
         assert!(read_response_frame(&mut receiver).is_err());
     }
 
@@ -781,7 +877,9 @@ mod tests {
     fn rejects_malformed_response_json_from_frame() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         let bytes = b"not-json";
-        sender.write_all(&(bytes.len() as u32).to_le_bytes()).unwrap();
+        sender
+            .write_all(&(bytes.len() as u32).to_le_bytes())
+            .unwrap();
         sender.write_all(bytes).unwrap();
         let frame = read_response_frame(&mut receiver).unwrap();
         assert!(serde_json::from_slice::<MutationResponse>(&frame).is_err());
@@ -795,50 +893,88 @@ mod tests {
 
     #[test]
     fn rejects_oversized_response_message_after_decode() {
-        let response = MutationResponse { version: VERSION, success: true, message: "x".repeat(8 * 1024 + 1) };
+        let response = MutationResponse {
+            version: VERSION,
+            success: true,
+            message: "x".repeat(8 * 1024 + 1),
+        };
         assert!(validate_response_envelope(&response).is_err());
     }
 
     #[test]
     fn rejects_response_message_above_envelope_bound() {
-        let response = MutationResponse { version: VERSION, success: false, message: "x".repeat(8 * 1024 + 1) };
+        let response = MutationResponse {
+            version: VERSION,
+            success: false,
+            message: "x".repeat(8 * 1024 + 1),
+        };
         assert!(validate_response_envelope(&response).is_err());
     }
 
     #[test]
     fn accepts_bounded_failure_response_envelope() {
-        let response = MutationResponse { version: VERSION, success: false, message: "denied".into() };
+        let response = MutationResponse {
+            version: VERSION,
+            success: false,
+            message: "denied".into(),
+        };
         assert!(validate_response_envelope(&response).is_ok());
     }
 
     #[test]
     fn accepts_valid_response_envelope() {
-        let response = MutationResponse { version: VERSION, success: true, message: "ok".into() };
+        let response = MutationResponse {
+            version: VERSION,
+            success: true,
+            message: "ok".into(),
+        };
         assert!(validate_response_envelope(&response).is_ok());
     }
 
     #[test]
     fn rejects_empty_response_message() {
-        let response = MutationResponse { version: VERSION, success: true, message: String::new() };
+        let response = MutationResponse {
+            version: VERSION,
+            success: true,
+            message: String::new(),
+        };
         assert!(validate_response_envelope(&response).is_err());
     }
 
     #[test]
     fn rejects_response_with_empty_failure_message() {
-        let response = MutationResponse { version: VERSION, success: false, message: String::new() };
+        let response = MutationResponse {
+            version: VERSION,
+            success: false,
+            message: String::new(),
+        };
         assert!(validate_response_envelope(&response).is_err());
     }
 
     #[test]
     fn rejects_response_version_mismatch() {
-        let response = MutationResponse { version: VERSION + 1, success: true, message: "ok".into() };
+        let response = MutationResponse {
+            version: VERSION + 1,
+            success: true,
+            message: "ok".into(),
+        };
         assert!(validate_response_envelope(&response).is_err());
     }
 
     #[test]
     fn rejects_ping_protocol_version_mismatch() {
-        assert!(MutationRequest::Ping { version: VERSION + 1 }.validate().is_err());
-        assert!(MutationRequest::Ping { version: VERSION }.validate().is_ok());
+        assert!(
+            MutationRequest::Ping {
+                version: VERSION + 1
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            MutationRequest::Ping { version: VERSION }
+                .validate()
+                .is_ok()
+        );
     }
 
     #[test]
@@ -892,50 +1028,58 @@ mod tests {
     }
 }
 
-    #[test]
-    fn native_activation_envelope_is_generation_and_policy_validated() {
-        let request = MutationRequest::ActivateNative {
-            version: VERSION,
-            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            generation: 8,
-            interface_name: "tun-proxyctl".into(),
-            owner_uid: 1000,
-            owner_gid: 1000,
-            table_id: 42420,
-            bypass_priority: 42410,
-            proxy_priority: 42420,
-            core_mark: 0x42,
-            core_mark_mask: 0xff,
-        };
-        assert!(request.validate().is_ok());
-        let mut stale = request.clone();
-        if let MutationRequest::ActivateNative { generation, .. } = &mut stale {
-            *generation = 0;
-        }
-        assert!(stale.validate().is_err());
-        let mut invalid_name = request;
-        if let MutationRequest::ActivateNative { interface_name, .. } = &mut invalid_name {
-            *interface_name = "bad/name".into();
-        }
-        assert!(invalid_name.validate().is_err());
+#[test]
+fn native_activation_envelope_is_generation_and_policy_validated() {
+    let request = MutationRequest::ActivateNative {
+        version: VERSION,
+        activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+        generation: 8,
+        interface_name: "tun-proxyctl".into(),
+        owner_uid: 1000,
+        owner_gid: 1000,
+        table_id: 42420,
+        bypass_priority: 42410,
+        proxy_priority: 42420,
+        core_mark: 0x42,
+        core_mark_mask: 0xff,
+    };
+    assert!(request.validate().is_ok());
+    let mut stale = request.clone();
+    if let MutationRequest::ActivateNative { generation, .. } = &mut stale {
+        *generation = 0;
     }
+    assert!(stale.validate().is_err());
+    let mut invalid_name = request;
+    if let MutationRequest::ActivateNative { interface_name, .. } = &mut invalid_name {
+        *interface_name = "bad/name".into();
+    }
+    assert!(invalid_name.validate().is_err());
+}
 
-    #[test]
-    fn native_activation_wire_operation_is_distinct_from_descriptor_activation() {
-        let native = MutationRequest::ActivateNative {
-            version: VERSION,
-            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            generation: 8,
-            interface_name: "tun-proxyctl".into(),
-            owner_uid: 1000,
-            owner_gid: 1000,
-            table_id: 42420,
-            bypass_priority: 42410,
-            proxy_priority: 42420,
-            core_mark: 0x42,
-            core_mark_mask: 0xff,
-        };
-        let encoded = serde_json::to_value(&native).unwrap();
-        assert_eq!(encoded.get("operation").and_then(serde_json::Value::as_str), Some("activate_native"));
-        assert!(serde_json::from_value::<MutationRequest>(encoded).unwrap().validate().is_ok());
-    }
+#[test]
+fn native_activation_wire_operation_is_distinct_from_descriptor_activation() {
+    let native = MutationRequest::ActivateNative {
+        version: VERSION,
+        activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+        generation: 8,
+        interface_name: "tun-proxyctl".into(),
+        owner_uid: 1000,
+        owner_gid: 1000,
+        table_id: 42420,
+        bypass_priority: 42410,
+        proxy_priority: 42420,
+        core_mark: 0x42,
+        core_mark_mask: 0xff,
+    };
+    let encoded = serde_json::to_value(&native).unwrap();
+    assert_eq!(
+        encoded.get("operation").and_then(serde_json::Value::as_str),
+        Some("activate_native")
+    );
+    assert!(
+        serde_json::from_value::<MutationRequest>(encoded)
+            .unwrap()
+            .validate()
+            .is_ok()
+    );
+}
