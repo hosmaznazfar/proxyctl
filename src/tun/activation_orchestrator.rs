@@ -123,7 +123,7 @@ impl<'a> ActivationOrchestrator<'a> {
                 anyhow::bail!("sing-box creates its own named TUN device and has no verified broker-owned descriptor adoption path; refusing to start it in this lifecycle"),
             (CoreId::Mihomo, super::super::cores::adapters::TunAttachmentMode::Unsupported) =>
                 anyhow::bail!("Mihomo has no verified marked TUN attachment contract; refusing TUN activation"),
-            _ => anyhow::bail!("{core_id} does not expose a supported broker-owned TUN descriptor contract"),
+            _ => anyhow::bail!("{core_id:?} does not expose a supported broker-owned TUN descriptor contract"),
         }
     }
 
