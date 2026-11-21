@@ -187,7 +187,6 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             .arg("--property=ProtectKernelTunables=yes")
             .arg("--property=ProtectKernelModules=yes")
             .arg("--property=ProtectControlGroups=yes")
-            .arg("--property=RestrictSUIDSGID=yes")
             .arg("--property=LockPersonality=yes")
             .arg("--property=MemoryDenyWriteExecute=yes")
             .arg("--property=RestrictRealtime=yes")
