@@ -73,10 +73,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
             if tun {
-                anyhow::ensure!(core == crate::cores::CoreId::Xray,
-                    "managed broker-owned TUN activation currently supports only Xray; sing-box and Mihomo remain fail-closed");
-                crate::services::activation::activate_tun_xray(
-                    stable_id, port, &tun_probe_url, tun_probe_status,
+                crate::services::activation::activate_tun_core(
+                    stable_id, core, port, &tun_probe_url, tun_probe_status,
                 )?;
             } else {
                 crate::services::activation::activate(stable_id, core, false, port)?;
