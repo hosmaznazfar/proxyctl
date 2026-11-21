@@ -328,47 +328,77 @@ impl<'a> ActivationOrchestrator<'a> {
         ) {
             Ok(started) => started,
             Err(error) => {
-                // The core launcher persists its process identity before acknowledging the
-                // handoff. Leave Prepared state for the already-running independent supervisor;
-                // never remove routes while a failed-to-reap core might still hold the TUN fd.
+                if let Err(stop_error) = self.stop_xray_and_recover_generation(
+                    &request.activation_id, request.generation, None,
+                ) {
+                    return Err(anyhow::anyhow!(
+                        "Xray launch/attachment failed ({error:#}); exact service stop or generation recovery also failed ({stop_error:#}); Prepared resources remain supervisor-owned"
+                    ));
+                }
                 return Err(error).context(
-                    "Xray launch/attachment failed; Prepared resources were retained for independent recovery",
+                    "Xray launch/attachment failed; the exact systemd service was stopped before generation recovery",
                 );
             }
         };
 
         if let Err(error) = readiness(&process, &token) {
-            if let Err(reap_error) = super::xray_launcher::terminate_and_reap_xray(&mut child, &process) {
+            if let Err(stop_error) = self.stop_xray_and_recover_generation(
+                request.activation_id.as_str(), request.generation, Some(&process),
+            ) {
                 return Err(anyhow::anyhow!(
-                    "Xray readiness failed ({error:#}); child termination could not be confirmed ({reap_error:#}); Prepared resources were retained for independent recovery"
+                    "Xray readiness failed ({error:#}); exact service stop or generation recovery failed ({stop_error:#}); Prepared resources remain supervisor-owned"
                 ));
             }
-            let recovery = self.helper.recover(request.activation_id.clone(), request.generation);
-            return match recovery {
-                Ok(response) if response.success =>
-                    Err(error).context("Xray readiness failed; child was reaped and exact-generation TUN resources were recovered"),
-                Ok(response) =>
-                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child was reaped but broker recovery failed: {}", response.message)),
-                Err(recovery_error) =>
-                    Err(anyhow::anyhow!("Xray readiness failed ({error:#}); child was reaped but broker recovery request failed: {recovery_error:#}")),
-            };
+            let _ = child.try_wait();
+            return Err(error).context(
+                "Xray readiness failed; the exact systemd service was stopped before generation recovery",
+            );
         }
 
-        let managed = match managed_activation::commit_managed_process(
-            self.helper, self.coordinator, &token, process.clone(),
+        let managed = match managed_activation::commit_prepared_managed_process(
+            self.coordinator, &token, process.clone(),
         ) {
             Ok(managed) => managed,
             Err(error) => {
-                // commit_managed_process has already attempted exact-process termination and
-                // only recovers the broker after that termination is confirmed.
+                if let Err(stop_error) = self.stop_xray_and_recover_generation(
+                    request.activation_id.as_str(), request.generation, Some(&process),
+                ) {
+                    return Err(anyhow::anyhow!(
+                        "Xray process commit failed ({error:#}); exact service stop or generation recovery failed ({stop_error:#}); Prepared resources remain supervisor-owned"
+                    ));
+                }
                 let _ = child.try_wait();
                 return Err(error).context(
-                    "Xray process commit failed; exact-process cleanup was attempted and unresolved state remains supervisor-owned",
+                    "Xray process commit failed; the exact systemd service was stopped before generation recovery",
                 );
             }
         };
 
         Ok(XrayActivation { child, managed })
+    }
+
+    fn stop_xray_and_recover_generation(
+        &self,
+        activation_id: &str,
+        generation: u64,
+        process: Option<&ProcessIdentity>,
+    ) -> Result<()> {
+        super::xray_launcher::stop_xray_generation(activation_id, generation, process)
+            .context("cannot confirm that the exact Xray system service has stopped")?;
+        let recovery = self.helper.recover(activation_id.to_owned(), generation);
+        if matches!(recovery.as_ref(), Ok(response) if response.success) {
+            return Ok(());
+        }
+        let store = super::manifest_store::ManifestStore::open(
+            self.coordinator.runtime_directory().to_path_buf()
+        )?;
+        let recovery_message = match &recovery {
+            Ok(response) => response.message.clone(),
+            Err(error) => format!("{error:#}"),
+        };
+        ensure!(store.load()?.is_none() && store.load_transaction_journal()?.is_none(),
+            "exact-generation Xray TUN cleanup is incomplete: {recovery_message}");
+        Ok(())
     }
 
     /// Start the CLI-independent systemd user service for an already committed generation.
