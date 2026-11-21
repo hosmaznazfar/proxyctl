@@ -247,8 +247,13 @@ pub struct PersistentTunIdentity {
 ///
 /// This is intentionally a low-level primitive. Callers must durably journal the
 /// returned name and ifindex before installing routes or starting a native core.
-pub fn create_persistent(name: &str, uid: u32, gid: u32) -> Result<PersistentTunIdentity> {
+pub fn create_persistent(name: &str, uid: u32, gid: u32, alias: &str) -> Result<PersistentTunIdentity> {
+    ensure!(!alias.is_empty() && alias.len() <= 240 && !alias.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
+        "persistent TUN generation alias is invalid");
     let device = TunDevice::create(name, uid, gid)?;
+    let index = current_interface_index(name)?;
+    super::rtnetlink_mutations::set_interface_alias(index, alias)
+        .context("cannot assign the generation-bound native TUN alias")?;
     // TUNSETPERSIST is applied only after TUNSETIFF, owner/group assignment and
     // link-up all succeeded. If this ioctl fails, dropping the descriptor removes
     // the non-persistent interface created above.
@@ -264,9 +269,11 @@ pub fn create_persistent(name: &str, uid: u32, gid: u32) -> Result<PersistentTun
 /// The interface name is validated and the kernel-returned TUN identity is checked
 /// before TUNSETPERSIST(0). The caller must additionally compare the live ifindex
 /// against its durable manifest immediately before invoking this operation.
-pub fn remove_persistent(name: &str, expected_index: u32) -> Result<()> {
+pub fn remove_persistent(name: &str, expected_index: u32, expected_alias: &str) -> Result<()> {
     validate_name(name)?;
     ensure!(expected_index > 0, "persistent TUN cleanup requires a non-zero expected ifindex");
+    ensure!(!expected_alias.is_empty() && expected_alias.len() <= 240 && !expected_alias.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
+        "persistent TUN cleanup requires a valid generation alias");
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -303,6 +310,10 @@ pub fn remove_persistent(name: &str, expected_index: u32) -> Result<()> {
     // This closes the name-reuse window before persistence is cleared.
     let live_index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
     ensure!(live_index == expected_index, "persistent TUN ifindex changed before cleanup; refusing to clear persistence");
+    let live_alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))
+        .context("cannot read persistent TUN generation alias before cleanup")?;
+    ensure!(live_alias.trim_end_matches(['\\r', '\\n']) == expected_alias,
+        "persistent TUN generation alias changed; refusing to clear persistence");
     let rc = ioctl_retry(fd.as_raw_fd(), TUNSETPERSIST, 0)?;
     ensure!(rc == 0, "TUNSETPERSIST(0) failed: {}", std::io::Error::last_os_error());
     Ok(())
