@@ -171,6 +171,7 @@ pub fn adopt_and_ack<F>(
 where
     F: FnOnce(&AttachmentOffer, OwnedFd) -> Result<()>,
 {
+    configure_handoff_timeouts(stream)?;
     let received = receive_offer(stream)?;
     ensure!(&received == expected, "received attachment offer differs from the expected activation");
     adopt(&received, descriptor).context("core-specific descriptor adoption failed")?;
