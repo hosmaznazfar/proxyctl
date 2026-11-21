@@ -234,8 +234,6 @@ pub struct HttpProbeTarget {
     pub host_header: String,
     pub path: String,
     pub expected_status: u16,
-    /// Optional response marker. When non-empty it must occur in the HTTP response body.
-    pub expected_body_marker: Vec<u8>,
 }
 
 impl HttpProbeTarget {
@@ -333,8 +331,6 @@ pub fn probe_tun_routed_http_traffic(
         "TUN HTTP probe timeout must be between zero and thirty seconds");
     ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 16 * 1024,
         "TUN HTTP response-header bound must be within sixteen KiB");
-    ensure!(target.expected_body_marker.is_empty(),
-        "persistent TUN readiness probes currently verify the HTTP status line and headers only");
     ensure!(process.verify()?, "managed core identity is not live before TUN traffic probe");
     let started = Instant::now();
     let deadline = started + timeout;
@@ -443,18 +439,6 @@ fn parse_http_status(response: &[u8]) -> Result<u16> {
         .parse::<u16>().context("HTTP response status code is invalid")?;
     ensure!((100..=599).contains(&status), "HTTP response status code is outside the valid range");
     Ok(status)
-}
-
-#[cfg(target_os = "linux")]
-fn http_response_body(response: &[u8]) -> Result<&[u8]> {
-    let offset = response.windows(4).position(|window| window == b"\r\n\r\n")
-        .context("HTTP response has no complete header block")?;
-    Ok(&response[offset + 4..])
-}
-
-#[cfg(target_os = "linux")]
-fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
 }
 
 /// Validate bounded traffic-probe evidence against the activation identity and limits.
@@ -1308,7 +1292,6 @@ mod http_tun_probe_tests {
             host_header: "probe.example".into(),
             path: "/health".into(),
             expected_status: 200,
-            expected_body_marker: b"proxyctl-ok".to_vec(),
         }
     }
 
@@ -1333,18 +1316,13 @@ mod http_tun_probe_tests {
         value.destination = "0.0.0.0:80".parse().unwrap();
         assert!(value.validate().is_err());
         value = target();
-        value.expected_body_marker = vec![b'x'; 1025];
-        assert!(value.validate().is_err());
     }
 
     #[test]
     fn parses_http_status_and_body_without_accepting_malformed_responses() {
-        let response = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nproxyctl-ok";
+        let response = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n";
         assert_eq!(parse_http_status(response).unwrap(), 200);
-        assert_eq!(http_response_body(response).unwrap(), b"proxyctl-ok");
-        assert!(contains_bytes(http_response_body(response).unwrap(), b"proxyctl"));
         assert!(parse_http_status(b"not-http\r\n").is_err());
-        assert!(http_response_body(b"HTTP/1.1 200 OK\r\n").is_err());
     }
 
     #[test]
