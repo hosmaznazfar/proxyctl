@@ -324,13 +324,27 @@ impl CoreAdapter for MihomoAdapter {
 
     fn generate_tun_activation_config(
         &self,
-        _node: &ProxyNode,
-        _listen_port: u16,
-        _mark: super::TunOutboundMark,
+        node: &ProxyNode,
+        listen_port: u16,
+        mark: super::TunOutboundMark,
     ) -> anyhow::Result<GeneratedConfig> {
-        anyhow::bail!(
-            "Mihomo TUN activation is unsupported until a proxy-outbound-only socket mark is verified"
-        )
+        let generated = self.generate_activation_config(node, listen_port)?;
+        let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        document["tun"] = json!({
+            "enable": true,
+            "device": "tun-proxyctl",
+            "mtu": 1500,
+            "inet4-address": ["198.18.0.1/30"],
+            "inet6-address": ["fdfe:dcba:9876::1/126"],
+            "auto-route": false,
+            "auto-redirect": false,
+            "dns-mode": "disabled",
+            "strict-route": false,
+            "auto-detect-interface": true
+        });
+        // Mihomo's global routing-mark is the default mark for proxy outbound connections.
+        document["routing-mark"] = json!(mark.value());
+        json_config(document)
     }
 
     fn generate_benchmark_config(
