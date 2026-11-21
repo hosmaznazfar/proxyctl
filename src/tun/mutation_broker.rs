@@ -610,6 +610,14 @@ mod tests {
     }
 
     #[test]
+    fn failure_envelope_truncates_long_messages_on_utf8_boundary() {
+        let response = MutationResponse::failure("界".repeat(10_000));
+        assert!(response.message.len() <= 8 * 1024 + 3);
+        assert!(response.message.is_char_boundary(response.message.len()));
+        assert!(response.message.ends_with("…"));
+    }
+
+    #[test]
     fn recovery_envelope_requires_canonical_activation_identity() {
         let request = MutationRequest::Recover {
             version: VERSION,
