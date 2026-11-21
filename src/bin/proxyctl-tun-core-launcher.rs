@@ -31,6 +31,21 @@ fn run() -> Result<()> {
     ensure!(args.next().as_deref() == Some(std::ffi::OsStr::new("--socket")),
         "expected --socket PATH");
     let socket_path = PathBuf::from(args.next().context("missing private socket path")?);
+    ensure!(args.next().as_deref() == Some(std::ffi::OsStr::new("--activation-id")),
+        "expected --activation-id UUID");
+    let activation_id = args.next().context("missing activation UUID")?
+        .into_string().map_err(|_| anyhow::anyhow!("activation UUID must be UTF-8"))?;
+    ensure!(activation_id.len() == 36
+        && activation_id.bytes().enumerate().all(|(i, b)| {
+            if [8, 13, 18, 23].contains(&i) { b == b'-' }
+            else { b.is_ascii_hexdigit() && !b.is_ascii_uppercase() }
+        }), "activation UUID is invalid");
+    ensure!(args.next().as_deref() == Some(std::ffi::OsStr::new("--generation")),
+        "expected --generation NUMBER");
+    let generation = args.next().context("missing activation generation")?
+        .to_str().context("activation generation must be UTF-8")?
+        .parse::<u64>().context("activation generation is invalid")?;
+    ensure!(generation > 0, "activation generation must be positive");
     ensure!(args.next().as_deref() == Some(std::ffi::OsStr::new("--parent-pid")),
         "expected --parent-pid PID");
     let parent_pid = args.next().context("missing parent PID")?
@@ -93,6 +108,19 @@ fn run() -> Result<()> {
             .context("cannot capture the spawned Xray process identity")?;
         ensure!(identity.executable == fs::canonicalize(&executable)?,
             "spawned process did not become the expected managed Xray executable");
+
+        // Persist the exact Xray child while the manifest is still Prepared. This closes the
+        // controller-crash window between descriptor handoff and readiness/Running commit.
+        let runtime = socket_path.parent().context("descriptor socket has no runtime directory")?;
+        let store = proxyctl::tun::manifest_store::ManifestStore::open(runtime)?;
+        let coordinator = proxyctl::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
+        let current = coordinator.load_current()?.context("Prepared TUN manifest disappeared before Xray process binding")?;
+        ensure!(current.token.activation_id() == activation_id
+            && current.token.generation() == generation
+            && current.snapshot.phase == proxyctl::tun::recovery::SupervisorPhase::Prepared,
+            "Xray process binding does not match the active Prepared generation");
+        coordinator.bind_core_process(&current.token, identity.clone())
+            .context("cannot persist Xray process identity before readiness")?;
         send_process_identity(&mut stream, &identity)?;
         Ok(())
     })();
