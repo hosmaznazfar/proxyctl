@@ -292,6 +292,25 @@ impl NativePersistentTunOwner {
         Ok(())
     }
 
+    /// Recover or release a journal-owned persistent device after the exact core service stopped.
+    /// This path intentionally works after broker restart, when the process-local registry is empty.
+    pub fn release_recovered(&mut self, name: &str, index: u32) -> Result<()> {
+        ensure!(index > 0, "persistent TUN recovery requires a non-zero ifindex");
+        let snapshot = kernel_inventory::inspect_snapshot()?;
+        let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name);
+        let live = matches.next().context("journal-owned persistent TUN interface is absent")?;
+        ensure!(matches.next().is_none(), "kernel inventory contains duplicate interface names");
+        ensure!(live.is_tun && live.index == index,
+            "persistent TUN recovery identity changed; refusing cleanup");
+        super::tun_device::remove_persistent(name, index)
+            .context("cannot clear persistence from journal-owned native TUN interface")?;
+        let after = kernel_inventory::inspect_snapshot()?;
+        ensure!(!after.interfaces.iter().any(|interface| interface.name == name || interface.index == index),
+            "persistent TUN interface remains after persistence was cleared");
+        self.devices.retain(|_, device| device.name != name || device.index != index);
+        Ok(())
+    }
+
     pub fn len(&self) -> usize { self.devices.len() }
     pub fn is_empty(&self) -> bool { self.devices.is_empty() }
 }
