@@ -269,6 +269,23 @@ pub fn stop_xray_generation(
     const SUDO: &str = "/usr/bin/sudo";
     const SYSTEMCTL: &str = "/usr/bin/systemctl";
     let unit = format!("proxyctl-tun-core-{activation_id}-{generation}.service");
+    let active = Command::new(SUDO)
+        .args(["-n", "--", SYSTEMCTL, "is-active", "--quiet"])
+        .arg(&unit)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+        .status()
+        .context("cannot inspect the exact Xray TUN service state")?;
+    match active.code() {
+        Some(0) => {}
+        Some(3) | Some(4) => {
+            if let Some(identity) = process {
+                ensure!(!identity.verify()?,
+                    "Xray service is inactive or missing but its recorded process identity remains live");
+            }
+            return Ok(());
+        }
+        _ => anyhow::bail!("systemd could not determine the exact Xray TUN service state"),
+    }
     let mut command = Command::new(SUDO);
     command.args(["-n", "--", SYSTEMCTL, "stop"]).arg(&unit)
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
