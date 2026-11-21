@@ -214,6 +214,23 @@ fn read_frame<T: for<'de> Deserialize<'de>>(stream: &mut UnixStream) -> Result<T
     serde_json::from_slice(&payload).context("attachment frame is malformed or contains unknown fields")
 }
 
+fn write_exact_until(stream: &mut UnixStream, mut bytes: &[u8], deadline: std::time::Instant) -> Result<()> {
+    use std::io::ErrorKind;
+    while !bytes.is_empty() {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        ensure!(!remaining.is_zero(), "attachment frame write exceeded its deadline");
+        stream.set_write_timeout(Some(remaining))?;
+        match stream.write(bytes) {
+            Ok(0) => anyhow::bail!("attachment socket closed during frame write"),
+            Ok(count) => bytes = &bytes[count..],
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => anyhow::bail!("attachment frame write exceeded its deadline"),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
 fn read_exact_until(stream: &mut UnixStream, mut bytes: &mut [u8], deadline: std::time::Instant) -> Result<()> {
     use std::io::ErrorKind;
     while !bytes.is_empty() {
