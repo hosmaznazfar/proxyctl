@@ -254,7 +254,7 @@ impl HttpConnectProbeTarget {
         ensure!((100..=599).contains(&self.expected_status),
             "HTTP probe expected status is outside the valid range");
         ensure!(self.expected_body_marker.len() <= 1024
-            && !self.expected_body_marker.iter().any(|byte| *byte == b'\\r' || *byte == b'\\n'),
+            && !self.expected_body_marker.iter().any(|byte| *byte == b'\r' || *byte == b'\n'),
             "HTTP probe body marker exceeds its bound or contains line breaks");
         Ok(())
     }
@@ -295,7 +295,7 @@ pub fn probe_http_connect_traffic(
     stream.set_write_timeout(Some(timeout))?;
     let authority = format!("{}:{}", target.destination.ip(), target.destination.port());
     let connect = format!(
-        "CONNECT {authority} HTTP/1.1\\r\\nHost: {}\\r\\nProxy-Connection: Keep-Alive\\r\\n\\r\\n",
+        "CONNECT {authority} HTTP/1.1\r\nHost: {}\r\nProxy-Connection: Keep-Alive\r\n\r\n",
         target.host_header
     );
     stream.write_all(connect.as_bytes()).context("cannot send bounded HTTP CONNECT request")?;
@@ -306,7 +306,7 @@ pub fn probe_http_connect_traffic(
         "managed core proxy did not establish the requested HTTP CONNECT tunnel");
 
     let request = format!(
-        "GET {} HTTP/1.1\\r\\nHost: {}\\r\\nConnection: close\\r\\nAccept: */*\\r\\n\\r\\n",
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept: */*\r\n\r\n",
         target.path, target.host_header
     );
     stream.write_all(request.as_bytes()).context("cannot send HTTP request through the proxy tunnel")?;
@@ -362,7 +362,7 @@ fn read_http_header_block(stream: &mut std::net::TcpStream, maximum: usize) -> R
     while headers.len() < maximum {
         stream.read_exact(&mut byte).context("HTTP response ended before its header terminator")?;
         headers.push(byte[0]);
-        if headers.ends_with(b"\\r\\n\\r\\n") {
+        if headers.ends_with(b"\r\n\r\n") {
             return Ok(headers);
         }
     }
@@ -371,7 +371,7 @@ fn read_http_header_block(stream: &mut std::net::TcpStream, maximum: usize) -> R
 
 #[cfg(target_os = "linux")]
 fn parse_http_status(response: &[u8]) -> Result<u16> {
-    let line_end = response.windows(2).position(|window| window == b"\\r\\n")
+    let line_end = response.windows(2).position(|window| window == b"\r\n")
         .context("HTTP response has no complete status line")?;
     let line = std::str::from_utf8(&response[..line_end])
         .context("HTTP response status line is not valid ASCII")?;
@@ -386,7 +386,7 @@ fn parse_http_status(response: &[u8]) -> Result<u16> {
 
 #[cfg(target_os = "linux")]
 fn http_response_body(response: &[u8]) -> Result<&[u8]> {
-    let offset = response.windows(4).position(|window| window == b"\\r\\n\\r\\n")
+    let offset = response.windows(4).position(|window| window == b"\r\n\r\n")
         .context("HTTP response has no complete header block")?;
     Ok(&response[offset + 4..])
 }
