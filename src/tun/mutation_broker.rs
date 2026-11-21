@@ -487,7 +487,8 @@ fn read_response_frame(stream: &mut UnixStream) -> Result<Vec<u8>> {
 }
 
 fn validate_response_envelope(response: &MutationResponse) -> Result<()> {
-    validate_response_envelope(&response)?;
+    ensure!(response.version == VERSION, "mutation broker response version mismatch");
+    ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
     ensure!(!response.message.is_empty(), "mutation broker response message is empty");
     Ok(())
 }
