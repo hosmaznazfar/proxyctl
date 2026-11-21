@@ -69,6 +69,10 @@ pub(super) fn verify_private_file(metadata: &fs::Metadata) -> Result<()> {
         "TUN manifest permissions are not private"
     );
     ensure!(
+        metadata.permissions().mode() & 0o7000 == 0,
+        "TUN manifest must not have special permission bits"
+    );
+    ensure!(
         metadata.nlink() == 1,
         "TUN manifest must not have external hard links"
     );
