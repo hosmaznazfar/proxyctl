@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn rejects_marker_without_descriptor() {
         use std::io::Write;
-        let (sender, receiver) = UnixStream::pair().unwrap();
+        let (mut sender, receiver) = UnixStream::pair().unwrap();
         sender.write_all(&[MARKER]).unwrap();
         assert!(receive_descriptor(&receiver).is_err());
     }
