@@ -35,6 +35,7 @@ pub fn send_descriptor(stream: &UnixStream, descriptor: BorrowedFd<'_>) -> Resul
 
 /// Receive one descriptor and atomically set close-on-exec.
 pub fn receive_descriptor(stream: &UnixStream) -> Result<OwnedFd> {
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     let mut marker = 0u8;
     let mut iov = libc::iovec { iov_base: (&mut marker as *mut u8).cast(), iov_len: 1 };
     let bytes = unsafe { libc::CMSG_SPACE(mem::size_of::<libc::c_int>() as u32) } as usize;
