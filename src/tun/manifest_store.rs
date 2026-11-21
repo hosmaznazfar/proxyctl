@@ -501,6 +501,18 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn refuses_empty_private_manifest_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        fs::write(store.path(), []).unwrap();
+        fs::set_permissions(store.path(), fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(store.load().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn refuses_manifest_symlink_and_permissive_file() {
         use std::os::unix::fs::symlink;
         let directory = tempfile::tempdir().unwrap();
