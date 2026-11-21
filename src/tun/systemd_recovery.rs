@@ -81,6 +81,7 @@ impl SystemdRecoverySupervisor {
         );
         ensure!(executable.permissions().mode() & 0o111 != 0, "recovery supervisor executable is not executable");
         ensure!(executable.permissions().mode() & 0o022 == 0, "recovery supervisor executable must not be group- or world-writable");
+        ensure!(executable.permissions().mode() & 0o7000 == 0, "recovery supervisor executable must not have special permission bits");
         ensure!(executable.nlink() == 1, "recovery supervisor executable must not have external hard links");
         for tool in [&self.systemd_run, &self.systemctl] {
             let metadata = fs::symlink_metadata(tool).with_context(|| format!("cannot inspect {}", tool.display()))?;
