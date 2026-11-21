@@ -16,6 +16,7 @@ pub const MANIFEST_VERSION: u32 = 1;
 const MAX_OWNED_RESOURCES: usize = 256;
 const MAX_RESOURCE_KEY_BYTES: usize = 512;
 const MAX_RESOURCE_FINGERPRINT_BYTES: usize = 16 * 1024;
+const MAX_MANIFEST_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedResource {
@@ -96,10 +97,19 @@ impl RouteManifest {
 
     pub fn encode(&self) -> Result<Vec<u8>> {
         self.validate()?;
-        Ok(serde_json::to_vec_pretty(self)?)
+        let bytes = serde_json::to_vec_pretty(self)?;
+        ensure!(
+            bytes.len() <= MAX_MANIFEST_BYTES,
+            "encoded TUN ownership manifest exceeds the size limit"
+        );
+        Ok(bytes)
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self> {
+        ensure!(
+            !bytes.is_empty() && bytes.len() <= MAX_MANIFEST_BYTES,
+            "TUN ownership manifest is empty or exceeds the size limit"
+        );
         let manifest: Self = serde_json::from_slice(bytes)?;
         manifest.validate()?;
         Ok(manifest)
