@@ -311,6 +311,16 @@ impl NativePersistentTunOwner {
         Ok(())
     }
 
+    /// Drop only stale process-local bookkeeping after a fresh inventory proves the device absent.
+    pub fn forget_if_absent(&mut self, name: &str, index: u32) -> Result<()> {
+        ensure!(index > 0, "native TUN stale-entry cleanup requires a non-zero ifindex");
+        let snapshot = kernel_inventory::inspect_snapshot()?;
+        ensure!(!snapshot.interfaces.iter().any(|interface| interface.name == name || interface.index == index),
+            "cannot forget native TUN ownership while its name or ifindex is still present");
+        self.devices.retain(|_, device| device.name != name || device.index != index);
+        Ok(())
+    }
+
     pub fn len(&self) -> usize { self.devices.len() }
     pub fn is_empty(&self) -> bool { self.devices.is_empty() }
 }
