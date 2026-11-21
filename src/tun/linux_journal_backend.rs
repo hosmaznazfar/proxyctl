@@ -149,7 +149,10 @@ impl LinuxJournalBackend {
                 let index = expected_value.get("ifindex").and_then(Value::as_u64)
                     .and_then(|value| u32::try_from(value).ok())
                     .context("persistent interface fingerprint has invalid ifindex")?;
+                let alias = expected_value.get("alias").and_then(Value::as_str)
+                    .context("persistent interface fingerprint has no generation alias")?;
                 self.native_owner.forget_if_absent(name, index)?;
+                ensure!(!alias.is_empty(), "persistent interface fingerprint has an empty generation alias");
                 return Ok(ResourceState::AlreadyAbsent);
             }
             if kind == JournalOperationKind::CreateInterface
@@ -199,7 +202,9 @@ impl LinuxJournalBackend {
                     return Ok(ResourceState::ChangedOrForeign);
                 }
                 if kind == JournalOperationKind::CreatePersistentInterface {
-                    self.native_owner.release_recovered(name, index)?;
+                    let alias = value.get("alias").and_then(Value::as_str)
+                        .context("persistent interface fingerprint has no generation alias")?;
+                    self.native_owner.release_recovered(name, index, alias)?;
                 } else {
                     self.owner.release(&journal.activation_id, self.generation, name, index)?;
                 }
