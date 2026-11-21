@@ -511,7 +511,7 @@ pub fn call(socket_path: &Path, request: &MutationRequest) -> Result<MutationRes
     stream.read_exact(&mut header)?;
     let length = u32::from_le_bytes(header) as usize;
     ensure!(
-        length > 0 && length <= MAX_FRAME,
+        length >= 2 && length <= MAX_FRAME,
         "mutation response frame length is invalid"
     );
     let mut bytes = vec![0u8; length];
