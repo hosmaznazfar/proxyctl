@@ -332,6 +332,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn refuses_lifecycle_lock_without_owner_read_write_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(LOCK_FILE);
         std::fs::write(&path, "").unwrap();
