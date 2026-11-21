@@ -98,6 +98,7 @@ pub fn receive_offer(stream: &mut UnixStream) -> Result<AttachmentOffer> {
 /// Send a positive adoption receipt only after the caller's core-specific attach operation succeeds.
 pub fn send_adoption_ack(stream: &mut UnixStream, offer: &AttachmentOffer) -> Result<()> {
     offer.validate()?;
+    configure_handoff_timeouts(stream)?;
     let ack = AttachmentAck {
         version: VERSION,
         activation_id: offer.activation_id.clone(),
