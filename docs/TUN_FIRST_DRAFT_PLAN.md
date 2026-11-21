@@ -239,12 +239,12 @@ The readiness path now includes an explicit numeric-address HTTP request sent di
 
 **Still incomplete:**
 
-- The end-to-end Xray readiness API is not wired to `services::activation::activate` or the public `use --tun` command.
+- The end-to-end Xray readiness API is now wired to the dedicated `activate_tun_xray` service and public `use --tun` / `stop` commands. The generic loopback activation path remains separate and cannot bypass the TUN lifecycle.
 - sing-box's documented TUN inbound creates/opens a named device; its public TUN configuration does not expose the Xray-style external descriptor environment contract. It needs a separate native-device ownership design before activation.
-- Mihomo's documented Linux TUN path is also native device creation; its file-descriptor option is not established as a supported Linux external-FD contract. It remains fail-closed.
+- Mihomo's documented Linux TUN path is native device creation; no Linux external-FD contract is used. A native-device configuration generator exists, but the persistent-device broker backend is not implemented, so it remains fail-closed.
 - No build, tests, real core startup, real traffic, fault injection, crash/reboot, or Linux host validation has been run. The public TUN gate must remain closed.
 
-This is real Xray orchestration/readiness progress, not completion of Phases 1–6. The next work is to connect a safe public Xray start/stop path, define the native-device backend for sing-box/Mihomo (or explicitly scope the release to Xray only), and then validate the whole lifecycle on Linux.
+This is real Xray orchestration/readiness progress, not completion of Phases 1–6. The next work is to implement the persistent native-device ownership backend for sing-box/Mihomo (or explicitly scope support to Xray), then build, fault-inject, and validate the full lifecycle on Linux.
 
 
 ## Xray public start/stop integration checkpoint (2026-11-21)
