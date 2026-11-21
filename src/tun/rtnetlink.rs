@@ -172,6 +172,9 @@ impl RouteNetlink {
                 "NETLINK_ROUTE link dump returned an unexpected message type"
             );
             validate_response_budget(&messages, &batch)?;
+            messages
+                .try_reserve(batch.len())
+                .context("cannot reserve NETLINK_ROUTE response message capacity")?;
             messages.extend(batch);
             if terminal {
                 return Ok(messages);
