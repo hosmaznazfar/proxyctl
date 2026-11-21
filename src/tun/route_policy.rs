@@ -85,6 +85,23 @@ pub struct KernelInventory {
     pub rule_priorities: Vec<(AddressFamily, u32)>,
 }
 
+/// Derive a stable, non-zero mark in Proxyctl's private high-bit range from a canonical UUID.
+pub fn mark_for_activation_id(activation_id: &str) -> Result<(u32, u32)> {
+    ensure!(activation_id.len() == 36 && activation_id.bytes().enumerate().all(|(index, byte)| {
+        if [8, 13, 18, 23].contains(&index) { byte == b'-' }
+        else { byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase() }
+    }), "activation ID must be a canonical lowercase UUID");
+    let digits = activation_id.bytes().filter(|byte| *byte != b'-').take(7)
+        .collect::<Vec<_>>();
+    ensure!(digits.len() == 7, "activation ID does not contain enough mark entropy");
+    let text = std::str::from_utf8(&digits)?;
+    let suffix = u32::from_str_radix(text, 16)? & 0x0fff_ffff;
+    let mark = 0x4000_0000 | suffix;
+    let mask = 0x7fff_ffff;
+    ensure!(mark != 0 && mark & !mask == 0, "derived Proxyctl socket mark is invalid");
+    Ok((mark, mask))
+}
+
 /// Allocate a free private table and consecutive policy priorities from one live snapshot.
 ///
 /// The caller must still let the broker re-check conflicts transactionally because another
@@ -320,6 +337,15 @@ impl RoutingPolicyPlan {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn derives_a_stable_mark_in_the_proxyctl_private_range() {
+        let id = "12345678-1234-4234-8234-123456789abc";
+        let (mark, mask) = mark_for_activation_id(id).unwrap();
+        assert_eq!((mark, mask), (0x4234_5678, 0x7fff_ffff));
+        assert_eq!(mark_for_activation_id(id).unwrap(), (mark, mask));
+        assert!(mark_for_activation_id("invalid").is_err());
+    }
+
     #[test]
     fn allocates_a_free_table_and_dual_stack_priority_pair() {
         let inventory = KernelInventory {
