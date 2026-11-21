@@ -807,6 +807,21 @@ mod tests {
         bytes[0..4].copy_from_slice(&99u32.to_ne_bytes());
         assert!(validate_request(&bytes).is_err());
     }
+
+    #[test]
+    fn rejects_netlink_requests_with_untrusted_sequence_port_or_flags() {
+        let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
+        request[6..8].copy_from_slice(&NLM_F_DUMP.to_ne_bytes());
+        assert!(validate_request(&request).is_err());
+
+        request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        request[8..12].copy_from_slice(&1u32.to_ne_bytes());
+        assert!(validate_request(&request).is_err());
+
+        request[8..12].fill(0);
+        request[12..16].copy_from_slice(&1u32.to_ne_bytes());
+        assert!(validate_request(&request).is_err());
+    }
     #[test]
     fn accepts_final_unpadded_non_aligned_netlink_message() {
         let mut bytes = message(99, 7, &[1]);
