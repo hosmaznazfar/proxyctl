@@ -1173,7 +1173,7 @@ pub fn probe_socks5_connect_detailed(_process: &(), _listener: SocketAddr, _dest
 
 
 #[cfg(all(test, target_os = "linux"))]
-mod http_connect_probe_tests {
+mod http_tun_probe_tests {
     #[test]
     fn validates_the_exact_unmarked_kernel_route_result() {
         let plan = super::super::route_policy::RoutingPolicyPlan::new(
