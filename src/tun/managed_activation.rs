@@ -194,7 +194,7 @@ fn terminate_prepared_core_process(
     if !identity.verify()? {
         return Ok(());
     }
-    let process = ProcessHandle::open(identity)
+    let process = ProcessHandle::open(identity.clone())
         .context("cannot pin orphaned Prepared core process")?;
     if !process.wait_exit(std::time::Duration::from_millis(0))? {
         process.signal(libc::SIGTERM)
