@@ -85,6 +85,7 @@ pub fn verify_peer_process(stream: &UnixStream, expected: &ProcessIdentity) -> R
 /// Send offer metadata before the descriptor so the receiver can validate the generation first.
 pub fn send_offer(stream: &mut UnixStream, offer: &AttachmentOffer) -> Result<()> {
     offer.validate()?;
+    configure_handoff_timeouts(stream)?;
     write_frame(stream, offer)
 }
 
