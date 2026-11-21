@@ -493,6 +493,10 @@ fn wait_for_socket(fd: i32, events: i16, deadline: std::time::Instant) -> Result
             "NETLINK_ROUTE socket reported an error"
         );
         ensure!(pollfd.revents & events != 0, "NETLINK_ROUTE socket readiness did not match the requested operation");
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "NETLINK_ROUTE socket operation timed out"
+        );
         return Ok(());
     }
 }
