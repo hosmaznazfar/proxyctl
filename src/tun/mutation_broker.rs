@@ -565,8 +565,9 @@ pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u6
     let mut stream = UnixStream::connect(socket_path).context("cannot connect to mutation broker for TUN descriptor attachment")?;
     stream.set_read_timeout(Some(IO_TIMEOUT))?;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
-    stream.write_all(&(payload.len() as u32).to_le_bytes())?;
-    stream.write_all(&payload)?;
+    let deadline = std::time::Instant::now() + IO_TIMEOUT;
+    write_exact_deadline(&mut stream, &(payload.len() as u32).to_le_bytes(), deadline)?;
+    write_exact_deadline(&mut stream, &payload, deadline)?;
     stream.flush()?;
     let bytes = read_response_frame(&mut stream)?;
     let response: MutationResponse = serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
