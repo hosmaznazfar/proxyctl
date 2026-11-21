@@ -471,6 +471,16 @@ mod tests {
     }
 
     #[test]
+    fn pidfd_reports_exit_for_a_zombie_before_reaping() {
+        let mut child = child();
+        let (_identity, handle) = pin_live_child(&child);
+        child.kill().unwrap();
+        wait_until_unreaped_child_exits(child.id());
+        assert!(handle.is_exited().unwrap());
+        child.wait().unwrap();
+    }
+
+    #[test]
     fn pidfd_signal_targets_the_verified_fake_child() {
         let mut child = child();
         let (_identity, handle) = pin_live_child(&child);
