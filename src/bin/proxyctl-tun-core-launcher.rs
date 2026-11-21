@@ -10,7 +10,7 @@ use std::{
     env, fs,
     io::Write,
     os::{
-        fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
+        fd::{AsFd, AsRawFd, OwnedFd},
         unix::{fs::{MetadataExt, PermissionsExt}, net::UnixStream, process::CommandExt},
     },
     path::{Path, PathBuf},
@@ -298,9 +298,7 @@ fn validate_tun_descriptor(fd: i32, interface: &str, expected_ifindex: u32) -> R
     let result = unsafe { libc::ioctl(fd, TUNGETIFF, request.as_mut_ptr()) };
     ensure!(result == 0, "received descriptor does not support TUNGETIFF");
     let flags = u16::from_ne_bytes([request[16], request[17]]);
-    ensure!(flags & IFF_TUN != 0 && flags & IFF_TAP == 0
-        && flags & IFF_NO_PI != 0 && flags & IFF_VNET_HDR == 0,
-        "received descriptor must be IFF_TUN|IFF_NO_PI without TAP or VNET_HDR");
+    validate_tun_mode_flags(flags, IFF_TUN, IFF_TAP, IFF_NO_PI, IFF_VNET_HDR)?;
     let status = unsafe { libc::fcntl(fd, libc::F_GETFL) };
     ensure!(status >= 0 && status & libc::O_ACCMODE == libc::O_RDWR,
         "received TUN descriptor must be open for read/write packet I/O");
@@ -312,6 +310,27 @@ fn validate_tun_descriptor(fd: i32, interface: &str, expected_ifindex: u32) -> R
         .trim().parse::<u32>().context("kernel returned an invalid TUN interface index")?;
     ensure!(actual == expected_ifindex, "TUN interface index changed before Xray exec");
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_tun_mode_flags(flags: u16, tun: u16, tap: u16, no_pi: u16, vnet_hdr: u16) -> Result<()> {
+    ensure!(flags & tun != 0 && flags & tap == 0
+        && flags & no_pi != 0 && flags & vnet_hdr == 0,
+        "received descriptor must be IFF_TUN|IFF_NO_PI without TAP or VNET_HDR");
+    Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tun_descriptor_contract_tests {
+    use super::validate_tun_mode_flags;
+
+    #[test]
+    fn accepts_only_packet_mode_tun_without_tap_or_vnet_header() {
+        assert!(validate_tun_mode_flags(0x1001, 0x0001, 0x0002, 0x1000, 0x4000).is_ok());
+        assert!(validate_tun_mode_flags(0x1003, 0x0001, 0x0002, 0x1000, 0x4000).is_err());
+        assert!(validate_tun_mode_flags(0x0001, 0x0001, 0x0002, 0x1000, 0x4000).is_err());
+        assert!(validate_tun_mode_flags(0x5001, 0x0001, 0x0002, 0x1000, 0x4000).is_err());
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
