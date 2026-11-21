@@ -363,6 +363,8 @@ pub fn probe_tun_routed_http_traffic(
     let status = parse_http_status(&response_headers)?;
     ensure!(status == target.expected_status,
         "TUN-routed HTTP probe returned an unexpected status");
+    ensure!(http_response_allows_keepalive(&response_headers)?,
+        "TUN readiness endpoint requested connection closure before outbound socket-mark inspection");
     ensure!(Instant::now() <= deadline, "TUN HTTP probe exceeded its aggregate deadline");
     ensure!(process.verify()?, "managed core identity changed during TUN traffic probe");
     Ok(TunTrafficProbe {
@@ -412,6 +414,20 @@ fn read_http_header_block(
         }
     }
     anyhow::bail!("HTTP response headers exceeded their configured bound")
+}
+
+#[cfg(target_os = "linux")]
+fn http_response_allows_keepalive(response: &[u8]) -> Result<bool> {
+    let end = response.windows(4).position(|window| window == b"\r\n\r\n")
+        .context("HTTP response has no complete header block")?;
+    let headers = std::str::from_utf8(&response[..end])
+        .context("HTTP response headers are not valid ASCII")?;
+    Ok(!headers.lines().skip(1).any(|line| {
+        line.split_once(':').is_some_and(|(name, value)| {
+            name.eq_ignore_ascii_case("connection")
+                && value.split(',').any(|token| token.trim().eq_ignore_ascii_case("close"))
+        })
+    }))
 }
 
 #[cfg(target_os = "linux")]
