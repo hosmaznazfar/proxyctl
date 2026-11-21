@@ -186,6 +186,13 @@ mod tests {
         use std::os::fd::AsRawFd;
 
         let file = std::fs::File::open("/dev/null").unwrap();
+        // SAFETY: F_GETFD/F_SETFD operate on the live descriptor owned by file.
+        let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
+        assert!(flags >= 0);
+        assert_eq!(
+            unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, flags & !libc::FD_CLOEXEC) },
+            0
+        );
         assert!(ensure_descriptor_cloexec(file.as_raw_fd()).is_err());
     }
 
