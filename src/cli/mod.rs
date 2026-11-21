@@ -201,7 +201,7 @@ enum Command {
         /// Override the persistent shared HTTP/SOCKS5 listener port for this activation only.
         #[arg(long, value_name = "PORT")]
         port: Option<u16>,
-        /// TUN activation is temporarily disabled pending safe route ownership and crash recovery.
+        /// Request experimental TUN activation; the public start path remains gated pending lifecycle integration and runtime validation.
         #[arg(long)]
         tun: bool,
     },
