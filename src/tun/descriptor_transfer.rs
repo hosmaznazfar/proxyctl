@@ -43,20 +43,45 @@ pub fn receive_descriptor(stream: &UnixStream) -> Result<OwnedFd> {
     message.msg_control = control.as_mut_ptr().cast(); message.msg_controllen = bytes;
     let received = unsafe { libc::recvmsg(stream.as_raw_fd(), &mut message, libc::MSG_CMSG_CLOEXEC) };
     ensure!(received == 1, "SCM_RIGHTS recvmsg failed or peer closed: {}", std::io::Error::last_os_error());
-    let header = unsafe { libc::CMSG_FIRSTHDR(&message) };
-    ensure!(!header.is_null(), "descriptor transfer omitted SCM_RIGHTS");
-    ensure!(unsafe { (*header).cmsg_level == libc::SOL_SOCKET && (*header).cmsg_type == libc::SCM_RIGHTS }, "unexpected ancillary message");
-    ensure!(unsafe { (*header).cmsg_len >= libc::CMSG_LEN(mem::size_of::<libc::c_int>() as u32) as usize }, "SCM_RIGHTS message omitted its descriptor");
-    let raw = unsafe { std::ptr::read_unaligned(libc::CMSG_DATA(header).cast::<libc::c_int>()) };
-    ensure!(raw >= 0, "kernel returned invalid descriptor");
-    // Take ownership before any later validation can fail, so malformed/truncated
-    // frames cannot leak the descriptor installed by the kernel.
-    let descriptor = unsafe { OwnedFd::from_raw_fd(raw) };
+    // Convert every installed SCM_RIGHTS descriptor to RAII ownership before checking
+    // the envelope. This guarantees that malformed messages cannot leak extra fds.
+    let mut descriptors = Vec::new();
+    let mut unexpected_control = false;
+    let mut header = unsafe { libc::CMSG_FIRSTHDR(&message) };
+    while !header.is_null() {
+        let level = unsafe { (*header).cmsg_level };
+        let kind = unsafe { (*header).cmsg_type };
+        let length = unsafe { (*header).cmsg_len };
+        if level == libc::SOL_SOCKET && kind == libc::SCM_RIGHTS {
+            let base = unsafe { libc::CMSG_LEN(0) as usize };
+            if length >= base {
+                let data_bytes = length - base;
+                if data_bytes % mem::size_of::<libc::c_int>() == 0 {
+                    let count = data_bytes / mem::size_of::<libc::c_int>();
+                    for index in 0..count {
+                        let raw = unsafe { std::ptr::read_unaligned(libc::CMSG_DATA(header).cast::<libc::c_int>().add(index)) };
+                        if raw >= 0 {
+                            descriptors.push(unsafe { OwnedFd::from_raw_fd(raw) });
+                        } else {
+                            unexpected_control = true;
+                        }
+                    }
+                } else {
+                    unexpected_control = true;
+                }
+            } else {
+                unexpected_control = true;
+            }
+        } else {
+            unexpected_control = true;
+        }
+        header = unsafe { libc::CMSG_NXTHDR(&message, header) };
+    }
     ensure!(marker == MARKER, "descriptor transfer marker is invalid");
     ensure!(message.msg_flags & (libc::MSG_CTRUNC | libc::MSG_TRUNC) == 0, "descriptor control message was truncated");
-    ensure!(unsafe { (*header).cmsg_len == libc::CMSG_LEN(mem::size_of::<libc::c_int>() as u32) as usize }, "transfer must contain exactly one descriptor");
-    ensure!(unsafe { libc::CMSG_NXTHDR(&message, header).is_null() }, "unexpected additional ancillary data");
-    Ok(descriptor)
+    ensure!(!unexpected_control, "unexpected ancillary message");
+    ensure!(descriptors.len() == 1, "transfer must contain exactly one descriptor");
+    Ok(descriptors.pop().expect("descriptor count was validated"))
 }
 #[cfg(test)]
 mod tests {
