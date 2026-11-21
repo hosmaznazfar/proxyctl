@@ -62,17 +62,19 @@ pub fn prepare_managed_activation(
     let token = match coordinator.adopt_prepared(&activation_id, generation) {
         Ok(token) => token,
         Err(error) => {
+            let original_error = format!("{error:#}");
             let recovery = helper.recover(activation_id, generation);
-            return Err(error).context(match recovery {
-                Ok(result) if result.success => "activation manifest adoption failed; broker recovery completed",
-                Ok(result) => return Err(anyhow::anyhow!(
-                    "activation manifest adoption failed ({error:#}); broker recovery failed: {}",
+            return match recovery {
+                Ok(result) if result.success => Err(error)
+                    .context("activation manifest adoption failed; broker recovery completed"),
+                Ok(result) => Err(anyhow::anyhow!(
+                    "activation manifest adoption failed ({original_error}); broker recovery failed: {}",
                     result.message
                 )),
-                Err(recovery_error) => return Err(anyhow::anyhow!(
-                    "activation manifest adoption failed ({error:#}); broker recovery request failed: {recovery_error:#}"
+                Err(recovery_error) => Err(anyhow::anyhow!(
+                    "activation manifest adoption failed ({original_error}); broker recovery request failed: {recovery_error:#}"
                 )),
-            });
+            };
         }
     };
     Ok((token, response.message))
