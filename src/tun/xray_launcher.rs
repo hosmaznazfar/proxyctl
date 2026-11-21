@@ -8,7 +8,8 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    os::unix::fs::{MetadataExt, PermissionsExt},
+    io::Read,
+    os::unix::{fs::{MetadataExt, PermissionsExt}, net::UnixListener},
     os::fd::AsFd,
     os::unix::process::CommandExt,
     path::Path,
@@ -34,6 +35,11 @@ pub fn spawn_xray_from_broker(
 ) -> Result<(Child, ProcessIdentity)> {
     ensure!(executable.is_absolute(), "Xray executable path must be absolute");
     ensure!(config.is_absolute(), "Xray config path must be absolute");
+    ensure!(generation > 0, "Xray activation generation must be positive");
+    ensure!(activation_id.len() == 36, "Xray activation ID is invalid");
+    ensure!(Path::new("/run/systemd/system").is_dir(),
+        "Xray TUN descriptor launch requires the systemd system manager");
+
     let executable_metadata = fs::symlink_metadata(executable)
         .context("cannot inspect Xray executable path")?;
     ensure!(executable_metadata.file_type().is_file(), "Xray executable must be a regular non-symlink file");
@@ -48,32 +54,152 @@ pub fn spawn_xray_from_broker(
     let executable = fs::canonicalize(executable).context("cannot canonicalize Xray executable")?;
     let config = fs::canonicalize(config).context("cannot canonicalize Xray config")?;
 
-    let broker_descriptor = helper.attach_descriptor(activation_id, generation)
-        .context("cannot obtain the broker-owned TUN descriptor for Xray")?;
-    let inherited = XrayTunDescriptor::duplicate(broker_descriptor.as_fd())
-        .context("cannot prepare the Xray TUN descriptor for child inheritance")?;
+    const SUDO: &str = "/usr/bin/sudo";
+    const SYSTEMD_RUN: &str = "/usr/bin/systemd-run";
+    const SYSTEMCTL: &str = "/usr/bin/systemctl";
+    const LAUNCHER: &str = "/usr/libexec/proxyctl-tun-core-launcher";
+    for path in [Path::new(SUDO), Path::new(SYSTEMD_RUN), Path::new(SYSTEMCTL), Path::new(LAUNCHER)] {
+        let metadata = fs::symlink_metadata(path)
+            .with_context(|| format!("required TUN service executable is missing: {}", path.display()))?;
+        ensure!(metadata.file_type().is_file() && metadata.uid() == 0
+            && metadata.permissions().mode() & 0o111 != 0
+            && metadata.permissions().mode() & 0o022 == 0
+            && metadata.permissions().mode() & 0o7000 == 0,
+            "TUN service executable must be a root-owned, non-writable regular executable: {}", path.display());
+    }
 
-    let mut command = Command::new(&executable);
-    command.arg("run").arg("-c").arg(&config)
-        .arg0("proxyctl-core")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    inherited.configure_command(&mut command)?;
+    let runtime = helper.socket_path().parent()
+        .context("mutation helper socket has no runtime directory")?;
+    let socket_path = runtime.join(format!("xray-{activation_id}-{generation}.sock"));
+    ensure!(socket_path.as_os_str().len() < 108,
+        "Xray descriptor socket path exceeds the Unix-domain socket limit");
+    ensure!(matches!(fs::symlink_metadata(&socket_path),
+        Err(ref error) if error.kind() == std::io::ErrorKind::NotFound),
+        "Xray descriptor socket path already exists; refusing to replace it");
+    let listener = UnixListener::bind(&socket_path)
+        .context("cannot bind private Xray descriptor socket")?;
+    fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
+        .context("cannot restrict Xray descriptor socket permissions")?;
+    let socket_metadata = fs::symlink_metadata(&socket_path)?;
+    ensure!(socket_metadata.file_type().is_socket()
+        && socket_metadata.uid() == unsafe { libc::geteuid() }
+        && socket_metadata.permissions().mode() & 0o777 == 0o600
+        && socket_metadata.nlink() == 1,
+        "Xray descriptor socket identity or permissions are unsafe");
+    listener.set_nonblocking(true)?;
 
-    let mut child = command.spawn().context("cannot spawn Xray with the broker-owned TUN descriptor")?;
-    drop(inherited);
-    drop(broker_descriptor);
+    // Allow the system manager to create one capability-confined transient unit. The
+    // subsequent systemd-run invocation is non-interactive and cannot prompt mid-launch.
+    let authorization = Command::new(SUDO).arg("-v").status()
+        .context("cannot request authorization for the isolated Xray TUN service")?;
+    ensure!(authorization.success(), "sudo authorization was not granted for the Xray TUN service");
 
-    let identity = match ProcessIdentity::capture(child.id()) {
-        Ok(identity) => identity,
-        Err(error) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(error).context("cannot capture the spawned Xray process identity");
+    let uid = unsafe { libc::getuid() };
+    let gid = unsafe { libc::getgid() };
+    let unit = format!("proxyctl-tun-core-{activation_id}-{generation}.service");
+    let mut launcher = Command::new(SUDO);
+    launcher.args(["-n", "--"]).arg(SYSTEMD_RUN)
+        .args(["--system", "--quiet", "--collect"])
+        .arg(format!("--unit={unit}"))
+        .arg(format!("--property=User={uid}"))
+        .arg(format!("--property=Group={gid}"))
+        .args([
+            "--property=Type=exec",
+            "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
+            "--property=AmbientCapabilities=CAP_NET_ADMIN",
+            "--property=NoNewPrivileges=yes",
+            "--property=KillMode=control-group",
+            "--property=KillSignal=SIGTERM",
+            "--property=TimeoutStopSec=5s",
+            "--property=SendSIGKILL=yes",
+            "--property=Restart=no",
+            "--property=UMask=0077",
+            "--property=PrivateTmp=yes",
+            "--property=StandardOutput=null",
+            "--property=StandardError=null",
+        ])
+        .arg("--").arg(LAUNCHER)
+        .arg("--socket").arg(&socket_path)
+        .arg("--parent-pid").arg(std::process::id().to_string())
+        .arg("--interface").arg(crate::cores::adapters::XRAY_TUN_INTERFACE_NAME)
+        .arg("--ifindex").arg("1")
+        .arg("--executable").arg(&executable)
+        .arg("--config").arg(&config)
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let mut service_command = launcher.spawn()
+        .context("cannot start the capability-confined Xray TUN service")?;
+
+    let start_deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = service_command.try_wait()? {
+            ensure!(status.success(), "systemd refused to start the Xray TUN service");
+            break;
         }
-    };
-    Ok((child, identity))
+        ensure!(std::time::Instant::now() < start_deadline,
+            "systemd-run did not finish starting the Xray TUN service before its deadline");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    let handoff_result = (|| -> Result<ProcessIdentity> {
+        let accept_deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let (mut stream, _) = loop {
+            match listener.accept() {
+                Ok(connection) => break connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    ensure!(std::time::Instant::now() < accept_deadline,
+                        "Xray core launcher did not connect before the descriptor handoff deadline");
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(error) => return Err(error).context("cannot accept Xray core launcher connection"),
+            }
+        };
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let peer = super::privilege_broker::read_broker_peer_credentials(&stream)?;
+        ensure!(peer.uid == uid && peer.pid > 0,
+            "Xray core launcher peer credentials do not match the activation user");
+        let launcher_identity = ProcessIdentity::capture(peer.pid)
+            .context("cannot capture Xray core launcher process identity")?;
+        ensure!(launcher_identity.executable == fs::canonicalize(LAUNCHER)?,
+            "descriptor socket peer is not the installed Xray core launcher");
+
+        let descriptor = helper.attach_descriptor(activation_id, generation)
+            .context("cannot obtain the broker-owned TUN descriptor for Xray")?;
+        descriptor_transfer::send_descriptor(&stream, descriptor.as_fd())
+            .context("cannot transfer the broker-owned TUN descriptor to Xray")?;
+        receive_process_identity(&mut stream)
+            .context("Xray core launcher did not confirm the exec'd core identity")
+    })();
+
+    let _ = fs::remove_file(&socket_path);
+    match handoff_result {
+        Ok(identity) => {
+            ensure!(identity.executable == executable,
+                "Xray core launcher reported an unexpected executable identity");
+            ensure!(identity.verify()?, "Xray process identity is not live after descriptor handoff");
+            Ok((service_command, identity))
+        }
+        Err(error) => {
+            let _ = Command::new(SUDO).args(["-n", "--", SYSTEMCTL, "stop", &unit]).status();
+            let _ = service_command.wait();
+            Err(error).context("Xray descriptor handoff failed; transient service stop was requested")
+        }
+    }
+}
+
+fn receive_process_identity(stream: &mut std::os::unix::net::UnixStream) -> Result<ProcessIdentity> {
+    let mut header = [0u8; 4];
+    stream.read_exact(&mut header).context("cannot read Xray process identity frame length")?;
+    let length = u32::from_le_bytes(header) as usize;
+    ensure!(length > 0 && length <= 4096, "Xray process identity frame length is invalid");
+    let mut payload = Vec::new();
+    payload.try_reserve_exact(length).context("cannot reserve bounded Xray process identity frame")?;
+    payload.resize(length, 0);
+    stream.read_exact(&mut payload).context("cannot read Xray process identity frame")?;
+    let identity: ProcessIdentity = serde_json::from_slice(&payload)
+        .context("Xray process identity frame is malformed")?;
+    identity.validate()?;
+    Ok(identity)
 }
 
 
