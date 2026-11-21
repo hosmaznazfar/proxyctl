@@ -91,6 +91,7 @@ pub fn send_offer(stream: &mut UnixStream, offer: &AttachmentOffer) -> Result<()
 
 /// Receive and validate one bounded attachment offer.
 pub fn receive_offer(stream: &mut UnixStream) -> Result<AttachmentOffer> {
+    configure_handoff_timeouts(stream)?;
     let offer: AttachmentOffer = read_frame(stream)?;
     offer.validate()?;
     Ok(offer)
