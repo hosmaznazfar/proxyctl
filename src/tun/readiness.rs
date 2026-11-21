@@ -1320,10 +1320,10 @@ mod http_tun_probe_tests {
     #[test]
     fn rejects_http_probe_header_and_request_injection() {
         let mut value = target();
-        value.host_header = "probe.example\\r\\nX-Injected: yes".into();
+        value.host_header = "probe.example\r\nX-Injected: yes".into();
         assert!(value.validate().is_err());
         value = target();
-        value.path = "/health\\r\\nHost: attacker.example".into();
+        value.path = "/health\r\nHost: attacker.example".into();
         assert!(value.validate().is_err());
     }
 
@@ -1339,28 +1339,28 @@ mod http_tun_probe_tests {
 
     #[test]
     fn parses_http_status_and_body_without_accepting_malformed_responses() {
-        let response = b"HTTP/1.1 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nproxyctl-ok";
+        let response = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nproxyctl-ok";
         assert_eq!(parse_http_status(response).unwrap(), 200);
         assert_eq!(http_response_body(response).unwrap(), b"proxyctl-ok");
         assert!(contains_bytes(http_response_body(response).unwrap(), b"proxyctl"));
-        assert!(parse_http_status(b"not-http\\r\\n").is_err());
-        assert!(http_response_body(b"HTTP/1.1 200 OK\\r\\n").is_err());
+        assert!(parse_http_status(b"not-http\r\n").is_err());
+        assert!(http_response_body(b"HTTP/1.1 200 OK\r\n").is_err());
     }
 
     #[test]
     fn persistent_readiness_response_rejects_connection_close() {
         assert!(super::http_response_allows_keepalive(
-            b"HTTP/1.1 204 No Content\\r\\n\\r\\n"
+            b"HTTP/1.1 204 No Content\r\n\r\n"
         ).unwrap());
         assert!(!super::http_response_allows_keepalive(
-            b"HTTP/1.1 204 No Content\\r\\nConnection: keep-alive, close\\r\\n\\r\\n"
+            b"HTTP/1.1 204 No Content\r\nConnection: keep-alive, close\r\n\r\n"
         ).unwrap());
     }
 
     #[test]
     fn parser_requires_complete_supported_status_line() {
-        assert!(parse_http_status(b"HTTP/2 200 OK\\r\\n").is_err());
-        assert!(parse_http_status(b"HTTP/1.1 700 Bad\\r\\n").is_err());
-        assert!(parse_http_status(b"HTTP/1.1 nope Bad\\r\\n").is_err());
+        assert!(parse_http_status(b"HTTP/2 200 OK\r\n").is_err());
+        assert!(parse_http_status(b"HTTP/1.1 700 Bad\r\n").is_err());
+        assert!(parse_http_status(b"HTTP/1.1 nope Bad\r\n").is_err());
     }
 }
