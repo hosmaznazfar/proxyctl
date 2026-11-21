@@ -553,6 +553,36 @@ mod tests {
     }
 
     #[test]
+    fn step_generation_is_stable_when_policy_vectors_are_reordered() {
+        let mut tx = transaction();
+        tx.policy.routes.reverse();
+        tx.policy.rules.reverse();
+        let steps = tx.steps().unwrap();
+        let route_families = steps[1..3]
+            .iter()
+            .map(|step| match step {
+                ApplyStep::AddRoute(route) => route.family,
+                _ => unreachable!(),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(route_families, [super::super::route_policy::AddressFamily::Ipv4,
+            super::super::route_policy::AddressFamily::Ipv6]);
+        let rule_families = steps[3..]
+            .iter()
+            .map(|step| match step {
+                ApplyStep::AddRule(rule) => (rule.family, rule.priority),
+                _ => unreachable!(),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rule_families, [
+            (super::super::route_policy::AddressFamily::Ipv4, 42_410),
+            (super::super::route_policy::AddressFamily::Ipv4, 42_420),
+            (super::super::route_policy::AddressFamily::Ipv6, 42_410),
+            (super::super::route_policy::AddressFamily::Ipv6, 42_420),
+        ]);
+    }
+
+    #[test]
     fn binds_routes_and_manifest_to_kernel_assigned_interface_index() {
         let mut backend = FakeBackend {
             assigned_interface_index: Some(143),
