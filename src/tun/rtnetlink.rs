@@ -606,11 +606,22 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
         let message = &bytes[offset..offset + length];
         if kind == NLMSG_ERROR {
             ensure!(
-                length >= NETLINK_HEADER_LEN + 4,
+                length >= NETLINK_HEADER_LEN + 4 + NETLINK_HEADER_LEN,
                 "truncated netlink acknowledgement"
             );
             let error =
                 i32::from_ne_bytes(message[NETLINK_HEADER_LEN..NETLINK_HEADER_LEN + 4].try_into()?);
+            let original = &message[NETLINK_HEADER_LEN + 4..NETLINK_HEADER_LEN + 4 + NETLINK_HEADER_LEN];
+            ensure!(
+                u32::from_ne_bytes(original[0..4].try_into()?) as usize
+                    == NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN
+                    && u16::from_ne_bytes(original[4..6].try_into()?) == RTM_GETLINK
+                    && u16::from_ne_bytes(original[6..8].try_into()?)
+                        == (NLM_F_REQUEST | NLM_F_DUMP)
+                    && u32::from_ne_bytes(original[8..12].try_into()?) == expected_sequence
+                    && u32::from_ne_bytes(original[12..16].try_into()?) == 0,
+                "NETLINK_ROUTE acknowledgement does not match the outstanding request"
+            );
             if error != 0 {
                 let errno = error
                     .checked_neg()
@@ -797,7 +808,15 @@ mod tests {
 
     #[test]
     fn accepts_matching_ack_as_terminal() {
-        let bytes = message(NLMSG_ERROR, 7, &0i32.to_ne_bytes());
+        let mut ack_payload = 0i32.to_ne_bytes().to_vec();
+        let mut original = vec![0u8; NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN];
+        let original_length = original.len() as u32;
+        original[0..4].copy_from_slice(&original_length.to_ne_bytes());
+        original[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+        original[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        original[8..12].copy_from_slice(&7u32.to_ne_bytes());
+        ack_payload.extend(original);
+        let bytes = message(NLMSG_ERROR, 7, &ack_payload);
         let (messages, terminal) = parse_datagram(&bytes, 7).unwrap();
         assert!(messages.is_empty());
         assert!(terminal);
@@ -830,7 +849,9 @@ mod tests {
 
     #[test]
     fn rejects_kernel_error_ack() {
-        let bytes = message(NLMSG_ERROR, 7, &(-libc::EPERM).to_ne_bytes());
+        let mut payload = (-libc::EPERM).to_ne_bytes().to_vec();
+        payload.extend([0u8; NETLINK_HEADER_LEN]);
+        let bytes = message(NLMSG_ERROR, 7, &payload);
         assert!(parse_datagram(&bytes, 7).is_err());
     }
 
