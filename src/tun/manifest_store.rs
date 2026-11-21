@@ -29,6 +29,7 @@ const STORE_VERSION: u32 = 1;
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManifestSnapshot {
     pub schema_version: u32,
     pub generation: u64,
