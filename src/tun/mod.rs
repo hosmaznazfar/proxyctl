@@ -35,6 +35,8 @@ pub mod manifest_store;
 pub mod mutation_broker;
 #[cfg(target_os = "linux")]
 pub mod mutation_helper_launcher;
+#[cfg(target_os = "linux")]
+pub mod native_core_launcher;
 pub mod ownership;
 #[cfg(target_os = "linux")]
 pub mod persistent_tun_owner;
