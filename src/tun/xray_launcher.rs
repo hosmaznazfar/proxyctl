@@ -14,7 +14,10 @@ use std::{
     os::unix::process::CommandExt,
     path::Path,
     process::{Child, Command, Stdio},
+    time::Duration,
 };
+
+use super::descriptor_transfer;
 
 use crate::{
     cores::adapters::xray_tun_fd::XrayTunDescriptor,
@@ -32,6 +35,8 @@ pub fn spawn_xray_from_broker(
     generation: u64,
     executable: &Path,
     config: &Path,
+    interface_name: &str,
+    expected_ifindex: u32,
 ) -> Result<(Child, ProcessIdentity)> {
     ensure!(executable.is_absolute(), "Xray executable path must be absolute");
     ensure!(config.is_absolute(), "Xray config path must be absolute");
@@ -121,8 +126,8 @@ pub fn spawn_xray_from_broker(
         .arg("--").arg(LAUNCHER)
         .arg("--socket").arg(&socket_path)
         .arg("--parent-pid").arg(std::process::id().to_string())
-        .arg("--interface").arg(crate::cores::adapters::XRAY_TUN_INTERFACE_NAME)
-        .arg("--ifindex").arg("1")
+        .arg("--interface").arg(interface_name)
+        .arg("--ifindex").arg(expected_ifindex.to_string())
         .arg("--executable").arg(&executable)
         .arg("--config").arg(&config)
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
@@ -366,7 +371,7 @@ pub fn spawn_xray_with_verified_attachment(
     attachment_timeout: std::time::Duration,
 ) -> Result<(Child, ProcessIdentity)> {
     let (mut child, identity) = spawn_xray_from_broker(
-        helper, activation_id, generation, executable, config,
+        helper, activation_id, generation, executable, config, interface_name, expected_ifindex,
     )?;
     if let Err(error) = wait_for_xray_tun_attachment(
         &identity, interface_name, expected_ifindex, attachment_timeout,
