@@ -414,6 +414,97 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
 }
 
+/// Probe a real application TCP flow through the host's unmarked TUN route.
+///
+/// Unlike a request to the local proxy listener, this opens the destination directly. The
+/// kernel must therefore route the application socket into the broker-owned TUN interface;
+/// Xray must read the packet from its attached descriptor and proxy the resulting connection.
+#[cfg(target_os = "linux")]
+pub fn probe_tun_routed_http_traffic(
+    process: &super::process::ProcessIdentity,
+    target: &HttpConnectProbeTarget,
+    activation_id: &str,
+    generation: u64,
+    timeout: Duration,
+    maximum_response_bytes: usize,
+) -> Result<ProxyTrafficObservation> {
+    use std::{io::{Read, Write}, net::TcpStream, time::Instant};
+
+    target.validate()?;
+    ensure!(!activation_id.is_empty() && generation > 0,
+        "TUN HTTP probe activation identity is invalid");
+    ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(30),
+        "TUN HTTP probe timeout must be between zero and thirty seconds");
+    ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
+        "TUN HTTP response bound must be within one MiB");
+    ensure!(process.verify()?, "managed core identity is not live before TUN traffic probe");
+    let started = Instant::now();
+    let deadline = started + timeout;
+    let connect_timeout = timeout.min(Duration::from_secs(5));
+    let mut stream = TcpStream::connect_timeout(&target.destination, connect_timeout)
+        .context("cannot establish the direct application TCP flow through the TUN route")?;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    ensure!(!remaining.is_zero(), "TUN HTTP probe deadline expired during TCP connection");
+    stream.set_read_timeout(Some(remaining))?;
+    stream.set_write_timeout(Some(remaining))?;
+    let authority = if target.destination.port() == 80 {
+        target.host_header.clone()
+    } else {
+        format!("{}:{}", target.host_header, target.destination.port())
+    };
+    let request = format!(
+        "GET {} HTTP/1.1\\r\\nHost: {}\\r\\nConnection: close\\r\\nAccept: */*\\r\\n\\r\\n",
+        target.path, authority
+    );
+    stream.write_all(request.as_bytes())
+        .context("cannot send HTTP request through the host TUN route")?;
+    let mut response = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        ensure!(!remaining.is_zero(), "TUN HTTP probe exceeded its aggregate deadline");
+        stream.set_read_timeout(Some(remaining))?;
+        let count = stream.read(&mut chunk)
+            .context("cannot read HTTP response from the TUN-routed application flow")?;
+        if count == 0 { break; }
+        ensure!(response.len().saturating_add(count) <= maximum_response_bytes,
+            "TUN HTTP response exceeded its configured bound");
+        response.try_reserve(count).context("cannot reserve bounded TUN HTTP response")?;
+        response.extend_from_slice(&chunk[..count]);
+    }
+    let status = parse_http_status(&response)?;
+    ensure!(status == target.expected_status,
+        "TUN-routed HTTP probe returned an unexpected status");
+    let body = http_response_body(&response)?;
+    ensure!(target.expected_body_marker.is_empty()
+        || contains_bytes(body, &target.expected_body_marker),
+        "TUN-routed HTTP response did not contain its expected body marker");
+    ensure!(Instant::now() <= deadline, "TUN HTTP probe exceeded its aggregate deadline");
+    ensure!(process.verify()?, "managed core identity changed during TUN traffic probe");
+    Ok(ProxyTrafficObservation {
+        activation_id: activation_id.to_owned(),
+        generation,
+        process: process.clone(),
+        destination: target.destination,
+        completed: true,
+        elapsed: started.elapsed(),
+        response_bytes: response.len(),
+        expected_response_verified: true,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_tun_routed_http_traffic(
+    _process: &(),
+    _target: &HttpConnectProbeTarget,
+    _activation_id: &str,
+    _generation: u64,
+    _timeout: Duration,
+    _maximum_response_bytes: usize,
+) -> Result<ProxyTrafficObservation> {
+    anyhow::bail!("direct TUN-routed HTTP probing is supported only on Linux");
+}
+
 /// Validate bounded traffic-probe evidence against the activation identity and limits.
 ///
 /// The API requires a non-zero generation, a concrete destination, bounded duration,
