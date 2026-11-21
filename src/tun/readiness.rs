@@ -333,6 +333,8 @@ pub fn probe_tun_routed_http_traffic(
     let connect_timeout = timeout.min(Duration::from_secs(5));
     let mut stream = TcpStream::connect_timeout(&target.destination, connect_timeout)
         .context("cannot establish the direct application TCP flow through the TUN route")?;
+    ensure!(stream.peer_addr()? == target.destination,
+        "direct TUN probe connected to a different destination endpoint");
     let remaining = deadline.saturating_duration_since(Instant::now());
     ensure!(!remaining.is_zero(), "TUN HTTP probe deadline expired during TCP connection");
     stream.set_read_timeout(Some(remaining))?;
