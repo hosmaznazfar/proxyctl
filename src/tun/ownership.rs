@@ -160,7 +160,9 @@ pub fn cleanup<B: OwnedResourceBackend>(
     manifest.validate()?;
     let mut report = CleanupReport::default();
     report.removed.try_reserve(manifest.resources.len())?;
-    report.already_absent.try_reserve(manifest.resources.len())?;
+    report
+        .already_absent
+        .try_reserve(manifest.resources.len())?;
     report.conflicts.try_reserve(manifest.resources.len())?;
 
     // Preflight every resource before the first deletion to avoid partial teardown on conflict.
@@ -412,7 +414,10 @@ mod tests {
         for name in [".", ".."] {
             let mut value = manifest();
             value.interface_name = name.to_owned();
-            assert!(value.validate().is_err(), "accepted interface name {name:?}");
+            assert!(
+                value.validate().is_err(),
+                "accepted interface name {name:?}"
+            );
         }
     }
 
