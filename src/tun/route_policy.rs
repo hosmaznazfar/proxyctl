@@ -168,8 +168,10 @@ impl RoutingPolicyPlan {
         ensure!(
             self.bypass_priority >= RPDB_PRIORITY_MIN_PROXYCTL
                 && self.proxy_priority >= RPDB_PRIORITY_MIN_PROXYCTL
+                && self.bypass_priority <= i32::MAX as u32
+                && self.proxy_priority <= i32::MAX as u32
                 && self.bypass_priority < self.proxy_priority,
-            "Proxyctl policy priorities must be in the private range with core bypass before proxy traffic"
+            "Proxyctl policy priorities must be in the signed native range with core bypass before proxy traffic"
         );
         ensure!(
             self.core_mark != 0
