@@ -54,7 +54,7 @@ impl KernelTransaction {
 }
 
 fn valid_backend_fingerprint(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 16 * 1024 && !value.chars().any(char::is_control)
+    !value.trim().is_empty() && value.len() <= 16 * 1024 && !value.chars().any(char::is_control)
 }
 
 fn valid_activation_id(value: &str) -> bool {
