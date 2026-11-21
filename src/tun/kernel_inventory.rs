@@ -45,14 +45,6 @@ fn inspect_snapshot_with_interface_path(interface_path: &Path) -> Result<KernelS
     let mut snapshot =
         parse_detailed_snapshot(&ipv4_routes, &ipv6_routes, &ipv4_rules, &ipv6_rules)?;
     snapshot.interfaces = inspect_interfaces(interface_path)?;
-    for interface in &snapshot.interfaces {
-        if let Ok(alias) = fs::read_to_string(interface_path.join(&interface.name).join("ifalias")) {
-            let alias = alias.trim_end_matches(['\\r', '\\n']).to_owned();
-            if !alias.is_empty() {
-                snapshot.interface_aliases.insert(interface.name.clone(), alias);
-            }
-        }
-    }
     let netlink_links = super::rtnetlink::inspect_links()
         .context("cannot capture exact read-only NETLINK_ROUTE link identities")?;
     snapshot.netlink_interface_count = netlink_links.len();
@@ -181,8 +173,6 @@ pub struct KernelSnapshot {
     pub routes: Vec<KernelRouteRecord>,
     pub rules: Vec<KernelRuleRecord>,
     pub interfaces: Vec<KernelInterfaceRecord>,
-    /// Read-only interface aliases keyed by exact interface name; unavailable aliases are omitted.
-    pub interface_aliases: std::collections::BTreeMap<String, String>,
     /// Independent interface-record count from a bounded RTM_GETLINK dump.
     #[cfg(target_os = "linux")]
     pub netlink_interface_count: usize,
