@@ -115,17 +115,8 @@ impl ProcessHandle {
                 libc::syscall(libc::SYS_pidfd_open, identity.pid as libc::pid_t, 0u32)
                     as libc::c_int
             };
-            if result > 0 {
+            if result >= 0 {
                 break result;
-            }
-            if result == 0 {
-                if Instant::now() >= deadline {
-                    return Ok(false);
-                }
-                // poll() caps its millisecond timeout at i32::MAX. A longer requested
-                // wait must continue against the original deadline rather than return
-                // early after the first capped interval.
-                continue;
             }
             let error = std::io::Error::last_os_error();
             if error.kind() == std::io::ErrorKind::Interrupted {
