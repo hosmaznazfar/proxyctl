@@ -58,7 +58,8 @@ impl SystemdRecoverySupervisor {
                         component,
                         std::path::Component::RootDir | std::path::Component::Normal(_)
                     ))
-                    && path.file_name().is_some(),
+                    && path.file_name().is_some()
+                    && path.as_os_str().len() <= 4096,
                 "recovery supervisor and systemd command paths must be normalized absolute file paths"
             );
         }
