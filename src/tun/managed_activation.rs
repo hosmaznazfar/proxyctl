@@ -9,9 +9,9 @@ use anyhow::{Context, Result, ensure};
 
 use super::{
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
+    mutation_broker::MutationResponse,
     mutation_helper_launcher::MutationHelper,
     process::{ProcessHandle, ProcessIdentity},
-    mutation_broker::MutationResponse,
     recovery::{SupervisorEvent, SupervisorPhase},
 };
 
@@ -42,8 +42,16 @@ pub fn prepare_managed_activation(
     core_mark_mask: u32,
 ) -> Result<(ActivationToken, String)> {
     let response = helper.activate(
-        activation_id.clone(), generation, interface_name, owner_uid, owner_gid,
-        table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
+        activation_id.clone(),
+        generation,
+        interface_name,
+        owner_uid,
+        owner_gid,
+        table_id,
+        bypass_priority,
+        proxy_priority,
+        core_mark,
+        core_mark_mask,
     )?;
     if !response.success {
         anyhow::bail!(
@@ -86,21 +94,38 @@ pub fn prepare_native_managed_activation(
     core_mark_mask: u32,
 ) -> Result<(ActivationToken, String)> {
     let response = helper.activate_native(
-        activation_id.clone(), generation, interface_name, owner_uid, owner_gid,
-        table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
+        activation_id.clone(),
+        generation,
+        interface_name,
+        owner_uid,
+        owner_gid,
+        table_id,
+        bypass_priority,
+        proxy_priority,
+        core_mark,
+        core_mark_mask,
     )?;
-    ensure!(response.success,
+    ensure!(
+        response.success,
         "privileged native TUN activation failed: {}; inspect and recover this generation if its durable journal was retained",
-        response.message);
+        response.message
+    );
     let token = match coordinator.adopt_prepared(&activation_id, generation) {
         Ok(token) => token,
-        Err(error) => {
-            match helper.recover(activation_id, generation) {
-                Ok(result) if result.success => return Err(error).context("native activation manifest adoption failed; broker recovery completed"),
-                Ok(result) => anyhow::bail!("native activation manifest adoption failed ({error:#}); broker recovery failed: {}", result.message),
-                Err(recovery_error) => anyhow::bail!("native activation manifest adoption failed ({error:#}); broker recovery request failed: {recovery_error:#}"),
+        Err(error) => match helper.recover(activation_id, generation) {
+            Ok(result) if result.success => {
+                return Err(error).context(
+                    "native activation manifest adoption failed; broker recovery completed",
+                );
             }
-        }
+            Ok(result) => anyhow::bail!(
+                "native activation manifest adoption failed ({error:#}); broker recovery failed: {}",
+                result.message
+            ),
+            Err(recovery_error) => anyhow::bail!(
+                "native activation manifest adoption failed ({error:#}); broker recovery request failed: {recovery_error:#}"
+            ),
+        },
     };
     Ok((token, response.message))
 }
@@ -114,14 +139,19 @@ pub fn commit_prepared_managed_process(
     token: &ActivationToken,
     process: ProcessIdentity,
 ) -> Result<ManagedActivation> {
-    let current = coordinator.load_current()?
+    let current = coordinator
+        .load_current()?
         .context("prepared activation manifest disappeared before process commit")?;
-    ensure!(current.token == *token,
-        "managed process commit token does not match the current activation");
+    ensure!(
+        current.token == *token,
+        "managed process commit token does not match the current activation"
+    );
     match current.snapshot.core_process {
         Some(ref persisted) => {
-            ensure!(persisted == &process && persisted.verify()?,
-                "persisted core process identity differs from the launched process");
+            ensure!(
+                persisted == &process && persisted.verify()?,
+                "persisted core process identity differs from the launched process"
+            );
         }
         None => coordinator.bind_core_process(token, process)?,
     }
@@ -182,8 +212,18 @@ pub fn activate_managed_core(
     process: ProcessIdentity,
 ) -> Result<ManagedActivation> {
     let (token, _message) = prepare_managed_activation(
-        helper, coordinator, activation_id, generation, interface_name, owner_uid, owner_gid,
-        table_id, bypass_priority, proxy_priority, core_mark, core_mark_mask,
+        helper,
+        coordinator,
+        activation_id,
+        generation,
+        interface_name,
+        owner_uid,
+        owner_gid,
+        table_id,
+        bypass_priority,
+        proxy_priority,
+        core_mark,
+        core_mark_mask,
     )?;
     commit_managed_process(helper, coordinator, &token, process)
 }
@@ -203,8 +243,7 @@ pub fn monitor_managed_core(
         .load_current()?
         .context("managed TUN manifest disappeared before supervision")?;
     anyhow::ensure!(
-        current.token == activation.token
-            && current.snapshot.phase == SupervisorPhase::Running,
+        current.token == activation.token && current.snapshot.phase == SupervisorPhase::Running,
         "managed supervisor token is stale or activation is not Running"
     );
     anyhow::ensure!(
@@ -224,11 +263,13 @@ pub fn monitor_managed_core(
     )?;
     if !response.success {
         let _ = coordinator.apply_event(&activation.token, SupervisorEvent::CleanupConflicted);
-        anyhow::bail!("broker cleanup failed; durable recovery state retained: {}", response.message);
+        anyhow::bail!(
+            "broker cleanup failed; durable recovery state retained: {}",
+            response.message
+        );
     }
     Ok(response)
 }
-
 
 /// Stop a core whose identity was persisted while its activation is still Prepared.
 #[cfg(target_os = "linux")]
@@ -237,8 +278,11 @@ fn stop_core_service_for_generation(
     process: Option<&ProcessIdentity>,
 ) -> Result<()> {
     super::xray_launcher::stop_core_service_generation(
-        token.activation_id(), token.generation(), process,
-    ).context("cannot confirm stop of the generation-bound Xray system service")
+        token.activation_id(),
+        token.generation(),
+        process,
+    )
+    .context("cannot confirm stop of the generation-bound Xray system service")
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -253,10 +297,13 @@ fn terminate_prepared_core_process(
     coordinator: &LifecycleCoordinator,
     token: &ActivationToken,
 ) -> Result<()> {
-    let current = coordinator.load_current()?
+    let current = coordinator
+        .load_current()?
         .context("Prepared activation disappeared before orphaned core cleanup")?;
-    ensure!(current.token == *token && current.snapshot.phase == SupervisorPhase::Prepared,
-        "orphaned core cleanup token does not match the Prepared activation");
+    ensure!(
+        current.token == *token && current.snapshot.phase == SupervisorPhase::Prepared,
+        "orphaned core cleanup token does not match the Prepared activation"
+    );
     let Some(identity) = current.snapshot.core_process else {
         return Ok(());
     };
@@ -283,13 +330,19 @@ fn terminate_process_identity(identity: &ProcessIdentity) -> Result<()> {
             }
         }
         if !process.wait_exit(std::time::Duration::from_secs(1))? {
-            process.signal(libc::SIGKILL)
+            process
+                .signal(libc::SIGKILL)
                 .context("cannot force-stop managed core process")?;
-            ensure!(process.wait_exit(std::time::Duration::from_secs(2))?,
-                "managed core process did not exit within the termination deadline");
+            ensure!(
+                process.wait_exit(std::time::Duration::from_secs(2))?,
+                "managed core process did not exit within the termination deadline"
+            );
         }
     }
-    ensure!(!identity.verify()?, "managed core process identity remains live after termination");
+    ensure!(
+        !identity.verify()?,
+        "managed core process identity remains live after termination"
+    );
     Ok(())
 }
 
@@ -306,15 +359,21 @@ pub fn resume_managed_supervision(
         .load_current()?
         .context("no managed TUN activation is available to resume")?;
     let token = current.token;
-    if matches!(current.snapshot.phase, SupervisorPhase::CleanupPending | SupervisorPhase::Prepared) {
+    if matches!(
+        current.snapshot.phase,
+        SupervisorPhase::CleanupPending | SupervisorPhase::Prepared
+    ) {
         let phase = current.snapshot.phase;
         if phase == SupervisorPhase::Prepared {
             terminate_prepared_core_process(coordinator, &token)?;
         }
         stop_core_service_for_generation(&token, current.snapshot.core_process.as_ref())?;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
-        anyhow::ensure!(response.success,
-            "broker cleanup for interrupted {phase:?} activation failed: {}", response.message);
+        anyhow::ensure!(
+            response.success,
+            "broker cleanup for interrupted {phase:?} activation failed: {}",
+            response.message
+        );
         return Ok(response);
     }
     anyhow::ensure!(
@@ -329,7 +388,11 @@ pub fn resume_managed_supervision(
         coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
         stop_core_service_for_generation(&token, Some(&identity))?;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
-        anyhow::ensure!(response.success, "dead-core broker cleanup failed: {}", response.message);
+        anyhow::ensure!(
+            response.success,
+            "dead-core broker cleanup failed: {}",
+            response.message
+        );
         return Ok(response);
     }
     let process = match ProcessHandle::open(identity.clone()) {
@@ -338,7 +401,11 @@ pub fn resume_managed_supervision(
             coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
             stop_core_service_for_generation(&token, Some(&identity))?;
             let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
-            anyhow::ensure!(response.success, "dead-core broker cleanup failed: {}", response.message);
+            anyhow::ensure!(
+                response.success,
+                "dead-core broker cleanup failed: {}",
+                response.message
+            );
             return Ok(response);
         }
         Err(error) => return Err(error).context("cannot safely reopen the managed core pidfd"),
@@ -347,7 +414,11 @@ pub fn resume_managed_supervision(
         coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
         stop_core_service_for_generation(&token, Some(&identity))?;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
-        anyhow::ensure!(response.success, "exited-core broker cleanup failed: {}", response.message);
+        anyhow::ensure!(
+            response.success,
+            "exited-core broker cleanup failed: {}",
+            response.message
+        );
         return Ok(response);
     }
     let activation = ManagedActivation {
@@ -356,7 +427,6 @@ pub fn resume_managed_supervision(
     };
     monitor_managed_core(helper, coordinator, &activation, &process)
 }
-
 
 /// Wait for the exact Prepared generation to either commit Running or enter cleanup.
 ///
@@ -371,7 +441,10 @@ pub fn resume_managed_supervision_after_startup(
     generation: u64,
     startup_timeout: std::time::Duration,
 ) -> Result<()> {
-    ensure!(!activation_id.is_empty() && generation > 0, "invalid supervisor activation identity");
+    ensure!(
+        !activation_id.is_empty() && generation > 0,
+        "invalid supervisor activation identity"
+    );
     ensure!(
         !startup_timeout.is_zero() && startup_timeout <= std::time::Duration::from_secs(60),
         "supervisor startup wait must be between 1ms and 60s"
@@ -395,9 +468,16 @@ pub fn resume_managed_supervision_after_startup(
                 if current.snapshot.phase == SupervisorPhase::Prepared {
                     terminate_prepared_core_process(coordinator, &current.token)?;
                 }
-                stop_core_service_for_generation(&current.token, current.snapshot.core_process.as_ref())?;
+                stop_core_service_for_generation(
+                    &current.token,
+                    current.snapshot.core_process.as_ref(),
+                )?;
                 let response = helper.recover(activation_id.to_owned(), generation)?;
-                ensure!(response.success, "orphaned activation recovery failed: {}", response.message);
+                ensure!(
+                    response.success,
+                    "orphaned activation recovery failed: {}",
+                    response.message
+                );
                 return Ok(());
             }
             SupervisorPhase::Running => {
