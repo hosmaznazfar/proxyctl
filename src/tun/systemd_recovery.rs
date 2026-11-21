@@ -183,6 +183,7 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             .arg("--property=PrivateTmp=yes")
             .arg("--property=ProtectSystem=full")
             .arg("--property=ProtectHome=read-only")
+            .arg(format!("--property=ReadWritePaths={}", self.runtime.display()))
             .arg("--property=ProtectKernelTunables=yes")
             .arg("--property=ProtectKernelModules=yes")
             .arg("--property=ProtectControlGroups=yes")
