@@ -181,6 +181,7 @@ pub(crate) fn json_config(value: Value) -> anyhow::Result<GeneratedConfig> {
 mod tun_mark_tests {
     use super::{TunAttachmentMode, TunOutboundMark};
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn core_tun_attachment_inventory_matches_verified_launch_contracts() {
         assert_eq!(
