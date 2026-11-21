@@ -66,12 +66,18 @@ impl RouteNetlink {
         let mut address: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
         address.nl_family = libc::AF_NETLINK as u16;
         // SAFETY: address is initialized and the pointer/length match sockaddr_nl.
-        let result = unsafe {
-            libc::bind(
-                fd.as_raw_fd(),
-                (&address as *const libc::sockaddr_nl).cast(),
-                std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
-            )
+        let result = loop {
+            let result = unsafe {
+                libc::bind(
+                    fd.as_raw_fd(),
+                    (&address as *const libc::sockaddr_nl).cast(),
+                    std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
+                )
+            };
+            if result < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            break result;
         };
         ensure!(
             result == 0,
