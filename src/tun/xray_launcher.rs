@@ -22,10 +22,6 @@ use crate::{
     tun::{mutation_helper_launcher::MutationHelper, process::{ProcessHandle, ProcessIdentity}},
 };
 
-/// Start Xray in a capability-confined transient service and pass its exact generation-bound TUN fd.
-///
-/// The service shim duplicates the descriptor for Xray and returns the identity of the actual
-/// Xray child, not the shim or the systemd-run client.
 struct PrivateSocketCleanup(PathBuf);
 
 impl Drop for PrivateSocketCleanup {
@@ -42,6 +38,10 @@ impl Drop for PrivateSocketCleanup {
     }
 }
 
+/// Start Xray in a capability-confined transient service and pass its exact generation-bound TUN fd.
+///
+/// The service shim duplicates the descriptor for Xray and returns the identity of the actual
+/// Xray child, not the shim or the systemd-run client.
 pub fn spawn_xray_from_broker(
     helper: &MutationHelper,
     activation_id: &str,
