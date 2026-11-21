@@ -264,7 +264,7 @@ impl CoreAdapter for SingBoxAdapter {
     }
 
     fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
-        super::super::TunAttachmentMode::NativeDeviceCreation
+        super::super::super::TunAttachmentMode::NativeDeviceCreation
     }
 
     fn generate_tun_activation_config(
@@ -334,7 +334,7 @@ mod config_contract_tests {
     fn sing_box_activation_benchmark_and_tun_options_stay_core_native() {
         assert_eq!(
             super::SingBoxAdapter.tun_attachment_mode(),
-            super::TunAttachmentMode::NativeDeviceCreation
+            super::super::TunAttachmentMode::NativeDeviceCreation
         );
         const {
             assert!(CAPABILITIES.hysteria2 && CAPABILITIES.reality_vless);
