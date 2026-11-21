@@ -91,7 +91,7 @@ impl RouteNetlink {
             .try_reserve_exact(request.len())
             .context("cannot allocate NETLINK_ROUTE request buffer")?;
         owned_request.extend_from_slice(request);
-        let request = owned_request;
+        let mut request = owned_request;
         request[8..12].copy_from_slice(&sequence.to_ne_bytes());
 
         // SAFETY: zero is a valid initial representation for sockaddr_nl.
@@ -134,9 +134,14 @@ impl RouteNetlink {
             "NETLINK_ROUTE request transmission timed out"
         );
         let mut messages = Vec::new();
-        let mut buffer = vec![0u8; MAX_NETLINK_DATAGRAM];
+        let mut buffer = Vec::new();
+        buffer
+            .try_reserve_exact(MAX_NETLINK_DATAGRAM)
+            .context("cannot allocate NETLINK_ROUTE receive buffer")?;
+        buffer.resize(MAX_NETLINK_DATAGRAM, 0);
         loop {
             wait_for_socket(self.fd.as_raw_fd(), libc::POLLIN, deadline)?;
+            buffer.resize(MAX_NETLINK_DATAGRAM, 0);
 
             // SAFETY: buffer and sender storage are writable for their declared lengths.
             let mut sender: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
