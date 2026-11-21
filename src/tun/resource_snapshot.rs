@@ -682,12 +682,14 @@ mod tests {
             }],
             ..KernelSnapshot::default()
         };
-        let observed = observe_journal_resources(&journal, &snapshot).unwrap();
+        let aliases = std::collections::BTreeMap::from([("tun-proxyctl".to_owned(), "proxyctl:12345678-1234-4234-8234-123456789abc:4".to_owned())]);
+        let observed = observe_journal_resources_with_aliases(&journal, &snapshot, &aliases).unwrap();
         let fingerprint = observed.get("interface:tun-proxyctl").unwrap().as_ref().unwrap();
         let value: Value = serde_json::from_str(fingerprint).unwrap();
         assert_eq!(value.get("name").and_then(Value::as_str), Some("tun-proxyctl"));
         assert_eq!(value.get("ifindex").and_then(Value::as_u64), Some(81));
         assert_eq!(value.get("kind").and_then(Value::as_str), Some("tun"));
+        assert_eq!(value.get("alias").and_then(Value::as_str), Some("proxyctl:12345678-1234-4234-8234-123456789abc:4"));
     }
 
     #[test]
