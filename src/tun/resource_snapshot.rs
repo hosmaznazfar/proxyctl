@@ -717,3 +717,31 @@ mod tests {
         };
         assert!(observe_journal_resources(&journal, &snapshot).is_err());
     }
+
+    #[test]
+    fn persistent_interface_observation_fails_closed_without_generation_alias() {
+        use crate::tun::journal::{JournalOperation, JournalOperationKind, JournalOperationState, TransactionJournal};
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 4,
+            operations: vec![JournalOperation {
+                sequence: 0,
+                kind: JournalOperationKind::CreatePersistentInterface,
+                resource_key: "interface:tun-proxyctl".into(),
+                state: JournalOperationState::Intent,
+                fingerprint: None,
+            }],
+        };
+        let snapshot = KernelSnapshot {
+            interfaces: vec![KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 81,
+                is_tun: true,
+            }],
+            ..KernelSnapshot::default()
+        };
+        assert!(observe_journal_resources_with_aliases(
+            &journal, &snapshot, &std::collections::BTreeMap::new(),
+        ).is_err());
+    }
