@@ -35,13 +35,28 @@ pub struct LinuxJournalBackend {
 
 impl LinuxJournalBackend {
     /// Borrow the descriptor retained for this backend's exact activation generation.
-    pub fn tun_descriptor(&self, activation_id: &str, generation: u64) -> Result<std::os::fd::BorrowedFd<'_>> {
-        ensure!(generation == self.generation, "TUN descriptor request has a stale generation");
-        let journal = self.store.load_transaction_journal()?.context("TUN transaction journal is missing")?;
-        ensure!(journal.activation_id == activation_id && journal.generation == generation, "TUN descriptor request does not match the active journal");
+    pub fn tun_descriptor(
+        &self,
+        activation_id: &str,
+        generation: u64,
+    ) -> Result<std::os::fd::BorrowedFd<'_>> {
         ensure!(
-            journal.operations.iter().any(|operation|
-                operation.kind == JournalOperationKind::CreateInterface),
+            generation == self.generation,
+            "TUN descriptor request has a stale generation"
+        );
+        let journal = self
+            .store
+            .load_transaction_journal()?
+            .context("TUN transaction journal is missing")?;
+        ensure!(
+            journal.activation_id == activation_id && journal.generation == generation,
+            "TUN descriptor request does not match the active journal"
+        );
+        ensure!(
+            journal
+                .operations
+                .iter()
+                .any(|operation| operation.kind == JournalOperationKind::CreateInterface),
             "this activation uses a persistent native TUN device and cannot export a broker descriptor"
         );
         self.owner.descriptor(activation_id, generation)
@@ -69,10 +84,14 @@ impl LinuxJournalBackend {
     /// Start a journal-backed transaction for a native core using a persistent named TUN device.
     pub fn new_native(store: ManifestStore, activation_id: &str, generation: u64) -> Result<Self> {
         ensure!(generation > 0, "activation generation must be non-zero");
-        ensure!(store.load_transaction_journal()?.is_none(),
-            "an unresolved transaction journal must be recovered first");
-        ensure!(store.load()?.is_none(),
-            "an existing ownership manifest must be cleaned before a new activation");
+        ensure!(
+            store.load_transaction_journal()?.is_none(),
+            "an unresolved transaction journal must be recovered first"
+        );
+        ensure!(
+            store.load()?.is_none(),
+            "an existing ownership manifest must be cleaned before a new activation"
+        );
         store.create_transaction_journal(activation_id, generation)?;
         Ok(Self {
             store,
@@ -144,15 +163,25 @@ impl LinuxJournalBackend {
         let Some(current) = observed.get(key).cloned().flatten() else {
             if kind == JournalOperationKind::CreatePersistentInterface {
                 let expected_value: Value = serde_json::from_str(expected)?;
-                let name = expected_value.get("name").and_then(Value::as_str)
+                let name = expected_value
+                    .get("name")
+                    .and_then(Value::as_str)
                     .context("persistent interface fingerprint has no name")?;
-                let index = expected_value.get("ifindex").and_then(Value::as_u64)
+                let index = expected_value
+                    .get("ifindex")
+                    .and_then(Value::as_u64)
                     .and_then(|value| u32::try_from(value).ok())
                     .context("persistent interface fingerprint has invalid ifindex")?;
-                let alias = expected_value.get("alias").and_then(Value::as_str)
+                let alias = expected_value
+                    .get("alias")
+                    .and_then(Value::as_str)
                     .context("persistent interface fingerprint has no generation alias")?;
-                let expected_alias = format!("proxyctl:{}:{}", journal.activation_id, self.generation);
-                ensure!(alias == expected_alias, "persistent interface fingerprint belongs to a different activation generation");
+                let expected_alias =
+                    format!("proxyctl:{}:{}", journal.activation_id, self.generation);
+                ensure!(
+                    alias == expected_alias,
+                    "persistent interface fingerprint belongs to a different activation generation"
+                );
                 self.native_owner.forget_if_absent(name, index)?;
                 return Ok(ResourceState::AlreadyAbsent);
             }
@@ -184,7 +213,8 @@ impl LinuxJournalBackend {
             return Ok(ResourceState::ChangedOrForeign);
         }
         match kind {
-            JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
+            JournalOperationKind::CreateInterface
+            | JournalOperationKind::CreatePersistentInterface => {
                 let value: Value = serde_json::from_str(&current)?;
                 let name = value
                     .get("name")
@@ -203,13 +233,20 @@ impl LinuxJournalBackend {
                     return Ok(ResourceState::ChangedOrForeign);
                 }
                 if kind == JournalOperationKind::CreatePersistentInterface {
-                    let alias = value.get("alias").and_then(Value::as_str)
+                    let alias = value
+                        .get("alias")
+                        .and_then(Value::as_str)
                         .context("persistent interface fingerprint has no generation alias")?;
-                    let expected_alias = format!("proxyctl:{}:{}", journal.activation_id, self.generation);
-                    ensure!(alias == expected_alias, "persistent TUN alias does not match the journal activation generation");
+                    let expected_alias =
+                        format!("proxyctl:{}:{}", journal.activation_id, self.generation);
+                    ensure!(
+                        alias == expected_alias,
+                        "persistent TUN alias does not match the journal activation generation"
+                    );
                     self.native_owner.release_recovered(name, index, alias)?;
                 } else {
-                    self.owner.release(&journal.activation_id, self.generation, name, index)?;
+                    self.owner
+                        .release(&journal.activation_id, self.generation, name, index)?;
                 }
                 let after = kernel_inventory::inspect_snapshot()?;
                 if after
@@ -350,9 +387,12 @@ impl KernelTransactionBackend for LinuxJournalBackend {
             JournalOperationKind::CreatePersistentInterface,
             &key,
         )?;
-        let interface = self.native_owner.create(id, self.generation, name, uid, gid)?;
+        let interface = self
+            .native_owner
+            .create(id, self.generation, name, uid, gid)?;
         let fingerprint = self.fingerprint(&key)?;
-        self.store.mark_operation_applied(id, self.generation, &key, &fingerprint)?;
+        self.store
+            .mark_operation_applied(id, self.generation, &key, &fingerprint)?;
         Ok(interface)
     }
 
@@ -427,15 +467,24 @@ impl KernelTransactionBackend for LinuxJournalBackend {
         let key = format!("interface:{name}");
         let fp =
             serde_json::to_string(&serde_json::json!({"ifindex":index,"kind":"tun","name":name}))?;
-        let journal = self.store.load_transaction_journal()?
+        let journal = self
+            .store
+            .load_transaction_journal()?
             .context("transaction journal is missing while removing the TUN interface")?;
-        let interface_kind = journal.operations.iter()
+        let interface_kind = journal
+            .operations
+            .iter()
             .find(|operation| operation.resource_key == key)
             .map(|operation| operation.kind)
             .context("journal has no interface creation operation")?;
-        ensure!(matches!(interface_kind,
-            JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface),
-            "journal interface operation has an invalid kind");
+        ensure!(
+            matches!(
+                interface_kind,
+                JournalOperationKind::CreateInterface
+                    | JournalOperationKind::CreatePersistentInterface
+            ),
+            "journal interface operation has an invalid kind"
+        );
         let state = self.remove_live(interface_kind, &key, &fp)?;
         if matches!(state, ResourceState::Removed | ResourceState::AlreadyAbsent) {
             self.store
@@ -513,7 +562,13 @@ fn journal_interface_identity(
     let operation = journal
         .operations
         .iter()
-        .find(|operation| matches!(operation.kind, JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface))
+        .find(|operation| {
+            matches!(
+                operation.kind,
+                JournalOperationKind::CreateInterface
+                    | JournalOperationKind::CreatePersistentInterface
+            )
+        })
         .context("journal has no TUN interface creation operation")?;
     let fingerprint = operation
         .fingerprint
@@ -610,20 +665,22 @@ fn parse_table_value(value: &Value) -> Result<u32> {
 mod tests {
     use super::*;
 
-
     #[test]
     fn native_journal_generation_never_exports_a_descriptor() {
         let directory = tempfile::tempdir().unwrap();
         let store = ManifestStore::open(directory.path()).unwrap();
         let activation_id = "12345678-1234-4234-8234-123456789abc";
         let generation = 44;
-        let mut backend = LinuxJournalBackend::new_native(store.clone(), activation_id, generation).unwrap();
-        store.record_operation_intent(
-            activation_id,
-            generation,
-            JournalOperationKind::CreatePersistentInterface,
-            "interface:tun-proxyctl",
-        ).unwrap();
+        let mut backend =
+            LinuxJournalBackend::new_native(store.clone(), activation_id, generation).unwrap();
+        store
+            .record_operation_intent(
+                activation_id,
+                generation,
+                JournalOperationKind::CreatePersistentInterface,
+                "interface:tun-proxyctl",
+            )
+            .unwrap();
         assert!(backend.tun_descriptor(activation_id, generation).is_err());
     }
     #[test]
@@ -665,4 +722,3 @@ mod tests {
         assert!(parse_mark("0x42/0").is_err());
     }
 }
-
