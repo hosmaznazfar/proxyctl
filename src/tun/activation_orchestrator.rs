@@ -127,6 +127,84 @@ impl<'a> ActivationOrchestrator<'a> {
         }
     }
 
+    /// Activate Xray only after a concrete HTTP CONNECT probe and independently collected
+    /// process, route, mark, physical-egress, DNS, and firewall evidence all pass.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate_xray_node_end_to_end(
+        &self,
+        request: ActivationRequest,
+        node: &ProxyNode,
+        listen_port: u16,
+        executable: &Path,
+        attachment_timeout: Duration,
+        expected_peer: std::net::SocketAddr,
+        traffic_target: super::readiness::HttpConnectProbeTarget,
+        probe_timeout: Duration,
+        maximum_response_bytes: usize,
+    ) -> Result<XrayActivation> {
+        ensure!(expected_peer.port() == node.port
+            && !expected_peer.ip().is_unspecified()
+            && !expected_peer.ip().is_multicast(),
+            "expected Xray peer must match the selected node's port and be a unicast address");
+        traffic_target.validate()?;
+        let baseline_host = crate::tun::inspect()
+            .context("cannot capture pre-activation DNS and firewall baseline")?;
+        ensure!(baseline_host.routes_inspected && baseline_host.dns_inspected,
+            "TUN activation requires complete pre-activation route and DNS inspection");
+
+        let runtime_directory = self.coordinator.runtime_directory()
+            .context("cannot resolve private TUN runtime directory")?;
+        let activation_request = request.clone();
+        let target = traffic_target.clone();
+        self.activate_xray_node_with_readiness(
+            CoreId::Xray, request, node, listen_port, executable, attachment_timeout,
+            move |process, token| {
+                let current = self.coordinator.load_current()?
+                    .context("Prepared Xray activation manifest disappeared before readiness")?;
+                ensure!(current.token == *token
+                    && current.snapshot.phase == super::recovery::SupervisorPhase::Prepared,
+                    "Xray readiness does not match the exact Prepared activation generation");
+                let interface_index = current.snapshot.manifest.interface_index;
+                let plan = super::route_policy::RoutingPolicyPlan::new(
+                    activation_request.table_id,
+                    activation_request.bypass_priority,
+                    activation_request.proxy_priority,
+                    activation_request.core_mark,
+                    activation_request.core_mark_mask,
+                    activation_request.interface_name.clone(),
+                    interface_index,
+                );
+                plan.validate()?;
+                let expected = super::readiness::ReadinessExpectation {
+                    interface_name: &activation_request.interface_name,
+                    interface_index,
+                    core_mark: activation_request.core_mark,
+                    core_mark_mask: activation_request.core_mark_mask,
+                };
+                let current_host = crate::tun::inspect()
+                    .context("cannot capture post-activation DNS and firewall state")?;
+                super::xray_launcher::verify_xray_end_to_end_readiness(
+                    &runtime_directory,
+                    process,
+                    &activation_request.interface_name,
+                    &expected,
+                    std::net::SocketAddr::from(([127, 0, 0, 1], listen_port)),
+                    Duration::from_secs(5),
+                    &plan,
+                    expected_peer,
+                    super::privilege_broker::BrokerSocketTransport::Tcp,
+                    &target,
+                    token.activation_id(),
+                    token.generation(),
+                    probe_timeout,
+                    maximum_response_bytes,
+                    &baseline_host,
+                    &current_host,
+                ).map(|_| ())
+            },
+        )
+    }
+
     /// Generate, validate, and launch Xray from the selected Proxyctl node using the
     /// broker-owned descriptor path. The temporary config is private (0600) and is kept
     /// alive through startup/readiness; no caller-supplied config can silently omit the TUN
