@@ -5,9 +5,16 @@
 
 use anyhow::{Context, Result, ensure};
 use std::{
-    net::{SocketAddr, TcpStream},
+    net::{IpAddr, SocketAddr, TcpStream},
     time::Duration,
 };
+
+fn is_link_local_ip(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => address.is_link_local(),
+        IpAddr::V6(address) => address.is_unicast_link_local(),
+    }
+}
 
 /// Actively verify a loopback listener while the exact managed core process remains alive.
 ///
@@ -267,7 +274,7 @@ impl HttpProbeTarget {
             !self.destination.ip().is_unspecified()
                 && !self.destination.ip().is_multicast()
                 && !self.destination.ip().is_loopback()
-                && !self.destination.ip().is_link_local()
+                && !is_link_local_ip(self.destination.ip())
                 && self.destination.port() != 0,
             "HTTP probe destination must be a concrete non-local unicast endpoint"
         );
@@ -309,7 +316,7 @@ pub fn probe_unmarked_route_to_tun(
         !destination.is_unspecified()
             && !destination.is_multicast()
             && !destination.is_loopback()
-            && !destination.is_link_local(),
+            && !is_link_local_ip(destination),
         "TUN route probe destination must be a concrete non-local unicast address"
     );
     let family = if destination.is_ipv4() { "-4" } else { "-6" };
@@ -1574,7 +1581,7 @@ pub fn probe_socks5_connect(
     ensure!(
         !destination.ip().is_loopback()
             && !destination.ip().is_multicast()
-            && !destination.ip().is_link_local(),
+            && !is_link_local_ip(destination.ip()),
         "probe destination must not be loopback, multicast, or link-local"
     );
     ensure!(
