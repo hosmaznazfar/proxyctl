@@ -264,9 +264,9 @@ fn read_start_ticks(pid: u32) -> Result<u64> {
     let close = stat
         .rfind(')')
         .context("process stat has no closing command delimiter")?;
-    let fields = stat[close + 1..].split_whitespace().collect::<Vec<_>>();
-    fields
-        .get(19)
+    stat[close + 1..]
+        .split_whitespace()
+        .nth(19)
         .context("process stat is missing start-time field")?
         .parse()
         .context("process stat has an invalid start-time field")
