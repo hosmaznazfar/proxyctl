@@ -42,8 +42,16 @@ impl MutationHelper {
         ensure!(metadata.permissions().mode() & 0o700 == 0o700,
             "helper runtime directory must be owner-readable, writable, and searchable");
         let runtime = fs::canonicalize(runtime).context("cannot canonicalize helper runtime directory")?;
+        ensure!(
+            runtime.is_absolute() && runtime.as_os_str().len() <= 4096,
+            "helper runtime directory must be a bounded absolute path"
+        );
         let _start_lock = acquire_start_lock(&runtime.join("tun-mutation.lock"))?;
         let socket = runtime.join("tun-mutation.sock");
+        ensure!(
+            socket.as_os_str().len() < 108,
+            "mutation broker socket path exceeds the Unix-domain socket path limit"
+        );
         if probe(&socket) {
             return Ok(Self { socket });
         }
