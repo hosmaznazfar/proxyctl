@@ -602,6 +602,22 @@ fn parse_table_value(value: &Value) -> Result<u32> {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn native_journal_generation_never_exports_a_descriptor() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path()).unwrap();
+        let activation_id = "12345678-1234-4234-8234-123456789abc";
+        let generation = 44;
+        let mut backend = LinuxJournalBackend::new_native(store.clone(), activation_id, generation).unwrap();
+        store.record_operation_intent(
+            activation_id,
+            generation,
+            JournalOperationKind::CreatePersistentInterface,
+            "interface:tun-proxyctl",
+        ).unwrap();
+        assert!(backend.tun_descriptor(activation_id, generation).is_err());
+    }
     #[test]
     fn parses_ipv4_and_ipv6_route_keys_without_losing_ipv6_colons() {
         assert_eq!(
