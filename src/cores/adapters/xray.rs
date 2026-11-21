@@ -452,6 +452,8 @@ mod config_contract_tests {
         )
         .unwrap();
         assert_eq!(tun["inbounds"][1]["protocol"], "tun");
+        assert_eq!(tun["inbounds"][1]["settings"]["name"], super::super::XRAY_TUN_INTERFACE_NAME);
+        assert_eq!(tun["inbounds"][1]["settings"]["autoOutboundsInterface"], "auto");
         assert_eq!(
             tun["inbounds"][1]["settings"]["autoSystemRoutingTable"]
                 .as_array()
