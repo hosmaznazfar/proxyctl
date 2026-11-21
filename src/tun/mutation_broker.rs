@@ -553,7 +553,9 @@ pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u6
     let mut bytes = vec![0u8; length];
     stream.read_exact(&mut bytes)?;
     let response: MutationResponse = serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
-    ensure!(response.version == VERSION && response.success, "mutation broker rejected descriptor attachment: {}", response.message);
+    ensure!(response.version == VERSION, "mutation broker response version mismatch");
+    ensure!(response.message.len() <= 8 * 1024, "mutation response message exceeds limit");
+    ensure!(response.success, "mutation broker rejected descriptor attachment: {}", response.message);
     let descriptor = super::descriptor_transfer::receive_descriptor(&stream)?;
     ensure!(unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) } >= 0, "received TUN descriptor is not valid");
     Ok(descriptor)
