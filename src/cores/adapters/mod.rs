@@ -203,12 +203,20 @@ mod tun_mark_tests {
     #[test]
     fn only_external_descriptor_modes_advertise_broker_fd_adoption() {
         assert_eq!(
-            TunAttachmentMode::ExternalDescriptorEnvironment { variable: "XRAY_TUN_FD" }
-                .external_descriptor_environment(),
+            TunAttachmentMode::ExternalDescriptorEnvironment {
+                variable: "XRAY_TUN_FD"
+            }
+            .external_descriptor_environment(),
             Some("XRAY_TUN_FD")
         );
-        assert_eq!(TunAttachmentMode::NativeDeviceCreation.external_descriptor_environment(), None);
-        assert_eq!(TunAttachmentMode::Unsupported.external_descriptor_environment(), None);
+        assert_eq!(
+            TunAttachmentMode::NativeDeviceCreation.external_descriptor_environment(),
+            None
+        );
+        assert_eq!(
+            TunAttachmentMode::Unsupported.external_descriptor_environment(),
+            None
+        );
     }
 
     #[test]
