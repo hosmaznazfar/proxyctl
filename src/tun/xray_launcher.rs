@@ -214,6 +214,7 @@ pub fn spawn_xray_from_broker(
         ensure!(identity.executable == executable,
             "Xray core launcher reported an unexpected executable identity");
         ensure!(identity.verify()?, "Xray process identity is not live after descriptor handoff");
+        verify_xray_capability_boundary(&identity, uid)?;
         Ok(identity)
     })();
 
@@ -225,6 +226,31 @@ pub fn spawn_xray_from_broker(
             Err(error).context("Xray descriptor handoff failed; transient service stop was requested")
         }
     }
+}
+
+fn verify_xray_capability_boundary(identity: &ProcessIdentity, expected_uid: u32) -> Result<()> {
+    const CAP_NET_ADMIN: u64 = 1 << 12;
+    let status = fs::read_to_string(format!("/proc/{}/status", identity.pid))
+        .context("cannot inspect managed Xray capability state")?;
+    let field = |name: &str| status.lines()
+        .find_map(|line| line.strip_prefix(name))
+        .map(str::trim);
+    let uid_values = field("Uid:")
+        .context("managed Xray process status has no UID field")?
+        .split_whitespace()
+        .map(str::parse::<u32>)
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    ensure!(uid_values.len() == 4 && uid_values.iter().all(|uid| *uid == expected_uid),
+        "managed Xray process did not retain the activation user's UID");
+    for name in ["CapEff:", "CapPrm:", "CapBnd:", "CapAmb:"] {
+        let value = field(name).context("managed Xray capability status is incomplete")?;
+        ensure!(u64::from_str_radix(value, 16)? == CAP_NET_ADMIN,
+            "managed Xray must have exactly CAP_NET_ADMIN in its effective, permitted, bounding, and ambient sets");
+    }
+    ensure!(field("NoNewPrivs:") == Some("1"),
+        "managed Xray process must retain NoNewPrivileges");
+    ensure!(identity.verify()?, "managed Xray process identity changed during capability verification");
+    Ok(())
 }
 
 fn receive_process_identity(stream: &mut std::os::unix::net::UnixStream) -> Result<ProcessIdentity> {
