@@ -802,6 +802,24 @@ mod tests {
     }
 
     #[test]
+    fn rejects_duplicate_link_name_and_link_info_attributes() {
+        let mut payload = vec![0u8; IFINFO_MESSAGE_LEN];
+        payload[4..8].copy_from_slice(&2i32.to_ne_bytes());
+        let name = rtattr(IFLA_IFNAME, b"tun0\0");
+        payload.extend_from_slice(&name);
+        payload.extend_from_slice(&name);
+        assert!(parse_link_message(&message(RTM_NEWLINK, 7, &payload)).is_err());
+
+        let mut payload = vec![0u8; IFINFO_MESSAGE_LEN];
+        payload[4..8].copy_from_slice(&2i32.to_ne_bytes());
+        payload.extend_from_slice(&rtattr(IFLA_IFNAME, b"tun0\0"));
+        let info = rtattr(IFLA_LINKINFO, &rtattr(IFLA_INFO_KIND, b"tun\0"));
+        payload.extend_from_slice(&info);
+        payload.extend_from_slice(&info);
+        assert!(parse_link_message(&message(RTM_NEWLINK, 7, &payload)).is_err());
+    }
+
+    #[test]
     fn rejects_malformed_link_identity_attributes() {
         assert!(parse_link_message(&link_message(0, b"eth0", None)).is_err());
         assert!(parse_link_message(&link_message(2, b"", None)).is_err());
