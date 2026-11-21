@@ -121,8 +121,8 @@ impl<'a> ActivationOrchestrator<'a> {
             }
             (CoreId::SingBox, TunAttachmentMode::NativeDeviceCreation) =>
                 anyhow::bail!("sing-box creates its own named TUN device and has no verified broker-owned descriptor adoption path; refusing to start it in this lifecycle"),
-            (CoreId::Mihomo, TunAttachmentMode::Unsupported) =>
-                anyhow::bail!("Mihomo has no verified marked TUN attachment contract; refusing TUN activation"),
+            (CoreId::Mihomo, TunAttachmentMode::NativeDeviceCreation) =>
+                anyhow::bail!("Mihomo creates and owns its named TUN device; the persistent native-device broker backend is not implemented yet, so refusing activation"),
             _ => anyhow::bail!("{core_id:?} does not expose a supported broker-owned TUN descriptor contract"),
         }
     }
