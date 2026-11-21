@@ -1144,3 +1144,61 @@ pub fn probe_socks5_connect_detailed(
 pub fn probe_socks5_connect_detailed(_process: &(), _listener: SocketAddr, _destination: SocketAddr, _timeout: Duration) -> Result<Socks5ConnectProbeResult> {
     anyhow::bail!("managed SOCKS5 probing is supported only on Linux");
 }
+
+
+#[cfg(all(test, target_os = "linux"))]
+mod http_connect_probe_tests {
+    use super::*;
+
+    fn target() -> HttpConnectProbeTarget {
+        HttpConnectProbeTarget {
+            destination: "192.0.2.80:80".parse().unwrap(),
+            host_header: "probe.example".into(),
+            path: "/health".into(),
+            expected_status: 200,
+            expected_body_marker: b"proxyctl-ok".to_vec(),
+        }
+    }
+
+    #[test]
+    fn validates_explicit_numeric_http_probe_target() {
+        assert!(target().validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_http_probe_header_and_request_injection() {
+        let mut value = target();
+        value.host_header = "probe.example\\r\\nX-Injected: yes".into();
+        assert!(value.validate().is_err());
+        value = target();
+        value.path = "/health\\r\\nHost: attacker.example".into();
+        assert!(value.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_unsafe_http_probe_destinations_and_unbounded_markers() {
+        let mut value = target();
+        value.destination = "0.0.0.0:80".parse().unwrap();
+        assert!(value.validate().is_err());
+        value = target();
+        value.expected_body_marker = vec![b'x'; 1025];
+        assert!(value.validate().is_err());
+    }
+
+    #[test]
+    fn parses_http_status_and_body_without_accepting_malformed_responses() {
+        let response = b"HTTP/1.1 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nproxyctl-ok";
+        assert_eq!(parse_http_status(response).unwrap(), 200);
+        assert_eq!(http_response_body(response).unwrap(), b"proxyctl-ok");
+        assert!(contains_bytes(http_response_body(response).unwrap(), b"proxyctl"));
+        assert!(parse_http_status(b"not-http\\r\\n").is_err());
+        assert!(http_response_body(b"HTTP/1.1 200 OK\\r\\n").is_err());
+    }
+
+    #[test]
+    fn parser_requires_complete_supported_status_line() {
+        assert!(parse_http_status(b"HTTP/2 200 OK\\r\\n").is_err());
+        assert!(parse_http_status(b"HTTP/1.1 700 Bad\\r\\n").is_err());
+        assert!(parse_http_status(b"HTTP/1.1 nope Bad\\r\\n").is_err());
+    }
+}
