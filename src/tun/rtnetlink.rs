@@ -626,6 +626,9 @@ fn parse_datagram(bytes: &[u8], expected_sequence: u32) -> Result<(Vec<Vec<u8>>,
             }
             terminal = true;
         } else {
+            messages
+                .try_reserve(1)
+                .context("cannot reserve parsed NETLINK_ROUTE message capacity")?;
             messages.push(message.to_vec());
         }
         let aligned_length = length
