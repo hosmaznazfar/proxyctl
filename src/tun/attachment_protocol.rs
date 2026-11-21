@@ -192,6 +192,7 @@ fn configure_handoff_timeouts(stream: &UnixStream) -> Result<()> {
 }
 
 fn write_frame<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<()> {
+    configure_handoff_timeouts(stream)?;
     let payload = serde_json::to_vec(value).context("cannot encode attachment protocol frame")?;
     ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME, "attachment frame exceeds its size bound");
     stream.write_all(&(payload.len() as u32).to_le_bytes()).context("cannot write attachment frame length")?;
