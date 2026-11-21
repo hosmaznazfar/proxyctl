@@ -137,7 +137,17 @@ impl LinuxJournalBackend {
         let snapshot = kernel_inventory::inspect_snapshot()?;
         let observed = observe_journal_resources(&journal, &snapshot)?;
         let Some(current) = observed.get(key).cloned().flatten() else {
-            if matches!(kind, JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface)
+            if kind == JournalOperationKind::CreatePersistentInterface {
+                let expected_value: Value = serde_json::from_str(expected)?;
+                let name = expected_value.get("name").and_then(Value::as_str)
+                    .context("persistent interface fingerprint has no name")?;
+                let index = expected_value.get("ifindex").and_then(Value::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+                    .context("persistent interface fingerprint has invalid ifindex")?;
+                self.native_owner.forget_if_absent(name, index)?;
+                return Ok(ResourceState::AlreadyAbsent);
+            }
+            if kind == JournalOperationKind::CreateInterface
                 && let Ok(interface) = self
                     .owner
                     .identity(&journal.activation_id, self.generation)
