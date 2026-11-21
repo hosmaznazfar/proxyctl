@@ -677,6 +677,12 @@ mod tests {
     }
 
     #[test]
+    fn rejects_response_with_empty_failure_message() {
+        let response = MutationResponse { version: VERSION, success: false, message: String::new() };
+        assert!(validate_response_envelope(&response).is_err());
+    }
+
+    #[test]
     fn rejects_response_version_mismatch() {
         let response = MutationResponse { version: VERSION + 1, success: true, message: "ok".into() };
         assert!(validate_response_envelope(&response).is_err());
