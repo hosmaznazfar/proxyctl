@@ -15,7 +15,7 @@ use super::{
     kernel_transaction::KernelTransactionBackend,
     manifest_store::{ManifestSnapshot, ManifestStore},
     ownership::{ResourceState, RouteManifest},
-    persistent_tun_owner::PersistentTunOwner,
+    persistent_tun_owner::{NativePersistentTunOwner, PersistentTunOwner},
     recovery::SupervisorPhase,
     resource_snapshot::observe_journal_resources,
     route_policy::{
@@ -30,6 +30,7 @@ pub struct LinuxJournalBackend {
     store: ManifestStore,
     generation: u64,
     owner: PersistentTunOwner,
+    native_owner: NativePersistentTunOwner,
 }
 
 impl LinuxJournalBackend {
@@ -56,6 +57,23 @@ impl LinuxJournalBackend {
             store,
             generation,
             owner: PersistentTunOwner::new(),
+            native_owner: NativePersistentTunOwner::new(),
+        })
+    }
+
+    /// Start a journal-backed transaction for a native core using a persistent named TUN device.
+    pub fn new_native(store: ManifestStore, activation_id: &str, generation: u64) -> Result<Self> {
+        ensure!(generation > 0, "activation generation must be non-zero");
+        ensure!(store.load_transaction_journal()?.is_none(),
+            "an unresolved transaction journal must be recovered first");
+        ensure!(store.load()?.is_none(),
+            "an existing ownership manifest must be cleaned before a new activation");
+        store.create_transaction_journal(activation_id, generation)?;
+        Ok(Self {
+            store,
+            generation,
+            owner: PersistentTunOwner::new(),
+            native_owner: NativePersistentTunOwner::new(),
         })
     }
 
@@ -78,6 +96,7 @@ impl LinuxJournalBackend {
             store,
             generation,
             owner: PersistentTunOwner::new(),
+            native_owner: NativePersistentTunOwner::new(),
         })
     }
 
@@ -118,7 +137,7 @@ impl LinuxJournalBackend {
         let snapshot = kernel_inventory::inspect_snapshot()?;
         let observed = observe_journal_resources(&journal, &snapshot)?;
         let Some(current) = observed.get(key).cloned().flatten() else {
-            if kind == JournalOperationKind::CreateInterface
+            if matches!(kind, JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface)
                 && let Ok(interface) = self
                     .owner
                     .identity(&journal.activation_id, self.generation)
@@ -146,7 +165,7 @@ impl LinuxJournalBackend {
             return Ok(ResourceState::ChangedOrForeign);
         }
         match kind {
-            JournalOperationKind::CreateInterface => {
+            JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
                 let value: Value = serde_json::from_str(&current)?;
                 let name = value
                     .get("name")
@@ -164,8 +183,11 @@ impl LinuxJournalBackend {
                 if live.is_none() {
                     return Ok(ResourceState::ChangedOrForeign);
                 }
-                self.owner
-                    .release(&journal.activation_id, self.generation, name, index)?;
+                if kind == JournalOperationKind::CreatePersistentInterface {
+                    self.native_owner.release_recovered(name, index)?;
+                } else {
+                    self.owner.release(&journal.activation_id, self.generation, name, index)?;
+                }
                 let after = kernel_inventory::inspect_snapshot()?;
                 if after
                     .interfaces
@@ -287,6 +309,27 @@ impl KernelTransactionBackend for LinuxJournalBackend {
         let fp = self.fingerprint(&key)?;
         self.store
             .mark_operation_applied(id, self.generation, &key, &fp)?;
+        Ok(interface)
+    }
+
+    fn create_persistent_owned_interface(
+        &mut self,
+        id: &str,
+        name: &str,
+        uid: u32,
+        gid: u32,
+    ) -> Result<KernelInterfaceRecord> {
+        self.journal_identity(id)?;
+        let key = format!("interface:{name}");
+        self.store.record_operation_intent(
+            id,
+            self.generation,
+            JournalOperationKind::CreatePersistentInterface,
+            &key,
+        )?;
+        let interface = self.native_owner.create(id, self.generation, name, uid, gid)?;
+        let fingerprint = self.fingerprint(&key)?;
+        self.store.mark_operation_applied(id, self.generation, &key, &fingerprint)?;
         Ok(interface)
     }
 
