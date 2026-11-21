@@ -137,6 +137,7 @@ fn probe(path: &Path) -> bool {
     if !metadata.file_type().is_socket()
         || metadata.uid() != unsafe { libc::geteuid() }
         || metadata.permissions().mode() & 0o777 != 0o600
+        || metadata.permissions().mode() & 0o7000 != 0
         || metadata.nlink() != 1
     {
         return false;
