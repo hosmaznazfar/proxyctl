@@ -556,6 +556,12 @@ mod tests {
     }
 
     #[test]
+    fn rejects_cleanup_rule_priority_outside_native_range() {
+        assert!(parse_rule_key(&format!("rule:v4:{}", i32::MAX as u64 + 1)).is_err());
+        assert!(parse_rule_key(&format!("rule:v4:{}", i32::MAX)).is_ok());
+    }
+
+    #[test]
     fn parses_only_valid_marked_rule_selectors() {
         assert_eq!(
             parse_mark("0x42/0xff").unwrap(),
