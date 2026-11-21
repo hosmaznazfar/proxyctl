@@ -40,7 +40,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 }
             );
             println!(
-                "TUN activation: disabled until the privileged kernel backend, independent recovery, and readiness gates are implemented."
+                "TUN activation: public CLI remains gated. Xray has a broker-owned descriptor and end-to-end readiness path, but CLI lifecycle wiring and real Linux runtime validation are still outstanding; sing-box/Mihomo require a separate native-device ownership backend."
             );
             return Ok(());
         }
