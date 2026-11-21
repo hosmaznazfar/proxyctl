@@ -343,6 +343,7 @@ impl CoreAdapter for MihomoAdapter {
             "auto-detect-interface": true
         });
         // Mihomo's global routing-mark is the default mark for proxy outbound connections.
+        document["ipv6"] = json!(true);
         document["routing-mark"] = json!(mark.value());
         json_config(document)
     }
@@ -428,6 +429,7 @@ mod config_contract_tests {
         assert_eq!(tun["tun"]["dns-mode"], "disabled");
         assert_eq!(tun["tun"]["auto-detect-interface"], true);
         assert_eq!(tun["routing-mark"], 0x42);
+        assert_eq!(tun["ipv6"], true);
         assert_eq!(tun["tun"]["inet4-address"][0], "198.18.0.1/30");
         assert_eq!(tun["tun"]["inet6-address"][0], "fdfe:dcba:9876::1/126");
     }
