@@ -8,8 +8,9 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     env, fs,
+    io::Write,
     os::{
-        fd::{AsRawFd, OwnedFd},
+        fd::{AsFd, AsRawFd, OwnedFd},
         unix::{fs::{MetadataExt, PermissionsExt}, net::UnixStream, process::CommandExt},
     },
     path::{Path, PathBuf},
@@ -72,17 +73,37 @@ fn run() -> Result<()> {
         .context("cannot receive the broker-owned TUN descriptor")?;
     validate_tun_descriptor(descriptor.as_raw_fd(), &interface, ifindex)?;
 
-    let raw = descriptor.as_raw_fd();
-    let flags = unsafe { libc::fcntl(raw, libc::F_GETFD) };
-    ensure!(flags >= 0, "cannot inspect received TUN descriptor flags");
-    ensure!(unsafe { libc::fcntl(raw, libc::F_SETFD, flags & !libc::FD_CLOEXEC) } == 0,
-        "cannot preserve TUN descriptor across Xray exec");
-
+    let inherited = proxyctl::cores::adapters::xray_tun_fd::XrayTunDescriptor::duplicate(
+        descriptor.as_fd(),
+    ).context("cannot duplicate the received broker-owned TUN descriptor")?;
     let mut command = Command::new(&executable);
-    command.arg("run").arg("-c").arg(&config).arg0("proxyctl-core")
-        .env(proxyctl::cores::adapters::XRAY_TUN_FD_ENV, raw.to_string());
-    let error = command.exec();
-    Err(error).context("cannot exec managed Xray with the broker-owned TUN descriptor")
+    command.arg("run").arg("-c").arg(&config).arg0("proxyctl-core");
+    inherited.configure_command(&mut command)?;
+    let mut child = command.spawn().context("cannot spawn managed Xray with the broker-owned TUN descriptor")?;
+    drop(inherited);
+    drop(descriptor);
+
+    // Command::spawn returns only after exec succeeded. Capture the actual Xray executable,
+    // not this shim, so the returned identity remains valid after the handoff.
+    let identity = proxyctl::tun::process::ProcessIdentity::capture(child.id())
+        .context("cannot capture the spawned Xray process identity")?;
+    ensure!(identity.executable == fs::canonicalize(&executable)?,
+        "spawned process did not become the expected managed Xray executable");
+    send_process_identity(&mut stream, &identity)?;
+    let status = child.wait().context("cannot wait for the Xray child process")?;
+    ensure!(status.success(), "managed Xray exited unsuccessfully");
+    Ok(())
+}
+
+fn send_process_identity(stream: &mut UnixStream, identity: &proxyctl::tun::process::ProcessIdentity) -> Result<()> {
+    let payload = serde_json::to_vec(identity).context("cannot encode Xray process identity")?;
+    ensure!(!payload.is_empty() && payload.len() <= 4096,
+        "Xray process identity frame exceeds its bound");
+    stream.set_write_timeout(Some(std::time::Duration::from_secs(5)))?;
+    stream.write_all(&(payload.len() as u32).to_le_bytes())
+        .context("cannot write Xray process identity frame length")?;
+    stream.write_all(&payload).context("cannot write Xray process identity frame")?;
+    stream.flush().context("cannot flush Xray process identity frame")
 }
 
 fn verify_capability_boundary() -> Result<()> {
