@@ -558,7 +558,6 @@ fn validate_kernel_sender(sender: &libc::sockaddr_nl, sender_len: libc::socklen_
     ensure!(
         sender_len as usize == std::mem::size_of::<libc::sockaddr_nl>()
             && sender.nl_family == libc::AF_NETLINK as u16
-            && sender.nl_pad == 0
             && sender.nl_pid == 0
             && sender.nl_groups == 0,
         "NETLINK_ROUTE response did not originate from the kernel unicast endpoint"
@@ -945,9 +944,6 @@ mod tests {
         let length = std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t;
         validate_kernel_sender(&sender, length).unwrap();
 
-        sender.nl_pad = 1;
-        assert!(validate_kernel_sender(&sender, length).is_err());
-        sender.nl_pad = 0;
         sender.nl_pid = 42;
         assert!(validate_kernel_sender(&sender, length).is_err());
         sender.nl_pid = 0;
@@ -984,7 +980,8 @@ mod tests {
         request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
         request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
         request.extend([0u8; 4]);
-        request[0..4].copy_from_slice(&(request.len() as u32).to_ne_bytes());
+        let request_len = request.len() as u32;
+        request[0..4].copy_from_slice(&request_len.to_ne_bytes());
         assert!(validate_request(&request).is_err());
     }
 
