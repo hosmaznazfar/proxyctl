@@ -281,6 +281,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_frame_write_above_size_limit() {
+        let (mut sender, _receiver) = UnixStream::pair().unwrap();
+        let oversized = vec![b'x'; MAX_FRAME + 1];
+        assert!(write_frame(&mut sender, &oversized).is_err());
+    }
+
+    #[test]
     fn rejects_tiny_frame_length_before_json_decode() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         sender.write_all(&1u32.to_le_bytes()).unwrap();
