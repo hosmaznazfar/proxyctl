@@ -215,6 +215,7 @@ impl ManifestStore {
             bytes.len() as u64 == metadata.len(),
             "TUN manifest changed size while it was being read"
         );
+        ensure!(!bytes.is_empty(), "TUN manifest file is empty");
         let snapshot: ManifestSnapshot =
             serde_json::from_slice(&bytes).context("TUN manifest is malformed")?;
         snapshot.validate()?;
