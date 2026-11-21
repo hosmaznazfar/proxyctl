@@ -53,13 +53,15 @@ impl KernelTransaction {
         });
         steps.extend(routes.into_iter().map(ApplyStep::AddRoute));
         let mut rules = self.policy.rules.clone();
-        rules.sort_by_key(|rule| (
-            match rule.family {
-                super::route_policy::AddressFamily::Ipv4 => 0u8,
-                super::route_policy::AddressFamily::Ipv6 => 1u8,
-            },
-            rule.priority,
-        ));
+        rules.sort_by_key(|rule| {
+            (
+                match rule.family {
+                    super::route_policy::AddressFamily::Ipv4 => 0u8,
+                    super::route_policy::AddressFamily::Ipv6 => 1u8,
+                },
+                rule.priority,
+            )
+        });
         steps.extend(rules.into_iter().map(ApplyStep::AddRule));
         Ok(steps)
     }
@@ -224,19 +226,24 @@ fn apply_with_device_mode<B: KernelTransactionBackend>(
         super::route_policy::AddressFamily::Ipv6 => 1u8,
     });
     let mut ordered_rules = bound_policy.rules.clone();
-    ordered_rules.sort_by_key(|rule| (
-        match rule.family {
-            super::route_policy::AddressFamily::Ipv4 => 0u8,
-            super::route_policy::AddressFamily::Ipv6 => 1u8,
-        },
-        rule.priority,
-    ));
+    ordered_rules.sort_by_key(|rule| {
+        (
+            match rule.family {
+                super::route_policy::AddressFamily::Ipv4 => 0u8,
+                super::route_policy::AddressFamily::Ipv6 => 1u8,
+            },
+            rule.priority,
+        )
+    });
     let mut resources = Vec::new();
-    if let Err(error) = resources.try_reserve(bound_policy.routes.len() + bound_policy.rules.len()) {
+    if let Err(error) = resources.try_reserve(bound_policy.routes.len() + bound_policy.rules.len())
+    {
         backend.retain_recovery_journal(activation_id).context(
             "resource tracking allocation failed and recovery journal could not be retained",
         )?;
-        return Err(error).context("cannot reserve kernel transaction resource tracking; recovery journal retained");
+        return Err(error).context(
+            "cannot reserve kernel transaction resource tracking; recovery journal retained",
+        );
     }
     let mut invalid_fingerprint = false;
     let mut ambiguous_mutation_error = false;
@@ -564,10 +571,12 @@ mod tests {
         }
     }
 
-
     #[test]
     fn native_transaction_rolls_back_persistent_device_after_route_failure() {
-        let mut backend = FakeBackend { fail_add_at: Some(1), ..Default::default() };
+        let mut backend = FakeBackend {
+            fail_add_at: Some(1),
+            ..Default::default()
+        };
         assert!(apply_native(&transaction(), &mut backend).is_err());
         assert_eq!(backend.native_create_count, 1);
         assert!(backend.interface.is_none());
@@ -593,24 +602,60 @@ mod tests {
         let mut backend = FakeBackend::default();
         let applied = apply_native(&transaction, &mut backend).unwrap();
         assert_eq!(backend.native_create_count, 1);
-        assert_eq!(applied.manifest.interface_name, transaction.policy.interface_name);
-        assert_eq!(backend.interface.as_ref().unwrap().index, applied.manifest.interface_index);
+        assert_eq!(
+            applied.manifest.interface_name,
+            transaction.policy.interface_name
+        );
+        assert_eq!(
+            backend.interface.as_ref().unwrap().index,
+            applied.manifest.interface_index
+        );
     }
 
     #[test]
     fn persistent_device_mode_fails_closed_for_backends_without_native_support() {
         struct UnsupportedBackend;
         impl KernelTransactionBackend for UnsupportedBackend {
-            fn create_owned_interface(&mut self, _: &str, _: &str, _: u32, _: u32) -> Result<KernelInterfaceRecord> {
+            fn create_owned_interface(
+                &mut self,
+                _: &str,
+                _: &str,
+                _: u32,
+                _: u32,
+            ) -> Result<KernelInterfaceRecord> {
                 anyhow::bail!("not used")
             }
-            fn add_owned_route(&mut self, _: &str, _: &PlannedRoute) -> Result<String> { anyhow::bail!("not used") }
-            fn add_owned_rule(&mut self, _: &str, _: &PlannedRule) -> Result<String> { anyhow::bail!("not used") }
-            fn remove_resource_if_matches(&mut self, _: &str, _: &str, _: &str) -> Result<ResourceState> { anyhow::bail!("not used") }
-            fn remove_interface_if_matches(&mut self, _: &str, _: &str, _: u32) -> Result<ResourceState> { anyhow::bail!("not used") }
-            fn retain_recovery_journal(&mut self, _: &str) -> Result<()> { Ok(()) }
-            fn commit_manifest(&mut self, _: &RouteManifest) -> Result<()> { Ok(()) }
-            fn finish_transaction(&mut self, _: &str) -> Result<()> { Ok(()) }
+            fn add_owned_route(&mut self, _: &str, _: &PlannedRoute) -> Result<String> {
+                anyhow::bail!("not used")
+            }
+            fn add_owned_rule(&mut self, _: &str, _: &PlannedRule) -> Result<String> {
+                anyhow::bail!("not used")
+            }
+            fn remove_resource_if_matches(
+                &mut self,
+                _: &str,
+                _: &str,
+                _: &str,
+            ) -> Result<ResourceState> {
+                anyhow::bail!("not used")
+            }
+            fn remove_interface_if_matches(
+                &mut self,
+                _: &str,
+                _: &str,
+                _: u32,
+            ) -> Result<ResourceState> {
+                anyhow::bail!("not used")
+            }
+            fn retain_recovery_journal(&mut self, _: &str) -> Result<()> {
+                Ok(())
+            }
+            fn commit_manifest(&mut self, _: &RouteManifest) -> Result<()> {
+                Ok(())
+            }
+            fn finish_transaction(&mut self, _: &str) -> Result<()> {
+                Ok(())
+            }
         }
         let mut backend = UnsupportedBackend;
         assert!(apply_native(&transaction(), &mut backend).is_err());
@@ -664,8 +709,13 @@ mod tests {
                 _ => unreachable!(),
             })
             .collect::<Vec<_>>();
-        assert_eq!(route_families, [super::super::route_policy::AddressFamily::Ipv4,
-            super::super::route_policy::AddressFamily::Ipv6]);
+        assert_eq!(
+            route_families,
+            [
+                super::super::route_policy::AddressFamily::Ipv4,
+                super::super::route_policy::AddressFamily::Ipv6
+            ]
+        );
         let rule_families = steps[3..]
             .iter()
             .map(|step| match step {
@@ -673,12 +723,15 @@ mod tests {
                 _ => unreachable!(),
             })
             .collect::<Vec<_>>();
-        assert_eq!(rule_families, [
-            (super::super::route_policy::AddressFamily::Ipv4, 42_410),
-            (super::super::route_policy::AddressFamily::Ipv4, 42_420),
-            (super::super::route_policy::AddressFamily::Ipv6, 42_410),
-            (super::super::route_policy::AddressFamily::Ipv6, 42_420),
-        ]);
+        assert_eq!(
+            rule_families,
+            [
+                (super::super::route_policy::AddressFamily::Ipv4, 42_410),
+                (super::super::route_policy::AddressFamily::Ipv4, 42_420),
+                (super::super::route_policy::AddressFamily::Ipv6, 42_410),
+                (super::super::route_policy::AddressFamily::Ipv6, 42_420),
+            ]
+        );
     }
 
     #[test]
