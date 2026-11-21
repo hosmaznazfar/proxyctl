@@ -631,3 +631,26 @@ mod validation_tests {
         );
     }
 }
+
+    #[test]
+    fn persistent_interface_creation_is_a_valid_first_journal_operation() {
+        let value = journal(vec![operation(
+            0,
+            JournalOperationKind::CreatePersistentInterface,
+            "interface:tun-proxyctl",
+        )]);
+        assert!(value.validate().is_ok());
+        let encoded = serde_json::to_vec(&value).unwrap();
+        let decoded: TransactionJournal = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(decoded.operations[0].kind, JournalOperationKind::CreatePersistentInterface);
+    }
+
+    #[test]
+    fn persistent_interface_operation_rejects_non_interface_resource_keys() {
+        let value = journal(vec![operation(
+            0,
+            JournalOperationKind::CreatePersistentInterface,
+            "route:v4:42420:0.0.0.0/0",
+        )]);
+        assert!(value.validate().is_err());
+    }
