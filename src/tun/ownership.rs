@@ -79,7 +79,7 @@ impl RouteManifest {
                 "owned resource key is empty, oversized, or contains control characters"
             );
             ensure!(
-                !resource.fingerprint.is_empty()
+                !resource.fingerprint.trim().is_empty()
                     && resource.fingerprint.len() <= MAX_RESOURCE_FINGERPRINT_BYTES
                     && !resource.fingerprint.chars().any(char::is_control),
                 "owned resource fingerprint is empty, oversized, or contains control characters"
