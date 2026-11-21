@@ -463,6 +463,7 @@ pub fn activate_tun_core(
     drop(db);
 
     ensure!(matches!(core, CoreId::Xray | CoreId::SingBox | CoreId::Mihomo), "unsupported TUN core");
+    ensure!(core == CoreId::Xray, "sing-box and Mihomo native TUN activation remain disabled until persistent-device crash recovery identity is fully hardened");
     let executable = core_binary_path(core)?;
     ensure!(executable.is_file(), "selected core is not installed by Proxyctl; run setup for the selected core");
     let executable = fs::canonicalize(executable)?;
