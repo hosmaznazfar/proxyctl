@@ -84,6 +84,7 @@ impl RouteNetlink {
             .checked_add(1)
             .context("netlink sequence exhausted")?;
         let sequence = self.sequence;
+        let deadline = std::time::Instant::now() + timeout.min(DEFAULT_TIMEOUT);
         let mut request = request.to_vec();
         request[8..12].copy_from_slice(&sequence.to_ne_bytes());
 
