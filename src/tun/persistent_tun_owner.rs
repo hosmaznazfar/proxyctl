@@ -10,6 +10,8 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 
+const MAX_RETAINED_TUN_DEVICES: usize = 64;
+
 use super::{
     kernel_inventory::{self, KernelInterfaceRecord},
     tun_device::TunDevice,
@@ -62,6 +64,10 @@ impl PersistentTunOwner {
         ensure!(
             !self.devices.contains_key(&key),
             "this activation generation already owns a TUN device"
+        );
+        ensure!(
+            self.devices.len() < MAX_RETAINED_TUN_DEVICES,
+            "the broker has reached its retained TUN device limit"
         );
         ensure!(
             !self
