@@ -91,20 +91,26 @@ impl RouteNetlink {
         let mut kernel: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
         kernel.nl_family = libc::AF_NETLINK as u16;
         // SAFETY: request and destination remain alive for the duration of sendto.
-        let sent = unsafe {
-            libc::sendto(
-                self.fd.as_raw_fd(),
-                request.as_ptr().cast(),
-                request.len(),
-                0,
-                (&kernel as *const libc::sockaddr_nl).cast(),
-                std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
-            )
+        let sent = loop {
+            let result = unsafe {
+                libc::sendto(
+                    self.fd.as_raw_fd(),
+                    request.as_ptr().cast(),
+                    request.len(),
+                    0,
+                    (&kernel as *const libc::sockaddr_nl).cast(),
+                    std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t,
+                )
+            };
+            if result < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            break result;
         };
         ensure!(
             sent == request.len() as isize,
-            "short NETLINK_ROUTE send: {}",
-            io::Error::last_os_error()
+            "NETLINK_ROUTE send failed or was short: {}",
+            if sent < 0 { io::Error::last_os_error() } else { io::Error::from(io::ErrorKind::WriteZero) }
         );
 
         let deadline = std::time::Instant::now() + timeout.min(DEFAULT_TIMEOUT);
