@@ -223,7 +223,7 @@ mod tests {
         for name in ["", "bad/name", "bad name", "1234567890123456", "bad\\name"] {
             assert!(validate_name(name).is_err());
         }
-        for name in ["tun0", "proxyctl-tun", "pctl_1"] {
+        for name in ["tun0", "proxyctl-tun", "pctl_1", "123456789012345"] {
             assert!(validate_name(name).is_ok());
         }
     }
