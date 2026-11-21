@@ -212,7 +212,7 @@ impl TransactionJournal {
                         operation
                             .fingerprint
                             .as_ref()
-                            .is_some_and(|value| !value.is_empty()
+                            .is_some_and(|value| !value.trim().is_empty()
                                 && value.len() <= 16 * 1024
                                 && !value.chars().any(char::is_control)),
                         "applied journal operation requires a valid fingerprint"
