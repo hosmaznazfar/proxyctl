@@ -5,12 +5,13 @@
 //! that a receiving core adopted the descriptor.
 #![cfg(target_os = "linux")]
 use anyhow::{Result, ensure};
-use std::{mem, os::{fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd}, unix::net::UnixStream}};
+use std::{mem, os::{fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd}, unix::net::UnixStream}, time::Duration};
 const MARKER: u8 = 0xA7;
 
 /// Send one descriptor with a marker byte. Use only on a private authenticated socket.
 /// A successful sendmsg confirms queueing, not application-level adoption.
 pub fn send_descriptor(stream: &UnixStream, descriptor: BorrowedFd<'_>) -> Result<()> {
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
     let mut marker = MARKER;
     let mut iov = libc::iovec { iov_base: (&mut marker as *mut u8).cast(), iov_len: 1 };
     const MAX_RECEIVED_DESCRIPTORS: usize = 16;
