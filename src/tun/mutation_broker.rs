@@ -623,6 +623,15 @@ mod tests {
     }
 
     #[test]
+    fn rejects_malformed_request_json_after_bounded_frame_read() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        let payload = b"{not-json";
+        sender.write_all(&(payload.len() as u32).to_le_bytes()).unwrap();
+        sender.write_all(payload).unwrap();
+        assert!(read_request(&mut receiver).is_err());
+    }
+
+    #[test]
     fn rejects_zero_length_request_frame() {
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
         sender.write_all(&0u32.to_le_bytes()).unwrap();
