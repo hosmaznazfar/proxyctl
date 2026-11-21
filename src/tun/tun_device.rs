@@ -312,7 +312,7 @@ pub fn remove_persistent(name: &str, expected_index: u32, expected_alias: &str) 
     ensure!(live_index == expected_index, "persistent TUN ifindex changed before cleanup; refusing to clear persistence");
     let live_alias = std::fs::read_to_string(format!("/sys/class/net/{name}/ifalias"))
         .context("cannot read persistent TUN generation alias before cleanup")?;
-    ensure!(live_alias.trim_end_matches(['\\r', '\\n']) == expected_alias,
+    ensure!(live_alias.trim_end_matches(['\r', '\n']) == expected_alias,
         "persistent TUN generation alias changed; refusing to clear persistence");
     let rc = ioctl_retry(fd.as_raw_fd(), TUNSETPERSIST, 0)?;
     ensure!(rc == 0, "TUNSETPERSIST(0) failed: {}", std::io::Error::last_os_error());
