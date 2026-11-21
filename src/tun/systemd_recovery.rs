@@ -50,7 +50,10 @@ impl SystemdRecoverySupervisor {
         identity.validate()?;
         ensure!(identity.manifest_path == self.runtime.join("tun-manifest.json").to_string_lossy().as_ref(),
             "supervisor identity points outside the configured runtime directory");
-        ensure!(self.runtime.is_absolute(), "supervisor runtime directory must be absolute");
+        ensure!(
+            self.runtime.is_absolute() && self.runtime.as_os_str().len() <= 4096,
+            "supervisor runtime directory must be a bounded absolute path"
+        );
         for path in [&self.executable, &self.systemd_run, &self.systemctl] {
             ensure!(
                 path.is_absolute()
