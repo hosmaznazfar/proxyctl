@@ -1,9 +1,8 @@
-//! Failure-aware orchestration for a future privileged kernel transaction.
+//! Failure-aware orchestration for generation-bound privileged kernel transactions.
 //!
-//! This module intentionally contains no operating-system mutator. A concrete broker must
-//! implement the backend contract with durable write-ahead ownership recording and atomic
-//! compare-and-delete semantics. The executor is exercised only with fake backends here;
-//! production TUN activation remains gated until such a backend and supervisor exist.
+//! The executor is independent of Linux syscalls. The production broker supplies a durable
+//! write-ahead backend and selects either descriptor-backed or persistent named-device TUN
+//! ownership. Tests use fake backends to exercise ordering and rollback without host mutation.
 
 use anyhow::{Context, Result, ensure};
 
@@ -81,7 +80,7 @@ fn valid_activation_id(value: &str) -> bool {
         })
 }
 
-/// Contract for a future broker-owned transaction backend.
+/// Contract for a broker-owned transaction backend.
 ///
 /// Each mutating method must persist a generation-scoped operation intent before issuing
 /// the kernel mutation, then persist the observed exact fingerprint before reporting success.
@@ -89,8 +88,7 @@ fn valid_activation_id(value: &str) -> bool {
 /// never delete a resource based on a guessed name. The journal must survive controller/core
 /// termination. Deletion must compare the current complete fingerprint atomically with the
 /// delete, then durably mark cleanup progress. A successful add must return a non-empty
-/// fingerprint. The filesystem journal primitives exist in ManifestStore, but this trait has
-/// no concrete backend wired to them yet.
+/// fingerprint. The Linux journal backend implements both descriptor and persistent-device modes.
 pub trait KernelTransactionBackend {
     fn create_owned_interface(
         &mut self,
