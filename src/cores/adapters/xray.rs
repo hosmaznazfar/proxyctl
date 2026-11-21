@@ -274,8 +274,8 @@ impl CoreAdapter for XrayAdapter {
 
     #[cfg(target_os = "linux")]
     fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
-        super::TunAttachmentMode::ExternalDescriptorEnvironment {
-            variable: super::XRAY_TUN_FD_ENV,
+        super::super::TunAttachmentMode::ExternalDescriptorEnvironment {
+            variable: super::super::XRAY_TUN_FD_ENV,
         }
     }
 
