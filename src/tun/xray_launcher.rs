@@ -268,6 +268,20 @@ pub fn stop_xray_generation(
     }
     const SUDO: &str = "/usr/bin/sudo";
     const SYSTEMCTL: &str = "/usr/bin/systemctl";
+    let sudo_metadata = fs::symlink_metadata(SUDO).context("cannot inspect sudo executable for Xray service stop")?;
+    ensure!(sudo_metadata.file_type().is_file() && sudo_metadata.uid() == 0
+        && sudo_metadata.permissions().mode() & 0o111 != 0
+        && sudo_metadata.permissions().mode() & 0o022 == 0
+        && sudo_metadata.permissions().mode() & 0o3000 == 0
+        && sudo_metadata.nlink() == 1,
+        "sudo must be a root-owned, non-writable executable (the conventional setuid bit is permitted)");
+    let systemctl_metadata = fs::symlink_metadata(SYSTEMCTL).context("cannot inspect systemctl executable for Xray service stop")?;
+    ensure!(systemctl_metadata.file_type().is_file() && systemctl_metadata.uid() == 0
+        && systemctl_metadata.permissions().mode() & 0o111 != 0
+        && systemctl_metadata.permissions().mode() & 0o022 == 0
+        && systemctl_metadata.permissions().mode() & 0o7000 == 0
+        && systemctl_metadata.nlink() == 1,
+        "systemctl must be a root-owned, non-writable executable");
     let unit = format!("proxyctl-tun-core-{activation_id}-{generation}.service");
     let active = Command::new(SUDO)
         .args(["-n", "--", SYSTEMCTL, "is-active", "--quiet"])
