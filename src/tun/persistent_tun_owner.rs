@@ -397,3 +397,17 @@ mod native_owner_capacity_tests {
         assert_eq!(owner.len(), 1);
     }
 }
+
+#[cfg(test)]
+mod generation_alias_tests {
+    use super::*;
+
+    #[test]
+    fn generation_alias_is_canonical_and_generation_bound() {
+        let id = "12345678-1234-4234-8234-123456789abc";
+        assert_eq!(generation_alias(id, 7).unwrap(), format!("proxyctl:{id}:7"));
+        assert_ne!(generation_alias(id, 7).unwrap(), generation_alias(id, 8).unwrap());
+        assert!(generation_alias("12345678-1234-4234-8234-123456789ABC", 7).is_err());
+        assert!(generation_alias(id, 0).is_err());
+    }
+}
