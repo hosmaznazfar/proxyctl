@@ -513,6 +513,10 @@ fn validate_request(bytes: &[u8]) -> Result<()> {
     let flags = u16::from_ne_bytes(bytes[6..8].try_into()?);
     let sequence = u32::from_ne_bytes(bytes[8..12].try_into()?);
     let port_id = u32::from_ne_bytes(bytes[12..16].try_into()?);
+    ensure!(
+        bytes[NETLINK_HEADER_LEN..].iter().all(|byte| *byte == 0),
+        "RTM_GETLINK inspection request must not contain interface filters"
+    );
     ensure!(kind != 0, "netlink request has an unspecified message type");
     ensure!(
         flags == (NLM_F_REQUEST | NLM_F_DUMP),
