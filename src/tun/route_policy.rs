@@ -226,24 +226,27 @@ impl RoutingPolicyPlan {
                 "route is not the exact unicast default route through the owned TUN interface"
             );
 
-            let bypass = self
-                .rules
-                .iter()
-                .filter(|rule| {
-                    rule.family == family && rule.purpose == RulePurpose::CoreTrafficBypass
-                })
-                .collect::<Vec<_>>();
-            let proxy = self
-                .rules
-                .iter()
-                .filter(|rule| rule.family == family && rule.purpose == RulePurpose::ProxyTraffic)
-                .collect::<Vec<_>>();
+            let mut bypass_rules = self.rules.iter().filter(|rule| {
+                rule.family == family && rule.purpose == RulePurpose::CoreTrafficBypass
+            });
+            let bypass = bypass_rules
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("routing plan is missing a core bypass rule"))?;
             ensure!(
-                bypass.len() == 1 && proxy.len() == 1,
-                "routing plan has missing or duplicate rules"
+                bypass_rules.next().is_none(),
+                "routing plan has duplicate core bypass rules"
             );
-            let bypass = bypass[0];
-            let proxy = proxy[0];
+            let mut proxy_rules = self
+                .rules
+                .iter()
+                .filter(|rule| rule.family == family && rule.purpose == RulePurpose::ProxyTraffic);
+            let proxy = proxy_rules
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("routing plan is missing a proxy rule"))?;
+            ensure!(
+                proxy_rules.next().is_none(),
+                "routing plan has duplicate proxy rules"
+            );
             ensure!(
                 bypass.priority == self.bypass_priority
                     && bypass.mark
