@@ -182,6 +182,14 @@ fn validate_name(name: &str) -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn accepts_close_on_exec_descriptor() {
+        use std::os::fd::AsRawFd;
+
+        let file = std::fs::File::open("/dev/null").unwrap();
+        assert!(ensure_descriptor_cloexec(file.as_raw_fd()).is_ok());
+    }
+
+    #[test]
     fn ioctl_retry_reports_invalid_descriptor_errors() {
         assert!(ioctl_retry(-1, TUNSETIFF, 0).is_err());
     }
