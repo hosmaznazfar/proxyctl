@@ -67,7 +67,8 @@ fn verify_listener_process_ownership(
             if fields.len() < 10 || fields[3] != "0A" {
                 continue;
             }
-            let Some((address, port)) = parse_proc_tcp_endpoint(fields[1], table.ends_with("tcp6")) else {
+            let Some((address, port)) = parse_proc_tcp_endpoint(fields[1], table.ends_with("tcp6"))
+            else {
                 continue;
             };
             if address == listener.ip() && port == listener.port() {
@@ -97,7 +98,9 @@ fn parse_proc_tcp_endpoint(value: &str, ipv6: bool) -> Option<(std::net::IpAddr,
     let (address, port) = value.split_once(':')?;
     let port = u16::from_str_radix(port, 16).ok()?;
     if ipv6 {
-        if address.len() != 32 { return None; }
+        if address.len() != 32 {
+            return None;
+        }
         let mut bytes = [0u8; 16];
         for (index, chunk) in address.as_bytes().chunks_exact(8).enumerate() {
             let word = u32::from_str_radix(std::str::from_utf8(chunk).ok()?, 16).ok()?;
@@ -105,7 +108,9 @@ fn parse_proc_tcp_endpoint(value: &str, ipv6: bool) -> Option<(std::net::IpAddr,
         }
         Some((IpAddr::V6(Ipv6Addr::from(bytes)), port))
     } else {
-        if address.len() != 8 { return None; }
+        if address.len() != 8 {
+            return None;
+        }
         let word = u32::from_str_radix(address, 16).ok()?;
         Some((IpAddr::V4(Ipv4Addr::from(word.to_le_bytes())), port))
     }
@@ -158,21 +163,31 @@ pub fn verify_host_network_unchanged(
     baseline: &super::NetworkStatus,
     current: &super::NetworkStatus,
 ) -> Result<()> {
-    ensure!(baseline.dns_inspected && current.dns_inspected,
-        "DNS state must be successfully inspected in both host snapshots");
-    ensure!(baseline.firewall.backend != "not available"
-        && current.firewall.backend != "not available"
-        && !baseline.firewall.detail.contains("failed")
-        && !current.firewall.detail.contains("failed")
-        && !baseline.firewall.detail.contains("unrecognized")
-        && !current.firewall.detail.contains("unrecognized")
-        && !baseline.firewall.detail.contains("not permitted")
-        && !current.firewall.detail.contains("not permitted")
-        && (baseline.firewall.backend != "iptables"
-            || baseline.firewall.detail.contains("2 address family commands"))
-        && (current.firewall.backend != "iptables"
-            || current.firewall.detail.contains("2 address family commands")),
-        "firewall state is unavailable or incomplete in a host snapshot");
+    ensure!(
+        baseline.dns_inspected && current.dns_inspected,
+        "DNS state must be successfully inspected in both host snapshots"
+    );
+    ensure!(
+        baseline.firewall.backend != "not available"
+            && current.firewall.backend != "not available"
+            && !baseline.firewall.detail.contains("failed")
+            && !current.firewall.detail.contains("failed")
+            && !baseline.firewall.detail.contains("unrecognized")
+            && !current.firewall.detail.contains("unrecognized")
+            && !baseline.firewall.detail.contains("not permitted")
+            && !current.firewall.detail.contains("not permitted")
+            && (baseline.firewall.backend != "iptables"
+                || baseline
+                    .firewall
+                    .detail
+                    .contains("2 address family commands"))
+            && (current.firewall.backend != "iptables"
+                || current
+                    .firewall
+                    .detail
+                    .contains("2 address family commands")),
+        "firewall state is unavailable or incomplete in a host snapshot"
+    );
     ensure!(
         baseline.dns_servers == current.dns_servers
             && baseline.resolv_conf_target == current.resolv_conf_target
@@ -180,12 +195,12 @@ pub fn verify_host_network_unchanged(
             && baseline.network_manager_runtime == current.network_manager_runtime,
         "host DNS configuration changed during TUN activation"
     );
-    ensure!(baseline.firewall == current.firewall,
-        "host firewall snapshot changed during TUN activation");
+    ensure!(
+        baseline.firewall == current.firewall,
+        "host firewall snapshot changed during TUN activation"
+    );
     Ok(())
 }
-
-
 
 /// Hard defaults for a conservative diagnostic traffic observation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,16 +212,26 @@ pub struct ProxyTrafficProbeLimits {
 impl ProxyTrafficProbeLimits {
     /// Construct validated limits; no timeout above thirty seconds or body above one MiB.
     pub fn new(timeout: Duration, maximum_response_bytes: usize) -> Result<Self> {
-        ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(30),
-            "proxy traffic timeout must be between zero and thirty seconds");
-        ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
-            "proxy traffic response bound must be within one MiB");
-        Ok(Self { timeout, maximum_response_bytes })
+        ensure!(
+            !timeout.is_zero() && timeout <= Duration::from_secs(30),
+            "proxy traffic timeout must be between zero and thirty seconds"
+        );
+        ensure!(
+            maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
+            "proxy traffic response bound must be within one MiB"
+        );
+        Ok(Self {
+            timeout,
+            maximum_response_bytes,
+        })
     }
 
     /// Conservative default bounds for a future explicit diagnostic probe.
     pub fn conservative() -> Self {
-        Self { timeout: Duration::from_secs(5), maximum_response_bytes: 64 * 1024 }
+        Self {
+            timeout: Duration::from_secs(5),
+            maximum_response_bytes: 64 * 1024,
+        }
     }
 }
 
@@ -238,21 +263,37 @@ pub struct HttpProbeTarget {
 
 impl HttpProbeTarget {
     pub fn validate(&self) -> Result<()> {
-        ensure!(!self.destination.ip().is_unspecified()
-            && !self.destination.ip().is_multicast()
-            && !self.destination.ip().is_loopback()
-            && !self.destination.ip().is_link_local()
-            && self.destination.port() != 0,
-            "HTTP probe destination must be a concrete non-local unicast endpoint");
-        ensure!(!self.host_header.is_empty() && self.host_header.len() <= 253
-            && self.host_header.bytes().all(|byte| byte.is_ascii_alphanumeric()
-                || matches!(byte, b'.' | b'-' | b':' | b'[' | b']')),
-            "HTTP probe Host header contains invalid characters");
-        ensure!(self.path.starts_with('/') && self.path.len() <= 2048
-            && !self.path.bytes().any(|byte| byte.is_ascii_control() || byte == b' '),
-            "HTTP probe path must be an absolute-path without control characters");
-        ensure!((200..=299).contains(&self.expected_status),
-            "HTTP probe expected status must be a successful 2xx response");
+        ensure!(
+            !self.destination.ip().is_unspecified()
+                && !self.destination.ip().is_multicast()
+                && !self.destination.ip().is_loopback()
+                && !self.destination.ip().is_link_local()
+                && self.destination.port() != 0,
+            "HTTP probe destination must be a concrete non-local unicast endpoint"
+        );
+        ensure!(
+            !self.host_header.is_empty()
+                && self.host_header.len() <= 253
+                && self
+                    .host_header
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric()
+                        || matches!(byte, b'.' | b'-' | b':' | b'[' | b']')),
+            "HTTP probe Host header contains invalid characters"
+        );
+        ensure!(
+            self.path.starts_with('/')
+                && self.path.len() <= 2048
+                && !self
+                    .path
+                    .bytes()
+                    .any(|byte| byte.is_ascii_control() || byte == b' '),
+            "HTTP probe path must be an absolute-path without control characters"
+        );
+        ensure!(
+            (200..=299).contains(&self.expected_status),
+            "HTTP probe expected status must be a successful 2xx response"
+        );
         Ok(())
     }
 }
@@ -264,18 +305,27 @@ pub fn probe_unmarked_route_to_tun(
     destination: std::net::IpAddr,
 ) -> Result<()> {
     plan.validate()?;
-    ensure!(!destination.is_unspecified() && !destination.is_multicast()
-        && !destination.is_loopback() && !destination.is_link_local(),
-        "TUN route probe destination must be a concrete non-local unicast address");
+    ensure!(
+        !destination.is_unspecified()
+            && !destination.is_multicast()
+            && !destination.is_loopback()
+            && !destination.is_link_local(),
+        "TUN route probe destination must be a concrete non-local unicast address"
+    );
     let family = if destination.is_ipv4() { "-4" } else { "-6" };
     let destination = destination.to_string();
-    let output = super::kernel_inventory::run_ip(&[
-        "-j", family, "route", "get", &destination, "mark", "0",
-    ]).context("cannot query the kernel route for an unmarked application flow")?;
+    let output =
+        super::kernel_inventory::run_ip(&["-j", family, "route", "get", &destination, "mark", "0"])
+            .context("cannot query the kernel route for an unmarked application flow")?;
     let value: serde_json::Value = serde_json::from_slice(&output)
         .context("kernel returned invalid JSON for the unmarked route lookup")?;
-    let records = value.as_array().context("unmarked route lookup did not return an array")?;
-    ensure!(records.len() == 1, "unmarked route lookup is missing or ambiguous");
+    let records = value
+        .as_array()
+        .context("unmarked route lookup did not return an array")?;
+    ensure!(
+        records.len() == 1,
+        "unmarked route lookup is missing or ambiguous"
+    );
     validate_unmarked_route_record(&records[0], plan)
 }
 
@@ -292,14 +342,19 @@ fn validate_unmarked_route_record(
     record: &serde_json::Value,
     plan: &super::route_policy::RoutingPolicyPlan,
 ) -> Result<()> {
-    ensure!(record.get("dev").and_then(serde_json::Value::as_str)
-        == Some(plan.interface_name.as_str()),
-        "kernel would not route the unmarked application flow through the owned TUN interface");
+    ensure!(
+        record.get("dev").and_then(serde_json::Value::as_str) == Some(plan.interface_name.as_str()),
+        "kernel would not route the unmarked application flow through the owned TUN interface"
+    );
     let table = record.get("table").and_then(|value| {
-        value.as_u64().or_else(|| value.as_str().and_then(|text| text.parse::<u64>().ok()))
+        value
+            .as_u64()
+            .or_else(|| value.as_str().and_then(|text| text.parse::<u64>().ok()))
     });
-    ensure!(table == Some(u64::from(plan.table_id)),
-        "kernel selected a different routing table for the unmarked application flow");
+    ensure!(
+        table == Some(u64::from(plan.table_id)),
+        "kernel selected a different routing table for the unmarked application flow"
+    );
     Ok(())
 }
 
@@ -322,22 +377,36 @@ pub fn probe_tun_routed_http_traffic(
     use std::{io::Write, net::TcpStream, time::Instant};
 
     target.validate()?;
-    ensure!(!activation_id.is_empty() && generation > 0,
-        "TUN HTTP probe activation identity is invalid");
-    ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(30),
-        "TUN HTTP probe timeout must be between zero and thirty seconds");
-    ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 16 * 1024,
-        "TUN HTTP response-header bound must be within sixteen KiB");
-    ensure!(process.verify()?, "managed core identity is not live before TUN traffic probe");
+    ensure!(
+        !activation_id.is_empty() && generation > 0,
+        "TUN HTTP probe activation identity is invalid"
+    );
+    ensure!(
+        !timeout.is_zero() && timeout <= Duration::from_secs(30),
+        "TUN HTTP probe timeout must be between zero and thirty seconds"
+    );
+    ensure!(
+        maximum_response_bytes > 0 && maximum_response_bytes <= 16 * 1024,
+        "TUN HTTP response-header bound must be within sixteen KiB"
+    );
+    ensure!(
+        process.verify()?,
+        "managed core identity is not live before TUN traffic probe"
+    );
     let started = Instant::now();
     let deadline = started + timeout;
     let connect_timeout = timeout.min(Duration::from_secs(5));
     let mut stream = TcpStream::connect_timeout(&target.destination, connect_timeout)
         .context("cannot establish the direct application TCP flow through the TUN route")?;
-    ensure!(stream.peer_addr()? == target.destination,
-        "direct TUN probe connected to a different destination endpoint");
+    ensure!(
+        stream.peer_addr()? == target.destination,
+        "direct TUN probe connected to a different destination endpoint"
+    );
     let remaining = deadline.saturating_duration_since(Instant::now());
-    ensure!(!remaining.is_zero(), "TUN HTTP probe deadline expired during TCP connection");
+    ensure!(
+        !remaining.is_zero(),
+        "TUN HTTP probe deadline expired during TCP connection"
+    );
     stream.set_read_timeout(Some(remaining))?;
     stream.set_write_timeout(Some(remaining))?;
     let authority = if target.destination.port() == 80 {
@@ -349,17 +418,28 @@ pub fn probe_tun_routed_http_traffic(
         "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: keep-alive\r\nAccept: */*\r\n\r\n",
         target.path, authority
     );
-    stream.write_all(request.as_bytes())
+    stream
+        .write_all(request.as_bytes())
         .context("cannot send HTTP request through the host TUN route")?;
     let response_headers = read_http_header_block(&mut stream, maximum_response_bytes, deadline)
         .context("cannot read HTTP response headers from the TUN-routed application flow")?;
     let status = parse_http_status(&response_headers)?;
-    ensure!(status == target.expected_status,
-        "TUN-routed HTTP probe returned an unexpected status");
-    ensure!(http_response_allows_keepalive(&response_headers)?,
-        "TUN readiness endpoint requested connection closure before outbound socket-mark inspection");
-    ensure!(Instant::now() <= deadline, "TUN HTTP probe exceeded its aggregate deadline");
-    ensure!(process.verify()?, "managed core identity changed during TUN traffic probe");
+    ensure!(
+        status == target.expected_status,
+        "TUN-routed HTTP probe returned an unexpected status"
+    );
+    ensure!(
+        http_response_allows_keepalive(&response_headers)?,
+        "TUN readiness endpoint requested connection closure before outbound socket-mark inspection"
+    );
+    ensure!(
+        Instant::now() <= deadline,
+        "TUN HTTP probe exceeded its aggregate deadline"
+    );
+    ensure!(
+        process.verify()?,
+        "managed core identity changed during TUN traffic probe"
+    );
     Ok(TunTrafficProbe {
         observation: ProxyTrafficObservation {
             activation_id: activation_id.to_owned(),
@@ -395,13 +475,20 @@ fn read_http_header_block(
 ) -> Result<Vec<u8>> {
     use std::io::Read;
     let mut headers = Vec::new();
-    headers.try_reserve_exact(maximum).context("cannot reserve bounded HTTP response headers")?;
+    headers
+        .try_reserve_exact(maximum)
+        .context("cannot reserve bounded HTTP response headers")?;
     let mut byte = [0u8; 1];
     while headers.len() < maximum {
         let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        ensure!(!remaining.is_zero(), "HTTP response headers exceeded the TUN probe deadline");
+        ensure!(
+            !remaining.is_zero(),
+            "HTTP response headers exceeded the TUN probe deadline"
+        );
         stream.set_read_timeout(Some(remaining))?;
-        stream.read_exact(&mut byte).context("HTTP response ended before its header terminator")?;
+        stream
+            .read_exact(&mut byte)
+            .context("HTTP response ended before its header terminator")?;
         headers.push(byte[0]);
         if headers.ends_with(b"\r\n\r\n") {
             return Ok(headers);
@@ -412,13 +499,18 @@ fn read_http_header_block(
 
 #[cfg(target_os = "linux")]
 fn http_response_allows_keepalive(response: &[u8]) -> Result<bool> {
-    let end = response.windows(4).position(|window| window == b"\r\n\r\n")
+    let end = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
         .context("HTTP response has no complete header block")?;
     let headers = std::str::from_utf8(&response[..end])
         .context("HTTP response headers are not valid ASCII")?;
     let mut lines = headers.lines();
     let status_line = lines.next().context("HTTP response has no status line")?;
-    let protocol = status_line.split_ascii_whitespace().next().unwrap_or_default();
+    let protocol = status_line
+        .split_ascii_whitespace()
+        .next()
+        .unwrap_or_default();
     let mut keep_alive = protocol == "HTTP/1.1";
     for line in lines {
         if let Some((name, value)) = line.split_once(':') {
@@ -439,16 +531,26 @@ fn http_response_allows_keepalive(response: &[u8]) -> Result<bool> {
 
 #[cfg(target_os = "linux")]
 fn parse_http_status(response: &[u8]) -> Result<u16> {
-    let line_end = response.windows(2).position(|window| window == b"\r\n")
+    let line_end = response
+        .windows(2)
+        .position(|window| window == b"\r\n")
         .context("HTTP response has no complete status line")?;
     let line = std::str::from_utf8(&response[..line_end])
         .context("HTTP response status line is not valid ASCII")?;
     let mut fields = line.split_ascii_whitespace();
-    ensure!(matches!(fields.next(), Some("HTTP/1.0" | "HTTP/1.1")),
-        "HTTP response uses an unsupported protocol version");
-    let status = fields.next().context("HTTP response has no status code")?
-        .parse::<u16>().context("HTTP response status code is invalid")?;
-    ensure!((100..=599).contains(&status), "HTTP response status code is outside the valid range");
+    ensure!(
+        matches!(fields.next(), Some("HTTP/1.0" | "HTTP/1.1")),
+        "HTTP response uses an unsupported protocol version"
+    );
+    let status = fields
+        .next()
+        .context("HTTP response has no status code")?
+        .parse::<u16>()
+        .context("HTTP response status code is invalid")?;
+    ensure!(
+        (100..=599).contains(&status),
+        "HTTP response status code is outside the valid range"
+    );
     Ok(status)
 }
 
@@ -467,25 +569,47 @@ pub fn validate_proxy_traffic_observation(
     maximum_duration: Duration,
     maximum_response_bytes: usize,
 ) -> Result<()> {
-    ensure!(!activation_id.is_empty(), "activation identity must not be empty");
+    ensure!(
+        !activation_id.is_empty(),
+        "activation identity must not be empty"
+    );
     ensure!(generation > 0, "activation generation must be non-zero");
-    ensure!(observation.activation_id == activation_id && observation.generation == generation,
-        "traffic observation belongs to a different activation generation");
-    ensure!(observation.process == *process && process.verify()?,
-        "traffic observation process identity is mismatched or no longer live");
-    ensure!(!observation.destination.ip().is_unspecified() && observation.destination.port() != 0,
-        "traffic observation destination is invalid");
-    ensure!(!maximum_duration.is_zero() && maximum_duration <= Duration::from_secs(30),
-        "traffic observation duration bound must be within thirty seconds");
-    ensure!(observation.completed && observation.elapsed <= maximum_duration,
-        "traffic probe did not complete within its duration bound");
-    ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
-        "traffic response bound must be within one MiB");
-    ensure!(observation.response_bytes > 0 && observation.response_bytes <= maximum_response_bytes,
-        "traffic probe response size is empty or exceeded its configured bound");
-    ensure!(observation.expected_response_verified,
-        "traffic probe did not independently verify its expected response");
-    ensure!(process.verify()?, "managed core identity changed after traffic probe");
+    ensure!(
+        observation.activation_id == activation_id && observation.generation == generation,
+        "traffic observation belongs to a different activation generation"
+    );
+    ensure!(
+        observation.process == *process && process.verify()?,
+        "traffic observation process identity is mismatched or no longer live"
+    );
+    ensure!(
+        !observation.destination.ip().is_unspecified() && observation.destination.port() != 0,
+        "traffic observation destination is invalid"
+    );
+    ensure!(
+        !maximum_duration.is_zero() && maximum_duration <= Duration::from_secs(30),
+        "traffic observation duration bound must be within thirty seconds"
+    );
+    ensure!(
+        observation.completed && observation.elapsed <= maximum_duration,
+        "traffic probe did not complete within its duration bound"
+    );
+    ensure!(
+        maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
+        "traffic response bound must be within one MiB"
+    );
+    ensure!(
+        observation.response_bytes > 0 && observation.response_bytes <= maximum_response_bytes,
+        "traffic probe response size is empty or exceeded its configured bound"
+    );
+    ensure!(
+        observation.expected_response_verified,
+        "traffic probe did not independently verify its expected response"
+    );
+    ensure!(
+        process.verify()?,
+        "managed core identity changed after traffic probe"
+    );
     Ok(())
 }
 
@@ -500,7 +624,6 @@ pub fn validate_proxy_traffic_observation(
 ) -> Result<()> {
     anyhow::bail!("managed proxy traffic observation validation is supported only on Linux");
 }
-
 
 /// Promote a validated traffic observation into complete readiness evidence.
 ///
@@ -519,10 +642,21 @@ pub fn verify_readiness_with_traffic_observation(
     maximum_response_bytes: usize,
 ) -> Result<()> {
     validate_proxy_traffic_observation(
-        observation, activation_id, generation, process, maximum_duration, maximum_response_bytes,
+        observation,
+        activation_id,
+        generation,
+        process,
+        maximum_duration,
+        maximum_response_bytes,
     )?;
-    ensure!(evidence.core_process_verified, "readiness process evidence is missing");
-    ensure!(evidence.local_listener.is_some(), "readiness listener evidence is missing");
+    ensure!(
+        evidence.core_process_verified,
+        "readiness process evidence is missing"
+    );
+    ensure!(
+        evidence.local_listener.is_some(),
+        "readiness listener evidence is missing"
+    );
     let mut promoted = evidence.clone();
     promoted.proxied_traffic_verified = true;
     verify_readiness(expected, &promoted)
@@ -554,45 +688,72 @@ pub fn collect_managed_preflight_with_response(
     baseline_host: &super::NetworkStatus,
     current_host: &super::NetworkStatus,
 ) -> Result<ManagedPreflight> {
-    ensure!(process.verify()?, "managed core identity is not live at preflight start");
-    ensure!(!expected_peers.is_empty() && expected_peers.len() <= 8,
-        "Xray outbound peer candidate list must contain one to eight addresses");
+    ensure!(
+        process.verify()?,
+        "managed core identity is not live at preflight start"
+    );
+    ensure!(
+        !expected_peers.is_empty() && expected_peers.len() <= 8,
+        "Xray outbound peer candidate list must contain one to eight addresses"
+    );
     let listener = probe_core_listener(process, listener, listener_timeout)?;
     let interface = probe_tun_interface(&plan.interface_name, plan.interface_index)?;
     probe_routing_policy(plan)?;
     let egress = super::egress_probe::inspect_marked_egress(plan)?;
-    ensure!(egress.mark == plan.core_mark && egress.mask == plan.core_mark_mask,
-        "marked physical-egress evidence is bound to a different mark policy");
+    ensure!(
+        egress.mark == plan.core_mark && egress.mask == plan.core_mark_mask,
+        "marked physical-egress evidence is bound to a different mark policy"
+    );
 
     let mut matched = None;
     let mut last_error = None;
     for peer in expected_peers {
         if peer.ip().is_unspecified() || peer.ip().is_multicast() || peer.port() == 0 {
-            last_error = Some(anyhow::anyhow!("Xray outbound peer candidate is not a valid unicast endpoint"));
+            last_error = Some(anyhow::anyhow!(
+                "Xray outbound peer candidate is not a valid unicast endpoint"
+            ));
             continue;
         }
         match super::socket_mark_probe::observe_proxy_outbound_mark(
-            runtime_directory, activation_id, process.clone(), *peer, transport,
-            plan.core_mark, plan.core_mark_mask,
+            runtime_directory,
+            activation_id,
+            process.clone(),
+            *peer,
+            transport,
+            plan.core_mark,
+            plan.core_mark_mask,
         ) {
             Ok(response) if response.expected_peer == *peer && response.transport == transport => {
                 match super::socket_mark_probe::observed_proxy_outbound_mark(
-                    &response, plan.core_mark, plan.core_mark_mask,
+                    &response,
+                    plan.core_mark,
+                    plan.core_mark_mask,
                 ) {
-                    Ok(mark) => { matched = Some((response, mark)); break; }
+                    Ok(mark) => {
+                        matched = Some((response, mark));
+                        break;
+                    }
                     Err(error) => last_error = Some(error),
                 }
             }
-            Ok(_) => last_error = Some(anyhow::anyhow!(
-                "socket-mark helper response did not match the requested Xray peer and transport"
-            )),
+            Ok(_) => {
+                last_error = Some(anyhow::anyhow!(
+                    "socket-mark helper response did not match the requested Xray peer and transport"
+                ))
+            }
             Err(error) => last_error = Some(error),
         }
     }
-    let (response, mark) = matched.ok_or_else(|| last_error.unwrap_or_else(||
-        anyhow::anyhow!("no Xray outbound socket matched any resolved node address")))?;
+    let (response, mark) = matched.ok_or_else(|| {
+        last_error.unwrap_or_else(|| {
+            anyhow::anyhow!("no Xray outbound socket matched any resolved node address")
+        })
+    })?;
     verify_host_network_unchanged(baseline_host, current_host)?;
-    ensure!(process.verify()?, "managed core identity changed during preflight");
+    ensure!(
+        process.verify()?,
+        "managed core identity changed during preflight"
+    );
     Ok(ManagedPreflight {
         evidence: ReadinessEvidence {
             core_process_verified: true,
@@ -633,38 +794,70 @@ pub fn verify_native_core_end_to_end_readiness(
     baseline_host: &super::NetworkStatus,
     current_host: &super::NetworkStatus,
 ) -> Result<ReadinessEvidence> {
-    ensure!(plan.interface_name == interface_name && plan.interface_index == interface_index,
-        "native TUN readiness plan does not match the exact persistent interface identity");
-    ensure!(plan.core_mark == core_mark && plan.core_mark_mask == core_mark_mask,
-        "native TUN readiness plan does not match the core outbound mark");
-    ensure!(!expected_peers.is_empty() && expected_peers.len() <= 8
-        && expected_peers.iter().all(|peer| !peer.ip().is_unspecified()
-            && !peer.ip().is_multicast() && peer.port() > 0),
-        "native core outbound peer candidates must contain one to eight unicast endpoints");
+    ensure!(
+        plan.interface_name == interface_name && plan.interface_index == interface_index,
+        "native TUN readiness plan does not match the exact persistent interface identity"
+    );
+    ensure!(
+        plan.core_mark == core_mark && plan.core_mark_mask == core_mark_mask,
+        "native TUN readiness plan does not match the core outbound mark"
+    );
+    ensure!(
+        !expected_peers.is_empty()
+            && expected_peers.len() <= 8
+            && expected_peers.iter().all(|peer| !peer.ip().is_unspecified()
+                && !peer.ip().is_multicast()
+                && peer.port() > 0),
+        "native core outbound peer candidates must contain one to eight unicast endpoints"
+    );
     target.validate()?;
     plan.validate()?;
     probe_unmarked_route_to_tun(plan, target.destination.ip())?;
     let traffic = probe_tun_routed_http_traffic(
-        process, target, activation_id, generation, probe_timeout, maximum_response_bytes,
+        process,
+        target,
+        activation_id,
+        generation,
+        probe_timeout,
+        maximum_response_bytes,
     )?;
     let mut preflight = collect_managed_preflight_with_response(
-        runtime_directory, activation_id, process, listener, listener_timeout, plan,
-        expected_peers, transport, baseline_host, current_host,
+        runtime_directory,
+        activation_id,
+        process,
+        listener,
+        listener_timeout,
+        plan,
+        expected_peers,
+        transport,
+        baseline_host,
+        current_host,
     )?;
-    ensure!(preflight.evidence.core_process_verified
-        && preflight.evidence.local_listener == Some(listener)
-        && preflight.evidence.tun_interface.as_ref().is_some_and(|interface|
-            interface.name == interface_name && interface.index == interface_index)
-        && preflight.evidence.route_policy_verified
-        && preflight.evidence.physical_egress_bypass_verified
-        && preflight.evidence.dns_unchanged
-        && preflight.evidence.firewall_unchanged,
-        "native core preflight did not produce all required independent evidence");
-    ensure!(preflight.socket_mark_response.expected_peer.port() > 0,
-        "native core socket-mark evidence has an invalid peer");
+    ensure!(
+        preflight.evidence.core_process_verified
+            && preflight.evidence.local_listener == Some(listener)
+            && preflight
+                .evidence
+                .tun_interface
+                .as_ref()
+                .is_some_and(|interface| interface.name == interface_name
+                    && interface.index == interface_index)
+            && preflight.evidence.route_policy_verified
+            && preflight.evidence.physical_egress_bypass_verified
+            && preflight.evidence.dns_unchanged
+            && preflight.evidence.firewall_unchanged,
+        "native core preflight did not produce all required independent evidence"
+    );
+    ensure!(
+        preflight.socket_mark_response.expected_peer.port() > 0,
+        "native core socket-mark evidence has an invalid peer"
+    );
     let _traffic_observation = traffic.observation;
     preflight.evidence.proxied_traffic_verified = true;
-    ensure!(process.verify()?, "native core process identity changed during end-to-end readiness");
+    ensure!(
+        process.verify()?,
+        "native core process identity changed during end-to-end readiness"
+    );
     Ok(preflight.evidence)
 }
 
@@ -713,9 +906,18 @@ pub fn collect_managed_preflight(
     current_host: &super::NetworkStatus,
 ) -> Result<ReadinessEvidence> {
     Ok(collect_managed_preflight_with_response(
-        runtime_directory, activation_id, process, listener, listener_timeout, plan,
-        &[expected_peer], transport, baseline_host, current_host,
-    )?.evidence)
+        runtime_directory,
+        activation_id,
+        process,
+        listener,
+        listener_timeout,
+        plan,
+        &[expected_peer],
+        transport,
+        baseline_host,
+        current_host,
+    )?
+    .evidence)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -750,7 +952,10 @@ pub fn probe_core_outbound_socket_mark(
     expected_mark: u32,
     mark_mask: u32,
 ) -> Result<u32> {
-    ensure!(process.verify()?, "managed core identity changed before socket-mark probe");
+    ensure!(
+        process.verify()?,
+        "managed core identity changed before socket-mark probe"
+    );
     let response = super::socket_mark_probe::observe_proxy_outbound_mark(
         runtime_directory,
         activation_id,
@@ -760,16 +965,15 @@ pub fn probe_core_outbound_socket_mark(
         expected_mark,
         mark_mask,
     )?;
-    ensure!(process.verify()?, "managed core identity changed during socket-mark probe");
+    ensure!(
+        process.verify()?,
+        "managed core identity changed during socket-mark probe"
+    );
     ensure!(
         response.expected_peer == expected_peer && response.transport == transport,
         "socket-mark helper response does not match the requested outbound peer and transport"
     );
-    super::socket_mark_probe::observed_proxy_outbound_mark(
-        &response,
-        expected_mark,
-        mark_mask,
-    )
+    super::socket_mark_probe::observed_proxy_outbound_mark(&response, expected_mark, mark_mask)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -816,45 +1020,67 @@ pub fn verify_readiness_with_socket_mark(
 /// Both inventories must agree before this returns evidence. A matching name alone is never
 /// sufficient because Linux may reuse an interface name after the original link disappears.
 #[cfg(target_os = "linux")]
-pub fn probe_tun_interface(interface_name: &str, interface_index: u32) -> Result<InterfaceEvidence> {
+pub fn probe_tun_interface(
+    interface_name: &str,
+    interface_index: u32,
+) -> Result<InterfaceEvidence> {
     ensure!(
         !interface_name.is_empty()
             && interface_name.len() <= 15
-            && interface_name.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+            && interface_name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
             && interface_index > 0,
         "expected TUN interface identity is invalid"
     );
     let snapshot = super::kernel_inventory::inspect_snapshot()
         .context("cannot capture live interface identity for TUN readiness")?;
-    let matches = snapshot.interfaces.iter()
+    let matches = snapshot
+        .interfaces
+        .iter()
         .filter(|interface| interface.name == interface_name)
         .collect::<Vec<_>>();
-    ensure!(matches.len() == 1, "manifest-bound TUN interface is missing or ambiguous");
+    ensure!(
+        matches.len() == 1,
+        "manifest-bound TUN interface is missing or ambiguous"
+    );
     let interface = matches[0];
     ensure!(
         interface.index == interface_index && interface.is_tun,
         "live interface name, ifindex, or link kind does not match the activation manifest"
     );
-    Ok(InterfaceEvidence { name: interface.name.clone(), index: interface.index })
+    Ok(InterfaceEvidence {
+        name: interface.name.clone(),
+        index: interface.index,
+    })
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn probe_tun_interface(_interface_name: &str, _interface_index: u32) -> Result<InterfaceEvidence> {
+pub fn probe_tun_interface(
+    _interface_name: &str,
+    _interface_index: u32,
+) -> Result<InterfaceEvidence> {
     anyhow::bail!("live TUN interface probing is supported only on Linux");
 }
 
 /// Verify the interface address and MTU contract emitted by the Xray TUN adapter.
 #[cfg(target_os = "linux")]
 pub fn probe_xray_tun_addressing(interface_name: &str, interface_index: u32) -> Result<()> {
-    ensure!(!interface_name.is_empty() && interface_name.len() <= 15 && interface_index > 0,
-        "Xray TUN interface identity is invalid");
-    let output = super::kernel_inventory::run_ip(&[
-        "-j", "address", "show", "dev", interface_name,
-    ]).context("cannot inspect Xray TUN interface addresses")?;
+    ensure!(
+        !interface_name.is_empty() && interface_name.len() <= 15 && interface_index > 0,
+        "Xray TUN interface identity is invalid"
+    );
+    let output = super::kernel_inventory::run_ip(&["-j", "address", "show", "dev", interface_name])
+        .context("cannot inspect Xray TUN interface addresses")?;
     let value: serde_json::Value = serde_json::from_slice(&output)
         .context("kernel returned invalid JSON for Xray TUN address inspection")?;
-    let records = value.as_array().context("Xray TUN address inspection did not return an array")?;
-    ensure!(records.len() == 1, "Xray TUN address record is missing or ambiguous");
+    let records = value
+        .as_array()
+        .context("Xray TUN address inspection did not return an array")?;
+    ensure!(
+        records.len() == 1,
+        "Xray TUN address record is missing or ambiguous"
+    );
     validate_xray_tun_address_record(&records[0], interface_name, interface_index)
 }
 
@@ -869,15 +1095,26 @@ fn validate_xray_tun_address_record(
     interface_name: &str,
     interface_index: u32,
 ) -> Result<()> {
-    ensure!(record.get("ifname").and_then(serde_json::Value::as_str) == Some(interface_name)
-        && record.get("ifindex").and_then(serde_json::Value::as_u64) == Some(u64::from(interface_index)),
-        "Xray TUN address record does not match the manifest-bound interface identity");
-    ensure!(record.get("mtu").and_then(serde_json::Value::as_u64) == Some(1500),
-        "Xray TUN interface MTU differs from the generated adapter contract");
-    ensure!(record.get("flags").and_then(serde_json::Value::as_array)
-        .is_some_and(|flags| flags.iter().any(|flag| flag.as_str() == Some("UP"))),
-        "Xray TUN interface is not administratively up");
-    let addresses = record.get("addr_info").and_then(serde_json::Value::as_array)
+    ensure!(
+        record.get("ifname").and_then(serde_json::Value::as_str) == Some(interface_name)
+            && record.get("ifindex").and_then(serde_json::Value::as_u64)
+                == Some(u64::from(interface_index)),
+        "Xray TUN address record does not match the manifest-bound interface identity"
+    );
+    ensure!(
+        record.get("mtu").and_then(serde_json::Value::as_u64) == Some(1500),
+        "Xray TUN interface MTU differs from the generated adapter contract"
+    );
+    ensure!(
+        record
+            .get("flags")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|flags| flags.iter().any(|flag| flag.as_str() == Some("UP"))),
+        "Xray TUN interface is not administratively up"
+    );
+    let addresses = record
+        .get("addr_info")
+        .and_then(serde_json::Value::as_array)
         .context("Xray TUN interface has no address inventory")?;
     let ipv4 = addresses.iter().any(|address| {
         address.get("family").and_then(serde_json::Value::as_str) == Some("inet")
@@ -889,8 +1126,10 @@ fn validate_xray_tun_address_record(
             && address.get("local").and_then(serde_json::Value::as_str) == Some("fdfe:dcba:9876::1")
             && address.get("prefixlen").and_then(serde_json::Value::as_u64) == Some(126)
     });
-    ensure!(ipv4 && ipv6,
-        "Xray TUN interface is missing one or more configured dual-stack gateway addresses");
+    ensure!(
+        ipv4 && ipv6,
+        "Xray TUN interface is missing one or more configured dual-stack gateway addresses"
+    );
     Ok(())
 }
 
@@ -902,7 +1141,7 @@ fn validate_xray_tun_address_record(
 /// traverses the proxy; those remain separate readiness checks.
 #[cfg(target_os = "linux")]
 pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Result<()> {
-    use super::route_policy::{RulePurpose, RT_TABLE_MAIN};
+    use super::route_policy::{RT_TABLE_MAIN, RulePurpose};
     plan.validate()?;
     let snapshot = super::kernel_inventory::inspect_snapshot()
         .context("cannot capture live routing policy for TUN readiness")?;
@@ -911,29 +1150,77 @@ pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Re
         super::route_policy::AddressFamily::Ipv4,
         super::route_policy::AddressFamily::Ipv6,
     ] {
-        let route_matches = snapshot.routes.iter().filter(|record| {
-            if record.family != family || record.table_id != plan.table_id { return false; }
-            let Ok(value) = serde_json::from_str::<serde_json::Value>(&record.canonical_attributes) else { return false; };
-            value.get("dst").and_then(serde_json::Value::as_str).map_or(true, |destination| destination == "default" || destination == family.default_prefix())
-                && value.get("dev").and_then(serde_json::Value::as_str) == Some(plan.interface_name.as_str())
-                && value.get("type").and_then(serde_json::Value::as_str).map_or(true, |kind| kind == "unicast")
-        }).count();
-        ensure!(route_matches == 1, "live {family:?} Proxyctl default route is missing, duplicated, or mismatched");
+        let route_matches = snapshot
+            .routes
+            .iter()
+            .filter(|record| {
+                if record.family != family || record.table_id != plan.table_id {
+                    return false;
+                }
+                let Ok(value) =
+                    serde_json::from_str::<serde_json::Value>(&record.canonical_attributes)
+                else {
+                    return false;
+                };
+                value
+                    .get("dst")
+                    .and_then(serde_json::Value::as_str)
+                    .map_or(true, |destination| {
+                        destination == "default" || destination == family.default_prefix()
+                    })
+                    && value.get("dev").and_then(serde_json::Value::as_str)
+                        == Some(plan.interface_name.as_str())
+                    && value
+                        .get("type")
+                        .and_then(serde_json::Value::as_str)
+                        .map_or(true, |kind| kind == "unicast")
+            })
+            .count();
+        ensure!(
+            route_matches == 1,
+            "live {family:?} Proxyctl default route is missing, duplicated, or mismatched"
+        );
 
         for purpose in [RulePurpose::CoreTrafficBypass, RulePurpose::ProxyTraffic] {
-            let expected = plan.rules.iter().find(|rule| rule.family == family && rule.purpose == purpose)
-                .ok_or_else(|| anyhow::anyhow!("routing plan is missing a {family:?} {purpose:?} rule"))?;
-            let matches = snapshot.rules.iter().filter(|record| {
-                if record.family != family || record.priority != expected.priority || record.table_id != Some(expected.lookup_table) { return false; }
-                let Ok(value) = serde_json::from_str::<serde_json::Value>(&record.canonical_attributes) else { return false; };
-                match expected.mark {
-                    Some(mark) => parse_rule_mark(value.get("fwmark")) == Some((mark.value, mark.mask)),
-                    None => value.get("fwmark").is_none(),
-                }
-            }).count();
-            ensure!(matches == 1, "live {family:?} {purpose:?} policy rule is missing, duplicated, or mismatched");
+            let expected = plan
+                .rules
+                .iter()
+                .find(|rule| rule.family == family && rule.purpose == purpose)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("routing plan is missing a {family:?} {purpose:?} rule")
+                })?;
+            let matches = snapshot
+                .rules
+                .iter()
+                .filter(|record| {
+                    if record.family != family
+                        || record.priority != expected.priority
+                        || record.table_id != Some(expected.lookup_table)
+                    {
+                        return false;
+                    }
+                    let Ok(value) =
+                        serde_json::from_str::<serde_json::Value>(&record.canonical_attributes)
+                    else {
+                        return false;
+                    };
+                    match expected.mark {
+                        Some(mark) => {
+                            parse_rule_mark(value.get("fwmark")) == Some((mark.value, mark.mask))
+                        }
+                        None => value.get("fwmark").is_none(),
+                    }
+                })
+                .count();
+            ensure!(
+                matches == 1,
+                "live {family:?} {purpose:?} policy rule is missing, duplicated, or mismatched"
+            );
             if purpose == RulePurpose::CoreTrafficBypass {
-                ensure!(expected.lookup_table == RT_TABLE_MAIN, "core bypass rule does not use the main table");
+                ensure!(
+                    expected.lookup_table == RT_TABLE_MAIN,
+                    "core bypass rule does not use the main table"
+                );
             }
         }
     }
@@ -1078,10 +1365,19 @@ mod tests {
 
     #[test]
     fn parses_kernel_rule_mark_and_mask_without_guessing() {
-        assert_eq!(parse_rule_mark(Some(&serde_json::json!("0x42/0xff"))), Some((0x42, 0xff)));
-        assert_eq!(parse_rule_mark(Some(&serde_json::json!("66/255"))), Some((66, 255)));
+        assert_eq!(
+            parse_rule_mark(Some(&serde_json::json!("0x42/0xff"))),
+            Some((0x42, 0xff))
+        );
+        assert_eq!(
+            parse_rule_mark(Some(&serde_json::json!("66/255"))),
+            Some((66, 255))
+        );
         assert_eq!(parse_rule_mark(Some(&serde_json::json!("0x42"))), None);
-        assert_eq!(parse_rule_mark(Some(&serde_json::json!("invalid/0xff"))), None);
+        assert_eq!(
+            parse_rule_mark(Some(&serde_json::json!("invalid/0xff"))),
+            None
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -1260,7 +1556,6 @@ mod tests {
     }
 }
 
-
 /// Perform a bounded SOCKS5 CONNECT probe through the manifest-bound core listener.
 /// This establishes a TCP tunnel to the explicit IP destination without DNS resolution,
 /// credentials, host-network mutation, or application payload transmission.
@@ -1272,40 +1567,90 @@ pub fn probe_socks5_connect(
     timeout: Duration,
 ) -> Result<()> {
     use std::io::{Read, Write};
-    ensure!(destination.port() != 0 && !destination.ip().is_unspecified(), "probe destination must be a concrete IP endpoint");
-    ensure!(!destination.ip().is_loopback() && !destination.ip().is_multicast() && !destination.ip().is_link_local(), "probe destination must not be loopback, multicast, or link-local");
-    ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(5), "SOCKS5 probe timeout must be between zero and five seconds");
+    ensure!(
+        destination.port() != 0 && !destination.ip().is_unspecified(),
+        "probe destination must be a concrete IP endpoint"
+    );
+    ensure!(
+        !destination.ip().is_loopback()
+            && !destination.ip().is_multicast()
+            && !destination.ip().is_link_local(),
+        "probe destination must not be loopback, multicast, or link-local"
+    );
+    ensure!(
+        !timeout.is_zero() && timeout <= Duration::from_secs(5),
+        "SOCKS5 probe timeout must be between zero and five seconds"
+    );
     probe_core_listener(process, listener, timeout)?;
-    let mut stream = TcpStream::connect_timeout(&listener, timeout).context("could not connect to managed SOCKS5 listener")?;
+    let mut stream = TcpStream::connect_timeout(&listener, timeout)
+        .context("could not connect to managed SOCKS5 listener")?;
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
-    stream.write_all(&[0x05, 0x01, 0x00]).context("failed sending SOCKS5 greeting")?;
+    stream
+        .write_all(&[0x05, 0x01, 0x00])
+        .context("failed sending SOCKS5 greeting")?;
     let mut greeting = [0u8; 2];
-    stream.read_exact(&mut greeting).context("failed reading SOCKS5 greeting response")?;
-    ensure!(greeting == [0x05, 0x00], "listener did not accept unauthenticated SOCKS5 probe");
+    stream
+        .read_exact(&mut greeting)
+        .context("failed reading SOCKS5 greeting response")?;
+    ensure!(
+        greeting == [0x05, 0x00],
+        "listener did not accept unauthenticated SOCKS5 probe"
+    );
     let mut request = vec![0x05, 0x01, 0x00];
     match destination.ip() {
-        std::net::IpAddr::V4(ip) => { request.push(0x01); request.extend_from_slice(&ip.octets()); }
-        std::net::IpAddr::V6(ip) => { request.push(0x04); request.extend_from_slice(&ip.octets()); }
+        std::net::IpAddr::V4(ip) => {
+            request.push(0x01);
+            request.extend_from_slice(&ip.octets());
+        }
+        std::net::IpAddr::V6(ip) => {
+            request.push(0x04);
+            request.extend_from_slice(&ip.octets());
+        }
     }
     request.extend_from_slice(&destination.port().to_be_bytes());
-    stream.write_all(&request).context("failed sending SOCKS5 CONNECT request")?;
+    stream
+        .write_all(&request)
+        .context("failed sending SOCKS5 CONNECT request")?;
     let mut response = [0u8; 4];
-    stream.read_exact(&mut response).context("failed reading SOCKS5 CONNECT response")?;
-    ensure!(response[0] == 0x05 && response[1] == 0x00 && response[2] == 0x00,
-        "SOCKS5 CONNECT failed or returned an invalid protocol response");
-    let tail_len = match response[3] { 0x01 => 6, 0x04 => 18, 0x03 => { let mut length=[0u8;1]; stream.read_exact(&mut length)?; usize::from(length[0])+2 }, _ => anyhow::bail!("SOCKS5 response contained an invalid address type") };
-    let mut tail=vec![0u8;tail_len]; stream.read_exact(&mut tail).context("failed reading SOCKS5 bound address")?;
-    ensure!(process.verify()?, "managed core process identity changed during SOCKS5 probe");
+    stream
+        .read_exact(&mut response)
+        .context("failed reading SOCKS5 CONNECT response")?;
+    ensure!(
+        response[0] == 0x05 && response[1] == 0x00 && response[2] == 0x00,
+        "SOCKS5 CONNECT failed or returned an invalid protocol response"
+    );
+    let tail_len = match response[3] {
+        0x01 => 6,
+        0x04 => 18,
+        0x03 => {
+            let mut length = [0u8; 1];
+            stream.read_exact(&mut length)?;
+            usize::from(length[0]) + 2
+        }
+        _ => anyhow::bail!("SOCKS5 response contained an invalid address type"),
+    };
+    let mut tail = vec![0u8; tail_len];
+    stream
+        .read_exact(&mut tail)
+        .context("failed reading SOCKS5 bound address")?;
+    ensure!(
+        process.verify()?,
+        "managed core process identity changed during SOCKS5 probe"
+    );
     verify_listener_process_ownership(process, listener)?;
     Ok(())
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn probe_socks5_connect(_process: &(), _listener: SocketAddr, _destination: SocketAddr, _timeout: Duration) -> Result<()> {
+pub fn probe_socks5_connect(
+    _process: &(),
+    _listener: SocketAddr,
+    _destination: SocketAddr,
+    _timeout: Duration,
+) -> Result<()> {
     anyhow::bail!("managed SOCKS5 probing is supported only on Linux");
 }
-
 
 /// Structured result from a SOCKS5 CONNECT-only diagnostic (no payload sent).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1327,15 +1672,33 @@ pub fn probe_socks5_connect_detailed(
     let started = std::time::Instant::now();
     probe_socks5_connect(process, listener, destination, timeout)?;
     let elapsed = started.elapsed();
-    ensure!(elapsed <= timeout.saturating_mul(4), "SOCKS5 probe exceeded its aggregate time bound");
-    Ok(Socks5ConnectProbeResult { listener, destination, elapsed, request_protocol_bytes: 3 + 3 + match destination.ip() { std::net::IpAddr::V4(_) => 4, std::net::IpAddr::V6(_) => 16 } + 2 })
+    ensure!(
+        elapsed <= timeout.saturating_mul(4),
+        "SOCKS5 probe exceeded its aggregate time bound"
+    );
+    Ok(Socks5ConnectProbeResult {
+        listener,
+        destination,
+        elapsed,
+        request_protocol_bytes: 3
+            + 3
+            + match destination.ip() {
+                std::net::IpAddr::V4(_) => 4,
+                std::net::IpAddr::V6(_) => 16,
+            }
+            + 2,
+    })
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn probe_socks5_connect_detailed(_process: &(), _listener: SocketAddr, _destination: SocketAddr, _timeout: Duration) -> Result<Socks5ConnectProbeResult> {
+pub fn probe_socks5_connect_detailed(
+    _process: &(),
+    _listener: SocketAddr,
+    _destination: SocketAddr,
+    _timeout: Duration,
+) -> Result<Socks5ConnectProbeResult> {
     anyhow::bail!("managed SOCKS5 probing is supported only on Linux");
 }
-
 
 #[cfg(all(test, target_os = "linux"))]
 mod http_tun_probe_tests {
@@ -1358,13 +1721,21 @@ mod http_tun_probe_tests {
         assert!(super::validate_xray_tun_address_record(&wrong_mtu, "tun-proxyctl", 42).is_err());
         let mut missing_ipv6 = record.clone();
         missing_ipv6["addr_info"].as_array_mut().unwrap().pop();
-        assert!(super::validate_xray_tun_address_record(&missing_ipv6, "tun-proxyctl", 42).is_err());
+        assert!(
+            super::validate_xray_tun_address_record(&missing_ipv6, "tun-proxyctl", 42).is_err()
+        );
     }
 
     #[test]
     fn validates_the_exact_unmarked_kernel_route_result() {
         let plan = super::super::route_policy::RoutingPolicyPlan::new(
-            10001, 10002, 10003, 0x4123_4567, 0x7fff_ffff, "tun-proxyctl", 42,
+            10001,
+            10002,
+            10003,
+            0x4123_4567,
+            0x7fff_ffff,
+            "tun-proxyctl",
+            42,
         );
         let accepted: serde_json::Value = serde_json::json!({
             "dev": "tun-proxyctl",
@@ -1421,12 +1792,13 @@ mod http_tun_probe_tests {
 
     #[test]
     fn persistent_readiness_response_rejects_connection_close() {
-        assert!(super::http_response_allows_keepalive(
-            b"HTTP/1.1 204 No Content\r\n\r\n"
-        ).unwrap());
-        assert!(!super::http_response_allows_keepalive(
-            b"HTTP/1.1 204 No Content\r\nConnection: keep-alive, close\r\n\r\n"
-        ).unwrap());
+        assert!(super::http_response_allows_keepalive(b"HTTP/1.1 204 No Content\r\n\r\n").unwrap());
+        assert!(
+            !super::http_response_allows_keepalive(
+                b"HTTP/1.1 204 No Content\r\nConnection: keep-alive, close\r\n\r\n"
+            )
+            .unwrap()
+        );
     }
 
     #[test]
