@@ -196,7 +196,7 @@ fn terminate_prepared_core_process(
     }
     let process = match ProcessHandle::open(identity.clone()) {
         Ok(process) => process,
-        Err(error) if !identity.verify()? => return Ok(()),
+        Err(_error) if !identity.verify()? => return Ok(()),
         Err(error) => return Err(error).context("cannot pin orphaned Prepared core process"),
     };
     if !process.wait_exit(std::time::Duration::ZERO)? {
