@@ -319,7 +319,7 @@ impl CoreAdapter for MihomoAdapter {
     }
 
     fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
-        super::super::TunAttachmentMode::NativeDeviceCreation
+        super::super::super::TunAttachmentMode::NativeDeviceCreation
     }
 
     fn generate_tun_activation_config(
@@ -385,7 +385,7 @@ mod config_contract_tests {
     fn mihomo_activation_benchmark_and_tun_options_stay_core_native() {
         assert_eq!(
             super::MihomoAdapter.tun_attachment_mode(),
-            super::TunAttachmentMode::NativeDeviceCreation
+            super::super::TunAttachmentMode::NativeDeviceCreation
         );
         let capabilities = std::hint::black_box(CAPABILITIES);
         assert!(capabilities.hysteria2 && capabilities.xhttp);
