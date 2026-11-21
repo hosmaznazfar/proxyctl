@@ -87,6 +87,11 @@ impl ProcessIdentity {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(error.into()),
         };
+        // A PID may be reused while /proc/<pid>/exe is being resolved. Confirm the
+        // start-time identity again before accepting the executable comparison.
+        if read_start_ticks(self.pid)? != self.start_ticks {
+            return Ok(false);
+        }
         Ok(executable == self.executable)
     }
 }
