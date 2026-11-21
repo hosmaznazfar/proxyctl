@@ -201,9 +201,15 @@ enum Command {
         /// Override the persistent shared HTTP/SOCKS5 listener port for this activation only.
         #[arg(long, value_name = "PORT")]
         port: Option<u16>,
-        /// Request experimental TUN activation; the public start path remains gated pending lifecycle integration and runtime validation.
+        /// Request managed Linux TUN activation (currently supported only by the Xray descriptor backend).
         #[arg(long)]
         tun: bool,
+        /// Plain HTTP endpoint used for a bounded end-to-end TUN readiness probe.
+        #[arg(long, default_value = "http://connectivitycheck.gstatic.com/generate_204")]
+        tun_probe_url: String,
+        /// Expected final HTTP status from the TUN readiness endpoint.
+        #[arg(long, default_value_t = 204, value_parser = clap::value_parser!(u16).range(200..=599))]
+        tun_probe_status: u16,
     },
     /// Show or change persistent listener settings.
     Config {
