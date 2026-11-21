@@ -175,6 +175,13 @@ fn acquire_start_lock(path: &Path) -> Result<fs::File> {
             return Ok(file);
         }
         let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            ensure!(
+                Instant::now() < deadline,
+                "timed out waiting for another TUN helper startup"
+            );
+            continue;
+        }
         if !matches!(error.raw_os_error(), Some(libc::EWOULDBLOCK)) {
             return Err(error).context("cannot acquire TUN helper startup lock");
         }
