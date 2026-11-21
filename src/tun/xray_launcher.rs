@@ -197,7 +197,7 @@ pub fn spawn_xray_from_broker(
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
         let peer = super::privilege_broker::read_broker_peer_credentials(&stream)?;
-        ensure!(peer.uid == uid && peer.pid > 0,
+        ensure!(peer.uid == uid && peer.gid == gid && peer.pid > 0,
             "Xray core launcher peer credentials do not match the activation user");
         let main_pid = Command::new(SUDO)
             .args(["-n", "--", SYSTEMCTL, "show", "--property=MainPID", "--value", &unit])
@@ -251,7 +251,7 @@ fn verify_xray_capability_boundary(identity: &ProcessIdentity, expected_uid: u32
         .collect::<std::result::Result<Vec<_>, _>>()?;
     ensure!(uid_values.len() == 4 && uid_values.iter().all(|uid| *uid == expected_uid),
         "managed Xray process did not retain the activation user's UID");
-    for name in ["CapEff:", "CapPrm:", "CapBnd:", "CapAmb:"] {
+    for name in ["CapEff:", "CapPrm:", "CapBnd:", "CapInh:", "CapAmb:"] {
         let value = field(name).context("managed Xray capability status is incomplete")?;
         ensure!(u64::from_str_radix(value, 16)? == CAP_NET_ADMIN,
             "managed Xray must have exactly CAP_NET_ADMIN in its effective, permitted, bounding, and ambient sets");
