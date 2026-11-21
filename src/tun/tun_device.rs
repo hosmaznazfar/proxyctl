@@ -59,6 +59,10 @@ impl TunDevice {
             "TUNSETIFF failed: {}",
             std::io::Error::last_os_error()
         );
+        ensure!(
+            (req.flags as u16) & (IFF_TUN | IFF_NO_PI) == (IFF_TUN | IFF_NO_PI),
+            "kernel returned unexpected TUN interface flags"
+        );
         let returned_name = req.name.iter()
             .take_while(|character| **character != 0)
             .map(|character| *character as u8);
