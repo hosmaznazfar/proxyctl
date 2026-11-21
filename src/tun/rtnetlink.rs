@@ -146,14 +146,16 @@ impl RouteNetlink {
                     &mut sender_len,
                 )
             };
-            if received < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
-                continue;
+            if received < 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() == io::ErrorKind::Interrupted
+                    || error.kind() == io::ErrorKind::WouldBlock
+                {
+                    continue;
+                }
+                return Err(error).context("NETLINK_ROUTE receive failed");
             }
-            ensure!(
-                received >= 0,
-                "NETLINK_ROUTE receive failed: {}",
-                io::Error::last_os_error()
-            );
+            ensure!(received >= 0, "NETLINK_ROUTE receive returned an invalid length");
             validate_kernel_sender(&sender, sender_len)?;
             ensure!(
                 received as usize <= buffer.len(),
