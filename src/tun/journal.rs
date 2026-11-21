@@ -93,7 +93,8 @@ pub fn plan_journal_recovery(
             );
         }
     }
-    let mut decisions = Vec::with_capacity(journal.operations.len());
+    let mut decisions = Vec::new();
+    decisions.try_reserve(journal.operations.len())?;
     for operation in journal.operations.iter().rev() {
         let current = observed.get(&operation.resource_key).cloned().flatten();
         let decision = match operation.state {
