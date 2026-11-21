@@ -411,6 +411,8 @@ pub fn verify_xray_tun_attachment(
         }
     }
     ensure!(attached, "Xray does not hold a TUN file descriptor bound to the expected interface");
+    super::readiness::probe_xray_tun_addressing(interface_name, expected_ifindex)
+        .context("Xray TUN interface addressing does not match the generated dual-stack contract")?;
     ensure!(process.verify()? && !handle.is_exited()?, "Xray process exited or changed during TUN attachment verification");
     Ok(())
 }
