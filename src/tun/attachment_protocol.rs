@@ -118,6 +118,8 @@ pub fn receive_adoption_ack(stream: &mut UnixStream, offer: &AttachmentOffer) ->
     configure_handoff_timeouts(stream)?;
     let ack: AttachmentAck = read_frame(stream)?;
     ensure!(ack.version == VERSION, "unsupported attachment acknowledgement version");
+    validate_identity(&ack.activation_id, ack.generation, &ack.interface_name)?;
+    ensure!(ack.nonce.iter().any(|byte| *byte != 0), "acknowledgement nonce is invalid");
     ensure!(ack.adopted, "core-side adapter rejected descriptor adoption");
     ensure!(
         ack.activation_id == offer.activation_id
