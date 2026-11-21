@@ -311,26 +311,39 @@ pub fn stop() -> anyhow::Result<()> {
         let current_manifest = store.load()?;
         let transaction_journal = store.load_transaction_journal()?;
         if current_manifest.is_some() || transaction_journal.is_some() {
-            let helper = crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(&runtime)
-                .context("cannot connect to the TUN mutation helper for safe stop")?;
+            let helper =
+                crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(&runtime)
+                    .context("cannot connect to the TUN mutation helper for safe stop")?;
             if current_manifest.is_some() {
-                let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
-                let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
-                orchestrator.stop_current_xray()
+                let coordinator =
+                    crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
+                let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(
+                    &helper,
+                    &coordinator,
+                );
+                orchestrator
+                    .stop_current_xray()
                     .context("cannot stop the active generation-bound TUN service")?;
             } else if let Some(journal) = transaction_journal {
                 crate::tun::xray_launcher::stop_core_service_generation(
-                    &journal.activation_id, journal.generation, None,
-                ).context("cannot stop the Xray service associated with the orphaned TUN journal")?;
+                    &journal.activation_id,
+                    journal.generation,
+                    None,
+                )
+                .context("cannot stop the Xray service associated with the orphaned TUN journal")?;
                 let recovery = helper.recover(journal.activation_id, journal.generation);
                 if !matches!(recovery.as_ref(), Ok(response) if response.success) {
                     let recovery_message = match &recovery {
                         Ok(response) => response.message.clone(),
                         Err(error) => format!("{error:#}"),
                     };
-                    let remaining = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
-                    ensure!(remaining.load()?.is_none() && remaining.load_transaction_journal()?.is_none(),
-                        "orphaned TUN journal recovery is incomplete: {recovery_message}");
+                    let remaining =
+                        crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
+                    ensure!(
+                        remaining.load()?.is_none()
+                            && remaining.load_transaction_journal()?.is_none(),
+                        "orphaned TUN journal recovery is incomplete: {recovery_message}"
+                    );
                 }
             }
             println!("Stopped or recovered the Proxyctl-managed Xray TUN generation.");
@@ -432,7 +445,13 @@ pub fn activate_tun_xray(
     probe_url: &str,
     expected_status: u16,
 ) -> anyhow::Result<()> {
-    activate_tun_core(node_id, CoreId::Xray, port_override, probe_url, expected_status)
+    activate_tun_core(
+        node_id,
+        CoreId::Xray,
+        port_override,
+        probe_url,
+        expected_status,
+    )
 }
 
 pub fn activate_tun_core(
@@ -446,34 +465,61 @@ pub fn activate_tun_core(
 
     let (runtime, state_path) = paths()?;
     let _lock = RuntimeLock::acquire(&runtime)?;
-    ensure!(!state_path.exists(),
-        "a Proxyctl-managed core state file already exists; stop it before starting TUN mode");
+    ensure!(
+        !state_path.exists(),
+        "a Proxyctl-managed core state file already exists; stop it before starting TUN mode"
+    );
 
     let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
-    ensure!(store.load()?.is_none(),
-        "a TUN activation manifest already exists; stop or recover it before starting another generation");
-    ensure!(store.load_transaction_journal()?.is_none(),
-        "an unresolved TUN transaction journal exists; recover it before starting another generation");
+    ensure!(
+        store.load()?.is_none(),
+        "a TUN activation manifest already exists; stop or recover it before starting another generation"
+    );
+    ensure!(
+        store.load_transaction_journal()?.is_none(),
+        "an unresolved TUN transaction journal exists; recover it before starting another generation"
+    );
 
     let db = NodeDatabase::open(default_database_path()?)?;
-    let record = db.get_node(node_id)?
+    let record = db
+        .get_node(node_id)?
         .with_context(|| format!("node #{node_id} not found"))?;
-    ensure!(!record.is_deleted(), "node #{node_id} is deleted; restore it first");
+    ensure!(
+        !record.is_deleted(),
+        "node #{node_id} is deleted; restore it first"
+    );
     let node = record.node;
     drop(db);
 
-    ensure!(matches!(core, CoreId::Xray | CoreId::SingBox | CoreId::Mihomo), "unsupported TUN core");
-    ensure!(core == CoreId::Xray, "sing-box and Mihomo native TUN activation remain disabled until persistent-device crash recovery identity is fully hardened");
+    ensure!(
+        matches!(core, CoreId::Xray | CoreId::SingBox | CoreId::Mihomo),
+        "unsupported TUN core"
+    );
+    ensure!(
+        core == CoreId::Xray,
+        "sing-box and Mihomo native TUN activation remain disabled until persistent-device crash recovery identity is fully hardened"
+    );
     let executable = core_binary_path(core)?;
-    ensure!(executable.is_file(), "selected core is not installed by Proxyctl; run setup for the selected core");
+    ensure!(
+        executable.is_file(),
+        "selected core is not installed by Proxyctl; run setup for the selected core"
+    );
     let executable = fs::canonicalize(executable)?;
     let managed_root = fs::canonicalize(managed_cores_path()?)?;
-    ensure!(executable.starts_with(&managed_root),
-        "refusing to run the selected core outside Proxyctl's managed-core directory");
+    ensure!(
+        executable.starts_with(&managed_root),
+        "refusing to run the selected core outside Proxyctl's managed-core directory"
+    );
     let adapter = adapters::adapter(core);
     let compatibility = adapter.compatibility(&node);
-    ensure!(compatibility.is_supported(), "selected core does not support this node: {}",
-        compatibility.reason.as_deref().unwrap_or("unsupported configuration"));
+    ensure!(
+        compatibility.is_supported(),
+        "selected core does not support this node: {}",
+        compatibility
+            .reason
+            .as_deref()
+            .unwrap_or("unsupported configuration")
+    );
 
     let listen_port = match port_override {
         Some(port) => port,
@@ -482,45 +528,70 @@ pub fn activate_tun_core(
     validate_listen_port(listen_port)?;
     ensure_port_available(listen_port)?;
 
-    let expected_peers = (node.server.as_str(), node.port).to_socket_addrs()
+    let expected_peers = (node.server.as_str(), node.port)
+        .to_socket_addrs()
         .context("cannot resolve the selected proxy node endpoint before TUN activation")?
         .filter(|peer| !peer.ip().is_unspecified() && !peer.ip().is_multicast())
         .take(8)
         .collect::<Vec<_>>();
-    ensure!(!expected_peers.is_empty(),
-        "selected node did not resolve to a usable endpoint");
+    ensure!(
+        !expected_peers.is_empty(),
+        "selected node did not resolve to a usable endpoint"
+    );
 
-    let probe = url::Url::parse(probe_url)
-        .context("TUN readiness probe URL is invalid")?;
-    ensure!(probe.scheme() == "http" && probe.username().is_empty()
-        && probe.password().is_none() && probe.query().is_none() && probe.fragment().is_none(),
-        "TUN readiness probe must be a plain HTTP URL without credentials, query, or fragment");
-    let probe_host = probe.host().context("TUN readiness probe URL has no host")?;
-    let probe_port = probe.port_or_known_default()
+    let probe = url::Url::parse(probe_url).context("TUN readiness probe URL is invalid")?;
+    ensure!(
+        probe.scheme() == "http"
+            && probe.username().is_empty()
+            && probe.password().is_none()
+            && probe.query().is_none()
+            && probe.fragment().is_none(),
+        "TUN readiness probe must be a plain HTTP URL without credentials, query, or fragment"
+    );
+    let probe_host = probe
+        .host()
+        .context("TUN readiness probe URL has no host")?;
+    let probe_port = probe
+        .port_or_known_default()
         .context("TUN readiness probe URL has no usable port")?;
     let probe_destination = match probe_host {
         url::Host::Ipv4(address) => std::net::SocketAddr::from((address, probe_port)),
         url::Host::Ipv6(address) => std::net::SocketAddr::from((address, probe_port)),
-        url::Host::Domain(domain) => (domain, probe_port).to_socket_addrs()
+        url::Host::Domain(domain) => (domain, probe_port)
+            .to_socket_addrs()
             .context("cannot resolve TUN readiness probe endpoint before activation")?
-            .next().context("TUN readiness probe host has no address")?,
+            .next()
+            .context("TUN readiness probe host has no address")?,
     };
     let traffic_target = crate::tun::readiness::HttpProbeTarget {
         destination: probe_destination,
-        host_header: probe.host_str().context("TUN readiness probe URL has no host")?.to_owned(),
-        path: if probe.path().is_empty() { "/".into() } else { probe.path().to_owned() },
+        host_header: probe
+            .host_str()
+            .context("TUN readiness probe URL has no host")?
+            .to_owned(),
+        path: if probe.path().is_empty() {
+            "/".into()
+        } else {
+            probe.path().to_owned()
+        },
         expected_status,
     };
     traffic_target.validate()?;
 
     let activation_id = fs::read_to_string("/proc/sys/kernel/random/uuid")
         .context("cannot obtain a kernel-generated activation UUID")?
-        .trim().to_ascii_lowercase();
+        .trim()
+        .to_ascii_lowercase();
     let generation = u64::try_from(
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_nanos()
-    ).context("system clock produced an activation generation outside the supported range")?;
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos(),
+    )
+    .context("system clock produced an activation generation outside the supported range")?;
     let (table_id, bypass_priority, proxy_priority) =
-        crate::tun::route_policy::allocate_policy_identifiers(&crate::tun::kernel_inventory::inspect()?)?;
+        crate::tun::route_policy::allocate_policy_identifiers(
+            &crate::tun::kernel_inventory::inspect()?,
+        )?;
     let (core_mark, core_mark_mask) =
         crate::tun::route_policy::mark_for_activation_id(&activation_id)?;
 
@@ -543,19 +614,38 @@ pub fn activate_tun_core(
     let helper = crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(&runtime)
         .context("cannot start or connect to the TUN mutation helper")?;
     let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
-    let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
+    let orchestrator =
+        crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
     let generation = request.generation;
     let activation = match core {
-        CoreId::Xray => orchestrator.activate_xray_node_end_to_end(
-            request, &node, listen_port, &executable,
-            Duration::from_secs(5), expected_peers, traffic_target,
-            Duration::from_secs(10), 64 * 1024,
-        ).map(|activation| activation.managed),
+        CoreId::Xray => orchestrator
+            .activate_xray_node_end_to_end(
+                request,
+                &node,
+                listen_port,
+                &executable,
+                Duration::from_secs(5),
+                expected_peers,
+                traffic_target,
+                Duration::from_secs(10),
+                64 * 1024,
+            )
+            .map(|activation| activation.managed),
         CoreId::SingBox | CoreId::Mihomo => orchestrator.activate_native_core_node_end_to_end(
-            core, request, &node, listen_port, &executable,
-            expected_peers, traffic_target, Duration::from_secs(10), 64 * 1024,
+            core,
+            request,
+            &node,
+            listen_port,
+            &executable,
+            expected_peers,
+            traffic_target,
+            Duration::from_secs(10),
+            64 * 1024,
         ),
-    }.with_context(|| format!("{core} TUN activation failed its broker transaction or end-to-end readiness gate"))?;
+    }
+    .with_context(|| {
+        format!("{core} TUN activation failed its broker transaction or end-to-end readiness gate")
+    })?;
 
     println!(
         "Activated Proxyctl {core} TUN for node #{node_id} on 127.0.0.1:{listen_port} (generation {}).",
