@@ -507,7 +507,10 @@ fn read_response_frame(stream: &mut UnixStream) -> Result<Vec<u8>> {
     read_exact_deadline(stream, &mut header, deadline)?;
     let length = u32::from_le_bytes(header) as usize;
     ensure!(length >= 2 && length <= MAX_FRAME, "mutation response frame length is invalid");
-    let mut bytes = vec![0u8; length];
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(length)
+        .context("cannot reserve bounded mutation response payload")?;
+    bytes.resize(length, 0);
     read_exact_deadline(stream, &mut bytes, deadline)?;
     Ok(bytes)
 }
