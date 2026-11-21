@@ -307,6 +307,17 @@ pub fn stop() -> anyhow::Result<()> {
     {
         let (runtime, state) = paths()?;
         let _lock = RuntimeLock::acquire(&runtime)?;
+        let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
+        if store.load()?.is_some() {
+            let helper = crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(&runtime)
+                .context("cannot connect to the TUN mutation helper for safe stop")?;
+            let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
+            let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
+            orchestrator.stop_current_xray()
+                .context("cannot stop the active generation-bound TUN service")?;
+            println!("Stopped the Proxyctl-managed Xray TUN activation and recovered its exact generation.");
+            return Ok(());
+        }
         let managed = fs::canonicalize(managed_cores_path()?)
             .context("Proxyctl managed-core directory is unavailable; refusing to stop")?;
         stop_locked(&runtime, &state, &managed)
