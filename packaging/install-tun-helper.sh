@@ -3,6 +3,8 @@ set -eu
 
 SOURCE=${1:-target/release/proxyctl-tun-helper}
 DESTINATION=/usr/libexec/proxyctl-tun-helper
+CORE_LAUNCHER_SOURCE=${3:-target/release/proxyctl-tun-core-launcher}
+CORE_LAUNCHER_DESTINATION=/usr/libexec/proxyctl-tun-core-launcher
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Run this installer as root (for example: sudo $0 [built-helper-path])." >&2
@@ -10,6 +12,10 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 if [ ! -f "$SOURCE" ] || [ ! -x "$SOURCE" ] || [ -L "$SOURCE" ]; then
     echo "Built helper must be a regular, non-symlink executable: $SOURCE" >&2
+    exit 2
+fi
+if [ ! -f "$CORE_LAUNCHER_SOURCE" ] || [ ! -x "$CORE_LAUNCHER_SOURCE" ] || [ -L "$CORE_LAUNCHER_SOURCE" ]; then
+    echo "Built core launcher must be a regular, non-symlink executable: $CORE_LAUNCHER_SOURCE" >&2
     exit 2
 fi
 if [ -L /usr/libexec ] || [ ! -d /usr/libexec ]; then
@@ -28,8 +34,8 @@ case "$LIBEXEC_MODE" in
         exit 1
         ;;
 esac
-if [ -L "$DESTINATION" ]; then
-    echo "Refusing to replace a symlink at $DESTINATION." >&2
+if [ -L "$DESTINATION" ] || [ -L "$CORE_LAUNCHER_DESTINATION" ]; then
+    echo "Refusing to replace a symlink in /usr/libexec." >&2
     exit 1
 fi
 if ! command -v setcap >/dev/null 2>&1 || ! command -v getcap >/dev/null 2>&1; then
@@ -47,10 +53,15 @@ if [ -e "$MAIN_BINARY" ]; then
 fi
 
 STAGING=$(mktemp /usr/libexec/.proxyctl-tun-helper.XXXXXX)
+CORE_LAUNCHER_STAGING=$(mktemp /usr/libexec/.proxyctl-tun-core-launcher.XXXXXX)
 cleanup_staging() {
     if [ -n "${STAGING:-}" ] && [ -e "$STAGING" ]; then
         setcap -r "$STAGING" 2>/dev/null || true
         rm -f -- "$STAGING"
+    fi
+    if [ -n "${CORE_LAUNCHER_STAGING:-}" ] && [ -e "$CORE_LAUNCHER_STAGING" ]; then
+        setcap -r "$CORE_LAUNCHER_STAGING" 2>/dev/null || true
+        rm -f -- "$CORE_LAUNCHER_STAGING"
     fi
 }
 trap cleanup_staging EXIT
@@ -59,6 +70,11 @@ trap 'exit 1' HUP INT TERM
 install -o root -g root -m 0755 "$SOURCE" "$STAGING"
 if ! setcap cap_net_admin=ep "$STAGING"; then
     echo "Could not apply the required file capability; existing helper was left untouched." >&2
+    exit 1
+fi
+install -o root -g root -m 0755 "$CORE_LAUNCHER_SOURCE" "$CORE_LAUNCHER_STAGING"
+if [ -n "$(getcap "$CORE_LAUNCHER_STAGING")" ]; then
+    echo "Core launcher must not have file capabilities." >&2
     exit 1
 fi
 ACTUAL=$(getcap "$STAGING")
@@ -74,9 +90,12 @@ esac
 # working helper remains in place until the replacement is fully prepared.
 mv -f -- "$STAGING" "$DESTINATION"
 STAGING=
+mv -f -- "$CORE_LAUNCHER_STAGING" "$CORE_LAUNCHER_DESTINATION"
+CORE_LAUNCHER_STAGING=
 trap - EXIT HUP INT TERM
 
 echo "Installed $DESTINATION with only cap_net_admin=ep."
+echo "Installed $CORE_LAUNCHER_DESTINATION without file capabilities; it receives CAP_NET_ADMIN only from its constrained systemd unit."
 echo "The helper supports the read-only --socket mode and persistent typed --mutation-socket mode."
 echo "Start the mutation mode explicitly with: /usr/libexec/proxyctl-tun-helper --mutation-socket PATH"
 echo "No setuid bit, service, sudoers rule, or automatic startup was installed."
