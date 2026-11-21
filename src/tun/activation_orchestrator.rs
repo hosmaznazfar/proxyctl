@@ -437,7 +437,7 @@ impl<'a> ActivationOrchestrator<'a> {
             current.token.activation_id().to_owned(),
             current.token.generation(),
         );
-        if matches!(recovery, Ok(ref response) if response.success) {
+        if matches!(recovery.as_ref(), Ok(response) if response.success) {
             return Ok(());
         }
         // The independent systemd supervisor may win the race and finish the same generation
@@ -446,10 +446,12 @@ impl<'a> ActivationOrchestrator<'a> {
         let store = super::manifest_store::ManifestStore::open(
             self.coordinator.runtime_directory().to_path_buf()
         )?;
+        let recovery_message = match &recovery {
+            Ok(response) => response.message.clone(),
+            Err(error) => format!("{error:#}"),
+        };
         ensure!(store.load()?.is_none() && store.load_transaction_journal()?.is_none(),
-            "exact-generation Xray TUN cleanup is incomplete: {}",
-            recovery.map(|response| response.message)
-                .unwrap_or_else(|error| format!("{error:#}")));
+            "exact-generation Xray TUN cleanup is incomplete: {recovery_message}");
         Ok(())
     }
 
