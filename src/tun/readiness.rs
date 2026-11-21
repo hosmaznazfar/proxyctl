@@ -511,27 +511,48 @@ pub fn collect_managed_preflight_with_response(
     listener: SocketAddr,
     listener_timeout: Duration,
     plan: &super::route_policy::RoutingPolicyPlan,
-    expected_peer: SocketAddr,
+    expected_peers: &[SocketAddr],
     transport: super::privilege_broker::BrokerSocketTransport,
     baseline_host: &super::NetworkStatus,
     current_host: &super::NetworkStatus,
 ) -> Result<ManagedPreflight> {
     ensure!(process.verify()?, "managed core identity is not live at preflight start");
+    ensure!(!expected_peers.is_empty() && expected_peers.len() <= 8,
+        "Xray outbound peer candidate list must contain one to eight addresses");
     let listener = probe_core_listener(process, listener, listener_timeout)?;
     let interface = probe_tun_interface(&plan.interface_name, plan.interface_index)?;
     probe_routing_policy(plan)?;
     let egress = super::egress_probe::inspect_marked_egress(plan)?;
     ensure!(egress.mark == plan.core_mark && egress.mask == plan.core_mark_mask,
         "marked physical-egress evidence is bound to a different mark policy");
-    let response = super::socket_mark_probe::observe_proxy_outbound_mark(
-        runtime_directory, activation_id, process.clone(), expected_peer, transport,
-        plan.core_mark, plan.core_mark_mask,
-    ).context("cannot obtain live core outbound socket-mark evidence")?;
-    ensure!(response.expected_peer == expected_peer && response.transport == transport,
-        "socket-mark helper response does not match the requested outbound peer and transport");
-    let mark = super::socket_mark_probe::observed_proxy_outbound_mark(
-        &response, plan.core_mark, plan.core_mark_mask,
-    )?;
+
+    let mut matched = None;
+    let mut last_error = None;
+    for peer in expected_peers {
+        if peer.ip().is_unspecified() || peer.ip().is_multicast() || peer.port() == 0 {
+            last_error = Some(anyhow::anyhow!("Xray outbound peer candidate is not a valid unicast endpoint"));
+            continue;
+        }
+        match super::socket_mark_probe::observe_proxy_outbound_mark(
+            runtime_directory, activation_id, process.clone(), *peer, transport,
+            plan.core_mark, plan.core_mark_mask,
+        ) {
+            Ok(response) if response.expected_peer == *peer && response.transport == transport => {
+                match super::socket_mark_probe::observed_proxy_outbound_mark(
+                    &response, plan.core_mark, plan.core_mark_mask,
+                ) {
+                    Ok(mark) => { matched = Some((response, mark)); break; }
+                    Err(error) => last_error = Some(error),
+                }
+            }
+            Ok(_) => last_error = Some(anyhow::anyhow!(
+                "socket-mark helper response did not match the requested Xray peer and transport"
+            )),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    let (response, mark) = matched.ok_or_else(|| last_error.unwrap_or_else(||
+        anyhow::anyhow!("no Xray outbound socket matched any resolved node address")))?;
     verify_host_network_unchanged(baseline_host, current_host)?;
     ensure!(process.verify()?, "managed core identity changed during preflight");
     Ok(ManagedPreflight {
@@ -571,7 +592,7 @@ pub fn collect_managed_preflight(
 ) -> Result<ReadinessEvidence> {
     Ok(collect_managed_preflight_with_response(
         runtime_directory, activation_id, process, listener, listener_timeout, plan,
-        expected_peer, transport, baseline_host, current_host,
+        &[expected_peer], transport, baseline_host, current_host,
     )?.evidence)
 }
 
