@@ -179,6 +179,37 @@ pub fn monitor_managed_core(
 }
 
 
+/// Stop a core whose identity was persisted while its activation is still Prepared.
+fn terminate_prepared_core_process(
+    coordinator: &LifecycleCoordinator,
+    token: &ActivationToken,
+) -> Result<()> {
+    let current = coordinator.load_current()?
+        .context("Prepared activation disappeared before orphaned core cleanup")?;
+    ensure!(current.token == *token && current.snapshot.phase == SupervisorPhase::Prepared,
+        "orphaned core cleanup token does not match the Prepared activation");
+    let Some(identity) = current.snapshot.core_process else {
+        return Ok(());
+    };
+    if !identity.verify()? {
+        return Ok(());
+    }
+    let process = ProcessHandle::open(identity)
+        .context("cannot pin orphaned Prepared core process")?;
+    if !process.wait_exit(std::time::Duration::from_millis(0))? {
+        process.signal(libc::SIGTERM)
+            .context("cannot request termination of orphaned Prepared core")?;
+        if !process.wait_exit(std::time::Duration::from_secs(1))? {
+            process.signal(libc::SIGKILL)
+                .context("cannot force-stop orphaned Prepared core")?;
+            ensure!(process.wait_exit(std::time::Duration::from_secs(2))?,
+                "orphaned Prepared core did not exit within the termination deadline");
+        }
+    }
+    ensure!(!identity.verify()?, "orphaned Prepared core identity remains live after termination");
+    Ok(())
+}
+
 /// Resume a broker-backed supervisor after its unprivileged process restarts.
 ///
 /// CleanupPending is retried immediately through the broker. Running activations are rebound
@@ -194,6 +225,9 @@ pub fn resume_managed_supervision(
     let token = current.token;
     if matches!(current.snapshot.phase, SupervisorPhase::CleanupPending | SupervisorPhase::Prepared) {
         let phase = current.snapshot.phase;
+        if phase == SupervisorPhase::Prepared {
+            terminate_prepared_core_process(coordinator, &token)?;
+        }
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
         anyhow::ensure!(response.success,
             "broker cleanup for interrupted {phase:?} activation failed: {}", response.message);
@@ -271,6 +305,9 @@ pub fn resume_managed_supervision_after_startup(
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
             SupervisorPhase::Prepared | SupervisorPhase::CleanupPending => {
+                if current.snapshot.phase == SupervisorPhase::Prepared {
+                    terminate_prepared_core_process(coordinator, &current.token)?;
+                }
                 let response = helper.recover(activation_id.to_owned(), generation)?;
                 ensure!(response.success, "orphaned activation recovery failed: {}", response.message);
                 return Ok(());
