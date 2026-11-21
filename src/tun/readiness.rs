@@ -414,6 +414,45 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
 }
 
+/// Ask the kernel how an unmarked application packet to this destination will route.
+#[cfg(target_os = "linux")]
+pub fn probe_unmarked_route_to_tun(
+    plan: &super::route_policy::RoutingPolicyPlan,
+    destination: std::net::IpAddr,
+) -> Result<()> {
+    plan.validate()?;
+    ensure!(!destination.is_unspecified() && !destination.is_multicast()
+        && !destination.is_loopback() && !destination.is_link_local(),
+        "TUN route probe destination must be a concrete non-local unicast address");
+    let family = if destination.is_ipv4() { "-4" } else { "-6" };
+    let destination = destination.to_string();
+    let output = super::kernel_inventory::run_ip(&[
+        "-j", family, "route", "get", &destination, "mark", "0",
+    ]).context("cannot query the kernel route for an unmarked application flow")?;
+    let value: serde_json::Value = serde_json::from_slice(&output)
+        .context("kernel returned invalid JSON for the unmarked route lookup")?;
+    let records = value.as_array().context("unmarked route lookup did not return an array")?;
+    ensure!(records.len() == 1, "unmarked route lookup is missing or ambiguous");
+    let record = &records[0];
+    ensure!(record.get("dev").and_then(serde_json::Value::as_str)
+        == Some(plan.interface_name.as_str()),
+        "kernel would not route the unmarked application flow through the owned TUN interface");
+    let table = record.get("table").and_then(|value| {
+        value.as_u64().or_else(|| value.as_str().and_then(|text| text.parse::<u64>().ok()))
+    });
+    ensure!(table == Some(u64::from(plan.table_id)),
+        "kernel selected a different routing table for the unmarked application flow");
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_unmarked_route_to_tun(
+    _plan: &super::route_policy::RoutingPolicyPlan,
+    _destination: std::net::IpAddr,
+) -> Result<()> {
+    anyhow::bail!("unmarked TUN route probing is supported only on Linux");
+}
+
 /// Probe a real application TCP flow through the host's unmarked TUN route.
 ///
 /// Unlike a request to the local proxy listener, this opens the destination directly. The
