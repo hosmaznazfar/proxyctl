@@ -56,6 +56,8 @@ impl RouteManifest {
         );
         ensure!(
             !self.interface_name.is_empty()
+                && self.interface_name != "."
+                && self.interface_name != ".."
                 && self.interface_name.len() <= 15
                 && self.interface_name.bytes().all(|byte| {
                     byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
