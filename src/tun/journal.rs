@@ -86,7 +86,7 @@ pub fn plan_journal_recovery(
         );
         if let Some(fingerprint) = fingerprint {
             ensure!(
-                !fingerprint.is_empty()
+                !fingerprint.trim().is_empty()
                     && fingerprint.len() <= 16 * 1024
                     && !fingerprint.chars().any(char::is_control),
                 "kernel observation contains an invalid resource fingerprint"
