@@ -274,7 +274,9 @@ impl CoreAdapter for XrayAdapter {
 
     #[cfg(target_os = "linux")]
     fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
-        super::TunAttachmentMode::ExternalDescriptorEnvironment { variable: super::XRAY_TUN_FD_ENV }
+        super::TunAttachmentMode::ExternalDescriptorEnvironment {
+            variable: super::XRAY_TUN_FD_ENV,
+        }
     }
 
     fn generate_tun_activation_config(
@@ -407,7 +409,9 @@ mod config_contract_tests {
         #[cfg(target_os = "linux")]
         assert_eq!(
             super::XrayAdapter.tun_attachment_mode(),
-            super::TunAttachmentMode::ExternalDescriptorEnvironment { variable: super::XRAY_TUN_FD_ENV }
+            super::TunAttachmentMode::ExternalDescriptorEnvironment {
+                variable: super::XRAY_TUN_FD_ENV
+            }
         );
         const {
             assert!(!CAPABILITIES.hysteria2 && CAPABILITIES.reality_vmess);
@@ -452,8 +456,14 @@ mod config_contract_tests {
         )
         .unwrap();
         assert_eq!(tun["inbounds"][1]["protocol"], "tun");
-        assert_eq!(tun["inbounds"][1]["settings"]["name"], super::super::XRAY_TUN_INTERFACE_NAME);
-        assert_eq!(tun["inbounds"][1]["settings"]["autoOutboundsInterface"], "auto");
+        assert_eq!(
+            tun["inbounds"][1]["settings"]["name"],
+            super::super::XRAY_TUN_INTERFACE_NAME
+        );
+        assert_eq!(
+            tun["inbounds"][1]["settings"]["autoOutboundsInterface"],
+            "auto"
+        );
         assert_eq!(
             tun["inbounds"][1]["settings"]["autoSystemRoutingTable"]
                 .as_array()
