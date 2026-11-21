@@ -90,8 +90,11 @@ impl ProcessIdentity {
         };
         // A PID may be reused while /proc/<pid>/exe is being resolved. Confirm the
         // start-time identity again before accepting the executable comparison.
-        if read_start_ticks(self.pid)? != self.start_ticks {
-            return Ok(false);
+        match read_start_ticks(self.pid) {
+            Ok(start_ticks) if start_ticks == self.start_ticks => {}
+            Ok(_) => return Ok(false),
+            Err(error) if is_process_gone(&error) => return Ok(false),
+            Err(error) => return Err(error),
         }
         Ok(executable == self.executable)
     }
