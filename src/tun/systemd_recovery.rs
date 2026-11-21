@@ -79,7 +79,8 @@ impl SystemdRecoverySupervisor {
             ensure!(metadata.is_file() && !metadata.file_type().is_symlink()
                 && metadata.uid() == 0
                 && metadata.permissions().mode() & 0o111 != 0
-                && metadata.permissions().mode() & 0o022 == 0,
+                && metadata.permissions().mode() & 0o022 == 0
+                && metadata.nlink() == 1,
                 "systemd command must be a root-owned, non-writable executable regular file");
         }
         Ok(())
