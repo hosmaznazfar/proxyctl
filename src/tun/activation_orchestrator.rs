@@ -812,7 +812,7 @@ impl<'a> ActivationOrchestrator<'a> {
             return Ok(());
         }
         let store = super::manifest_store::ManifestStore::open(
-            self.coordinator.runtime_directory().to_path_buf(),
+            self.coordinator.runtime_directory()?,
         )?;
         let recovery_message = match &recovery {
             Ok(response) => response.message.clone(),
@@ -922,7 +922,7 @@ impl<'a> ActivationOrchestrator<'a> {
         // while the explicit stop request is waiting. Accept that only when both durable
         // ownership records are absent; never infer success from a failed IPC response alone.
         let store = super::manifest_store::ManifestStore::open(
-            self.coordinator.runtime_directory().to_path_buf(),
+            self.coordinator.runtime_directory()?,
         )?;
         let recovery_message = match &recovery {
             Ok(response) => response.message.clone(),
