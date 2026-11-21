@@ -7,6 +7,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
+    io::Read,
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
     path::PathBuf,
     time::{Duration, Instant},
