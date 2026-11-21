@@ -110,10 +110,24 @@ pub fn recover<B: JournalRecoveryBackend>(
             JournalRecoveryDecision::CompareAndDelete {
                 expected_fingerprint,
             } => {
-                ensure!(
-                    operation.state == JournalOperationState::Applied,
-                    "compare-and-delete requires an applied journal operation"
-                );
+                if operation.state == JournalOperationState::Intent
+                    && operation.kind == JournalOperationKind::CreatePersistentInterface
+                {
+                    // The exact generation alias proves this intent reached the persistent
+                    // state before the broker crashed. Promote the observed fingerprint
+                    // durably first; a second crash then follows ordinary Applied recovery.
+                    store.mark_operation_applied(
+                        &journal.activation_id,
+                        journal.generation,
+                        &operation.resource_key,
+                        expected_fingerprint,
+                    )?;
+                } else {
+                    ensure!(
+                        operation.state == JournalOperationState::Applied,
+                        "compare-and-delete requires an applied journal operation"
+                    );
+                }
                 let state = backend
                     .remove_if_fingerprint_matches(
                         operation.kind,
