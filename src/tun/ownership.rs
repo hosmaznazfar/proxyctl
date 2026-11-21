@@ -278,6 +278,21 @@ mod tests {
     }
 
     #[test]
+    fn manifest_encoding_and_decoding_enforce_total_size_limit() {
+        let mut value = manifest();
+        value.resources = (0..6)
+            .map(|index| OwnedResource {
+                key: format!("resource:{index}"),
+                fingerprint: "f".repeat(MAX_RESOURCE_FINGERPRINT_BYTES),
+            })
+            .collect();
+        assert!(value.validate().is_ok());
+        assert!(value.encode().is_err());
+        assert!(RouteManifest::decode(&[]).is_err());
+        assert!(RouteManifest::decode(&vec![b' '; MAX_MANIFEST_BYTES + 1]).is_err());
+    }
+
+    #[test]
     fn manifest_rejects_reserved_or_low_routing_allocations() {
         for table_id in [0, RT_TABLE_DEFAULT, RT_TABLE_MAIN, RT_TABLE_LOCAL, 9_999] {
             let mut value = manifest();
