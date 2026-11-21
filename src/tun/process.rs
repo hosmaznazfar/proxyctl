@@ -173,16 +173,25 @@ impl ProcessHandle {
             self.identity.verify()?,
             "refusing to signal a process whose identity no longer matches"
         );
-        let result = unsafe {
-            libc::syscall(
-                libc::SYS_pidfd_send_signal,
-                self.pidfd.as_raw_fd(),
-                signal,
-                std::ptr::null::<libc::siginfo_t>(),
-                0u32,
-            ) as libc::c_int
-        };
-        ensure!(result == 0, "pidfd_send_signal failed");
+        loop {
+            let result = unsafe {
+                libc::syscall(
+                    libc::SYS_pidfd_send_signal,
+                    self.pidfd.as_raw_fd(),
+                    signal,
+                    std::ptr::null::<libc::siginfo_t>(),
+                    0u32,
+                ) as libc::c_int
+            };
+            if result == 0 {
+                return Ok(());
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error).context("pidfd_send_signal failed");
+        }
         Ok(())
     }
 }
