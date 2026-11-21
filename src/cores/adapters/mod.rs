@@ -54,9 +54,21 @@ pub enum TunAttachmentMode {
     /// The core accepts an externally supplied descriptor through a documented environment key.
     ExternalDescriptorEnvironment { variable: &'static str },
     /// The core creates or opens the device itself from its native configuration.
+    /// This is not compatible with broker-owned descriptor transfer and needs a separate
+    /// native-device lifecycle backend before it can be activated by Proxyctl.
     NativeDeviceCreation,
     /// No supported TUN attachment contract is available in this adapter.
     Unsupported,
+}
+
+impl TunAttachmentMode {
+    /// Return the environment key only when the core can consume an externally supplied fd.
+    pub const fn external_descriptor_environment(self) -> Option<&'static str> {
+        match self {
+            Self::ExternalDescriptorEnvironment { variable } => Some(variable),
+            Self::NativeDeviceCreation | Self::Unsupported => None,
+        }
+    }
 }
 
 /// A core adapter must either represent every retained connection option or explain why it
