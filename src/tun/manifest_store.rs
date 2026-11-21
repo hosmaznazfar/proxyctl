@@ -51,6 +51,18 @@ impl ManifestSnapshot {
         );
         self.manifest.validate()?;
         #[cfg(target_os = "linux")]
+        match self.phase {
+            SupervisorPhase::Prepared => ensure!(
+                self.core_process.is_none(),
+                "Prepared TUN manifest cannot contain a core process identity"
+            ),
+            SupervisorPhase::Running => ensure!(
+                self.core_process.is_some(),
+                "Running TUN manifest must contain a core process identity"
+            ),
+            SupervisorPhase::CleanupPending | SupervisorPhase::Cleaned => {}
+        }
+        #[cfg(target_os = "linux")]
         if let Some(process) = &self.core_process {
             process.validate()?;
         }
