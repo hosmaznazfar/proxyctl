@@ -10,10 +10,8 @@ use std::{env, fs, path::PathBuf, process};
 
 #[cfg(target_os = "linux")]
 use proxyctl::tun::{
-    activation_orchestrator::ActivationOrchestrator,
-    lifecycle_coordinator::LifecycleCoordinator,
-    manifest_store::ManifestStore,
-    mutation_helper_launcher::MutationHelper,
+    activation_orchestrator::ActivationOrchestrator, lifecycle_coordinator::LifecycleCoordinator,
+    manifest_store::ManifestStore, mutation_helper_launcher::MutationHelper,
 };
 
 #[cfg(target_os = "linux")]
@@ -30,28 +28,45 @@ fn run() -> Result<()> {
     let _program = args.next();
     let runtime = args.next().map(PathBuf::from)
         .context("usage: proxyctl-tun-supervisor ABSOLUTE_PRIVATE_RUNTIME_DIRECTORY ACTIVATION_UUID GENERATION")?;
-    let activation_id = args.next().context("missing activation UUID")?
-        .into_string().map_err(|_| anyhow::anyhow!("activation UUID must be UTF-8"))?;
-    let generation = args.next().context("missing activation generation")?
-        .into_string().map_err(|_| anyhow::anyhow!("activation generation must be UTF-8"))?
-        .parse::<u64>().context("activation generation must be a positive integer")?;
-    ensure!(args.next().is_none(), "unexpected extra supervisor arguments");
+    let activation_id = args
+        .next()
+        .context("missing activation UUID")?
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("activation UUID must be UTF-8"))?;
+    let generation = args
+        .next()
+        .context("missing activation generation")?
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("activation generation must be UTF-8"))?
+        .parse::<u64>()
+        .context("activation generation must be a positive integer")?;
+    ensure!(
+        args.next().is_none(),
+        "unexpected extra supervisor arguments"
+    );
     let expected = proxyctl::tun::recovery::SupervisorIdentity::for_activation(
         &activation_id,
-        runtime.join("tun-manifest.json").to_string_lossy().into_owned(),
+        runtime
+            .join("tun-manifest.json")
+            .to_string_lossy()
+            .into_owned(),
         generation,
     )?;
-    ensure!(runtime.is_absolute(), "supervisor runtime directory must be an absolute path");
     ensure!(
-        fs::canonicalize(&runtime).context("cannot canonicalize supervisor runtime directory")? == runtime,
+        runtime.is_absolute(),
+        "supervisor runtime directory must be an absolute path"
+    );
+    ensure!(
+        fs::canonicalize(&runtime).context("cannot canonicalize supervisor runtime directory")?
+            == runtime,
         "supervisor runtime directory must not contain symlinked or non-canonical path components"
     );
 
     // ManifestStore validates ownership, directory permissions, and symlink boundaries.
     let store = ManifestStore::open(&runtime)
         .context("cannot open the private TUN lifecycle runtime directory")?;
-    let coordinator = LifecycleCoordinator::new(store)
-        .context("cannot initialize TUN lifecycle coordination")?;
+    let coordinator =
+        LifecycleCoordinator::new(store).context("cannot initialize TUN lifecycle coordination")?;
     let Some(current) = coordinator.load_current()? else {
         // This generation was already cleaned before the service process started.
         return Ok(());
@@ -65,7 +80,8 @@ fn run() -> Result<()> {
     let helper = MutationHelper::ensure_started(&runtime)
         .context("cannot start or connect to the persistent TUN mutation broker")?;
     let supervisor = ActivationOrchestrator::new(&helper, &coordinator);
-    supervisor.resume_generation(&expected.activation_id, expected.generation)
+    supervisor
+        .resume_generation(&expected.activation_id, expected.generation)
         .context("TUN recovery supervisor could not resume the requested activation generation")?;
     Ok(())
 }
