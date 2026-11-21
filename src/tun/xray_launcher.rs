@@ -139,6 +139,8 @@ pub fn spawn_xray_from_broker(
         ])
         .arg("--").arg(LAUNCHER)
         .arg("--socket").arg(&socket_path)
+        .arg("--activation-id").arg(activation_id)
+        .arg("--generation").arg(generation.to_string())
         .arg("--parent-pid").arg(std::process::id().to_string())
         .arg("--interface").arg(interface_name)
         .arg("--ifindex").arg(expected_ifindex.to_string())
