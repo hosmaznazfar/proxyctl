@@ -729,6 +729,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_empty_datagrams_and_non_kernel_message_port_ids() {
+        assert!(parse_datagram(&[], 7).is_err());
+        let mut foreign = message(NLMSG_DONE, 7, &[]);
+        foreign[12..16].copy_from_slice(&42u32.to_ne_bytes());
+        assert!(parse_datagram(&foreign, 7).is_err());
+    }
+
+    #[test]
     fn accepts_matching_ack_as_terminal() {
         let bytes = message(NLMSG_ERROR, 7, &0i32.to_ne_bytes());
         let (messages, terminal) = parse_datagram(&bytes, 7).unwrap();
