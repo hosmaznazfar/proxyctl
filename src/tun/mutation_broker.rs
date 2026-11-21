@@ -9,7 +9,7 @@ use std::{
     collections::BTreeMap,
     io::{Read, Write},
     os::unix::{
-        fs::MetadataExt,
+        fs::{MetadataExt, PermissionsExt},
         net::{UnixListener, UnixStream},
     },
     path::Path,
@@ -162,6 +162,11 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
     ensure!(
         metadata.is_dir() && metadata.uid() == unsafe { libc::geteuid() },
         "mutation broker runtime directory must be a real caller-owned directory"
+    );
+    ensure!(
+        metadata.permissions().mode() & 0o077 == 0
+            && metadata.permissions().mode() & 0o700 == 0o700,
+        "mutation broker runtime directory must be private and owner-accessible"
     );
     let mut backends: BTreeMap<(String, u64), LinuxJournalBackend> = BTreeMap::new();
     loop {
