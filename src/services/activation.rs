@@ -308,14 +308,24 @@ pub fn stop() -> anyhow::Result<()> {
         let (runtime, state) = paths()?;
         let _lock = RuntimeLock::acquire(&runtime)?;
         let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
-        if store.load()?.is_some() {
+        let current_manifest = store.load()?;
+        let transaction_journal = store.load_transaction_journal()?;
+        if current_manifest.is_some() || transaction_journal.is_some() {
             let helper = crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(&runtime)
                 .context("cannot connect to the TUN mutation helper for safe stop")?;
-            let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
-            let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
-            orchestrator.stop_current_xray()
-                .context("cannot stop the active generation-bound TUN service")?;
-            println!("Stopped the Proxyctl-managed Xray TUN activation and recovered its exact generation.");
+            if current_manifest.is_some() {
+                let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
+                let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
+                orchestrator.stop_current_xray()
+                    .context("cannot stop the active generation-bound TUN service")?;
+            } else if let Some(journal) = transaction_journal {
+                crate::tun::xray_launcher::stop_xray_generation(
+                    &journal.activation_id, journal.generation, None,
+                ).context("cannot stop the Xray service associated with the orphaned TUN journal")?;
+                let response = helper.recover(journal.activation_id, journal.generation)?;
+                ensure!(response.success, "orphaned TUN journal recovery failed: {}", response.message);
+            }
+            println!("Stopped or recovered the Proxyctl-managed Xray TUN generation.");
             return Ok(());
         }
         let managed = fs::canonicalize(managed_cores_path()?)
