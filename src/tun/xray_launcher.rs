@@ -283,12 +283,14 @@ pub fn stop_xray_generation(
         && systemctl_metadata.nlink() == 1,
         "systemctl must be a root-owned, non-writable executable");
     let unit = format!("proxyctl-tun-core-{activation_id}-{generation}.service");
-    let active = Command::new(SUDO)
-        .args(["-n", "--", SYSTEMCTL, "is-active", "--quiet"])
+    let mut active_command = Command::new(SUDO);
+    active_command.args(["-n", "--", SYSTEMCTL, "is-active", "--quiet"])
         .arg(&unit)
-        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-        .status()
-        .context("cannot inspect the exact Xray TUN service state")?;
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let active = run_bounded_command_status(
+        &mut active_command, Duration::from_secs(3),
+        "cannot inspect the exact Xray TUN service state",
+    )?;
     match active.code() {
         Some(0) => {}
         Some(3) | Some(4) => {
@@ -303,34 +305,44 @@ pub fn stop_xray_generation(
     let mut command = Command::new(SUDO);
     command.args(["-n", "--", SYSTEMCTL, "stop"]).arg(&unit)
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    let mut child = command.spawn().context("cannot request stop of the exact Xray TUN service")?;
-    let deadline = std::time::Instant::now() + Duration::from_secs(8);
+    let status = run_bounded_command_status(
+        &mut command, Duration::from_secs(8),
+        "systemd Xray service stop exceeded its eight-second deadline",
+    )?;
+    ensure!(status.success(), "systemd did not confirm stop of the exact Xray TUN service");
+    if let Some(identity) = process {
+        ensure!(!identity.verify()?,
+            "Xray process identity remains live after systemd confirmed service stop");
+    }
+    Ok(())
+}
+
+fn run_bounded_command_status(
+    command: &mut Command,
+    timeout: Duration,
+    timeout_message: &str,
+) -> Result<std::process::ExitStatus> {
+    ensure!(!timeout.is_zero(), "command timeout must be non-zero");
+    let mut child = command.spawn().context("cannot start bounded system command")?;
+    let deadline = std::time::Instant::now() + timeout;
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => {
-                ensure!(status.success(), "systemd did not confirm stop of the exact Xray TUN service");
-                break;
-            }
+            Ok(Some(status)) => return Ok(status),
             Ok(None) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(25));
             }
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                anyhow::bail!("systemd Xray service stop exceeded its eight-second deadline");
+                anyhow::bail!("{timeout_message}");
             }
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(error).context("cannot inspect exact Xray service stop request");
+                return Err(error).context("cannot inspect bounded system command");
             }
         }
     }
-    if let Some(identity) = process {
-        ensure!(!identity.verify()?,
-            "Xray process identity remains live after systemd confirmed service stop");
-    }
-    Ok(())
 }
 
 fn verify_xray_capability_boundary(identity: &ProcessIdentity, expected_uid: u32) -> Result<()> {
