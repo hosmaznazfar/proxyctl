@@ -300,7 +300,7 @@ pub fn probe_http_connect_traffic(
     ensure!(!remaining.is_zero(), "HTTP CONNECT probe deadline expired after listener connection");
     stream.set_read_timeout(Some(remaining))?;
     stream.set_write_timeout(Some(remaining))?;
-    let authority = format!("{}:{}", target.destination.ip(), target.destination.port());
+    let authority = target.destination.to_string();
     let connect = format!(
         "CONNECT {authority} HTTP/1.1\r\nHost: {}\r\nProxy-Connection: Keep-Alive\r\n\r\n",
         target.host_header
@@ -416,7 +416,7 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
 
 /// Validate bounded traffic-probe evidence against the activation identity and limits.
 ///
-/// The API requires a non-zero generation, a concrete destination, positive bounded duration,
+/// The API requires a non-zero generation, a concrete destination, bounded duration,
 /// and response-size ceiling. It does not infer that traffic was proxied from metadata alone;
 /// callers must set `expected_response_verified` only after the probe independently confirms
 /// the expected response through the proxy path.
