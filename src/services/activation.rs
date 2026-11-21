@@ -322,8 +322,16 @@ pub fn stop() -> anyhow::Result<()> {
                 crate::tun::xray_launcher::stop_xray_generation(
                     &journal.activation_id, journal.generation, None,
                 ).context("cannot stop the Xray service associated with the orphaned TUN journal")?;
-                let response = helper.recover(journal.activation_id, journal.generation)?;
-                ensure!(response.success, "orphaned TUN journal recovery failed: {}", response.message);
+                let recovery = helper.recover(journal.activation_id, journal.generation);
+                if !matches!(recovery.as_ref(), Ok(response) if response.success) {
+                    let recovery_message = match &recovery {
+                        Ok(response) => response.message.clone(),
+                        Err(error) => format!("{error:#}"),
+                    };
+                    let remaining = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
+                    ensure!(remaining.load()?.is_none() && remaining.load_transaction_journal()?.is_none(),
+                        "orphaned TUN journal recovery is incomplete: {recovery_message}");
+                }
             }
             println!("Stopped or recovered the Proxyctl-managed Xray TUN generation.");
             return Ok(());
