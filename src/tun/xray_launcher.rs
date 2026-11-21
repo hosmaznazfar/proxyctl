@@ -11,7 +11,7 @@ use std::{
     io::Read,
     os::fd::AsFd,
     os::unix::{
-        fs::{MetadataExt, PermissionsExt},
+        fs::{FileTypeExt, MetadataExt, PermissionsExt},
         net::UnixListener,
     },
     path::{Path, PathBuf},
@@ -818,7 +818,6 @@ pub fn wait_for_xray_tun_attachment(
     let handle = ProcessHandle::open(process.clone())
         .context("cannot pin Xray while waiting for TUN attachment")?;
     let deadline = std::time::Instant::now() + timeout;
-    let mut last_error = None;
     loop {
         ensure!(
             !handle.is_exited()?,
@@ -826,7 +825,10 @@ pub fn wait_for_xray_tun_attachment(
         );
         match verify_xray_tun_attachment(process, interface_name, expected_ifindex) {
             Ok(()) => return Ok(()),
-            Err(error) => last_error = Some(error),
+            Err(error) if std::time::Instant::now() >= deadline => {
+                return Err(error).context("Xray did not adopt the expected TUN interface before the startup deadline");
+            }
+            Err(_) => {}
         }
         if std::time::Instant::now() >= deadline {
             break;
@@ -836,8 +838,7 @@ pub fn wait_for_xray_tun_attachment(
                 .min(deadline.saturating_duration_since(std::time::Instant::now())),
         );
     }
-    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Xray TUN attachment was not observed")))
-        .context("Xray did not adopt the expected TUN interface before the startup deadline")
+    anyhow::bail!("Xray TUN attachment was not observed before the startup deadline")
 }
 
 /// Spawn Xray and require kernel-confirmed attachment before returning the child handle.
