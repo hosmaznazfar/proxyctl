@@ -89,6 +89,9 @@ impl ManifestStore {
         set_private_directory(&directory)?;
         let metadata = fs::metadata(&directory)?;
         verify_private_directory(&metadata)?;
+        let directory = fs::canonicalize(&directory)
+            .context("cannot canonicalize TUN runtime directory")?;
+        ensure!(directory.is_absolute(), "TUN runtime directory must resolve to an absolute path");
         Ok(Self { directory })
     }
 
