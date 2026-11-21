@@ -50,6 +50,29 @@ fn request(kind: u16, flags: u16, payload: &[u8]) -> Vec<u8> {
     b[6..8].copy_from_slice(&flags.to_ne_bytes());
     b
 }
+
+const RTM_NEWLINK: u16 = 16;
+const IFLA_IFALIAS: u16 = 20;
+
+/// Set an activation-generation alias on an interface before making a native TUN persistent.
+/// The alias is a recovery identity for the crash window between TUNSETPERSIST and journal ACK.
+pub fn set_interface_alias(index: u32, alias: &str) -> Result<()> {
+    ensure!(index > 0, "interface alias requires a non-zero ifindex");
+    ensure!(!alias.is_empty() && alias.len() <= 240
+        && !alias.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
+        "interface alias is empty, oversized, or contains control characters");
+    let mut payload = vec![0u8; 16];
+    payload[0] = libc::AF_UNSPEC as u8;
+    payload[4..8].copy_from_slice(&(index as i32).to_ne_bytes());
+    let mut value = alias.as_bytes().to_vec();
+    value.push(0);
+    attr(IFLA_IFALIAS, &value, &mut payload)?;
+    let message = request(RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, &payload);
+    let mut socket = RouteNetlink::open()?;
+    socket.transact(&message, Duration::from_secs(3))?;
+    Ok(())
+}
+
 /// Installs an exact default unicast route into a dedicated table, using an ACK.
 pub fn add_route(route: &PlannedRoute) -> Result<()> {
     ensure!(
