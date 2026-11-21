@@ -235,13 +235,11 @@ pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
         "process exited before owner inspection"
     );
     let status_path = format!("/proc/{}/status", identity.pid);
-    let status_metadata = fs::metadata(&status_path)
-        .context("cannot inspect pinned process credential metadata")?;
-    ensure!(
-        status_metadata.len() <= 64 * 1024,
-        "pinned process status exceeds the bounded read limit"
-    );
-    let status = fs::read_to_string(&status_path)
+    let mut status = String::new();
+    fs::File::open(&status_path)
+        .context("cannot inspect pinned process credentials")?
+        .take(64 * 1024 + 1)
+        .read_to_string(&mut status)
         .context("cannot inspect pinned process credentials")?;
     ensure!(
         status.len() <= 64 * 1024,
