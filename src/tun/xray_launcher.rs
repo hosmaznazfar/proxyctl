@@ -199,6 +199,15 @@ pub fn spawn_xray_from_broker(
         let peer = super::privilege_broker::read_broker_peer_credentials(&stream)?;
         ensure!(peer.uid == uid && peer.pid > 0,
             "Xray core launcher peer credentials do not match the activation user");
+        let main_pid = Command::new(SUDO)
+            .args(["-n", "--", SYSTEMCTL, "show", "--property=MainPID", "--value", &unit])
+            .output()
+            .context("cannot verify Xray systemd service main process")?;
+        ensure!(main_pid.status.success(), "cannot inspect the exact Xray systemd service");
+        let main_pid = String::from_utf8_lossy(&main_pid.stdout).trim()
+            .parse::<u32>().context("systemd returned an invalid Xray service MainPID")?;
+        ensure!(main_pid == peer.pid,
+            "descriptor socket peer is not the MainPID of the requested Xray service");
         let launcher_identity = ProcessIdentity::capture(peer.pid)
             .context("cannot capture Xray core launcher process identity")?;
         ensure!(launcher_identity.executable == fs::canonicalize(LAUNCHER)?
