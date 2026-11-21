@@ -102,6 +102,14 @@ impl ManifestStore {
         set_private_directory(&directory)?;
         let metadata = fs::metadata(&directory)?;
         verify_private_directory(&metadata)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            ensure!(
+                metadata.permissions().mode() & 0o7000 == 0,
+                "TUN runtime directory must not have special permission bits"
+            );
+        }
         let directory = fs::canonicalize(&directory)
             .context("cannot canonicalize TUN runtime directory")?;
         ensure!(directory.is_absolute(), "TUN runtime directory must resolve to an absolute path");
