@@ -325,3 +325,12 @@ mod persistent_tests {
         assert!(ioctl_retry(-1, TUNSETPERSIST, 0).is_err());
     }
 }
+
+/// Read the current ifindex for a validated interface name.
+pub fn current_interface_index(name: &str) -> Result<u32> {
+    validate_name(name)?;
+    let c_name = std::ffi::CString::new(name)?;
+    let index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
+    ensure!(index > 0, "cannot resolve current TUN interface index: {}", std::io::Error::last_os_error());
+    Ok(index)
+}
