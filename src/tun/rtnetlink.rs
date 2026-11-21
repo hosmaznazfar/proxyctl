@@ -42,12 +42,18 @@ pub(crate) struct RouteNetlink {
 impl RouteNetlink {
     pub(crate) fn open() -> Result<Self> {
         // SAFETY: socket has no pointer arguments and returns a new owned descriptor.
-        let raw = unsafe {
-            libc::socket(
-                libc::AF_NETLINK,
-                libc::SOCK_RAW | libc::SOCK_CLOEXEC,
-                libc::NETLINK_ROUTE,
-            )
+        let raw = loop {
+            let result = unsafe {
+                libc::socket(
+                    libc::AF_NETLINK,
+                    libc::SOCK_RAW | libc::SOCK_CLOEXEC,
+                    libc::NETLINK_ROUTE,
+                )
+            };
+            if result < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            break result;
         };
         ensure!(
             raw >= 0,
