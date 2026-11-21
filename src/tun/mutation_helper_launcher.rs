@@ -62,6 +62,7 @@ impl MutationHelper {
             helper_metadata.permissions().mode() & 0o022 == 0,
             "TUN helper executable must not be group- or world-writable"
         );
+        ensure!(helper_metadata.nlink() == 1, "TUN helper executable must not have external hard links");
         ensure!(
             helper_metadata.permissions().mode() & 0o111 != 0,
             "TUN helper executable has no execute permission"
