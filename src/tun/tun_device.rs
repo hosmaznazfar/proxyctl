@@ -43,11 +43,7 @@ impl TunDevice {
             .context("securely open /dev/net/tun")?;
         ensure_tun_character_device(&file)?;
         let fd: OwnedFd = file.into();
-        // SAFETY: fcntl reads descriptor flags for the live descriptor owned by fd.
-        ensure!(
-            unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC != 0,
-            "TUN descriptor is not close-on-exec"
-        );
+        ensure_descriptor_cloexec(fd.as_raw_fd())?;
         let mut req = IfReq {
             name: [0; IFNAMSIZ],
             flags: (IFF_TUN | IFF_NO_PI | IFF_TUN_EXCL) as libc::c_short,
@@ -100,6 +96,14 @@ impl TunDevice {
     pub fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
     }
+}
+
+fn ensure_descriptor_cloexec(fd: std::os::fd::RawFd) -> Result<()> {
+    // SAFETY: fcntl reads descriptor flags for the caller-owned descriptor.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    ensure!(flags >= 0, "cannot inspect TUN descriptor flags: {}", std::io::Error::last_os_error());
+    ensure!(flags & libc::FD_CLOEXEC != 0, "TUN descriptor is not close-on-exec");
+    Ok(())
 }
 
 fn ensure_tun_character_device(file: &std::fs::File) -> Result<()> {
@@ -177,6 +181,14 @@ fn validate_name(name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rejects_descriptor_without_close_on_exec() {
+        use std::os::fd::AsRawFd;
+
+        let file = std::fs::File::open("/dev/null").unwrap();
+        assert!(ensure_descriptor_cloexec(file.as_raw_fd()).is_err());
+    }
+
     #[test]
     fn rejects_regular_file_as_tun_device_node() {
         let directory = tempfile::tempdir().unwrap();
