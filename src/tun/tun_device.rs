@@ -41,10 +41,7 @@ impl TunDevice {
             .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
             .open("/dev/net/tun")
             .context("securely open /dev/net/tun")?;
-        ensure!(
-            file.metadata()?.file_type().is_char_device(),
-            "/dev/net/tun is not a character device"
-        );
+        ensure_tun_character_device(&file)?;
         let fd: OwnedFd = file.into();
         // SAFETY: fcntl reads descriptor flags for the live descriptor owned by fd.
         ensure!(
@@ -103,6 +100,14 @@ impl TunDevice {
     pub fn as_fd(&self) -> BorrowedFd<'_> {
         self.fd.as_fd()
     }
+}
+
+fn ensure_tun_character_device(file: &std::fs::File) -> Result<()> {
+    ensure!(
+        file.metadata()?.file_type().is_char_device(),
+        "/dev/net/tun is not a character device"
+    );
+    Ok(())
 }
 
 fn ioctl_retry(fd: std::os::fd::RawFd, request: libc::c_ulong, argument: usize) -> Result<libc::c_int> {
@@ -165,6 +170,15 @@ fn validate_name(name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rejects_regular_file_as_tun_device_node() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("not-a-device");
+        std::fs::write(&path, "").unwrap();
+        let file = std::fs::File::open(path).unwrap();
+        assert!(ensure_tun_character_device(&file).is_err());
+    }
+
     #[test]
     fn validates_interface_names() {
         for name in ["", "bad/name", "bad name", "1234567890123456", "bad\\name"] {
