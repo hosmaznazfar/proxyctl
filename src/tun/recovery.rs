@@ -61,12 +61,22 @@ pub struct SupervisorIdentity {
 }
 
 impl SupervisorIdentity {
-    pub fn for_activation(activation_id: &str, manifest_path: impl Into<String>, generation: u64) -> Result<Self> {
-        ensure!(activation_id.len() == 36
-            && activation_id.bytes().enumerate().all(|(index, byte)| {
-                if [8, 13, 18, 23].contains(&index) { byte == b'-' }
-                else { byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase() }
-            }), "invalid supervisor activation identity");
+    pub fn for_activation(
+        activation_id: &str,
+        manifest_path: impl Into<String>,
+        generation: u64,
+    ) -> Result<Self> {
+        ensure!(
+            activation_id.len() == 36
+                && activation_id.bytes().enumerate().all(|(index, byte)| {
+                    if [8, 13, 18, 23].contains(&index) {
+                        byte == b'-'
+                    } else {
+                        byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                    }
+                }),
+            "invalid supervisor activation identity"
+        );
         let identity = Self {
             activation_id: activation_id.to_owned(),
             service_name: format!("proxyctl-tun-{activation_id}"),
@@ -184,17 +194,21 @@ mod tests {
             "12345678-1234-4234-8234-123456789abc",
             "/run/user/1000/proxyctl/tun-manifest.json",
             9,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(
             identity.service_name,
             "proxyctl-tun-12345678-1234-4234-8234-123456789abc"
         );
         assert_eq!(identity.generation, 9);
-        assert!(SupervisorIdentity::for_activation(
-            "12345678-1234-4234-8234-123456789abc",
-            "/run/user/1000/proxyctl/tun-manifest.json",
-            0,
-        ).is_err());
+        assert!(
+            SupervisorIdentity::for_activation(
+                "12345678-1234-4234-8234-123456789abc",
+                "/run/user/1000/proxyctl/tun-manifest.json",
+                0,
+            )
+            .is_err()
+        );
     }
 
     #[test]
