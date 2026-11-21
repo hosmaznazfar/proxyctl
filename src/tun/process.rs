@@ -9,7 +9,7 @@ use std::{
     fs,
     os::fd::{AsRawFd, FromRawFd, OwnedFd},
     path::PathBuf,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,13 +145,15 @@ impl ProcessHandle {
 
     /// Wait for this exact process instance to exit. A false result means timeout.
     pub fn wait_exit(&self, timeout: Duration) -> Result<bool> {
-        let timeout_ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+        let deadline = Instant::now() + timeout;
         let mut descriptor = libc::pollfd {
             fd: self.pidfd.as_raw_fd(),
             events: libc::POLLIN,
             revents: 0,
         };
         let result = loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let timeout_ms = remaining.as_millis().min(i32::MAX as u128) as i32;
             let result = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
             if result >= 0 {
                 break result;
