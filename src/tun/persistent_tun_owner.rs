@@ -160,8 +160,9 @@ impl PersistentTunOwner {
     pub fn descriptor(&self, activation_id: &str, generation: u64) -> Result<std::os::fd::BorrowedFd<'_>> {
         validate_identity(activation_id, generation)?;
         self.devices.get(&OwnerKey { activation_id: activation_id.to_owned(), generation })
+            .filter(|owned| owned.device.name() == owned.interface.name && owned.interface.index > 0)
             .map(|owned| owned.device.as_fd())
-            .context("activation generation does not own a retained TUN descriptor")
+            .context("activation generation does not own a consistent retained TUN descriptor")
     }
 
     pub fn len(&self) -> usize {
