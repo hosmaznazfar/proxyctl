@@ -227,6 +227,10 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
         "TUN lifecycle lock permissions are not private"
     );
     ensure!(
+        metadata.permissions().mode() & 0o700 == 0o600,
+        "TUN lifecycle lock must be owner-readable and writable"
+    );
+    ensure!(
         metadata.nlink() == 1,
         "TUN lifecycle lock must not have external hard links"
     );
@@ -308,6 +312,16 @@ mod tests {
         std::fs::write(&path, "").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         std::fs::hard_link(&path, &external).unwrap();
+        assert!(LifecycleLock::acquire(&path, Duration::from_millis(50)).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_lifecycle_lock_without_owner_read_write_permissions() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(LOCK_FILE);
+        std::fs::write(&path, "").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
         assert!(LifecycleLock::acquire(&path, Duration::from_millis(50)).is_err());
     }
 
