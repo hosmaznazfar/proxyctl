@@ -153,13 +153,17 @@ impl ManifestStore {
                 "refusing to overwrite a different TUN activation manifest"
             );
         }
-        if let Ok(metadata) = fs::symlink_metadata(&destination) {
-            ensure!(
-                metadata.file_type().is_file(),
-                "TUN manifest path is not a regular file"
-            );
-            verify_owner(&metadata)?;
-            verify_private_file(&metadata)?;
+        match fs::symlink_metadata(&destination) {
+            Ok(metadata) => {
+                ensure!(
+                    metadata.file_type().is_file(),
+                    "TUN manifest path is not a regular file"
+                );
+                verify_owner(&metadata)?;
+                verify_private_file(&metadata)?;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).context("cannot inspect existing TUN manifest"),
         }
 
         let bytes = serde_json::to_vec_pretty(snapshot)?;
