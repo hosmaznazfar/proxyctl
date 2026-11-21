@@ -113,6 +113,7 @@ pub fn send_adoption_ack(stream: &mut UnixStream, offer: &AttachmentOffer) -> Re
 /// Require a positive acknowledgement matching every offer field.
 pub fn receive_adoption_ack(stream: &mut UnixStream, offer: &AttachmentOffer) -> Result<()> {
     offer.validate()?;
+    configure_handoff_timeouts(stream)?;
     let ack: AttachmentAck = read_frame(stream)?;
     ensure!(ack.version == VERSION, "unsupported attachment acknowledgement version");
     ensure!(ack.adopted, "core-side adapter rejected descriptor adoption");
