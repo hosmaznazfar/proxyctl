@@ -151,7 +151,8 @@ impl ProcessHandle {
 
     /// Wait for this exact process instance to exit. A false result means timeout.
     pub fn wait_exit(&self, timeout: Duration) -> Result<bool> {
-        let deadline = Instant::now()
+        let started = Instant::now();
+        let deadline = started
             .checked_add(timeout)
             .context("pidfd wait timeout exceeds the monotonic clock range")?;
         let mut descriptor = libc::pollfd {
