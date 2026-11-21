@@ -12,6 +12,7 @@ const MARKER: u8 = 0xA7;
 /// A successful sendmsg confirms queueing, not application-level adoption.
 pub fn send_descriptor(stream: &UnixStream, descriptor: BorrowedFd<'_>) -> Result<()> {
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
     let mut marker = MARKER;
     let mut iov = libc::iovec { iov_base: (&mut marker as *mut u8).cast(), iov_len: 1 };
     let bytes = unsafe { libc::CMSG_SPACE(mem::size_of::<libc::c_int>() as u32) } as usize;
@@ -31,7 +32,10 @@ pub fn send_descriptor(stream: &UnixStream, descriptor: BorrowedFd<'_>) -> Resul
         let result = unsafe { libc::sendmsg(stream.as_raw_fd(), &message, libc::MSG_NOSIGNAL) };
         if result >= 0 { break result; }
         let error = std::io::Error::last_os_error();
-        if error.kind() == std::io::ErrorKind::Interrupted { continue; }
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            ensure!(std::time::Instant::now() < deadline, "SCM_RIGHTS send exceeded its deadline");
+            continue;
+        }
         return Err(error).context("SCM_RIGHTS sendmsg failed");
     };
     ensure!(sent == 1, "SCM_RIGHTS sendmsg did not transfer its marker byte");
