@@ -441,7 +441,7 @@ mod attachment_tests {
 /// listener, interface, and route-policy evidence itself; it never infers traffic success from a
 /// successful SOCKS handshake.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_xray_readiness(
+fn verify_xray_readiness(
     process: &ProcessIdentity,
     interface_name: &str,
     expected: &super::readiness::ReadinessExpectation<'_>,
@@ -492,7 +492,7 @@ pub fn verify_xray_readiness(
 /// caller-authored boolean evidence: verify the unmarked kernel route, send direct traffic
 /// through TUN, then inspect the process/socket/route/host state.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_xray_end_to_end_readiness(
+pub(crate) fn verify_xray_end_to_end_readiness(
     runtime_directory: &Path,
     process: &ProcessIdentity,
     interface_name: &str,
@@ -531,7 +531,7 @@ pub fn verify_xray_end_to_end_readiness(
 /// Run a real bounded HTTP CONNECT probe through Xray, then promote only its measured
 /// response into the complete process/route/mark/host readiness gate.
 #[allow(clippy::too_many_arguments)]
-pub fn probe_and_verify_xray_readiness(
+pub(crate) fn probe_and_verify_xray_readiness(
     process: &ProcessIdentity,
     interface_name: &str,
     expected: &super::readiness::ReadinessExpectation<'_>,
