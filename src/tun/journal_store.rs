@@ -116,6 +116,8 @@ impl JournalStore {
                 .any(|operation| operation.resource_key == resource_key),
             "journal resource already exists"
         );
+        journal.operations.try_reserve(1)
+            .context("cannot reserve transaction journal operation capacity")?;
         journal.operations.push(JournalOperation {
             sequence: journal.operations.len() as u32,
             kind,
