@@ -320,7 +320,6 @@ fn read_start_ticks(pid: u32) -> Result<u64> {
 mod tests {
     use super::*;
     use std::{
-        io::Read,
         process::{Child, Command, Stdio},
         time::Instant,
     };
