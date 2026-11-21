@@ -424,6 +424,8 @@ pub fn activate_tun_xray(
     let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
     ensure!(store.load()?.is_none(),
         "a TUN activation manifest already exists; stop or recover it before starting another generation");
+    ensure!(store.load_transaction_journal()?.is_none(),
+        "an unresolved TUN transaction journal exists; recover it before starting another generation");
 
     let db = NodeDatabase::open(default_database_path()?)?;
     let record = db.get_node(node_id)?
