@@ -521,7 +521,7 @@ mod tests {
     fn rejects_whitespace_only_backend_fingerprints() {
         assert!(!valid_backend_fingerprint(""));
         assert!(!valid_backend_fingerprint("   "));
-        assert!(!valid_backend_fingerprint("\\n\\t"));
+        assert!(!valid_backend_fingerprint("\n\t"));
         assert!(valid_backend_fingerprint("fingerprint"));
     }
 
