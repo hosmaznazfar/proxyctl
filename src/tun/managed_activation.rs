@@ -70,16 +70,29 @@ pub fn prepare_managed_activation(
     Ok((token, response.message))
 }
 
-/// Bind a process only after the caller has completed core-specific attachment and readiness.
+/// Commit a process after readiness, accepting an identity already persisted by a core launcher.
 pub fn commit_managed_process(
     helper: &MutationHelper,
     coordinator: &LifecycleCoordinator,
     token: &ActivationToken,
     process: ProcessIdentity,
 ) -> Result<ManagedActivation> {
-    if let Err(error) = coordinator
-        .bind_core_process(token, process)
-        .and_then(|()| coordinator.apply_event(token, SupervisorEvent::StartCommitted).map(|_| ()))
+    let commit = (|| -> Result<()> {
+        let current = coordinator.load_current()?
+            .context("prepared activation manifest disappeared before process commit")?;
+        ensure!(current.token == *token,
+            "managed process commit token does not match the current activation");
+        match current.snapshot.core_process {
+            Some(ref persisted) => {
+                ensure!(persisted == &process && persisted.verify()?,
+                    "persisted core process identity differs from the launched process");
+            }
+            None => coordinator.bind_core_process(token, process)?,
+        }
+        coordinator.apply_event(token, SupervisorEvent::StartCommitted)?;
+        Ok(())
+    })();
+    if let Err(error) = commit
     {
         let recovery = helper.recover(token.activation_id().to_owned(), token.generation());
         return match recovery {
