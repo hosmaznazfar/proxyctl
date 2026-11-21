@@ -372,6 +372,15 @@ mod tests {
     }
 
     #[test]
+    fn manifest_rejects_dot_only_interface_names() {
+        for name in [".", ".."] {
+            let mut value = manifest();
+            value.interface_name = name.to_owned();
+            assert!(value.validate().is_err(), "accepted interface name {name:?}");
+        }
+    }
+
+    #[test]
     fn manifest_activation_id_requires_canonical_lowercase_hex() {
         let mut invalid = manifest();
         invalid.activation_id = "12345678-1234-4234-8234-123456789ABC".into();
