@@ -472,6 +472,66 @@ pub fn verify_readiness_with_traffic_observation(
     verify_readiness(expected, &promoted)
 }
 
+/// Complete preflight evidence plus the exact helper response needed by the final readiness gate.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagedPreflight {
+    pub evidence: ReadinessEvidence,
+    pub socket_mark_response: super::privilege_broker::SocketMarkBrokerResponse,
+}
+
+/// Collect all locally observable readiness evidence after a real proxy traffic probe.
+///
+/// This is deliberately separate from the traffic probe: the caller must first generate traffic
+/// through the local listener so the core has an attributable outbound socket to inspect.
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+pub fn collect_managed_preflight_with_response(
+    runtime_directory: &std::path::Path,
+    activation_id: &str,
+    process: &super::process::ProcessIdentity,
+    listener: SocketAddr,
+    listener_timeout: Duration,
+    plan: &super::route_policy::RoutingPolicyPlan,
+    expected_peer: SocketAddr,
+    transport: super::privilege_broker::BrokerSocketTransport,
+    baseline_host: &super::NetworkStatus,
+    current_host: &super::NetworkStatus,
+) -> Result<ManagedPreflight> {
+    ensure!(process.verify()?, "managed core identity is not live at preflight start");
+    let listener = probe_core_listener(process, listener, listener_timeout)?;
+    let interface = probe_tun_interface(&plan.interface_name, plan.interface_index)?;
+    probe_routing_policy(plan)?;
+    let egress = super::egress_probe::inspect_marked_egress(plan)?;
+    ensure!(egress.mark == plan.core_mark && egress.mask == plan.core_mark_mask,
+        "marked physical-egress evidence is bound to a different mark policy");
+    let response = super::socket_mark_probe::observe_proxy_outbound_mark(
+        runtime_directory, activation_id, process.clone(), expected_peer, transport,
+        plan.core_mark, plan.core_mark_mask,
+    ).context("cannot obtain live core outbound socket-mark evidence")?;
+    ensure!(response.expected_peer == expected_peer && response.transport == transport,
+        "socket-mark helper response does not match the requested outbound peer and transport");
+    let mark = super::socket_mark_probe::observed_proxy_outbound_mark(
+        &response, plan.core_mark, plan.core_mark_mask,
+    )?;
+    verify_host_network_unchanged(baseline_host, current_host)?;
+    ensure!(process.verify()?, "managed core identity changed during preflight");
+    Ok(ManagedPreflight {
+        evidence: ReadinessEvidence {
+            core_process_verified: true,
+            local_listener: Some(listener),
+            tun_interface: Some(interface),
+            route_policy_verified: true,
+            core_outbound_socket_mark: Some(mark),
+            physical_egress_bypass_verified: true,
+            proxied_traffic_verified: false,
+            dns_unchanged: true,
+            firewall_unchanged: true,
+        },
+        socket_mark_response: response,
+    })
+}
+
 /// Collect independent read-only evidence for a managed activation preflight.
 ///
 /// This composes process/listener, TUN identity, routing-policy, marked physical-egress,
