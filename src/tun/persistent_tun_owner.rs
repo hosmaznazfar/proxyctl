@@ -307,6 +307,7 @@ impl NativePersistentTunOwner {
     /// Recover or release a journal-owned persistent device after the exact core service stopped.
     /// This path intentionally works after broker restart, when the process-local registry is empty.
     pub fn release_recovered(&mut self, name: &str, index: u32, expected_alias: &str) -> Result<()> {
+        super::tun_device::validate_name(name)?;
         ensure!(index > 0, "persistent TUN recovery requires a non-zero ifindex");
         let snapshot = kernel_inventory::inspect_snapshot()?;
         let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name);
@@ -328,6 +329,7 @@ impl NativePersistentTunOwner {
 
     /// Drop only stale process-local bookkeeping after a fresh inventory proves the device absent.
     pub fn forget_if_absent(&mut self, name: &str, index: u32) -> Result<()> {
+        super::tun_device::validate_name(name)?;
         ensure!(index > 0, "native TUN stale-entry cleanup requires a non-zero ifindex");
         let snapshot = kernel_inventory::inspect_snapshot()?;
         ensure!(!snapshot.interfaces.iter().any(|interface| interface.name == name || interface.index == index),
