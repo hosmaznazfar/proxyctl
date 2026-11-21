@@ -125,12 +125,19 @@ fn ioctl_retry(fd: std::os::fd::RawFd, request: libc::c_ulong, argument: usize) 
 }
 
 fn set_link_up(name: &str) -> Result<()> {
-    let socket = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
-    ensure!(
-        socket >= 0,
-        "cannot open link-control socket: {}",
-        std::io::Error::last_os_error()
-    );
+    let socket = loop {
+        // SAFETY: socket receives a valid address family, type, and protocol.
+        let result = unsafe {
+            libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0)
+        };
+        if result >= 0 {
+            break result;
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(error).context("cannot open link-control socket");
+        }
+    };
     let fd = unsafe { OwnedFd::from_raw_fd(socket) };
     let mut req = IfReq {
         name: [0; IFNAMSIZ],
