@@ -474,7 +474,7 @@ pub fn activate_tun_xray(
             .context("cannot resolve TUN readiness probe endpoint before activation")?
             .next().context("TUN readiness probe host has no address")?,
     };
-    let traffic_target = crate::tun::readiness::HttpConnectProbeTarget {
+    let traffic_target = crate::tun::readiness::HttpProbeTarget {
         destination: probe_destination,
         host_header: probe.host_str().context("TUN readiness probe URL has no host")?.to_owned(),
         path: if probe.path().is_empty() { "/".into() } else { probe.path().to_owned() },
