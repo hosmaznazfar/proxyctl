@@ -375,6 +375,48 @@ mod validation_tests {
         }
     }
 
+
+    #[test]
+    fn persistent_interface_intent_is_recoverable_only_with_exact_generation_alias() {
+        let value = journal(vec![operation(
+            0,
+            JournalOperationKind::CreatePersistentInterface,
+            "interface:tun-proxyctl",
+        )]);
+        let fingerprint = serde_json::json!({
+            "alias": "proxyctl:12345678-1234-4234-8234-123456789abc:1",
+            "ifindex": 77,
+            "kind": "tun",
+            "name": "tun-proxyctl"
+        }).to_string();
+        let observed = std::collections::BTreeMap::from([
+            ("interface:tun-proxyctl".to_owned(), Some(fingerprint.clone())),
+        ]);
+        let decisions = plan_journal_recovery(&value, &observed).unwrap();
+        assert_eq!(decisions[0].1, JournalRecoveryDecision::CompareAndDelete {
+            expected_fingerprint: fingerprint,
+        });
+    }
+
+    #[test]
+    fn persistent_interface_intent_with_foreign_alias_remains_a_conflict() {
+        let value = journal(vec![operation(
+            0,
+            JournalOperationKind::CreatePersistentInterface,
+            "interface:tun-proxyctl",
+        )]);
+        let fingerprint = serde_json::json!({
+            "alias": "foreign:activation",
+            "ifindex": 77,
+            "kind": "tun",
+            "name": "tun-proxyctl"
+        }).to_string();
+        let observed = std::collections::BTreeMap::from([
+            ("interface:tun-proxyctl".to_owned(), Some(fingerprint)),
+        ]);
+        let decisions = plan_journal_recovery(&value, &observed).unwrap();
+        assert_eq!(decisions[0].1, JournalRecoveryDecision::PreserveAndReportConflict);
+    }
     #[test]
     fn journal_wire_types_reject_unknown_fields() {
         let operation = br#"{"sequence":0,"kind":"create_interface","resource_key":"interface:tun-proxyctl","state":"intent","fingerprint":null,"extra":true}"#;
