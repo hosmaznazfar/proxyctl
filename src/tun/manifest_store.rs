@@ -365,6 +365,12 @@ mod tests {
         }
     }
 
+    #[test]
+    fn durable_snapshot_rejects_unknown_fields() {
+        let bytes = br#"{"schema_version":1,"generation":1,"phase":"prepared","manifest":{"version":1,"activation_id":"12345678-1234-4234-8234-123456789abc","table_id":42420,"rule_priority":42420,"interface_name":"tun-proxyctl","interface_index":77,"resources":[]},"extra":true}"#;
+        assert!(serde_json::from_slice::<ManifestSnapshot>(bytes).is_err());
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn manifest_phase_requires_consistent_core_process_identity() {
