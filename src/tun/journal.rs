@@ -32,6 +32,7 @@ pub struct JournalOperation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TransactionJournal {
     pub schema_version: u32,
     pub activation_id: String,
