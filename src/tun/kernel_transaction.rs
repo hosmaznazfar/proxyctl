@@ -193,7 +193,7 @@ pub fn apply<B: KernelTransactionBackend>(
     let mut invalid_fingerprint = false;
     let mut ambiguous_mutation_error = false;
     let apply_result = (|| -> Result<()> {
-        for route in &bound_policy.routes {
+        for route in &ordered_routes {
             let fingerprint = match backend.add_owned_route(activation_id, route) {
                 Ok(fingerprint) => fingerprint,
                 Err(error) => {
