@@ -50,8 +50,9 @@ impl RouteManifest {
             "manifest routing table is reserved or below the Proxyctl allocation floor"
         );
         ensure!(
-            self.rule_priority >= RPDB_PRIORITY_MIN_PROXYCTL,
-            "manifest policy-rule priority is below the Proxyctl allocation floor"
+            self.rule_priority >= RPDB_PRIORITY_MIN_PROXYCTL
+                && self.rule_priority <= i32::MAX as u32,
+            "manifest policy-rule priority is outside the Proxyctl/native allocation range"
         );
         ensure!(
             !self.interface_name.is_empty()
