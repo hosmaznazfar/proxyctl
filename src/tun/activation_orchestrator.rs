@@ -401,10 +401,10 @@ impl<'a> ActivationOrchestrator<'a> {
         Ok(())
     }
 
-    /// Start the CLI-independent systemd user service for an already committed generation.
+    /// Start the CLI-independent systemd user service while the manifest is Prepared.
     ///
-    /// The service is started only after the manifest reaches Running; if service startup fails,
-    /// the caller must terminate the core and request exact-generation broker recovery.
+    /// The supervisor waits for this exact generation to commit Running; if the controller
+    /// disappears or startup stalls, it terminates any persisted Prepared core before recovery.
     fn start_recovery_supervisor(&self, activation: &ManagedActivation) -> Result<()> {
         let runtime = self.coordinator.runtime_directory()?;
         let manifest = runtime.join("tun-manifest.json");
