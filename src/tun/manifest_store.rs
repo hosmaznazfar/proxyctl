@@ -28,6 +28,30 @@ const STORE_FILE: &str = "tun-manifest.json";
 const STORE_VERSION: u32 = 1;
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 
+struct BoundedManifestWriter<'a> {
+    file: &'a mut tempfile::NamedTempFile,
+    written: u64,
+}
+
+impl Write for BoundedManifestWriter<'_> {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        let remaining = MAX_MANIFEST_BYTES.saturating_sub(self.written);
+        if buffer.len() as u64 > remaining {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::WriteZero,
+                "TUN manifest exceeds size limit",
+            ));
+        }
+        let written = self.file.write(buffer)?;
+        self.written += written as u64;
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestSnapshot {
@@ -190,18 +214,19 @@ impl ManifestStore {
         // RouteManifest::encode enforces its own aggregate resource bound before the
         // enclosing snapshot serializer allocates its output buffer.
         snapshot.manifest.encode()?;
-        let bytes = serde_json::to_vec_pretty(snapshot)?;
-        ensure!(
-            bytes.len() as u64 <= MAX_MANIFEST_BYTES,
-            "TUN manifest exceeds size limit"
-        );
         let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)
             .context("cannot create private temporary TUN manifest")?;
         set_private_file(temporary.as_file())?;
         let temporary_metadata = temporary.as_file().metadata()?;
         verify_owner(&temporary_metadata)?;
         verify_private_file(&temporary_metadata)?;
-        temporary.write_all(&bytes)?;
+        let mut bounded = BoundedManifestWriter {
+            file: &mut temporary,
+            written: 0,
+        };
+        serde_json::to_writer_pretty(&mut bounded, snapshot)
+            .context("cannot serialize bounded TUN manifest")?;
+        drop(bounded);
         temporary.as_file().sync_all()?;
         temporary
             .persist(&destination)
