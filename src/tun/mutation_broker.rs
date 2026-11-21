@@ -549,7 +549,7 @@ pub fn attach_descriptor(socket_path: &Path, activation_id: &str, generation: u6
     let mut header = [0u8; 4];
     stream.read_exact(&mut header)?;
     let length = u32::from_le_bytes(header) as usize;
-    ensure!(length > 0 && length <= MAX_FRAME, "mutation response frame length is invalid");
+    ensure!(length >= 2 && length <= MAX_FRAME, "mutation response frame length is invalid");
     let mut bytes = vec![0u8; length];
     stream.read_exact(&mut bytes)?;
     let response: MutationResponse = serde_json::from_slice(&bytes).context("mutation broker response is malformed")?;
