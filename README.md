@@ -386,19 +386,19 @@ Proxy URLs can contain credentials. Do not share database files or logs containi
 Quick accepts a useful partial download after one attempt. Accurate retries an incomplete download up to three total attempts, stopping only when the configured byte cap is reached. Each Accurate attempt receives the full configured download duration; attempts are not divided into one shared duration. Latency, TCP-connect, and upload checks retry failures up to three total attempts and stop at the first success. Attempt history records only the attempts actually made.
 
 
-**TUN integration status:** Linux SCM_RIGHTS descriptor-transfer primitives now exist, but they are not connected to a managed-core launch or a core-supported TUN descriptor consumer. A successful descriptor send is not proof of attachment. TUN activation remains gated; see docs/TUN_FIRST_DRAFT_PLAN.md.
+**TUN integration status:** The Xray path now composes broker-owned descriptor export, a capability-confined transient systemd service, the documented `XRAY_TUN_FD` consumer, kernel interface/index verification, and process-identity persistence while the manifest is still Prepared. The core launcher drops its own capabilities after spawning Xray; the Xray child retains only `CAP_NET_ADMIN` for marked outbound sockets. This is an orchestration/library path, not yet wired into the public CLI, and it has not passed offline fault-injection or real Linux dataplane validation. TUN activation remains gated; see docs/TUN_FIRST_DRAFT_PLAN.md.
 
 
-**TUN handoff status:** A generation-bound, nonce-bearing descriptor offer/acknowledgement protocol is available as an integration seam. It verifies Unix-socket peer credentials against a process identity and acknowledges only after a core-adoption callback succeeds. No native-core adapter currently consumes the descriptor; TUN activation remains gated.
+**TUN handoff status:** A generation-bound, nonce-bearing descriptor offer/acknowledgement protocol remains available for adapters that can prove adoption. Xray now has a separate concrete SCM_RIGHTS-to-`XRAY_TUN_FD` launch path; the protocol itself is not treated as proof that sing-box or Mihomo adopted the broker descriptor.
 
 
-The native-core attachment inventory is explicit: Xray documents Linux external TUN FD input through `XRAY_TUN_FD`, while the current sing-box adapter requests native named-device creation and Mihomo remains unsupported for the marked TUN contract. Proxyctl has not yet connected broker descriptor export and process launch to Xray's environment-variable path, so this does not change the TUN activation gate.
+The native-core attachment inventory is explicit: Xray has a broker-backed `XRAY_TUN_FD` launcher path. sing-box currently requests native named-device creation, which is not compatible with the broker-owned descriptor lifecycle and still needs a separate native-device backend. Mihomo remains unsupported for the marked TUN contract. Neither unsupported core is allowed through the Xray descriptor path.
 
 
-The TUN mutation broker can now export its retained descriptor to an authenticated same-user client for an exact live activation generation using SCM_RIGHTS. This is only the broker-to-client transport leg; core launch/adoption and independent readiness are still not integrated, so TUN activation remains disabled.
+The TUN mutation broker exports its retained descriptor to an authenticated same-user client for an exact live activation generation using SCM_RIGHTS. Xray launch now consumes this descriptor through the constrained systemd core-launch shim; independent dataplane readiness and public CLI integration are still outstanding, so TUN activation remains disabled.
 
 
-Xray now has a Linux-only descriptor-inheritance helper for its documented `XRAY_TUN_FD` input. It preserves close-on-exec in the parent and exposes the descriptor only to the spawned Xray child. The helper is not yet connected to public activation or readiness checks; TUN remains disabled.
+Xray has a Linux-only descriptor-inheritance helper for its documented `XRAY_TUN_FD` input. It preserves close-on-exec in the parent and exposes the descriptor only to the Xray child. The service shim gives the child `CAP_NET_ADMIN` for `SO_MARK`, then drops its own capability set.
 
 
-The Xray TUN path now has a broker-to-child launch primitive: it exports the descriptor for an exact activation generation and starts Xray with `XRAY_TUN_FD`, returning a pinned process identity. It does not yet compose activation, readiness, and independent recovery, so it does not enable TUN mode.
+The Xray TUN path now has an orchestrator entry point that generates and validates the selected node config, exports the exact generation descriptor, starts the constrained Xray service, verifies the actual TUN interface/index attachment, and persists the Xray child identity before readiness. The remaining integration work is to connect independent dataplane readiness and recovery to the CLI path, then validate crashes and real traffic; no public TUN activation is enabled.
