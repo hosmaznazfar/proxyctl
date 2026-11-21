@@ -39,6 +39,11 @@ impl LinuxJournalBackend {
         ensure!(generation == self.generation, "TUN descriptor request has a stale generation");
         let journal = self.store.load_transaction_journal()?.context("TUN transaction journal is missing")?;
         ensure!(journal.activation_id == activation_id && journal.generation == generation, "TUN descriptor request does not match the active journal");
+        ensure!(
+            journal.operations.iter().any(|operation|
+                operation.kind == JournalOperationKind::CreateInterface),
+            "this activation uses a persistent native TUN device and cannot export a broker descriptor"
+        );
         self.owner.descriptor(activation_id, generation)
     }
 
