@@ -54,13 +54,18 @@ fn request(kind: u16, flags: u16, payload: &[u8]) -> Vec<u8> {
 const RTM_NEWLINK: u16 = 16;
 const IFLA_IFALIAS: u16 = 20;
 
-/// Set an activation-generation alias on an interface before making a native TUN persistent.
-/// The alias is a recovery identity for the crash window between TUNSETPERSIST and journal ACK.
-pub fn set_interface_alias(index: u32, alias: &str) -> Result<()> {
+fn validate_interface_alias(index: u32, alias: &str) -> Result<()> {
     ensure!(index > 0, "interface alias requires a non-zero ifindex");
     ensure!(!alias.is_empty() && alias.len() <= 240
         && !alias.bytes().any(|byte| byte == 0 || byte.is_ascii_control()),
         "interface alias is empty, oversized, or contains control characters");
+    Ok(())
+}
+
+/// Set an activation-generation alias on an interface before making a native TUN persistent.
+/// The alias is a recovery identity for the crash window between TUNSETPERSIST and journal ACK.
+pub fn set_interface_alias(index: u32, alias: &str) -> Result<()> {
+    validate_interface_alias(index, alias)?;
     let mut payload = vec![0u8; 16];
     payload[0] = libc::AF_UNSPEC as u8;
     payload[4..8].copy_from_slice(&(index as i32).to_ne_bytes());
@@ -189,4 +194,18 @@ pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
     let mut sock = RouteNetlink::open()?;
     sock.transact(&nl, Duration::from_secs(3))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod interface_alias_tests {
+    use super::*;
+
+    #[test]
+    fn validates_generation_alias_before_netlink_mutation() {
+        assert!(validate_interface_alias(7, "proxyctl:activation:1").is_ok());
+        assert!(validate_interface_alias(0, "proxyctl:activation:1").is_err());
+        assert!(validate_interface_alias(7, "").is_err());
+        assert!(validate_interface_alias(7, &"x".repeat(241)).is_err());
+        assert!(validate_interface_alias(7, "bad\nalias").is_err());
+    }
 }
