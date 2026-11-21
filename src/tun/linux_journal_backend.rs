@@ -671,7 +671,7 @@ mod tests {
         let store = ManifestStore::open(directory.path()).unwrap();
         let activation_id = "12345678-1234-4234-8234-123456789abc";
         let generation = 44;
-        let mut backend =
+        let backend =
             LinuxJournalBackend::new_native(store.clone(), activation_id, generation).unwrap();
         store
             .record_operation_intent(
