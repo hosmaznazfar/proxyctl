@@ -271,3 +271,10 @@ The Linux mutation backend now has an explicit persistent-device transaction mod
 Targeted tests were added for native activation envelope validation, journal operation validation/serialization, persistent interface observations, transaction dispatch, fail-closed unsupported backends, and generation/name/ifindex ownership guards.
 
 **Still incomplete:** this is transaction and ownership infrastructure, not end-to-end sing-box/Mihomo support. Native core systemd launch, exact core-service shutdown integration, core configuration/address readiness, direct dataplane verification for both native cores, and public CLI dispatch remain gated. A crash during the narrow persistent-device creation/fingerprint window still needs stronger recovery identity treatment. No compilation, tests, fault injection, or host TUN activation has been run.
+
+
+### Native core launch and crash-identity continuation (2026-11-21)
+
+Added a capability-confined systemd launcher for sing-box and Mihomo, with exact generation-bound unit names, verified MainPID/executable identity, bounded startup inspection, and shared exact-unit shutdown. The native orchestrator now composes persistent broker preparation, recovery-supervisor startup, native core launch, mandatory readiness, and Running commit. A direct TUN-routed HTTP readiness path now shares the independent listener, interface, route, marked-outbound-socket, physical-egress, DNS, and firewall checks.
+
+The persistent TUN now receives a kernel interface alias containing the activation UUID and generation before TUNSETPERSIST is enabled. Recovery can therefore distinguish a broker crash after persistence but before the journal's Applied record: it promotes only a matching alias/fingerprint to Applied, then compare-and-deletes it. A foreign or missing alias remains a conflict. The public sing-box/Mihomo TUN entry remains fail-closed until the full lifecycle is compiled, tested, and runtime-validated.
