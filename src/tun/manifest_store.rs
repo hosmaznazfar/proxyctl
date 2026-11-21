@@ -198,6 +198,9 @@ impl ManifestStore {
         let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)
             .context("cannot create private temporary TUN manifest")?;
         set_private_file(temporary.as_file())?;
+        let temporary_metadata = temporary.as_file().metadata()?;
+        verify_owner(&temporary_metadata)?;
+        verify_private_file(&temporary_metadata)?;
         temporary.write_all(&bytes)?;
         temporary.as_file().sync_all()?;
         temporary
