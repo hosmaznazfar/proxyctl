@@ -11,7 +11,7 @@ use std::{
     io::Write,
     os::{
         fd::{AsFd, AsRawFd, OwnedFd},
-        unix::{fs::{MetadataExt, PermissionsExt}, net::UnixStream, process::CommandExt},
+        unix::{fs::{MetadataExt, PermissionsExt}, net::UnixStream},
     },
     path::{Path, PathBuf},
     process::Command,
