@@ -231,21 +231,37 @@ impl NativePersistentTunOwner {
 
         super::tun_device::create_persistent(name, uid, gid)
             .with_context(|| format!("cannot create persistent native TUN interface {name}"))?;
-        let snapshot = match kernel_inventory::inspect_snapshot() {
-            Ok(snapshot) => snapshot,
+
+        // Any failure after TUNSETPERSIST(1) must attempt exact cleanup. Without
+        // this guard, an inventory mismatch could leave an unjournaled persistent
+        // interface behind while the broker reports activation failure.
+        let verified = (|| -> Result<KernelInterfaceRecord> {
+            let snapshot = kernel_inventory::inspect_snapshot()?;
+            let mut matches = snapshot.interfaces.iter()
+                .filter(|interface| interface.name == name && interface.is_tun)
+                .cloned();
+            let interface = matches.next()
+                .context("persistent native TUN interface is absent from fresh kernel inventory")?;
+            ensure!(matches.next().is_none(), "kernel inventory contains duplicate native TUN names");
+            ensure!(interface.index > 0, "persistent native TUN interface has an invalid ifindex");
+            let live_index = super::tun_device::current_interface_index(name)?;
+            ensure!(live_index == interface.index, "persistent native TUN ifindex changed during verification");
+            Ok(interface)
+        })();
+
+        let interface = match verified {
+            Ok(interface) => interface,
             Err(error) => {
                 let rollback = super::tun_device::current_interface_index(name)
                     .and_then(|index| super::tun_device::remove_persistent(name, index));
                 return match rollback {
-                    Ok(()) => Err(error).context("cannot verify persistent native TUN interface; persistence was rolled back"),
-                    Err(cleanup) => anyhow::bail!("cannot verify persistent native TUN interface ({error:#}); persistence rollback also failed ({cleanup:#})"),
+                    Ok(()) => Err(error).context("native TUN verification failed; persistent interface was rolled back"),
+                    Err(cleanup) => anyhow::bail!(
+                        "native TUN verification failed ({error:#}); persistent-interface rollback also failed ({cleanup:#})"
+                    ),
                 };
             }
         };
-        let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name && interface.is_tun).cloned();
-        let interface = matches.next().context("persistent native TUN interface is absent from fresh kernel inventory")?;
-        ensure!(matches.next().is_none(), "kernel inventory contains duplicate native TUN names");
-        ensure!(interface.index > 0, "persistent native TUN interface has an invalid ifindex");
         self.devices.insert(key, interface.clone());
         Ok(interface)
     }
