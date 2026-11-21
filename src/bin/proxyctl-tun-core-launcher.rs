@@ -122,6 +122,9 @@ fn run() -> Result<()> {
             && current.token.generation() == generation
             && current.snapshot.phase == proxyctl::tun::recovery::SupervisorPhase::Prepared,
             "Xray process binding does not match the active Prepared generation");
+        ensure!(current.snapshot.manifest.interface_name == interface
+            && current.snapshot.manifest.interface_index == ifindex,
+            "Xray process binding interface identity differs from the broker manifest");
         coordinator.bind_core_process(&current.token, identity.clone())
             .context("cannot persist Xray process identity before readiness")?;
         send_process_identity(&mut stream, &identity)?;
