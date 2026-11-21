@@ -54,7 +54,14 @@ pub fn spawn_xray_from_broker(
     ensure!(executable.is_absolute(), "Xray executable path must be absolute");
     ensure!(config.is_absolute(), "Xray config path must be absolute");
     ensure!(generation > 0, "Xray activation generation must be positive");
-    ensure!(activation_id.len() == 36, "Xray activation ID is invalid");
+    ensure!(activation_id.len() == 36 && activation_id.bytes().enumerate().all(|(i, byte)| {
+        if [8, 13, 18, 23].contains(&i) { byte == b'-' }
+        else { byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase() }
+    }), "Xray activation ID is invalid");
+    ensure!(!interface_name.is_empty() && interface_name.len() < 16
+        && interface_name.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')),
+        "Xray TUN interface name is invalid");
+    ensure!(expected_ifindex > 0, "Xray TUN interface index must be positive");
     ensure!(Path::new("/run/systemd/system").is_dir(),
         "Xray TUN descriptor launch requires the systemd system manager");
 
