@@ -87,18 +87,34 @@ pub struct KernelInventory {
 
 /// Derive a stable, non-zero mark in Proxyctl's private high-bit range from a canonical UUID.
 pub fn mark_for_activation_id(activation_id: &str) -> Result<(u32, u32)> {
-    ensure!(activation_id.len() == 36 && activation_id.bytes().enumerate().all(|(index, byte)| {
-        if [8, 13, 18, 23].contains(&index) { byte == b'-' }
-        else { byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase() }
-    }), "activation ID must be a canonical lowercase UUID");
-    let digits = activation_id.bytes().filter(|byte| *byte != b'-').take(7)
+    ensure!(
+        activation_id.len() == 36
+            && activation_id.bytes().enumerate().all(|(index, byte)| {
+                if [8, 13, 18, 23].contains(&index) {
+                    byte == b'-'
+                } else {
+                    byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                }
+            }),
+        "activation ID must be a canonical lowercase UUID"
+    );
+    let digits = activation_id
+        .bytes()
+        .filter(|byte| *byte != b'-')
+        .take(7)
         .collect::<Vec<_>>();
-    ensure!(digits.len() == 7, "activation ID does not contain enough mark entropy");
+    ensure!(
+        digits.len() == 7,
+        "activation ID does not contain enough mark entropy"
+    );
     let text = std::str::from_utf8(&digits)?;
     let suffix = u32::from_str_radix(text, 16)? & 0x0fff_ffff;
     let mark = 0x4000_0000 | suffix;
     let mask = 0x7fff_ffff;
-    ensure!(mark != 0 && mark & !mask == 0, "derived Proxyctl socket mark is invalid");
+    ensure!(
+        mark != 0 && mark & !mask == 0,
+        "derived Proxyctl socket mark is invalid"
+    );
     Ok((mark, mask))
 }
 
@@ -109,17 +125,27 @@ pub fn mark_for_activation_id(activation_id: &str) -> Result<(u32, u32)> {
 pub fn allocate_policy_identifiers(inventory: &KernelInventory) -> Result<(u32, u32, u32)> {
     let table = (RT_TABLE_MIN_PROXYCTL..=RT_TABLE_MIN_PROXYCTL + 4095)
         .find(|candidate| !inventory.occupied_tables.contains(candidate))
-        .ok_or_else(|| anyhow::anyhow!("no free Proxyctl routing table is available in the private allocation range"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no free Proxyctl routing table is available in the private allocation range"
+            )
+        })?;
     let priority_pair = (RPDB_PRIORITY_MIN_PROXYCTL..=32_000u32)
         .find(|priority| {
-            let Some(next) = priority.checked_add(1) else { return false; };
+            let Some(next) = priority.checked_add(1) else {
+                return false;
+            };
             next <= 32_000
-                && [AddressFamily::Ipv4, AddressFamily::Ipv6].iter().all(|family| {
-                    !inventory.rule_priorities.contains(&(*family, *priority))
-                        && !inventory.rule_priorities.contains(&(*family, next))
-                })
+                && [AddressFamily::Ipv4, AddressFamily::Ipv6]
+                    .iter()
+                    .all(|family| {
+                        !inventory.rule_priorities.contains(&(*family, *priority))
+                            && !inventory.rule_priorities.contains(&(*family, next))
+                    })
         })
-        .ok_or_else(|| anyhow::anyhow!("no consecutive free Proxyctl policy priorities are available"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("no consecutive free Proxyctl policy priorities are available")
+        })?;
     Ok((table, priority_pair, priority_pair + 1))
 }
 
@@ -240,11 +266,17 @@ impl RoutingPolicyPlan {
             "routing plan must contain bypass and proxy rules per family"
         );
         ensure!(
-            self.routes.iter().all(|route| route.interface_index == self.interface_index && route.interface_name == self.interface_name && route.table_id == self.table_id),
+            self.routes
+                .iter()
+                .all(|route| route.interface_index == self.interface_index
+                    && route.interface_name == self.interface_name
+                    && route.table_id == self.table_id),
             "all routes must bind the plan's interface identity and dedicated table"
         );
         ensure!(
-            self.rules.iter().all(|rule| rule.priority >= RPDB_PRIORITY_MIN_PROXYCTL),
+            self.rules
+                .iter()
+                .all(|rule| rule.priority >= RPDB_PRIORITY_MIN_PROXYCTL),
             "every rule priority must be in the Proxyctl allocation range"
         );
 
@@ -358,7 +390,11 @@ mod tests {
         };
         assert_eq!(
             allocate_policy_identifiers(&inventory).unwrap(),
-            (RT_TABLE_MIN_PROXYCTL + 1, RPDB_PRIORITY_MIN_PROXYCTL + 2, RPDB_PRIORITY_MIN_PROXYCTL + 3)
+            (
+                RT_TABLE_MIN_PROXYCTL + 1,
+                RPDB_PRIORITY_MIN_PROXYCTL + 2,
+                RPDB_PRIORITY_MIN_PROXYCTL + 3
+            )
         );
     }
 
