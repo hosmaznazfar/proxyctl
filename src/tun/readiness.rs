@@ -1348,6 +1348,16 @@ mod http_tun_probe_tests {
     }
 
     #[test]
+    fn persistent_readiness_response_rejects_connection_close() {
+        assert!(super::http_response_allows_keepalive(
+            b"HTTP/1.1 204 No Content\\r\\n\\r\\n"
+        ).unwrap());
+        assert!(!super::http_response_allows_keepalive(
+            b"HTTP/1.1 204 No Content\\r\\nConnection: keep-alive, close\\r\\n\\r\\n"
+        ).unwrap());
+    }
+
+    #[test]
     fn parser_requires_complete_supported_status_line() {
         assert!(parse_http_status(b"HTTP/2 200 OK\\r\\n").is_err());
         assert!(parse_http_status(b"HTTP/1.1 700 Bad\\r\\n").is_err());
