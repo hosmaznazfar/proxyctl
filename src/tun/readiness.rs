@@ -453,7 +453,7 @@ pub fn probe_tun_routed_http_traffic(
         format!("{}:{}", target.host_header, target.destination.port())
     };
     let request = format!(
-        "GET {} HTTP/1.1\\r\\nHost: {}\\r\\nConnection: close\\r\\nAccept: */*\\r\\n\\r\\n",
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept: */*\r\n\r\n",
         target.path, authority
     );
     stream.write_all(request.as_bytes())
