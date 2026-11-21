@@ -206,3 +206,74 @@ mod tests {
         assert!(validate_identity("12345678-1234-4234-8234-123456789abc", 0).is_err());
     }
 }
+
+
+/// Registry for native cores that attach to a persistent named TUN device.
+///
+/// Unlike PersistentTunOwner, this registry does not retain an open TUN queue.
+/// An idle broker queue would compete with a native core for packets. The durable
+/// journal remains the recovery authority after a broker crash; this map only
+/// prevents duplicate live generations in one process.
+#[derive(Debug, Default)]
+pub struct NativePersistentTunOwner {
+    devices: BTreeMap<OwnerKey, KernelInterfaceRecord>,
+}
+
+impl NativePersistentTunOwner {
+    pub fn new() -> Self { Self::default() }
+
+    pub fn create(&mut self, activation_id: &str, generation: u64, name: &str, uid: u32, gid: u32) -> Result<KernelInterfaceRecord> {
+        validate_identity(activation_id, generation)?;
+        let key = OwnerKey { activation_id: activation_id.to_owned(), generation };
+        ensure!(!self.devices.contains_key(&key), "native TUN generation is already registered");
+        ensure!(self.devices.len() < MAX_RETAINED_TUN_DEVICES, "native TUN registry limit reached");
+        ensure!(!self.devices.values().any(|device| device.name == name), "native TUN name is already owned");
+
+        super::tun_device::create_persistent(name, uid, gid)
+            .with_context(|| format!("cannot create persistent native TUN interface {name}"))?;
+        let snapshot = match kernel_inventory::inspect_snapshot() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                return match super::tun_device::remove_persistent(name) {
+                    Ok(()) => Err(error).context("cannot verify persistent native TUN interface; persistence was rolled back"),
+                    Err(cleanup) => anyhow::bail!("cannot verify persistent native TUN interface ({error:#}); persistence rollback also failed ({cleanup:#})"),
+                };
+            }
+        };
+        let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name && interface.is_tun).cloned();
+        let interface = matches.next().context("persistent native TUN interface is absent from fresh kernel inventory")?;
+        ensure!(matches.next().is_none(), "kernel inventory contains duplicate native TUN names");
+        ensure!(interface.index > 0, "persistent native TUN interface has an invalid ifindex");
+        self.devices.insert(key, interface.clone());
+        Ok(interface)
+    }
+
+    pub fn identity(&self, activation_id: &str, generation: u64) -> Result<&KernelInterfaceRecord> {
+        validate_identity(activation_id, generation)?;
+        self.devices.get(&OwnerKey { activation_id: activation_id.to_owned(), generation })
+            .filter(|interface| interface.index > 0)
+            .context("native TUN generation is not registered")
+    }
+
+    /// Remove the persistent device only after the caller has stopped its exact core service.
+    pub fn release(&mut self, activation_id: &str, generation: u64, name: &str, index: u32) -> Result<()> {
+        validate_identity(activation_id, generation)?;
+        let key = OwnerKey { activation_id: activation_id.to_owned(), generation };
+        let owned = self.devices.get(&key).context("native TUN generation is not registered")?;
+        ensure!(owned.name == name && owned.index == index && index > 0,
+            "refusing to remove a native TUN device with mismatched durable identity");
+        let snapshot = kernel_inventory::inspect_snapshot()?;
+        let mut matches = snapshot.interfaces.iter().filter(|interface| interface.name == name);
+        let live = matches.next().context("native TUN interface disappeared before cleanup")?;
+        ensure!(matches.next().is_none(), "kernel inventory contains duplicate interface names");
+        ensure!(live.is_tun && live.index == index,
+            "native TUN interface identity changed; refusing persistent cleanup");
+        super::tun_device::remove_persistent(name)
+            .context("cannot clear persistence from the exact owned native TUN interface")?;
+        self.devices.remove(&key);
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize { self.devices.len() }
+    pub fn is_empty(&self) -> bool { self.devices.is_empty() }
+}
