@@ -523,6 +523,14 @@ mod validation_tests {
         )]);
         assert!(plan_journal_recovery(&value, &malformed).is_err());
 
+        for fingerprint in ["", "   ", "\n\t"] {
+            let malformed = std::collections::BTreeMap::from([(
+                "interface:tun-proxyctl".to_owned(),
+                Some(fingerprint.to_owned()),
+            )]);
+            assert!(plan_journal_recovery(&value, &malformed).is_err());
+        }
+
         let incomplete = std::collections::BTreeMap::from([(
             "interface:tun-proxyctl".to_owned(),
             Some("foreign-interface".to_owned()),
