@@ -323,12 +323,12 @@ mod tests {
 
     #[test]
     fn service_state_requires_exact_active_and_running_values() {
-        assert!(is_active_running_state(true, b"active\\nrunning\\n"));
-        assert!(!is_active_running_state(true, b"activating\\nstart\\n"));
-        assert!(!is_active_running_state(true, b"active\\nexited\\n"));
-        assert!(!is_active_running_state(false, b"active\\nrunning\\n"));
-        assert!(!is_active_running_state(true, b"active\\nrunning\\nextra\\n"));
-        assert!(!is_active_running_state(true, b"\\xff"));
+        assert!(is_active_running_state(true, b"active\nrunning\n"));
+        assert!(!is_active_running_state(true, b"activating\nstart\n"));
+        assert!(!is_active_running_state(true, b"active\nexited\n"));
+        assert!(!is_active_running_state(false, b"active\nrunning\n"));
+        assert!(!is_active_running_state(true, b"active\nrunning\nextra\n"));
+        assert!(!is_active_running_state(true, b"\xff"));
     }
 
     #[test]
