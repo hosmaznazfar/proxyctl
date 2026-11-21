@@ -28,8 +28,14 @@ pub fn send_descriptor(stream: &UnixStream, descriptor: BorrowedFd<'_>) -> Resul
         (*header).cmsg_len = libc::CMSG_LEN(mem::size_of::<libc::c_int>() as u32) as usize;
         std::ptr::write_unaligned(libc::CMSG_DATA(header).cast::<libc::c_int>(), descriptor.as_raw_fd());
     }
-    let sent = unsafe { libc::sendmsg(stream.as_raw_fd(), &message, libc::MSG_NOSIGNAL) };
-    ensure!(sent == 1, "SCM_RIGHTS sendmsg failed: {}", std::io::Error::last_os_error());
+    let sent = loop {
+        let result = unsafe { libc::sendmsg(stream.as_raw_fd(), &message, libc::MSG_NOSIGNAL) };
+        if result >= 0 { break result; }
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted { continue; }
+        return Err(error).context("SCM_RIGHTS sendmsg failed");
+    };
+    ensure!(sent == 1, "SCM_RIGHTS sendmsg did not transfer its marker byte");
     Ok(())
 }
 
