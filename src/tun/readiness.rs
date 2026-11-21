@@ -1226,6 +1226,28 @@ pub fn probe_socks5_connect_detailed(_process: &(), _listener: SocketAddr, _dest
 #[cfg(all(test, target_os = "linux"))]
 mod http_tun_probe_tests {
     #[test]
+    fn validates_xray_tun_link_mtu_and_dual_stack_gateway_addresses() {
+        let record = serde_json::json!({
+            "ifname": "tun-proxyctl",
+            "ifindex": 42,
+            "mtu": 1500,
+            "flags": ["POINTOPOINT", "NOARP", "UP", "LOWER_UP"],
+            "addr_info": [
+                {"family":"inet","local":"198.18.0.1","prefixlen":30},
+                {"family":"inet6","local":"fdfe:dcba:9876::1","prefixlen":126}
+            ]
+        });
+        assert!(super::validate_xray_tun_address_record(&record, "tun-proxyctl", 42).is_ok());
+        assert!(super::validate_xray_tun_address_record(&record, "tun-proxyctl", 43).is_err());
+        let mut wrong_mtu = record.clone();
+        wrong_mtu["mtu"] = serde_json::json!(9000);
+        assert!(super::validate_xray_tun_address_record(&wrong_mtu, "tun-proxyctl", 42).is_err());
+        let mut missing_ipv6 = record.clone();
+        missing_ipv6["addr_info"].as_array_mut().unwrap().pop();
+        assert!(super::validate_xray_tun_address_record(&missing_ipv6, "tun-proxyctl", 42).is_err());
+    }
+
+    #[test]
     fn validates_the_exact_unmarked_kernel_route_result() {
         let plan = super::super::route_policy::RoutingPolicyPlan::new(
             10001, 10002, 10003, 0x4123_4567, 0x7fff_ffff, "tun-proxyctl", 42,
