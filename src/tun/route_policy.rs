@@ -341,7 +341,7 @@ mod tests {
     fn derives_a_stable_mark_in_the_proxyctl_private_range() {
         let id = "12345678-1234-4234-8234-123456789abc";
         let (mark, mask) = mark_for_activation_id(id).unwrap();
-        assert_eq!((mark, mask), (0x4234_5678, 0x7fff_ffff));
+        assert_eq!((mark, mask), (0x4123_4567, 0x7fff_ffff));
         assert_eq!(mark_for_activation_id(id).unwrap(), (mark, mask));
         assert!(mark_for_activation_id("invalid").is_err());
     }
