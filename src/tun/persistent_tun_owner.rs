@@ -277,3 +277,34 @@ impl NativePersistentTunOwner {
     pub fn len(&self) -> usize { self.devices.len() }
     pub fn is_empty(&self) -> bool { self.devices.is_empty() }
 }
+
+
+#[cfg(test)]
+mod native_owner_tests {
+    use super::*;
+
+    #[test]
+    fn native_registry_starts_empty_and_rejects_unknown_generation() {
+        let owner = NativePersistentTunOwner::new();
+        assert!(owner.is_empty());
+        assert_eq!(owner.len(), 0);
+        assert!(owner.identity("12345678-1234-4234-8234-123456789abc", 1).is_err());
+    }
+
+    #[test]
+    fn native_registry_release_requires_exact_name_and_ifindex_before_kernel_access() {
+        let mut owner = NativePersistentTunOwner::new();
+        let key = OwnerKey { activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 9 };
+        owner.devices.insert(key, KernelInterfaceRecord { name: "tun-proxyctl".into(), index: 17, is_tun: true });
+        assert!(owner.release("12345678-1234-4234-8234-123456789abc", 9, "tun-other", 17).is_err());
+        assert!(owner.release("12345678-1234-4234-8234-123456789abc", 9, "tun-proxyctl", 18).is_err());
+        assert_eq!(owner.len(), 1);
+    }
+
+    #[test]
+    fn native_registry_rejects_stale_generation_and_invalid_uuid() {
+        let owner = NativePersistentTunOwner::new();
+        assert!(owner.identity("12345678-1234-4234-8234-123456789ABC", 1).is_err());
+        assert!(owner.identity("12345678-1234-4234-8234-123456789abc", 0).is_err());
+    }
+}
