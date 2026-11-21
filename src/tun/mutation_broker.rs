@@ -466,8 +466,7 @@ fn read_exact_deadline(
 
 fn write_response(stream: &mut UnixStream, response: &MutationResponse) -> Result<()> {
     let payload = serde_json::to_vec(response)?;
-    ensure!(
-        payload.len() <= MAX_FRAME,
+    ensure!(!payload.is_empty() && payload.len() <= MAX_FRAME,
         "mutation response exceeds frame limit"
     );
     stream.write_all(&(payload.len() as u32).to_le_bytes())?;
