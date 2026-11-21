@@ -234,7 +234,9 @@ impl NativePersistentTunOwner {
         let snapshot = match kernel_inventory::inspect_snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                return match super::tun_device::remove_persistent(name) {
+                let rollback = super::tun_device::current_interface_index(name)
+                    .and_then(|index| super::tun_device::remove_persistent(name, index));
+                return match rollback {
                     Ok(()) => Err(error).context("cannot verify persistent native TUN interface; persistence was rolled back"),
                     Err(cleanup) => anyhow::bail!("cannot verify persistent native TUN interface ({error:#}); persistence rollback also failed ({cleanup:#})"),
                 };
@@ -268,7 +270,7 @@ impl NativePersistentTunOwner {
         ensure!(matches.next().is_none(), "kernel inventory contains duplicate interface names");
         ensure!(live.is_tun && live.index == index,
             "native TUN interface identity changed; refusing persistent cleanup");
-        super::tun_device::remove_persistent(name)
+        super::tun_device::remove_persistent(name, index)
             .context("cannot clear persistence from the exact owned native TUN interface")?;
         self.devices.remove(&key);
         Ok(())
