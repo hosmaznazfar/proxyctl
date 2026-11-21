@@ -665,6 +665,12 @@ mod tests {
     }
 
     #[test]
+    fn accepts_valid_response_envelope() {
+        let response = MutationResponse { version: VERSION, success: true, message: "ok".into() };
+        assert!(validate_response_envelope(&response).is_ok());
+    }
+
+    #[test]
     fn rejects_empty_response_message() {
         let response = MutationResponse { version: VERSION, success: true, message: String::new() };
         assert!(validate_response_envelope(&response).is_err());
