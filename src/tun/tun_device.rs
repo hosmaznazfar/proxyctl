@@ -60,7 +60,7 @@ impl TunDevice {
             *dst = src as libc::c_char;
         }
         // SAFETY: fd is a TUN fd and req follows Linux ifreq layout.
-        let rc = unsafe { libc::ioctl(fd.as_raw_fd(), TUNSETIFF, &mut req) };
+        let rc = ioctl_retry(fd.as_raw_fd(), TUNSETIFF, (&mut req as *mut IfReq) as usize)?;
         ensure!(
             rc == 0,
             "TUNSETIFF failed: {}",
@@ -78,14 +78,14 @@ impl TunDevice {
             "kernel allocated unexpected interface identity"
         );
         // SAFETY: TUNSETOWNER/GROUP accept scalar uid/gid on the attached fd.
-        let rc = unsafe { libc::ioctl(fd.as_raw_fd(), TUNSETOWNER, uid) };
+        let rc = ioctl_retry(fd.as_raw_fd(), TUNSETOWNER, uid as usize)?;
         ensure!(
             rc == 0,
             "TUNSETOWNER failed: {}",
             std::io::Error::last_os_error()
         );
         // SAFETY: scalar gid argument is valid for TUNSETGROUP.
-        let rc = unsafe { libc::ioctl(fd.as_raw_fd(), TUNSETGROUP, gid) };
+        let rc = ioctl_retry(fd.as_raw_fd(), TUNSETGROUP, gid as usize)?;
         ensure!(
             rc == 0,
             "TUNSETGROUP failed: {}",
@@ -105,6 +105,20 @@ impl TunDevice {
     }
 }
 
+fn ioctl_retry(fd: std::os::fd::RawFd, request: libc::c_ulong, argument: usize) -> Result<libc::c_int> {
+    loop {
+        // SAFETY: callers provide the argument shape required by the specific ioctl request.
+        let result = unsafe { libc::ioctl(fd, request, argument) };
+        if result >= 0 {
+            return Ok(result);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(error.into());
+        }
+    }
+}
+
 fn set_link_up(name: &str) -> Result<()> {
     let socket = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
     ensure!(
@@ -121,14 +135,14 @@ fn set_link_up(name: &str) -> Result<()> {
     for (dst, src) in req.name.iter_mut().zip(name.bytes()) {
         *dst = src as libc::c_char;
     }
-    let rc = unsafe { libc::ioctl(fd.as_raw_fd(), SIOCGIFFLAGS, &mut req) };
+    let rc = ioctl_retry(fd.as_raw_fd(), SIOCGIFFLAGS, (&mut req as *mut IfReq) as usize)?;
     ensure!(
         rc == 0,
         "SIOCGIFFLAGS failed: {}",
         std::io::Error::last_os_error()
     );
     req.flags |= IFF_UP;
-    let rc = unsafe { libc::ioctl(fd.as_raw_fd(), SIOCSIFFLAGS, &req) };
+    let rc = ioctl_retry(fd.as_raw_fd(), SIOCSIFFLAGS, (&req as *const IfReq) as usize)?;
     ensure!(
         rc == 0,
         "SIOCSIFFLAGS failed: {}",
