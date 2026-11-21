@@ -502,6 +502,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_process_stat_records_over_the_read_limit() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("stat");
+        fs::write(&path, "x".repeat(64 * 1024 + 1)).unwrap();
+        let mut stat = String::new();
+        fs::File::open(&path).unwrap().take(64 * 1024 + 1)
+            .read_to_string(&mut stat).unwrap();
+        assert_eq!(stat.len(), 64 * 1024 + 1);
+    }
+
+    #[test]
     fn invalid_or_unavailable_process_identity_fails_closed() {
         let invalid = ProcessIdentity {
             pid: 0,
