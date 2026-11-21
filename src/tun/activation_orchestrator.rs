@@ -137,15 +137,15 @@ impl<'a> ActivationOrchestrator<'a> {
         listen_port: u16,
         executable: &Path,
         attachment_timeout: Duration,
-        expected_peer: std::net::SocketAddr,
+        expected_peers: Vec<std::net::SocketAddr>,
         traffic_target: super::readiness::HttpConnectProbeTarget,
         probe_timeout: Duration,
         maximum_response_bytes: usize,
     ) -> Result<XrayActivation> {
-        ensure!(expected_peer.port() == node.port
-            && !expected_peer.ip().is_unspecified()
-            && !expected_peer.ip().is_multicast(),
-            "expected Xray peer must match the selected node's port and be a unicast address");
+        ensure!(!expected_peers.is_empty() && expected_peers.len() <= 8
+            && expected_peers.iter().all(|peer| peer.port() == node.port
+                && !peer.ip().is_unspecified() && !peer.ip().is_multicast()),
+            "Xray peer candidates must be one to eight unicast addresses matching the selected node's port");
         traffic_target.validate()?;
         let baseline_host = crate::tun::inspect()
             .context("cannot capture pre-activation DNS and firewall baseline")?;
@@ -191,7 +191,7 @@ impl<'a> ActivationOrchestrator<'a> {
                     std::net::SocketAddr::from(([127, 0, 0, 1], listen_port)),
                     Duration::from_secs(5),
                     &plan,
-                    expected_peer,
+                    &expected_peers,
                     super::privilege_broker::BrokerSocketTransport::Tcp,
                     &target,
                     token.activation_id(),
