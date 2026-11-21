@@ -170,7 +170,13 @@ pub fn apply<B: KernelTransactionBackend>(
             );
         }
     };
-    let mut resources = Vec::with_capacity(bound_policy.routes.len() + bound_policy.rules.len());
+    let mut resources = Vec::new();
+    if let Err(error) = resources.try_reserve(bound_policy.routes.len() + bound_policy.rules.len()) {
+        backend.retain_recovery_journal(activation_id).context(
+            "resource tracking allocation failed and recovery journal could not be retained",
+        )?;
+        return Err(error).context("cannot reserve kernel transaction resource tracking; recovery journal retained");
+    }
     let mut invalid_fingerprint = false;
     let mut ambiguous_mutation_error = false;
     let apply_result = (|| -> Result<()> {
