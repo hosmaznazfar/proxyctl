@@ -304,6 +304,15 @@ mod tests {
     }
 
     #[test]
+    fn manifest_rejects_whitespace_only_fingerprints() {
+        for fingerprint in ["", "   ", "\\n\\t"] {
+            let mut value = manifest();
+            value.resources[0].fingerprint = fingerprint.into();
+            assert!(value.validate().is_err());
+        }
+    }
+
+    #[test]
     fn cleanup_removes_only_manifest_resources_and_preserves_foreign_state() {
         let mut backend = backend();
         let report = cleanup(&manifest(), &mut backend).unwrap();
