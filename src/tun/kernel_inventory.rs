@@ -102,6 +102,14 @@ fn run_ip_command(executable: &str, arguments: &[&str], timeout: Duration) -> Re
                 return Err(error).context("could not inspect iproute2 process status");
             }
         }
+        if output_file.metadata()?.len() > MAX_IP_COMMAND_OUTPUT_BYTES {
+            let _ = child.kill();
+            let _ = child.wait();
+            anyhow::bail!(
+                "iproute2 inspection output exceeded the {}-byte safety limit while the command was running",
+                MAX_IP_COMMAND_OUTPUT_BYTES
+            );
+        }
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
