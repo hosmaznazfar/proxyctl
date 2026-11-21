@@ -53,7 +53,15 @@ impl KernelTransaction {
             super::route_policy::AddressFamily::Ipv6 => 1u8,
         });
         steps.extend(routes.into_iter().map(ApplyStep::AddRoute));
-        steps.extend(self.policy.rules.iter().cloned().map(ApplyStep::AddRule));
+        let mut rules = self.policy.rules.clone();
+        rules.sort_by_key(|rule| (
+            match rule.family {
+                super::route_policy::AddressFamily::Ipv4 => 0u8,
+                super::route_policy::AddressFamily::Ipv6 => 1u8,
+            },
+            rule.priority,
+        ));
+        steps.extend(rules.into_iter().map(ApplyStep::AddRule));
         Ok(steps)
     }
 }
