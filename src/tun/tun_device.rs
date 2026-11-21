@@ -297,3 +297,25 @@ pub fn remove_persistent(name: &str) -> Result<()> {
     ensure!(rc == 0, "TUNSETPERSIST(0) failed: {}", std::io::Error::last_os_error());
     Ok(())
 }
+
+
+#[cfg(test)]
+mod persistent_tests {
+    use super::*;
+
+    #[test]
+    fn persistent_identity_preserves_only_valid_linux_interface_names() {
+        for name in ["tun0", "tun-proxyctl", "pctl_1"] {
+            assert_eq!(PersistentTunIdentity { name: name.into() }.name, name);
+        }
+        for name in ["", "bad/name", "1234567890123456"] {
+            assert!(validate_name(name).is_err());
+        }
+    }
+
+    #[test]
+    fn persistence_ioctl_rejects_invalid_descriptor_without_mutation() {
+        assert!(ioctl_retry(-1, TUNSETPERSIST, 1).is_err());
+        assert!(ioctl_retry(-1, TUNSETPERSIST, 0).is_err());
+    }
+}
