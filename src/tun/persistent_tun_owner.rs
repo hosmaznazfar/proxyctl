@@ -208,6 +208,13 @@ mod tests {
 }
 
 
+
+/// Stable kernel-visible alias used to recover a persistent TUN after a broker crash.
+pub fn generation_alias(activation_id: &str, generation: u64) -> Result<String> {
+    validate_identity(activation_id, generation)?;
+    Ok(format!("proxyctl:{activation_id}:{generation}"))
+}
+
 /// Registry for native cores that attach to a persistent named TUN device.
 ///
 /// Unlike PersistentTunOwner, this registry does not retain an open TUN queue.
