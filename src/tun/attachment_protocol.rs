@@ -263,6 +263,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_tiny_frame_length_before_json_decode() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        sender.write_all(&1u32.to_le_bytes()).unwrap();
+        sender.write_all(b"x").unwrap();
+        assert!(read_frame::<AttachmentOffer>(&mut receiver).is_err());
+    }
+
+    #[test]
     fn offer_round_trips_with_nonce_and_generation() {
         let expected = offer();
         let (mut sender, mut receiver) = UnixStream::pair().unwrap();
