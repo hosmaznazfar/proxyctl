@@ -227,6 +227,175 @@ pub struct ProxyTrafficObservation {
     pub expected_response_verified: bool,
 }
 
+/// An explicit, numeric-address HTTP target for a bounded probe through Xray's local HTTP proxy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpConnectProbeTarget {
+    pub destination: SocketAddr,
+    pub host_header: String,
+    pub path: String,
+    pub expected_status: u16,
+    /// Optional response marker. When non-empty it must occur in the HTTP response body.
+    pub expected_body_marker: Vec<u8>,
+}
+
+impl HttpConnectProbeTarget {
+    pub fn validate(&self) -> Result<()> {
+        ensure!(!self.destination.ip().is_unspecified()
+            && !self.destination.ip().is_multicast()
+            && self.destination.port() != 0,
+            "HTTP probe destination must be a concrete unicast endpoint");
+        ensure!(!self.host_header.is_empty() && self.host_header.len() <= 253
+            && self.host_header.bytes().all(|byte| byte.is_ascii_alphanumeric()
+                || matches!(byte, b'.' | b'-' | b':' | b'[' | b']')),
+            "HTTP probe Host header contains invalid characters");
+        ensure!(self.path.starts_with('/') && self.path.len() <= 2048
+            && !self.path.bytes().any(|byte| byte.is_ascii_control() || byte == b' '),
+            "HTTP probe path must be an absolute-path without control characters");
+        ensure!((100..=599).contains(&self.expected_status),
+            "HTTP probe expected status is outside the valid range");
+        ensure!(self.expected_body_marker.len() <= 1024
+            && !self.expected_body_marker.iter().any(|byte| *byte == b'\\r' || *byte == b'\\n'),
+            "HTTP probe body marker exceeds its bound or contains line breaks");
+        Ok(())
+    }
+}
+
+/// Execute a bounded HTTP CONNECT request through the process-owned local proxy listener.
+///
+/// The destination is numeric to avoid resolving names outside the proxy. The expected Host
+/// header remains caller-controlled and is validated against header injection. This returns
+/// generation-bound evidence only after the local listener, CONNECT tunnel, HTTP status, and
+/// optional body marker have all been checked.
+#[cfg(target_os = "linux")]
+pub fn probe_http_connect_traffic(
+    process: &super::process::ProcessIdentity,
+    listener: SocketAddr,
+    target: &HttpConnectProbeTarget,
+    activation_id: &str,
+    generation: u64,
+    timeout: Duration,
+    maximum_response_bytes: usize,
+) -> Result<ProxyTrafficObservation> {
+    use std::{io::{Read, Write}, net::TcpStream, time::Instant};
+
+    target.validate()?;
+    ensure!(!activation_id.is_empty() && generation > 0,
+        "HTTP probe activation identity is invalid");
+    ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(30),
+        "HTTP CONNECT probe timeout must be between zero and thirty seconds");
+    ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
+        "HTTP CONNECT response bound must be within one MiB");
+    ensure!(process.verify()?, "managed core identity is not live before HTTP CONNECT probe");
+    let started = Instant::now();
+    probe_core_listener(process, listener, timeout.min(Duration::from_secs(5)))?;
+
+    let mut stream = TcpStream::connect_timeout(&listener, timeout.min(Duration::from_secs(5)))
+        .context("cannot connect to the managed core HTTP proxy listener")?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
+    let authority = format!("{}:{}", target.destination.ip(), target.destination.port());
+    let connect = format!(
+        "CONNECT {authority} HTTP/1.1\\r\\nHost: {}\\r\\nProxy-Connection: Keep-Alive\\r\\n\\r\\n",
+        target.host_header
+    );
+    stream.write_all(connect.as_bytes()).context("cannot send bounded HTTP CONNECT request")?;
+    let connect_headers = read_http_header_block(&mut stream, 16 * 1024)
+        .context("cannot read HTTP CONNECT response headers")?;
+    let connect_status = parse_http_status(&connect_headers)?;
+    ensure!(connect_status == 200,
+        "managed core proxy did not establish the requested HTTP CONNECT tunnel");
+
+    let request = format!(
+        "GET {} HTTP/1.1\\r\\nHost: {}\\r\\nConnection: close\\r\\nAccept: */*\\r\\n\\r\\n",
+        target.path, target.host_header
+    );
+    stream.write_all(request.as_bytes()).context("cannot send HTTP request through the proxy tunnel")?;
+    let mut response = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let count = stream.read(&mut chunk).context("cannot read HTTP response through proxy tunnel")?;
+        if count == 0 { break; }
+        ensure!(response.len().saturating_add(count) <= maximum_response_bytes,
+            "HTTP CONNECT probe response exceeded its configured bound");
+        response.try_reserve(count).context("cannot reserve bounded HTTP probe response")?;
+        response.extend_from_slice(&chunk[..count]);
+    }
+    let status = parse_http_status(&response)?;
+    ensure!(status == target.expected_status,
+        "HTTP CONNECT probe returned an unexpected HTTP status");
+    let body = http_response_body(&response)?;
+    ensure!(target.expected_body_marker.is_empty()
+        || contains_bytes(body, &target.expected_body_marker),
+        "HTTP CONNECT probe response did not contain its expected body marker");
+    ensure!(process.verify()?, "managed core identity changed during HTTP CONNECT probe");
+
+    Ok(ProxyTrafficObservation {
+        activation_id: activation_id.to_owned(),
+        generation,
+        process: process.clone(),
+        destination: target.destination,
+        completed: true,
+        elapsed: started.elapsed(),
+        response_bytes: response.len(),
+        expected_response_verified: true,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn probe_http_connect_traffic(
+    _process: &(),
+    _listener: SocketAddr,
+    _target: &HttpConnectProbeTarget,
+    _activation_id: &str,
+    _generation: u64,
+    _timeout: Duration,
+    _maximum_response_bytes: usize,
+) -> Result<ProxyTrafficObservation> {
+    anyhow::bail!("HTTP CONNECT TUN traffic probing is supported only on Linux");
+}
+
+#[cfg(target_os = "linux")]
+fn read_http_header_block(stream: &mut std::net::TcpStream, maximum: usize) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut headers = Vec::new();
+    let mut byte = [0u8; 1];
+    while headers.len() < maximum {
+        stream.read_exact(&mut byte).context("HTTP response ended before its header terminator")?;
+        headers.push(byte[0]);
+        if headers.ends_with(b"\\r\\n\\r\\n") {
+            return Ok(headers);
+        }
+    }
+    anyhow::bail!("HTTP response headers exceeded their configured bound")
+}
+
+#[cfg(target_os = "linux")]
+fn parse_http_status(response: &[u8]) -> Result<u16> {
+    let line_end = response.windows(2).position(|window| window == b"\\r\\n")
+        .context("HTTP response has no complete status line")?;
+    let line = std::str::from_utf8(&response[..line_end])
+        .context("HTTP response status line is not valid ASCII")?;
+    let mut fields = line.split_ascii_whitespace();
+    ensure!(matches!(fields.next(), Some("HTTP/1.0" | "HTTP/1.1")),
+        "HTTP response uses an unsupported protocol version");
+    let status = fields.next().context("HTTP response has no status code")?
+        .parse::<u16>().context("HTTP response status code is invalid")?;
+    ensure!((100..=599).contains(&status), "HTTP response status code is outside the valid range");
+    Ok(status)
+}
+
+#[cfg(target_os = "linux")]
+fn http_response_body(response: &[u8]) -> Result<&[u8]> {
+    let offset = response.windows(4).position(|window| window == b"\\r\\n\\r\\n")
+        .context("HTTP response has no complete header block")?;
+    Ok(&response[offset + 4..])
+}
+
+#[cfg(target_os = "linux")]
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
+}
+
 /// Validate bounded traffic-probe evidence against the activation identity and limits.
 ///
 /// The API requires a non-zero generation, a concrete destination, positive bounded duration,
