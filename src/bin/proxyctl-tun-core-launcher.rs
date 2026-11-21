@@ -263,9 +263,11 @@ fn validate_xray_paths(executable: &Path, config: &Path) -> Result<()> {
     let config_metadata = fs::symlink_metadata(config)?;
     ensure!(config_metadata.file_type().is_file()
         && config_metadata.uid() == unsafe { libc::geteuid() }
+        && config_metadata.permissions().mode() & 0o700 == 0o600
         && config_metadata.permissions().mode() & 0o077 == 0
-        && config_metadata.permissions().mode() & 0o7000 == 0,
-        "Xray config must be a caller-owned private regular file");
+        && config_metadata.permissions().mode() & 0o7000 == 0
+        && config_metadata.nlink() == 1,
+        "Xray config must be a caller-owned, single-link 0600 regular file");
     let runtime = config.parent().context("Xray config has no runtime parent")?;
     let runtime_metadata = fs::symlink_metadata(runtime)?;
     ensure!(runtime_metadata.is_dir() && !runtime_metadata.file_type().is_symlink()
