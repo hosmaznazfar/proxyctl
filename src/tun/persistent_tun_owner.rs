@@ -122,7 +122,8 @@ impl PersistentTunOwner {
                 generation,
             })
             .and_then(|owned| {
-                (owned.device.name() == owned.interface.name).then_some(&owned.interface)
+                (owned.device.name() == owned.interface.name && owned.interface.index > 0)
+                    .then_some(&owned.interface)
             })
             .context("activation generation does not own a consistent retained TUN device")
     }
