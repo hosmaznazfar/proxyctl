@@ -151,8 +151,9 @@ impl LinuxJournalBackend {
                     .context("persistent interface fingerprint has invalid ifindex")?;
                 let alias = expected_value.get("alias").and_then(Value::as_str)
                     .context("persistent interface fingerprint has no generation alias")?;
+                let expected_alias = format!("proxyctl:{}:{}", journal.activation_id, self.generation);
+                ensure!(alias == expected_alias, "persistent interface fingerprint belongs to a different activation generation");
                 self.native_owner.forget_if_absent(name, index)?;
-                ensure!(!alias.is_empty(), "persistent interface fingerprint has an empty generation alias");
                 return Ok(ResourceState::AlreadyAbsent);
             }
             if kind == JournalOperationKind::CreateInterface
@@ -204,6 +205,8 @@ impl LinuxJournalBackend {
                 if kind == JournalOperationKind::CreatePersistentInterface {
                     let alias = value.get("alias").and_then(Value::as_str)
                         .context("persistent interface fingerprint has no generation alias")?;
+                    let expected_alias = format!("proxyctl:{}:{}", journal.activation_id, self.generation);
+                    ensure!(alias == expected_alias, "persistent TUN alias does not match the journal activation generation");
                     self.native_owner.release_recovered(name, index, alias)?;
                 } else {
                     self.owner.release(&journal.activation_id, self.generation, name, index)?;
