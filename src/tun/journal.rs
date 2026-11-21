@@ -8,6 +8,7 @@ pub(super) const MAX_JOURNAL_OPERATIONS: usize = 256;
 #[serde(rename_all = "snake_case")]
 pub enum JournalOperationKind {
     CreateInterface,
+    CreatePersistentInterface,
     AddRoute,
     AddRule,
 }
@@ -153,7 +154,7 @@ impl TransactionJournal {
         let mut cleanup_started = false;
         for (index, operation) in self.operations.iter().enumerate() {
             match operation.kind {
-                JournalOperationKind::CreateInterface => {
+                JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface => {
                     ensure!(
                         index == 0 && !interface_seen,
                         "interface creation must be the first and only interface operation"
