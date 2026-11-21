@@ -489,7 +489,8 @@ pub fn verify_xray_readiness(
 
 
 /// Execute the complete Xray readiness sequence from live observations rather than
-/// caller-authored boolean evidence: traffic first, then process/socket/route/host inspection.
+/// caller-authored boolean evidence: verify the unmarked kernel route, send direct traffic
+/// through TUN, then inspect the process/socket/route/host state.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_xray_end_to_end_readiness(
     runtime_directory: &Path,
@@ -509,9 +510,11 @@ pub fn verify_xray_end_to_end_readiness(
     baseline_host: &super::NetworkStatus,
     current_host: &super::NetworkStatus,
 ) -> Result<super::readiness::ProxyTrafficObservation> {
-    let traffic = super::readiness::probe_http_connect_traffic(
-        process, listener, target, activation_id, generation, probe_timeout, maximum_response_bytes,
-    ).context("Xray end-to-end HTTP CONNECT probe failed")?;
+    super::readiness::probe_unmarked_route_to_tun(plan, target.destination.ip())
+        .context("kernel does not route the unmarked application probe through the owned TUN table")?;
+    let traffic = super::readiness::probe_tun_routed_http_traffic(
+        process, target, activation_id, generation, probe_timeout, maximum_response_bytes,
+    ).context("direct application traffic did not traverse the Xray TUN dataplane")?;
     let preflight = super::readiness::collect_managed_preflight_with_response(
         runtime_directory, activation_id, process, listener, listener_timeout, plan,
         expected_peers, transport, baseline_host, current_host,
