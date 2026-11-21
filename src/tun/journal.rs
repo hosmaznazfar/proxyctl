@@ -689,6 +689,18 @@ mod validation_tests {
     }
 }
 
+#[cfg(test)]
+mod persistent_journal_tests {
+    use super::*;
+
+    fn journal(operations: Vec<JournalOperation>) -> TransactionJournal {
+        TransactionJournal { schema_version: 1, activation_id: "12345678-1234-4234-8234-123456789abc".into(), generation: 1, operations }
+    }
+
+    fn operation(sequence: u32, kind: JournalOperationKind, key: &str) -> JournalOperation {
+        JournalOperation { sequence, kind, resource_key: key.into(), state: JournalOperationState::Applied, fingerprint: Some("fixture-fingerprint".into()) }
+    }
+
     #[test]
     fn persistent_interface_creation_is_a_valid_first_journal_operation() {
         let value = journal(vec![operation(
@@ -711,3 +723,5 @@ mod validation_tests {
         )]);
         assert!(value.validate().is_err());
     }
+
+}
