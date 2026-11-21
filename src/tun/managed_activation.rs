@@ -182,6 +182,7 @@ pub fn monitor_managed_core(
     // Persist the exit before asking the broker to mutate kernel state. A failed recovery
     // therefore leaves a durable CleanupPending/Conflicted record for a later retry.
     coordinator.apply_event(&activation.token, SupervisorEvent::CoreExited)?;
+    stop_core_service_for_generation(&activation.token, Some(process.identity()))?;
     let response = helper.recover(
         activation.token.activation_id().to_owned(),
         activation.token.generation(),
@@ -195,6 +196,24 @@ pub fn monitor_managed_core(
 
 
 /// Stop a core whose identity was persisted while its activation is still Prepared.
+#[cfg(target_os = "linux")]
+fn stop_core_service_for_generation(
+    token: &ActivationToken,
+    process: Option<&ProcessIdentity>,
+) -> Result<()> {
+    super::xray_launcher::stop_xray_generation(
+        token.activation_id(), token.generation(), process,
+    ).context("cannot confirm stop of the generation-bound Xray system service")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn stop_core_service_for_generation(
+    _token: &ActivationToken,
+    _process: Option<&ProcessIdentity>,
+) -> Result<()> {
+    Ok(())
+}
+
 fn terminate_prepared_core_process(
     coordinator: &LifecycleCoordinator,
     token: &ActivationToken,
@@ -257,6 +276,7 @@ pub fn resume_managed_supervision(
         if phase == SupervisorPhase::Prepared {
             terminate_prepared_core_process(coordinator, &token)?;
         }
+        stop_core_service_for_generation(&token, current.snapshot.core_process.as_ref())?;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
         anyhow::ensure!(response.success,
             "broker cleanup for interrupted {phase:?} activation failed: {}", response.message);
@@ -272,6 +292,7 @@ pub fn resume_managed_supervision(
         .context("running activation has no persisted core process identity")?;
     if !identity.verify()? {
         coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
+        stop_core_service_for_generation(&token, Some(&identity))?;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
         anyhow::ensure!(response.success, "dead-core broker cleanup failed: {}", response.message);
         return Ok(response);
@@ -280,6 +301,7 @@ pub fn resume_managed_supervision(
         Ok(process) => process,
         Err(_error) if !identity.verify()? => {
             coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
+            stop_core_service_for_generation(&token, Some(&identity))?;
             let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
             anyhow::ensure!(response.success, "dead-core broker cleanup failed: {}", response.message);
             return Ok(response);
@@ -288,6 +310,7 @@ pub fn resume_managed_supervision(
     };
     if process.is_exited()? {
         coordinator.apply_event(&token, SupervisorEvent::CoreExited)?;
+        stop_core_service_for_generation(&token, Some(&identity))?;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
         anyhow::ensure!(response.success, "exited-core broker cleanup failed: {}", response.message);
         return Ok(response);
