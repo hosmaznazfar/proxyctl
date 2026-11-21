@@ -39,7 +39,7 @@ impl XrayTunDescriptor {
     pub fn configure_command(&self, command: &mut Command) -> Result<()> {
         let raw = self.descriptor.as_raw_fd();
         ensure!(raw >= 3, "Xray TUN descriptor overlaps standard I/O");
-        command.env("XRAY_TUN_FD", raw.to_string());
+        command.env(super::XRAY_TUN_FD_ENV, raw.to_string());
         // SAFETY: the pre-exec closure performs only async-signal-safe fcntl operations.
         // The descriptor is owned by self and must remain alive until spawn returns.
         unsafe {
