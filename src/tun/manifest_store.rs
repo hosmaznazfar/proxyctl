@@ -134,9 +134,12 @@ impl ManifestStore {
                 "TUN runtime directory must not have special permission bits"
             );
         }
-        let directory = fs::canonicalize(&directory)
-            .context("cannot canonicalize TUN runtime directory")?;
-        ensure!(directory.is_absolute(), "TUN runtime directory must resolve to an absolute path");
+        let directory =
+            fs::canonicalize(&directory).context("cannot canonicalize TUN runtime directory")?;
+        ensure!(
+            directory.is_absolute(),
+            "TUN runtime directory must resolve to an absolute path"
+        );
         Ok(Self { directory })
     }
 
@@ -266,15 +269,16 @@ impl ManifestStore {
         bytes
             .try_reserve_exact(metadata.len() as usize)
             .context("cannot reserve bounded TUN manifest read buffer")?;
-        (&file).take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
+        (&file)
+            .take(MAX_MANIFEST_BYTES + 1)
+            .read_to_end(&mut bytes)?;
         ensure!(
             bytes.len() as u64 <= MAX_MANIFEST_BYTES,
             "TUN manifest exceeds size limit"
         );
         let after_read = file.metadata()?;
         ensure!(
-            bytes.len() as u64 == metadata.len()
-                && after_read.len() == metadata.len(),
+            bytes.len() as u64 == metadata.len() && after_read.len() == metadata.len(),
             "TUN manifest changed size while it was being read"
         );
         #[cfg(unix)]
