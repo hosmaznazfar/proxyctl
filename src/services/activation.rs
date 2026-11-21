@@ -319,7 +319,7 @@ pub fn stop() -> anyhow::Result<()> {
                 orchestrator.stop_current_xray()
                     .context("cannot stop the active generation-bound TUN service")?;
             } else if let Some(journal) = transaction_journal {
-                crate::tun::xray_launcher::stop_xray_generation(
+                crate::tun::xray_launcher::stop_core_service_generation(
                     &journal.activation_id, journal.generation, None,
                 ).context("cannot stop the Xray service associated with the orphaned TUN journal")?;
                 let recovery = helper.recover(journal.activation_id, journal.generation);
