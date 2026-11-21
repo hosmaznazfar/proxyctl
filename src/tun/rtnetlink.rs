@@ -555,8 +555,19 @@ fn wait_for_socket(fd: i32, events: i16, deadline: std::time::Instant) -> Result
 }
 
 fn validate_kernel_sender(sender: &libc::sockaddr_nl, sender_len: libc::socklen_t) -> Result<()> {
+    // libc intentionally hides the ABI-reserved nl_pad field on some targets. The Linux
+    // sockaddr_nl ABI places its two-byte reserved field immediately after nl_family.
+    // SAFETY: sender points to a fully initialized sockaddr_nl and the slice is bounded by
+    // that exact object; repr(C) preserves the kernel ABI field order.
+    let bytes = unsafe {
+        std::slice::from_raw_parts(
+            (sender as *const libc::sockaddr_nl).cast::<u8>(),
+            std::mem::size_of::<libc::sockaddr_nl>(),
+        )
+    };
     ensure!(
         sender_len as usize == std::mem::size_of::<libc::sockaddr_nl>()
+            && bytes.get(2..4) == Some(&[0, 0])
             && sender.nl_family == libc::AF_NETLINK as u16
             && sender.nl_pid == 0
             && sender.nl_groups == 0,
@@ -944,6 +955,17 @@ mod tests {
         let length = std::mem::size_of::<libc::sockaddr_nl>() as libc::socklen_t;
         validate_kernel_sender(&sender, length).unwrap();
 
+        // Exercise the ABI-reserved padding without naming libc's private field.
+        // SAFETY: the byte slice is restricted to the initialized sockaddr_nl object.
+        let bytes = unsafe {
+            std::slice::from_raw_parts_mut(
+                (&mut sender as *mut libc::sockaddr_nl).cast::<u8>(),
+                std::mem::size_of::<libc::sockaddr_nl>(),
+            )
+        };
+        bytes[2] = 1;
+        assert!(validate_kernel_sender(&sender, length).is_err());
+        bytes[2] = 0;
         sender.nl_pid = 42;
         assert!(validate_kernel_sender(&sender, length).is_err());
         sender.nl_pid = 0;
