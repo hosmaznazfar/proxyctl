@@ -51,6 +51,7 @@ impl ProcessIdentity {
             .context("process executable identity is not valid UTF-8")?;
         ensure!(
             self.executable.is_absolute()
+                && self.executable.as_os_str().len() <= 4096
                 && self.executable.file_name().is_some()
                 && !executable_text
                     .bytes()
