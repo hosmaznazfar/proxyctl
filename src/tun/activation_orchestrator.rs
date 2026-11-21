@@ -433,11 +433,23 @@ impl<'a> ActivationOrchestrator<'a> {
             current.token.generation(),
             process,
         ).context("could not stop the exact Xray service before TUN cleanup")?;
-        let response = self.helper.recover(
+        let recovery = self.helper.recover(
             current.token.activation_id().to_owned(),
             current.token.generation(),
+        );
+        if matches!(recovery, Ok(ref response) if response.success) {
+            return Ok(());
+        }
+        // The independent systemd supervisor may win the race and finish the same generation
+        // while the explicit stop request is waiting. Accept that only when both durable
+        // ownership records are absent; never infer success from a failed IPC response alone.
+        let store = super::manifest_store::ManifestStore::open(
+            self.coordinator.runtime_directory().to_path_buf()
         )?;
-        ensure!(response.success, "exact-generation Xray TUN cleanup failed: {}", response.message);
+        ensure!(store.load()?.is_none() && store.load_transaction_journal()?.is_none(),
+            "exact-generation Xray TUN cleanup is incomplete: {}",
+            recovery.map(|response| response.message)
+                .unwrap_or_else(|error| format!("{error:#}")));
         Ok(())
     }
 
