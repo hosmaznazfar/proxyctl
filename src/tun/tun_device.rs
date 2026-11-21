@@ -9,6 +9,7 @@ use std::{
     },
 };
 const TUNSETIFF: libc::c_ulong = 0x4004_54ca;
+const TUNSETPERSIST: libc::c_ulong = 0x4004_54cb;
 const TUNSETOWNER: libc::c_ulong = 0x4004_54cc;
 const TUNSETGROUP: libc::c_ulong = 0x4004_54ce;
 const IFF_TUN: u16 = 1;
@@ -228,4 +229,71 @@ mod tests {
             assert!(validate_name(name).is_ok());
         }
     }
+}
+
+
+/// A named TUN device whose kernel lifetime is independent of the creating descriptor.
+///
+/// Native cores such as sing-box and Mihomo attach by interface name rather than
+/// accepting Proxyctl's descriptor. The broker must therefore make the device
+/// persistent, close its own descriptor, and later remove persistence only after
+/// the exact core service has stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersistentTunIdentity {
+    pub name: String,
+}
+
+/// Create a persistent TUN interface and close the broker's descriptor.
+///
+/// This is intentionally a low-level primitive. Callers must durably journal the
+/// returned name and ifindex before installing routes or starting a native core.
+pub fn create_persistent(name: &str, uid: u32, gid: u32) -> Result<PersistentTunIdentity> {
+    let device = TunDevice::create(name, uid, gid)?;
+    // TUNSETPERSIST is applied only after TUNSETIFF, owner/group assignment and
+    // link-up all succeeded. If this ioctl fails, dropping the descriptor removes
+    // the non-persistent interface created above.
+    let result = ioctl_retry(device.as_raw_fd(), TUNSETPERSIST, 1)?;
+    ensure!(result == 0, "TUNSETPERSIST(1) failed: {}", std::io::Error::last_os_error());
+    let identity = PersistentTunIdentity { name: device.name().to_owned() };
+    drop(device);
+    Ok(identity)
+}
+
+/// Remove persistence from an existing interface after its core has been stopped.
+///
+/// The interface name is validated and the kernel-returned TUN identity is checked
+/// before TUNSETPERSIST(0). The caller must additionally compare the live ifindex
+/// against its durable manifest immediately before invoking this operation.
+pub fn remove_persistent(name: &str) -> Result<()> {
+    validate_name(name)?;
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        .open("/dev/net/tun")
+        .context("securely open /dev/net/tun for persistent TUN cleanup")?;
+    ensure_tun_character_device(&file)?;
+    let fd: OwnedFd = file.into();
+    ensure_descriptor_cloexec(fd.as_raw_fd())?;
+    let mut req = IfReq {
+        name: [0; IFNAMSIZ],
+        flags: (IFF_TUN | IFF_NO_PI) as libc::c_short,
+        padding: [0; 6],
+    };
+    for (dst, src) in req.name.iter_mut().zip(name.bytes()) {
+        *dst = src as libc::c_char;
+    }
+    let rc = ioctl_retry(fd.as_raw_fd(), TUNSETIFF, (&mut req as *mut IfReq) as usize)?;
+    ensure!(rc == 0, "TUNSETIFF attach for persistent cleanup failed: {}", std::io::Error::last_os_error());
+    let returned_name = req.name.iter()
+        .take_while(|character| **character != 0)
+        .map(|character| *character as u8)
+        .collect::<Vec<_>>();
+    ensure!(
+        returned_name == name.as_bytes(),
+        "kernel attached an unexpected TUN interface during persistent cleanup"
+    );
+    let rc = ioctl_retry(fd.as_raw_fd(), TUNSETPERSIST, 0)?;
+    ensure!(rc == 0, "TUNSETPERSIST(0) failed: {}", std::io::Error::last_os_error());
+    Ok(())
 }
