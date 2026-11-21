@@ -505,7 +505,7 @@ fn journal_interface_identity(
     let operation = journal
         .operations
         .iter()
-        .find(|operation| operation.kind == JournalOperationKind::CreateInterface)
+        .find(|operation| matches!(operation.kind, JournalOperationKind::CreateInterface | JournalOperationKind::CreatePersistentInterface))
         .context("journal has no TUN interface creation operation")?;
     let fingerprint = operation
         .fingerprint
