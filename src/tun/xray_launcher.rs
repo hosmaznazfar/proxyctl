@@ -485,7 +485,7 @@ pub fn verify_xray_end_to_end_readiness(
     listener: std::net::SocketAddr,
     listener_timeout: Duration,
     plan: &super::route_policy::RoutingPolicyPlan,
-    expected_peer: std::net::SocketAddr,
+    expected_peers: &[std::net::SocketAddr],
     transport: super::privilege_broker::BrokerSocketTransport,
     target: &super::readiness::HttpConnectProbeTarget,
     activation_id: &str,
@@ -500,11 +500,12 @@ pub fn verify_xray_end_to_end_readiness(
     ).context("Xray end-to-end HTTP CONNECT probe failed")?;
     let preflight = super::readiness::collect_managed_preflight_with_response(
         runtime_directory, activation_id, process, listener, listener_timeout, plan,
-        expected_peer, transport, baseline_host, current_host,
+        expected_peers, transport, baseline_host, current_host,
     ).context("Xray managed preflight evidence collection failed")?;
+    let observed_peer = preflight.socket_mark_response.expected_peer;
     verify_xray_readiness(
         process, interface_name, expected, &preflight.evidence, listener, listener_timeout,
-        plan, &preflight.socket_mark_response, expected_peer, transport, &traffic,
+        plan, &preflight.socket_mark_response, observed_peer, transport, &traffic,
         activation_id, generation, probe_timeout, maximum_response_bytes,
     ).context("Xray full readiness verification failed")?;
     Ok(traffic)
