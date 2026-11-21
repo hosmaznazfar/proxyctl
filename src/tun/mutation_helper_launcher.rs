@@ -81,7 +81,7 @@ impl MutationHelper {
             helper_metadata.permissions().mode() & 0o111 != 0,
             "TUN helper executable has no execute permission"
         );
-        Command::new(HELPER)
+        let mut child = Command::new(HELPER)
             .arg("--mutation-socket")
             .arg(&socket)
             .stdin(Stdio::null())
@@ -94,8 +94,21 @@ impl MutationHelper {
             if probe(&socket) {
                 return Ok(Self { socket });
             }
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    anyhow::bail!("mutation helper exited before becoming ready: {status}");
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error).context("cannot inspect mutation helper startup process");
+                }
+            }
             std::thread::sleep(POLL);
         }
+        let _ = child.kill();
+        let _ = child.wait();
         anyhow::bail!("mutation helper did not become ready before deadline");
     }
 
