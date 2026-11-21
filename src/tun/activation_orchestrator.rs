@@ -41,6 +41,7 @@ impl ActivationRequest {
         ensure!(self.bypass_priority >= super::route_policy::RPDB_PRIORITY_MIN_PROXYCTL && self.proxy_priority >= super::route_policy::RPDB_PRIORITY_MIN_PROXYCTL, "rule priorities must be in the Proxyctl allocation range");
         ensure!(self.bypass_priority > 0 && self.proxy_priority > 0, "routing rule priorities must be positive");
         ensure!(self.bypass_priority != self.proxy_priority, "routing rule priorities must be distinct");
+        ensure!(self.bypass_priority < self.proxy_priority, "core bypass priority must precede proxy routing priority");
         ensure!(self.core_mark > 0 && self.core_mark <= i32::MAX as u32, "core mark must be non-zero and fit the native-core range");
         ensure!(self.core_mark_mask > 0 && self.core_mark & !self.core_mark_mask == 0, "core mark must fit a non-zero mark mask");
         ensure!(self.core_mark_mask <= i32::MAX as u32, "core mark mask must fit the native-core range");
@@ -302,6 +303,8 @@ mod request_tests {
     fn rejects_zero_generation() { let mut r=valid(); r.generation=0; assert!(r.validate().is_err()); }
     #[test]
     fn rejects_duplicate_priorities() { let mut r=valid(); r.proxy_priority=r.bypass_priority; assert!(r.validate().is_err()); }
+    #[test]
+    fn rejects_bypass_priority_after_proxy_priority() { let mut r=valid(); r.bypass_priority=r.proxy_priority+1; assert!(r.validate().is_err()); }
     #[test]
     fn rejects_mark_outside_mask() { let mut r=valid(); r.core_mark=0x100; assert!(r.validate().is_err()); }
     #[test]
