@@ -95,7 +95,10 @@ pub fn receive_descriptor(stream: &UnixStream) -> Result<OwnedFd> {
     ensure!(message.msg_flags & (libc::MSG_CTRUNC | libc::MSG_TRUNC) == 0, "descriptor control message was truncated");
     ensure!(!unexpected_control, "unexpected ancillary message");
     ensure!(descriptors.len() == 1, "transfer must contain exactly one descriptor");
-    Ok(descriptors.pop().expect("descriptor count was validated"))
+    let descriptor = descriptors.pop().expect("descriptor count was validated");
+    let flags = unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) };
+    ensure!(flags >= 0 && flags & libc::FD_CLOEXEC != 0, "received descriptor is not marked close-on-exec");
+    Ok(descriptor)
 }
 #[cfg(test)]
 mod tests {
