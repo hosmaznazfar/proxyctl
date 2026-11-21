@@ -501,6 +501,10 @@ fn validate_request(bytes: &[u8]) -> Result<()> {
         declared as usize == bytes.len(),
         "netlink request length does not match its header"
     );
+    ensure!(
+        bytes.len() == NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN,
+        "RTM_GETLINK request has an unexpected payload size"
+    );
     let kind = u16::from_ne_bytes(bytes[4..6].try_into()?);
     ensure!(
         kind == RTM_GETLINK,
