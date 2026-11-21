@@ -242,8 +242,10 @@ impl HttpConnectProbeTarget {
     pub fn validate(&self) -> Result<()> {
         ensure!(!self.destination.ip().is_unspecified()
             && !self.destination.ip().is_multicast()
+            && !self.destination.ip().is_loopback()
+            && !self.destination.ip().is_link_local()
             && self.destination.port() != 0,
-            "HTTP probe destination must be a concrete unicast endpoint");
+            "HTTP probe destination must be a concrete non-local unicast endpoint");
         ensure!(!self.host_header.is_empty() && self.host_header.len() <= 253
             && self.host_header.bytes().all(|byte| byte.is_ascii_alphanumeric()
                 || matches!(byte, b'.' | b'-' | b':' | b'[' | b']')),
@@ -251,8 +253,8 @@ impl HttpConnectProbeTarget {
         ensure!(self.path.starts_with('/') && self.path.len() <= 2048
             && !self.path.bytes().any(|byte| byte.is_ascii_control() || byte == b' '),
             "HTTP probe path must be an absolute-path without control characters");
-        ensure!((100..=599).contains(&self.expected_status),
-            "HTTP probe expected status is outside the valid range");
+        ensure!((200..=599).contains(&self.expected_status),
+            "HTTP probe expected status must be a final 2xx–5xx response");
         ensure!(self.expected_body_marker.len() <= 1024
             && !self.expected_body_marker.iter().any(|byte| *byte == b'\r' || *byte == b'\n'),
             "HTTP probe body marker exceeds its bound or contains line breaks");
@@ -287,12 +289,17 @@ pub fn probe_http_connect_traffic(
         "HTTP CONNECT response bound must be within one MiB");
     ensure!(process.verify()?, "managed core identity is not live before HTTP CONNECT probe");
     let started = Instant::now();
+    let deadline = started + timeout;
     probe_core_listener(process, listener, timeout.min(Duration::from_secs(5)))?;
+    ensure!(Instant::now() < deadline, "HTTP CONNECT probe deadline expired during listener ownership verification");
 
-    let mut stream = TcpStream::connect_timeout(&listener, timeout.min(Duration::from_secs(5)))
+    let connect_timeout = deadline.saturating_duration_since(Instant::now()).min(Duration::from_secs(5));
+    let mut stream = TcpStream::connect_timeout(&listener, connect_timeout)
         .context("cannot connect to the managed core HTTP proxy listener")?;
-    stream.set_read_timeout(Some(timeout))?;
-    stream.set_write_timeout(Some(timeout))?;
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    ensure!(!remaining.is_zero(), "HTTP CONNECT probe deadline expired after listener connection");
+    stream.set_read_timeout(Some(remaining))?;
+    stream.set_write_timeout(Some(remaining))?;
     let authority = format!("{}:{}", target.destination.ip(), target.destination.port());
     let connect = format!(
         "CONNECT {authority} HTTP/1.1\r\nHost: {}\r\nProxy-Connection: Keep-Alive\r\n\r\n",
@@ -304,6 +311,10 @@ pub fn probe_http_connect_traffic(
     let connect_status = parse_http_status(&connect_headers)?;
     ensure!(connect_status == 200,
         "managed core proxy did not establish the requested HTTP CONNECT tunnel");
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    ensure!(!remaining.is_zero(), "HTTP CONNECT probe deadline expired during tunnel setup");
+    stream.set_read_timeout(Some(remaining))?;
+    stream.set_write_timeout(Some(remaining))?;
 
     let request = format!(
         "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept: */*\r\n\r\n",
@@ -313,6 +324,9 @@ pub fn probe_http_connect_traffic(
     let mut response = Vec::new();
     let mut chunk = [0u8; 4096];
     loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        ensure!(!remaining.is_zero(), "HTTP CONNECT probe exceeded its aggregate deadline");
+        stream.set_read_timeout(Some(remaining))?;
         let count = stream.read(&mut chunk).context("cannot read HTTP response through proxy tunnel")?;
         if count == 0 { break; }
         ensure!(response.len().saturating_add(count) <= maximum_response_bytes,
@@ -327,6 +341,7 @@ pub fn probe_http_connect_traffic(
     ensure!(target.expected_body_marker.is_empty()
         || contains_bytes(body, &target.expected_body_marker),
         "HTTP CONNECT probe response did not contain its expected body marker");
+    ensure!(Instant::now() <= deadline, "HTTP CONNECT probe exceeded its aggregate deadline");
     ensure!(process.verify()?, "managed core identity changed during HTTP CONNECT probe");
 
     Ok(ProxyTrafficObservation {
@@ -421,12 +436,12 @@ pub fn validate_proxy_traffic_observation(
         "traffic observation destination is invalid");
     ensure!(!maximum_duration.is_zero() && maximum_duration <= Duration::from_secs(30),
         "traffic observation duration bound must be within thirty seconds");
-    ensure!(observation.completed && !observation.elapsed.is_zero() && observation.elapsed <= maximum_duration,
+    ensure!(observation.completed && observation.elapsed <= maximum_duration,
         "traffic probe did not complete within its duration bound");
     ensure!(maximum_response_bytes > 0 && maximum_response_bytes <= 1024 * 1024,
         "traffic response bound must be within one MiB");
-    ensure!(observation.response_bytes <= maximum_response_bytes,
-        "traffic probe exceeded its response size bound");
+    ensure!(observation.response_bytes > 0 && observation.response_bytes <= maximum_response_bytes,
+        "traffic probe response size is empty or exceeded its configured bound");
     ensure!(observation.expected_response_verified,
         "traffic probe did not independently verify its expected response");
     ensure!(process.verify()?, "managed core identity changed after traffic probe");
