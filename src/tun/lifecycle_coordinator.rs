@@ -243,6 +243,9 @@ fn acquire_platform_lock(path: &std::path::Path, timeout: Duration) -> Result<Fi
             return Ok(file);
         }
         let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            continue;
+        }
         if !matches!(error.raw_os_error(), Some(libc::EWOULDBLOCK)) {
             return Err(error).context("cannot acquire TUN lifecycle lock");
         }
