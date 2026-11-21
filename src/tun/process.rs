@@ -278,6 +278,10 @@ pub fn read_process_owner_uid(handle: &ProcessHandle) -> Result<u32> {
         !handle.is_exited()?,
         "process exited during owner inspection"
     );
+    ensure!(
+        identity.verify()?,
+        "process identity changed before owner inspection completed"
+    );
     Ok(real)
 }
 
