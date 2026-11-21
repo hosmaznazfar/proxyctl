@@ -197,10 +197,13 @@ impl ProcessHandle {
             !self.is_exited()?,
             "refusing to signal a process that has already exited"
         );
-        ensure!(
-            self.identity.verify()?,
-            "refusing to signal a process whose identity no longer matches"
-        );
+        if !self.identity.verify()? {
+            ensure!(
+                self.is_exited()?,
+                "refusing to signal a process whose identity no longer matches"
+            );
+            anyhow::bail!("refusing to signal an exited process");
+        }
         loop {
             let result = unsafe {
                 libc::syscall(
