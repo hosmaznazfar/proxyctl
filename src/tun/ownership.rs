@@ -272,6 +272,12 @@ mod tests {
         let mut value = manifest();
         value.rule_priority = RPDB_PRIORITY_MIN_PROXYCTL - 1;
         assert!(value.validate().is_err());
+        let mut value = manifest();
+        value.rule_priority = i32::MAX as u32 + 1;
+        assert!(value.validate().is_err());
+        let mut value = manifest();
+        value.rule_priority = i32::MAX as u32;
+        assert!(value.validate().is_ok());
     }
 
     #[test]
