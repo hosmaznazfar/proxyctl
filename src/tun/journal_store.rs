@@ -116,7 +116,9 @@ impl JournalStore {
                 .any(|operation| operation.resource_key == resource_key),
             "journal resource already exists"
         );
-        journal.operations.try_reserve(1)
+        journal
+            .operations
+            .try_reserve(1)
             .context("cannot reserve transaction journal operation capacity")?;
         journal.operations.push(JournalOperation {
             sequence: journal.operations.len() as u32,
@@ -229,9 +231,12 @@ impl JournalStore {
         verify_owner(&metadata)?;
         verify_private_file(&metadata)?;
         let mut bytes = Vec::new();
-        bytes.try_reserve_exact(metadata.len() as usize)
+        bytes
+            .try_reserve_exact(metadata.len() as usize)
             .context("cannot reserve bounded TUN journal read buffer")?;
-        (&file).take(MAX_JOURNAL_BYTES + 1).read_to_end(&mut bytes)?;
+        (&file)
+            .take(MAX_JOURNAL_BYTES + 1)
+            .read_to_end(&mut bytes)?;
         ensure!(
             bytes.len() as u64 <= MAX_JOURNAL_BYTES,
             "TUN transaction journal exceeds size limit"
