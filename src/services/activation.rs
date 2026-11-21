@@ -479,7 +479,6 @@ pub fn activate_tun_xray(
         host_header: probe.host_str().context("TUN readiness probe URL has no host")?.to_owned(),
         path: if probe.path().is_empty() { "/".into() } else { probe.path().to_owned() },
         expected_status,
-        expected_body_marker: Vec::new(),
     };
     traffic_target.validate()?;
 
