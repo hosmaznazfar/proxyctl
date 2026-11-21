@@ -365,6 +365,19 @@ mod validation_tests {
     }
 
     #[test]
+    fn journal_rejects_whitespace_only_applied_fingerprints() {
+        for fingerprint in ["", "   ", "\n\t"] {
+            let mut value = journal(vec![operation(
+                0,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            )]);
+            value.operations[0].fingerprint = Some(fingerprint.into());
+            assert!(value.validate().is_err());
+        }
+    }
+
+    #[test]
     fn every_route_and_rule_requires_the_interface_creation_intent_first() {
         let route_first = journal(vec![operation(
             0,
