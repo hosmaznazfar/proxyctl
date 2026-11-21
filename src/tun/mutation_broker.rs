@@ -83,7 +83,8 @@ impl MutationRequest {
             Self::Ping { version } => {
                 ensure!(*version == VERSION, "unsupported mutation broker protocol version");
             }
-            Self::Activate {\n                version,
+            Self::Activate {
+                version,
                 activation_id,
                 generation,
                 interface_name,
