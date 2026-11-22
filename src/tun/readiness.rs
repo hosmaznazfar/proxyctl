@@ -638,6 +638,7 @@ pub fn validate_proxy_traffic_observation(
 /// readiness gate over the supplied evidence. The supplied evidence must already contain
 /// all other independently collected signals.
 #[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
 pub fn verify_readiness_with_traffic_observation(
     expected: &ReadinessExpectation<'_>,
     evidence: &ReadinessEvidence,
