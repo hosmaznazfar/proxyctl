@@ -572,16 +572,18 @@ mod tests {
     }
 
     #[test]
-    fn native_transaction_rolls_back_persistent_device_after_invalid_fingerprint() {
+    fn native_transaction_retains_journal_after_ambiguous_route_failure() {
         let mut backend = FakeBackend {
-            empty_fingerprint_at: Some(1),
+            fail_add_at: Some(1),
             ..Default::default()
         };
         assert!(apply_native(&transaction(), &mut backend).is_err());
         assert_eq!(backend.native_create_count, 1);
-        assert!(backend.interface.is_none());
-        assert!(backend.resources.is_empty());
-        assert!(backend.finalized);
+        // An add failure may occur after the kernel mutation. Without an exact
+        // fingerprint, cleanup is unsafe; preserve the interface and journal.
+        assert!(backend.interface.is_some());
+        assert!(backend.journal_retained);
+        assert!(!backend.finalized);
     }
 
     #[test]
