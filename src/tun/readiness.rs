@@ -78,12 +78,12 @@ fn verify_listener_process_ownership(
             else {
                 continue;
             };
-            if address == listener.ip() && port == listener.port() {
-                if let Ok(inode) = fields[9].parse::<u64>() {
-                    if inode > 0 {
-                        listener_inodes.insert(inode);
-                    }
-                }
+            if address == listener.ip()
+                && port == listener.port()
+                && let Ok(inode) = fields[9].parse::<u64>()
+                && inode > 0
+            {
+                listener_inodes.insert(inode);
             }
         }
     }
@@ -109,7 +109,7 @@ fn parse_proc_tcp_endpoint(value: &str, ipv6: bool) -> Option<(std::net::IpAddr,
             return None;
         }
         let mut bytes = [0u8; 16];
-        for (index, chunk) in address.as_bytes().chunks_exact(8).enumerate() {
+        for (index, chunk) in address.as_bytes().as_chunks::<8>().0.iter().enumerate() {
             let word = u32::from_str_radix(std::str::from_utf8(chunk).ok()?, 16).ok()?;
             bytes[index * 4..index * 4 + 4].copy_from_slice(&word.to_le_bytes());
         }
@@ -520,15 +520,15 @@ fn http_response_allows_keepalive(response: &[u8]) -> Result<bool> {
         .unwrap_or_default();
     let mut keep_alive = protocol == "HTTP/1.1";
     for line in lines {
-        if let Some((name, value)) = line.split_once(':') {
-            if name.eq_ignore_ascii_case("connection") {
-                for token in value.split(',').map(str::trim) {
-                    if token.eq_ignore_ascii_case("close") {
-                        return Ok(false);
-                    }
-                    if token.eq_ignore_ascii_case("keep-alive") {
-                        keep_alive = true;
-                    }
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("connection")
+        {
+            for token in value.split(',').map(str::trim) {
+                if token.eq_ignore_ascii_case("close") {
+                    return Ok(false);
+                }
+                if token.eq_ignore_ascii_case("keep-alive") {
+                    keep_alive = true;
                 }
             }
         }
@@ -1172,7 +1172,7 @@ pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Re
                 value
                     .get("dst")
                     .and_then(serde_json::Value::as_str)
-                    .map_or(true, |destination| {
+                    .is_none_or(|destination| {
                         destination == "default" || destination == family.default_prefix()
                     })
                     && value.get("dev").and_then(serde_json::Value::as_str)
@@ -1180,7 +1180,7 @@ pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Re
                     && value
                         .get("type")
                         .and_then(serde_json::Value::as_str)
-                        .map_or(true, |kind| kind == "unicast")
+                        .is_none_or(|kind| kind == "unicast")
             })
             .count();
         ensure!(
