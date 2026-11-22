@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn manifest_rejects_whitespace_only_fingerprints() {
-        for fingerprint in ["", "   ", "\\n\\t"] {
+        for fingerprint in ["", "   ", "\n\t"] {
             let mut value = manifest();
             value.resources[0].fingerprint = fingerprint.into();
             assert!(value.validate().is_err());
