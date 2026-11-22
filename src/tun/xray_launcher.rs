@@ -807,7 +807,9 @@ pub fn wait_for_xray_tun_attachment(
         match verify_xray_tun_attachment(process, interface_name, expected_ifindex) {
             Ok(()) => return Ok(()),
             Err(error) if std::time::Instant::now() >= deadline => {
-                return Err(error).context("Xray did not adopt the expected TUN interface before the startup deadline");
+                return Err(error).context(
+                    "Xray did not adopt the expected TUN interface before the startup deadline",
+                );
             }
             Err(_) => {}
         }
