@@ -319,7 +319,7 @@ impl CoreAdapter for MihomoAdapter {
     }
 
     fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
-        super::super::super::TunAttachmentMode::NativeDeviceCreation
+        super::super::TunAttachmentMode::NativeDeviceCreation
     }
 
     fn generate_tun_activation_config(
