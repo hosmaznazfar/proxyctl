@@ -978,6 +978,18 @@ impl<'a> ActivationOrchestrator<'a> {
     }
 }
 
+
+fn canonical_activation_id(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(i, b)| {
+            if [8, 13, 18, 23].contains(&i) {
+                b == b'-'
+            } else {
+                b.is_ascii_hexdigit() && !b.is_ascii_uppercase()
+            }
+        })
+}
+
 #[cfg(test)]
 mod request_tests {
     use super::*;
@@ -1061,15 +1073,4 @@ mod request_tests {
         r.bypass_priority = 1;
         assert!(r.validate().is_err());
     }
-}
-
-fn canonical_activation_id(value: &str) -> bool {
-    value.len() == 36
-        && value.bytes().enumerate().all(|(i, b)| {
-            if [8, 13, 18, 23].contains(&i) {
-                b == b'-'
-            } else {
-                b.is_ascii_hexdigit() && !b.is_ascii_uppercase()
-            }
-        })
 }
