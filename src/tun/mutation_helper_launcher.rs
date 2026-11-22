@@ -7,7 +7,10 @@ use anyhow::{Context, Result, ensure};
 use std::{
     fs,
     fs::OpenOptions,
-    os::{fd::AsRawFd, unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt}},
+    os::{
+        fd::AsRawFd,
+        unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt},
+    },
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant},
