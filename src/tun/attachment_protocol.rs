@@ -264,7 +264,7 @@ fn read_frame<T: for<'de> Deserialize<'de>>(stream: &mut UnixStream) -> Result<T
         .context("cannot read attachment frame length")?;
     let length = u32::from_le_bytes(header) as usize;
     ensure!(
-        length >= 2 && length <= MAX_FRAME,
+        (2..=MAX_FRAME).contains(&length),
         "attachment frame length is invalid"
     );
     let mut payload = Vec::new();
