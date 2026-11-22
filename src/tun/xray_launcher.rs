@@ -827,6 +827,7 @@ pub fn wait_for_xray_tun_attachment(
 /// On attachment timeout or early exit, this function terminates and reaps only the child it
 /// created. The caller remains responsible for generation-scoped broker rollback and lifecycle
 /// manifest cleanup.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_xray_with_verified_attachment(
     helper: &MutationHelper,
     activation_id: &str,
