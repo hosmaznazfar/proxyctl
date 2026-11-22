@@ -147,6 +147,7 @@ impl LifecycleCoordinator {
             "managed core process exited before its identity could be persisted"
         );
         snapshot.core_process = Some(process);
+        snapshot.phase = SupervisorPhase::Running;
         self.store.write(&snapshot)
     }
 
