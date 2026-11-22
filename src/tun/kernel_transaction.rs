@@ -572,9 +572,9 @@ mod tests {
     }
 
     #[test]
-    fn native_transaction_rolls_back_persistent_device_after_route_failure() {
+    fn native_transaction_rolls_back_persistent_device_after_invalid_fingerprint() {
         let mut backend = FakeBackend {
-            fail_add_at: Some(1),
+            empty_fingerprint_at: Some(1),
             ..Default::default()
         };
         assert!(apply_native(&transaction(), &mut backend).is_err());
