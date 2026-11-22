@@ -55,7 +55,9 @@ impl AttachmentEvidence {
             "attachment process identity is missing"
         );
         ensure!(
-            !self.interface_name.is_empty() && self.interface_name.len() < 16,
+            !self.interface_name.is_empty()
+                && self.interface_name.len() < 16
+                && self.interface_name.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.')),
             "attachment interface name is invalid"
         );
         ensure!(
