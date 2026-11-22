@@ -301,7 +301,10 @@ mod tests {
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(2);
         let identity = loop {
-            assert!(Instant::now() < deadline, "fake child did not remain available long enough to capture its identity");
+            assert!(
+                Instant::now() < deadline,
+                "fake child did not remain available long enough to capture its identity"
+            );
             if let Ok(identity) = ProcessIdentity::capture(child.id())
                 && identity.verify().unwrap_or(false)
             {
