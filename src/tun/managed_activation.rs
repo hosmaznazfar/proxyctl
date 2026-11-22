@@ -326,10 +326,10 @@ fn terminate_process_identity(identity: &ProcessIdentity) -> Result<()> {
         Err(error) => return Err(error).context("cannot pin managed core process for termination"),
     };
     if !process.wait_exit(std::time::Duration::ZERO)? {
-        if let Err(error) = process.signal(libc::SIGTERM) {
-            if identity.verify()? {
-                return Err(error).context("cannot request termination of managed core process");
-            }
+        if let Err(error) = process.signal(libc::SIGTERM)
+            && identity.verify()?
+        {
+            return Err(error).context("cannot request termination of managed core process");
         }
         if !process.wait_exit(std::time::Duration::from_secs(1))? {
             process
