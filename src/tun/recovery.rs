@@ -320,7 +320,13 @@ pub fn transition(
     }
 
     match (phase, event) {
+        // A Prepared manifest cannot become Running from an event alone: the exact
+        // launched process identity must first be durably bound by the coordinator.
         (SupervisorPhase::Prepared, SupervisorEvent::StartCommitted) => LifecycleTransition {
+            phase: SupervisorPhase::Prepared,
+            action: RecoveryAction::None,
+        },
+        (SupervisorPhase::Running, SupervisorEvent::StartCommitted) => LifecycleTransition {
             phase: SupervisorPhase::Running,
             action: RecoveryAction::StartManagedCore,
         },
