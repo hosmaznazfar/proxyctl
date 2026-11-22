@@ -309,13 +309,14 @@ impl JournalStore {
         let temporary_metadata = temporary.as_file().metadata()?;
         verify_owner(&temporary_metadata)?;
         verify_private_file(&temporary_metadata)?;
-        let mut bounded = BoundedJournalWriter {
-            file: &mut temporary,
-            written: 0,
-        };
-        serde_json::to_writer_pretty(&mut bounded, journal)
-            .context("cannot serialize bounded TUN transaction journal")?;
-        drop(bounded);
+        {
+            let mut bounded = BoundedJournalWriter {
+                file: &mut temporary,
+                written: 0,
+            };
+            serde_json::to_writer_pretty(&mut bounded, journal)
+                .context("cannot serialize bounded TUN transaction journal")?;
+        }
         temporary.as_file().sync_all()?;
         temporary
             .persist(&destination)
