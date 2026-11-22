@@ -223,13 +223,14 @@ impl ManifestStore {
         let temporary_metadata = temporary.as_file().metadata()?;
         verify_owner(&temporary_metadata)?;
         verify_private_file(&temporary_metadata)?;
-        let mut bounded = BoundedManifestWriter {
-            file: &mut temporary,
-            written: 0,
-        };
-        serde_json::to_writer_pretty(&mut bounded, snapshot)
-            .context("cannot serialize bounded TUN manifest")?;
-        drop(bounded);
+        {
+            let mut bounded = BoundedManifestWriter {
+                file: &mut temporary,
+                written: 0,
+            };
+            serde_json::to_writer_pretty(&mut bounded, snapshot)
+                .context("cannot serialize bounded TUN manifest")?;
+        }
         temporary.as_file().sync_all()?;
         temporary
             .persist(&destination)
