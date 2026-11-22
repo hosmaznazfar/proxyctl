@@ -105,12 +105,12 @@ fn activation_configs_share_one_loopback_port_for_socks5_and_http() {
 }
 
 #[test]
-fn tun_activation_configs_require_outbound_mark_and_fail_closed_for_mihomo() {
+fn tun_activation_configs_apply_outbound_mark_for_each_supported_core() {
     let node =
         parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
     let mark = crate::cores::adapters::TunOutboundMark::new(0x100, 0xffff).unwrap();
 
-    for core in [CoreId::SingBox, CoreId::Xray] {
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
         let generated = adapter(core)
             .generate_tun_activation_config(&node, 43129, mark)
             .unwrap();
@@ -126,6 +126,7 @@ fn tun_activation_configs_require_outbound_mark_and_fail_closed_for_mihomo() {
                 assert_eq!(document["inbounds"][1]["auto_route"], false);
                 assert_eq!(document["inbounds"][1]["dns_mode"], "disabled");
                 assert_eq!(document["route"]["auto_detect_interface"], true);
+                assert_eq!(document["outbounds"][0]["routing_mark"], mark.value());
             }
             CoreId::Xray => {
                 assert_eq!(document["inbounds"][0]["protocol"], "mixed");
@@ -140,16 +141,25 @@ fn tun_activation_configs_require_outbound_mark_and_fail_closed_for_mihomo() {
                     document["inbounds"][1]["settings"]["autoSystemDnsToGateway"],
                     false
                 );
+                assert_eq!(
+                    document["outbounds"][0]["streamSettings"]["sockopt"]["mark"],
+                    mark.value()
+                );
             }
-            CoreId::Mihomo => unreachable!("Mihomo is excluded from marked TUN generation"),
+            CoreId::Mihomo => {
+                assert_eq!(document["mixed-port"], 43129);
+                assert_eq!(document["bind-address"], "127.0.0.1");
+                assert_eq!(document["allow-lan"], false);
+                assert_eq!(document["tun"]["enable"], true);
+                assert_eq!(document["tun"]["device"], "tun-proxyctl");
+                assert_eq!(document["tun"]["auto-route"], false);
+                assert_eq!(document["tun"]["auto-redirect"], false);
+                assert_eq!(document["tun"]["dns-mode"], "disabled");
+                assert_eq!(document["tun"]["auto-detect-interface"], true);
+                assert_eq!(document["routing-mark"], mark.value());
+            }
         }
     }
-
-    assert!(
-        adapter(CoreId::Mihomo)
-            .generate_tun_activation_config(&node, 43129, mark)
-            .is_err()
-    );
 }
 
 #[test]
