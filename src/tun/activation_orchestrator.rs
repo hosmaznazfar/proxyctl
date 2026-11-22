@@ -11,8 +11,7 @@ use crate::{
     cores::{
         CoreId,
         adapters::{
-            TunAttachmentMode, TunOutboundMark, XRAY_TUN_FD_ENV,
-            XRAY_TUN_INTERFACE_NAME, adapter,
+            TunAttachmentMode, TunOutboundMark, XRAY_TUN_FD_ENV, XRAY_TUN_INTERFACE_NAME, adapter,
         },
     },
     domain::ProxyNode,
@@ -458,9 +457,8 @@ impl<'a> ActivationOrchestrator<'a> {
         if matches!(recovery.as_ref(), Ok(response) if response.success) {
             return Ok(());
         }
-        let store = super::manifest_store::ManifestStore::open(
-            self.coordinator.runtime_directory()?,
-        )?;
+        let store =
+            super::manifest_store::ManifestStore::open(self.coordinator.runtime_directory()?)?;
         let message = match &recovery {
             Ok(response) => response.message.clone(),
             Err(error) => format!("{error:#}"),
