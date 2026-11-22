@@ -81,6 +81,7 @@ pub fn prepare_managed_activation(
 }
 
 /// Prepare a persistent named TUN transaction for a native core.
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_native_managed_activation(
     helper: &MutationHelper,
     coordinator: &LifecycleCoordinator,
