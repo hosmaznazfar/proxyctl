@@ -638,25 +638,6 @@ fn fdinfo_names_interface(contents: &str, expected: &str) -> bool {
             .is_some_and(|value| value.trim() == expected)
     })
 }
-
-#[cfg(test)]
-mod attachment_tests {
-    use super::fdinfo_names_interface;
-
-    #[test]
-    fn fdinfo_interface_match_is_exact() {
-        assert!(fdinfo_names_interface(
-            "pos:\t0\niff:\ttun-proxyctl\n",
-            "tun-proxyctl"
-        ));
-        assert!(!fdinfo_names_interface(
-            "iff:\ttun-proxyctl-extra\n",
-            "tun-proxyctl"
-        ));
-        assert!(!fdinfo_names_interface("pos:\t0\n", "tun-proxyctl"));
-    }
-}
-
 /// Compose Xray's kernel-backed descriptor check with the shared live TUN readiness gate.
 ///
 /// The caller must supply independently collected host-network, physical-egress, and socket-mark
@@ -910,4 +891,22 @@ pub fn stop_xray_generation(
     process: Option<&ProcessIdentity>,
 ) -> Result<()> {
     stop_core_service_generation(activation_id, generation, process)
+}
+
+#[cfg(test)]
+mod attachment_tests {
+    use super::fdinfo_names_interface;
+
+    #[test]
+    fn fdinfo_interface_match_is_exact() {
+        assert!(fdinfo_names_interface(
+            "pos:\t0\niff:\ttun-proxyctl\n",
+            "tun-proxyctl"
+        ));
+        assert!(!fdinfo_names_interface(
+            "iff:\ttun-proxyctl-extra\n",
+            "tun-proxyctl"
+        ));
+        assert!(!fdinfo_names_interface("pos:\t0\n", "tun-proxyctl"));
+    }
 }
