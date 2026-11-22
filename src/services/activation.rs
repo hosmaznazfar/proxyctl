@@ -677,7 +677,7 @@ pub fn activate_tun_core(
 fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
     ensure!(
         !tun_enabled,
-        "TUN activation must use activate_tun_core, which composes the broker-owned device, readiness, and recovery lifecycle. The generic loopback activation path cannot start TUN mode."
+        "TUN activation must use the dedicated generation-bound Xray broker lifecycle, which composes the broker-owned device, readiness, and recovery lifecycle; it is not the loopback activation path."
     );
     Ok(())
 }
