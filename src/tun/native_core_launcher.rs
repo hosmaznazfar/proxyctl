@@ -181,14 +181,13 @@ pub fn spawn_native_core_service(
                     .parse::<u32>()
                 && pid > 0
             {
-                    let identity = ProcessIdentity::capture(pid)
-                        .context("cannot capture native core systemd MainPID identity")?;
-                    ensure!(
-                        identity.executable == executable && identity.verify()?,
-                        "native core systemd MainPID does not match the requested executable"
-                    );
-                    return Ok(identity);
-                }
+                let identity = ProcessIdentity::capture(pid)
+                    .context("cannot capture native core systemd MainPID identity")?;
+                ensure!(
+                    identity.executable == executable && identity.verify()?,
+                    "native core systemd MainPID does not match the requested executable"
+                );
+                return Ok(identity);
             }
         }
         ensure!(
