@@ -190,7 +190,7 @@ impl MutationResponse {
                 boundary -= 1;
             }
             message.truncate(boundary);
-            message.push_str("…");
+            message.push('…');
         }
         Self {
             version: VERSION,
@@ -641,7 +641,7 @@ fn read_response_frame(stream: &mut UnixStream) -> Result<Vec<u8>> {
     read_exact_deadline(stream, &mut header, deadline)?;
     let length = u32::from_le_bytes(header) as usize;
     ensure!(
-        length >= 2 && length <= MAX_FRAME,
+        (2..=MAX_FRAME).contains(&length),
         "mutation response frame length is invalid"
     );
     let mut bytes = Vec::new();
