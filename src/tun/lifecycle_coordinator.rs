@@ -283,6 +283,35 @@ mod tests {
         recovery::SupervisorPhase,
     };
 
+    #[cfg(target_os = "linux")]
+    fn bind_fake_core(
+        coordinator: &LifecycleCoordinator,
+        token: &ActivationToken,
+    ) -> std::process::Child {
+        use crate::tun::process::ProcessIdentity;
+        use std::process::{Command, Stdio};
+
+        let child = Command::new("tail")
+            .args(["-f", "/dev/null"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let identity = loop {
+            assert!(Instant::now() < deadline, "fake child did not remain available long enough to capture its identity");
+            if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && identity.verify().unwrap_or(false)
+            {
+                break identity;
+            }
+            thread::sleep(Duration::from_millis(5));
+        };
+        coordinator.bind_core_process(token, identity).unwrap();
+        child
+    }
+
     fn snapshot(activation_id: &str) -> ManifestSnapshot {
         ManifestSnapshot {
             schema_version: 1,
@@ -423,6 +452,8 @@ mod tests {
             .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
             .unwrap();
 
+        #[cfg(target_os = "linux")]
+        let mut child = bind_fake_core(&coordinator, &token);
         assert_eq!(
             coordinator
                 .apply_event(&token, SupervisorEvent::StartCommitted)
@@ -444,6 +475,11 @@ mod tests {
         let current = coordinator.load_current().unwrap().unwrap();
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
         assert_eq!(current.token, token);
+        #[cfg(target_os = "linux")]
+        {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
     }
 
     #[test]
@@ -455,6 +491,8 @@ mod tests {
             .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
             .unwrap();
 
+        #[cfg(target_os = "linux")]
+        let mut child = bind_fake_core(&coordinator, &old_token);
         coordinator
             .apply_event(&old_token, SupervisorEvent::StartCommitted)
             .unwrap();
@@ -478,5 +516,10 @@ mod tests {
             coordinator.load_current().unwrap().unwrap().token,
             new_token
         );
+        #[cfg(target_os = "linux")]
+        {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
     }
 }
