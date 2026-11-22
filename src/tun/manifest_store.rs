@@ -528,8 +528,17 @@ mod tests {
 
         let directory = tempfile::tempdir().unwrap();
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
-        let original = snapshot();
-        store.create_prepared(&original).unwrap();
+        let mut original = snapshot();
+        #[cfg(target_os = "linux")]
+        {
+            original.phase = SupervisorPhase::Running;
+            original.core_process = Some(ProcessIdentity {
+                pid: 42,
+                start_ticks: 100,
+                executable: PathBuf::from("/usr/bin/sing-box"),
+            });
+        }
+        store.write(&original).unwrap();
         assert_eq!(
             store
                 .apply_event(SupervisorEvent::StartCommitted, 9)
@@ -567,7 +576,17 @@ mod tests {
 
         let directory = tempfile::tempdir().unwrap();
         let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
-        store.create_prepared(&snapshot()).unwrap();
+        let mut initial = snapshot();
+        #[cfg(target_os = "linux")]
+        {
+            initial.phase = SupervisorPhase::Running;
+            initial.core_process = Some(ProcessIdentity {
+                pid: 42,
+                start_ticks: 100,
+                executable: PathBuf::from("/usr/bin/sing-box"),
+            });
+        }
+        store.write(&initial).unwrap();
         store
             .apply_event(SupervisorEvent::StartCommitted, 9)
             .unwrap();
