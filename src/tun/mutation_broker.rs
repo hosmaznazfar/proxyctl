@@ -794,11 +794,14 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let directory = tempfile::tempdir().unwrap();
-        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
         let socket = directory.path().join("broker.sock");
-        // Bind before restricting permissions so the test remains runnable as an unprivileged user.
+        // Create the socket while writable, then restrict the directory. This ensures the
+        // test exercises broker validation rather than failing during socket creation.
         let listener = UnixListener::bind(&socket).unwrap();
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
         assert!(serve(&listener, directory.path()).is_err());
+        // Restore cleanup permissions for TempDir and its socket.
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 
     #[test]
