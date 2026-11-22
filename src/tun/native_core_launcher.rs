@@ -174,13 +174,13 @@ pub fn spawn_native_core_service(
                 INSPECT_TIMEOUT,
                 true,
             )?;
-            if output.success {
-                if let Ok(pid) = std::str::from_utf8(&output.stdout)
+            if output.success
+                && let Ok(pid) = std::str::from_utf8(&output.stdout)
                     .unwrap_or_default()
                     .trim()
                     .parse::<u32>()
-                    && pid > 0
-                {
+                && pid > 0
+            {
                     let identity = ProcessIdentity::capture(pid)
                         .context("cannot capture native core systemd MainPID identity")?;
                     ensure!(
