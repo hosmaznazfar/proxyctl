@@ -231,3 +231,7 @@ The source audit and added unit tests do not prove installed file capabilities, 
 - Run concurrent activation/deactivation/recovery tests against isolated Linux network namespaces and verify foreign routes/rules/interfaces are never removed.
 - Do not describe managed TUN as production-ready or enable the default activation gate until the cleanup race has a defensible resolution and the host-level matrix passes.
 
+
+### Release artifact completeness
+- The tagged release workflow now builds all declared binaries and packages the CLI, privileged TUN helper, core launcher, and recovery supervisor as separate Linux executables with a combined SHA-256 manifest. This matches the executable set expected by the helper installer rather than publishing only the CLI.
+- The helper installer remains an explicit root-run packaging step; publishing the helper binary does not install file capabilities or enable TUN automatically. The separate install/remove scripts must still be exercised on the target host.
