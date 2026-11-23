@@ -29,7 +29,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Validate packaging shell syntax
-        run: sh -n packaging/install-tun-helper.sh packaging/remove-tun-helper.sh
+        run: sh -n packaging/install-tun-helper.sh packaging/remove-tun-helper.sh tests/tun-link-cleanup-netns.sh
 
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
