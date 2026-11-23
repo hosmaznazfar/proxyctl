@@ -233,7 +233,10 @@ mod interface_alias_tests {
         let mut attrs = Vec::new();
         append_proxyctl_rule_protocol(&mut attrs).unwrap();
         assert_eq!(u16::from_ne_bytes(attrs[0..2].try_into().unwrap()), 5);
-        assert_eq!(u16::from_ne_bytes(attrs[2..4].try_into().unwrap()), FRA_PROTOCOL);
+        assert_eq!(
+            u16::from_ne_bytes(attrs[2..4].try_into().unwrap()),
+            FRA_PROTOCOL
+        );
         assert_eq!(attrs[4], PROXYCTL_ROUTE_PROTOCOL);
         assert_eq!(RTPROT_PROXYCTL, PROXYCTL_ROUTE_PROTOCOL);
         assert_eq!(FRA_FWMARK, 10);
