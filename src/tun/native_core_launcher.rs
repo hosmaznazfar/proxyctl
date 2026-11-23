@@ -90,10 +90,10 @@ pub fn spawn_native_core_service(
     validate_root_executable(Path::new(SUDO), true)?;
     validate_root_executable(Path::new(SYSTEMD_RUN), false)?;
     validate_root_executable(Path::new(SYSTEMCTL), false)?;
-    let authorization = Command::new(SUDO)
-        .arg("-v")
-        .status()
-        .context("cannot request authorization for native TUN core service")?;
+    let mut authorization = Command::new(SUDO);
+    authorization.arg("-v");
+    let authorization = run_command(authorization, Duration::from_secs(5), false)
+        .context("cannot request bounded authorization for native TUN core service")?;
     ensure!(
         authorization.success(),
         "sudo authorization was not granted for native TUN core service"
