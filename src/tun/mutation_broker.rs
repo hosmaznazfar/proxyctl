@@ -202,7 +202,10 @@ impl MutationResponse {
 
 /// Authorize the kernel-authenticated peer before decoding any request bytes.
 fn authorize_mutation_peer(peer: BrokerPeerCredentials, effective_uid: u32) -> Result<()> {
-    ensure!(peer.pid > 0, "mutation broker peer has an invalid process ID");
+    ensure!(
+        peer.pid > 0,
+        "mutation broker peer has an invalid process ID"
+    );
     ensure!(
         peer.uid == effective_uid,
         "mutation broker accepts requests only from its owning user"
@@ -809,11 +812,7 @@ mod tests {
         };
         assert!(authorize_mutation_peer(peer, 1000).is_ok());
         assert!(authorize_mutation_peer(peer, 1001).is_err());
-        assert!(authorize_mutation_peer(
-            BrokerPeerCredentials { pid: 0, ..peer },
-            1000
-        )
-        .is_err());
+        assert!(authorize_mutation_peer(BrokerPeerCredentials { pid: 0, ..peer }, 1000).is_err());
     }
 
     #[test]
