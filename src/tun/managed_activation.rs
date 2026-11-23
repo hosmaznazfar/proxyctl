@@ -300,14 +300,7 @@ fn terminate_prepared_core_process(
     coordinator: &LifecycleCoordinator,
     token: &ActivationToken,
 ) -> Result<()> {
-    let current = coordinator
-        .load_current()?
-        .context("Prepared activation disappeared before orphaned core cleanup")?;
-    ensure!(
-        current.token == *token && current.snapshot.phase == SupervisorPhase::Prepared,
-        "orphaned core cleanup token does not match the Prepared activation"
-    );
-    let Some(identity) = current.snapshot.core_process else {
+    let Some(identity) = coordinator.claim_prepared_cleanup(token)? else {
         return Ok(());
     };
     if !identity.verify()? {
