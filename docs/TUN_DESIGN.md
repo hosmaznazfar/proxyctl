@@ -1278,3 +1278,8 @@ Activation request validation now rejects a core-bypass policy priority that is 
 ## Routing-plan and manifest-store preflight continuation (2026-11-21)
 
 Pure routing-policy validation now additionally checks consistency of route identity fields and ensures all rule priorities remain within the signed native priority range. The manifest store canonicalizes its runtime directory after private-directory validation, so subsequent file operations use the resolved absolute directory. A focused priority-bound unit test was added; tests remain unexecuted.
+
+
+## Compatibility activation supervisor handoff (review update)
+
+The compatibility activation orchestrator now starts the generation-bound recovery supervisor while the manifest is still Prepared, before committing the supplied process identity as Running. If supervisor startup fails, the exact activation generation is stopped/recovered. Commit compensation is attempted against the same identity and generation. This integration change is source-only and remains unverified locally; public activation remains gated and live systemd validation is required.
