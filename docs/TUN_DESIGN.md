@@ -1370,9 +1370,20 @@ The only automatic recovery backend currently implemented is systemd. OpenRC, ru
 Unit tests cover dual-stack target-family validation and the linger-state parser. The new code has not been compiled or executed in the maintainer's local environment yet. TUN activation remains gated until the maintainer validates formatting, all targets, Clippy, actual systemd user lingering, both address families, DNS behavior, and crash/restart recovery on the target machine.
 
 
-### Automated CI result (2026-11-23)
+### Maintainer-owned validation policy and latest local result (2026-11-23)
 
-GitHub Actions CI passed for commit c343bd9d12102af24c22b918fe0164e7bfdb547e: cargo fmt --all -- --check, cargo clippy --all-targets --all-features -- -D warnings, and cargo test --all-targets. The test job reported 644 passed, 0 failed, and 1 ignored (the existing managed-core-binary integration test). This is hosted CI validation, not a local CachyOS run and not live TUN/systemd dataplane validation. The maintainer must still run the commands below and perform host integration checks before enabling activation.
+The maintainer performs validation locally on the target CachyOS machine. Do not trigger, poll, or report GitHub Actions CI for routine implementation commits unless the maintainer explicitly requests hosted CI. Implementation updates should not repeatedly ask for checks already recorded here; request only the next outstanding validation result.
+
+Latest maintainer-reported `cargo test --all-targets --all-features` output:
+
+- Main test binary: 649 passed, 0 failed, 0 ignored.
+- TUN core-launcher binary: 1 passed.
+- TUN helper binary: 3 passed.
+- Native adapter validation: 1 ignored because all three proxyctl-managed core binaries were not installed.
+
+The terminal output supplied ended at the sudo password prompt for `tests/tun-link-cleanup-netns.sh`. Its execution result was not included, so the privileged namespace test is still unconfirmed. Formatting and Clippy results for this latest source revision have not yet been reported. Do not infer or claim those checks passed from the test output.
+
+Record future maintainer results in this section, replacing the latest-result bullets rather than appending repetitive progress claims.
 
 
 ## Phase 5 — privileged helper security (2026-11-23)
