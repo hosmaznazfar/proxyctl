@@ -116,3 +116,8 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 ### Generation-specific systemd supervisor identity
 
 The transient systemd recovery unit name now includes both the complete activation UUID and its generation (`proxyctl-tun-<uuid>-g<generation>.service`). Previously the unit name omitted generation even though the process arguments and manifest checks included it. Reusing an activation UUID with a later generation could therefore cause startup to mistake an older generation's active unit for the requested supervisor. The unit name, identity validator, and regression tests now bind both dimensions. This source change has not yet been run through local compilation, formatting, Clippy, or tests.
+
+
+### Activation API evidence gate
+
+The evidence-free `ActivationOrchestrator::activate` entrypoint is now private to the TUN module. External callers must use `activate_with_attachment_evidence`, which validates activation UUID, generation, interface, and pinned process binding before activation. This narrows the public API bypass, but the current `AttachmentEvidence` remains caller-supplied structural evidence; it is not yet an unforgeable receipt from the core-side adoption acknowledgement and must not be described as independent proof of attachment.
