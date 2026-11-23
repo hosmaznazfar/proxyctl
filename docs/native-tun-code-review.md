@@ -100,4 +100,4 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 - Startup recovery now passes the supervisor's expected activation ID and generation into the same resume entrypoint that loads the durable manifest and binds its process identity.
 - The resume entrypoint rejects a manifest whose activation token differs from that expected identity before process monitoring or recovery is initiated. The general CLI resume path remains available without an explicit expected identity.
 - This narrows a check-to-resume race in the standalone recovery service. Kernel cleanup selector race limitations and live service-manager verification remain separate unresolved concerns.
-- Tests for this change are authored in the source workflow but have not been run locally in this implementation phase.
+- No new automated regression test has yet been added for this narrow change; the existing test suite remains unexecuted during this implementation phase.
