@@ -489,6 +489,59 @@ mod tests {
     }
 
     #[test]
+    fn journal_store_accepts_link_teardown_cleanup_order() {
+        let directory = tempdir().unwrap();
+        let store = JournalStore::from_directory(directory.path().to_path_buf());
+        let activation = "12345678-1234-4234-8234-123456789abc";
+        store.create_transaction_journal(activation, 31).unwrap();
+
+        for (kind, key, fingerprint) in [
+            (
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+                "interface-fingerprint",
+            ),
+            (
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+                "route-fingerprint",
+            ),
+            (
+                JournalOperationKind::AddRule,
+                "rule:v4:42410",
+                "rule-fingerprint",
+            ),
+        ] {
+            store
+                .record_operation_intent(activation, 31, kind, key)
+                .unwrap();
+            store
+                .mark_operation_applied(activation, 31, key, fingerprint)
+                .unwrap();
+        }
+
+        // The safe kernel teardown order is rule, interface, then route absence check.
+        store
+            .mark_operation_removed(activation, 31, "rule:v4:42410")
+            .unwrap();
+        store
+            .mark_operation_removed(activation, 31, "interface:tun-proxyctl")
+            .unwrap();
+        let partial = store.load_transaction_journal().unwrap().unwrap();
+        assert_eq!(partial.operations[0].state, JournalOperationState::Removed);
+        assert_eq!(partial.operations[1].state, JournalOperationState::Applied);
+        assert_eq!(partial.operations[2].state, JournalOperationState::Removed);
+
+        store
+            .mark_operation_removed(activation, 31, "route:v4:42420:0.0.0.0/0")
+            .unwrap();
+        store
+            .remove_completed_transaction_journal(activation, 31)
+            .unwrap();
+        assert!(store.load_transaction_journal().unwrap().is_none());
+    }
+
+    #[test]
     fn journal_store_refuses_incomplete_removal_and_wrong_generation() {
         let directory = tempdir().unwrap();
         let store = JournalStore::from_directory(directory.path().to_path_buf());
