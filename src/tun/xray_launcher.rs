@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    io::Read,
+    io::{Read, Seek, SeekFrom},
     os::fd::AsFd,
     os::unix::{
         fs::{FileTypeExt, MetadataExt, PermissionsExt},
@@ -187,10 +187,12 @@ pub fn spawn_xray_from_broker(
 
     // Allow the system manager to create one capability-confined transient unit. The
     // subsequent systemd-run invocation is non-interactive and cannot prompt mid-launch.
-    let authorization = Command::new(SUDO)
-        .arg("-v")
-        .status()
-        .context("cannot request authorization for the isolated Xray TUN service")?;
+    let mut authorization = Command::new(SUDO);
+    authorization.arg("-v").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    let authorization = run_bounded_command_status(
+        &mut authorization, Duration::from_secs(5),
+        "sudo authorization for the Xray TUN service exceeded its five-second deadline",
+    )?;
     ensure!(
         authorization.success(),
         "sudo authorization was not granted for the Xray TUN service"
@@ -303,25 +305,16 @@ pub fn spawn_xray_from_broker(
             peer.uid == uid && peer.gid == gid && peer.pid > 0,
             "Xray core launcher peer credentials do not match the activation user"
         );
-        let main_pid = Command::new(SUDO)
-            .args([
-                "-n",
-                "--",
-                SYSTEMCTL,
-                "show",
-                "--property=MainPID",
-                "--value",
-            ])
-            .arg(&unit)
-            .output()
-            .context("cannot verify Xray systemd service main process")?;
-        ensure!(
-            main_pid.status.success(),
-            "cannot inspect the exact Xray systemd service"
-        );
-        let main_pid = String::from_utf8_lossy(&main_pid.stdout)
-            .trim()
-            .parse::<u32>()
+        let mut main_pid_command = Command::new(SUDO);
+        main_pid_command.args(["-n", "--", SYSTEMCTL, "show", "--property=MainPID", "--value"]).arg(&unit);
+        let main_pid = run_bounded_command_output(
+            &mut main_pid_command, Duration::from_secs(3), 128,
+            "Xray systemd MainPID inspection exceeded its three-second deadline",
+        )?;
+        ensure!(main_pid.status.success(), "cannot inspect the exact Xray systemd service");
+        let main_pid = String::from_utf8(main_pid.stdout)
+            .context("systemd returned non-UTF-8 Xray service MainPID")?
+            .trim().parse::<u32>()
             .context("systemd returned an invalid Xray service MainPID")?;
         ensure!(
             main_pid == peer.pid,
@@ -465,6 +458,47 @@ pub fn stop_core_service_generation(
         );
     }
     Ok(())
+}
+
+struct BoundedCommandOutput {
+    status: std::process::ExitStatus,
+    stdout: Vec<u8>,
+}
+
+fn run_bounded_command_output(
+    command: &mut Command,
+    timeout: Duration,
+    maximum_output: u64,
+    timeout_message: &str,
+) -> Result<BoundedCommandOutput> {
+    ensure!(!timeout.is_zero(), "command timeout must be non-zero");
+    let mut output_file = tempfile::tempfile().context("cannot create bounded Xray command output file")?;
+    command.stdin(Stdio::null()).stdout(Stdio::from(output_file.try_clone()?)).stderr(Stdio::null());
+    let mut child = command.spawn().context("cannot start bounded Xray command")?;
+    let deadline = std::time::Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                anyhow::bail!("{timeout_message}");
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("cannot inspect bounded Xray command");
+            }
+        }
+    };
+    let size = output_file.metadata()?.len();
+    ensure!(size <= maximum_output, "Xray command output exceeded its bound");
+    output_file.seek(SeekFrom::Start(0))?;
+    let mut stdout = Vec::new();
+    output_file.take(maximum_output + 1).read_to_end(&mut stdout)?;
+    ensure!(stdout.len() as u64 <= maximum_output, "Xray command output exceeded its bound");
+    Ok(BoundedCommandOutput { status, stdout })
 }
 
 fn run_bounded_command_status(
