@@ -496,6 +496,94 @@ impl<'a> ActivationOrchestrator<'a> {
         )
     }
 
+    /// Activate sing-box or Mihomo only after both IPv4 and IPv6 TUN-routed HTTP probes pass.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate_native_core_node_dual_stack_end_to_end(
+        &self,
+        core_id: CoreId,
+        request: ActivationRequest,
+        node: &ProxyNode,
+        listen_port: u16,
+        executable: &Path,
+        expected_peers: Vec<std::net::SocketAddr>,
+        traffic_targets: Vec<super::readiness::HttpProbeTarget>,
+        probe_timeout: Duration,
+        maximum_response_bytes: usize,
+    ) -> Result<ManagedActivation> {
+        ensure!(
+            !expected_peers.is_empty()
+                && expected_peers.len() <= 8
+                && expected_peers.iter().all(|peer| peer.port() == node.port
+                    && !peer.ip().is_unspecified()
+                    && !peer.ip().is_multicast()),
+            "native core peer candidates must be one to eight unicast addresses matching the selected node's port"
+        );
+        super::readiness::validate_dual_stack_probe_targets(&traffic_targets)?;
+        let baseline_host = crate::tun::inspect()
+            .context("cannot capture pre-activation DNS and firewall baseline")?;
+        ensure!(
+            baseline_host.routes_inspected && baseline_host.dns_inspected,
+            "native TUN activation requires complete pre-activation route and DNS inspection"
+        );
+        let runtime = self
+            .coordinator
+            .runtime_directory()
+            .context("cannot resolve native TUN activation runtime directory")?;
+        let activation_request = request.clone();
+        self.activate_native_core_node_with_readiness(
+            core_id,
+            request,
+            node,
+            listen_port,
+            executable,
+            move |process, token| {
+                let current = self
+                    .coordinator
+                    .load_current()?
+                    .context("Prepared native TUN manifest disappeared before readiness")?;
+                ensure!(
+                    current.token == *token
+                        && current.snapshot.phase == super::recovery::SupervisorPhase::Prepared,
+                    "native core readiness does not match the exact Prepared generation"
+                );
+                let interface_index = current.snapshot.manifest.interface_index;
+                let plan = super::route_policy::RoutingPolicyPlan::new(
+                    activation_request.table_id,
+                    activation_request.bypass_priority,
+                    activation_request.proxy_priority,
+                    activation_request.core_mark,
+                    activation_request.core_mark_mask,
+                    activation_request.interface_name.clone(),
+                    interface_index,
+                );
+                plan.validate()?;
+                let current_host = crate::tun::inspect()
+                    .context("cannot capture post-activation DNS and firewall state")?;
+                super::readiness::verify_native_core_dual_stack_end_to_end_readiness(
+                    &runtime,
+                    process,
+                    &activation_request.interface_name,
+                    interface_index,
+                    activation_request.core_mark,
+                    activation_request.core_mark_mask,
+                    std::net::SocketAddr::from(([127, 0, 0, 1], listen_port)),
+                    Duration::from_secs(5),
+                    &plan,
+                    &expected_peers,
+                    super::privilege_broker::BrokerSocketTransport::Tcp,
+                    &traffic_targets,
+                    token.activation_id(),
+                    token.generation(),
+                    probe_timeout,
+                    maximum_response_bytes,
+                    &baseline_host,
+                    &current_host,
+                )
+                .map(|_| ())
+            },
+        )
+    }
+
     fn stop_core_and_recover_generation(
         &self,
         activation_id: &str,
@@ -605,6 +693,99 @@ impl<'a> ActivationOrchestrator<'a> {
                     &expected_peers,
                     super::privilege_broker::BrokerSocketTransport::Tcp,
                     &target,
+                    token.activation_id(),
+                    token.generation(),
+                    probe_timeout,
+                    maximum_response_bytes,
+                    &baseline_host,
+                    &current_host,
+                )
+                .map(|_| ())
+            },
+        )
+    }
+
+    /// Activate Xray only after both IPv4 and IPv6 TUN-routed HTTP probes pass.
+    #[allow(clippy::too_many_arguments)]
+    pub fn activate_xray_node_dual_stack_end_to_end(
+        &self,
+        request: ActivationRequest,
+        node: &ProxyNode,
+        listen_port: u16,
+        executable: &Path,
+        attachment_timeout: Duration,
+        expected_peers: Vec<std::net::SocketAddr>,
+        traffic_targets: Vec<super::readiness::HttpProbeTarget>,
+        probe_timeout: Duration,
+        maximum_response_bytes: usize,
+    ) -> Result<XrayActivation> {
+        ensure!(
+            !expected_peers.is_empty()
+                && expected_peers.len() <= 8
+                && expected_peers.iter().all(|peer| peer.port() == node.port
+                    && !peer.ip().is_unspecified()
+                    && !peer.ip().is_multicast()),
+            "Xray peer candidates must be one to eight unicast addresses matching the selected node's port"
+        );
+        super::readiness::validate_dual_stack_probe_targets(&traffic_targets)?;
+        let baseline_host = crate::tun::inspect()
+            .context("cannot capture pre-activation DNS and firewall baseline")?;
+        ensure!(
+            baseline_host.routes_inspected && baseline_host.dns_inspected,
+            "TUN activation requires complete pre-activation route and DNS inspection"
+        );
+        let runtime = self
+            .coordinator
+            .runtime_directory()
+            .context("cannot resolve private TUN runtime directory")?;
+        let activation_request = request.clone();
+        self.activate_core_node_with_readiness(
+            CoreId::Xray,
+            request,
+            node,
+            listen_port,
+            executable,
+            attachment_timeout,
+            move |process, token| {
+                let current = self
+                    .coordinator
+                    .load_current()?
+                    .context("Prepared Xray activation manifest disappeared before readiness")?;
+                ensure!(
+                    current.token == *token
+                        && current.snapshot.phase == super::recovery::SupervisorPhase::Prepared,
+                    "Xray readiness does not match the exact Prepared activation generation"
+                );
+                let interface_index = current.snapshot.manifest.interface_index;
+                let plan = super::route_policy::RoutingPolicyPlan::new(
+                    activation_request.table_id,
+                    activation_request.bypass_priority,
+                    activation_request.proxy_priority,
+                    activation_request.core_mark,
+                    activation_request.core_mark_mask,
+                    activation_request.interface_name.clone(),
+                    interface_index,
+                );
+                plan.validate()?;
+                let expected = super::readiness::ReadinessExpectation {
+                    interface_name: &activation_request.interface_name,
+                    interface_index,
+                    core_mark: activation_request.core_mark,
+                    core_mark_mask: activation_request.core_mark_mask,
+                };
+                let current_host = crate::tun::inspect()
+                    .context("cannot capture post-activation DNS and firewall state")?;
+                super::xray_launcher::verify_xray_dual_stack_end_to_end_readiness(
+                    &runtime,
+                    process,
+                    &activation_request.interface_name,
+                    &expected,
+                    std::net::SocketAddr::from(([127, 0, 0, 1], listen_port)),
+                    Duration::from_secs(5),
+                    &plan,
+                    &expected_peers,
+                    super::privilege_broker::BrokerSocketTransport::Tcp,
+                    &traffic_targets,
                     token.activation_id(),
                     token.generation(),
                     probe_timeout,
