@@ -575,23 +575,6 @@ fn family_key(family: AddressFamily) -> &'static str {
         AddressFamily::Ipv6 => "v6",
     }
 }
-fn parse_route_key(key: &str) -> Result<(AddressFamily, u32, String)> {
-    let rest = key.strip_prefix("route:").context("invalid route key")?;
-    let (family, rest) = rest.split_once(':').context("invalid route family")?;
-    let (table, destination) = rest.split_once(':').context("invalid route table")?;
-    let family = parse_family(family)?;
-    let parsed_table = table.parse::<u32>()?;
-    ensure!(
-        parsed_table > 0 && parsed_table.to_string() == table,
-        "route table ID is not canonical"
-    );
-    ensure!(
-        destination == family.default_prefix() || destination == "default",
-        "unsupported route identity"
-    );
-    let table = parsed_table;
-    Ok((family, table, family.default_prefix().to_owned()))
-}
 fn parse_rule_key(key: &str) -> Result<(AddressFamily, u32)> {
     let rest = key.strip_prefix("rule:").context("invalid rule key")?;
     let (family, priority) = rest.split_once(':').context("invalid rule priority")?;
