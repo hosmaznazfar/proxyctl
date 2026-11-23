@@ -1471,3 +1471,8 @@ The transient systemd user service for the recovery supervisor is further constr
 ### Recovery supervisor sandbox validation (2026-11-23)
 
 The maintainer reported that the local validation commands passed after the transient recovery-supervisor systemd service sandbox properties were added: formatting check, Clippy across all targets/features with warnings denied, and the complete all-targets/all-features test suite. This validates compilation and the automated suite for that change. The systemd service sandbox properties and real recovery-supervisor lifecycle remain unvalidated on-host; the activation gate stays closed pending the focused host integration checks and the broader documented kernel side-effect assessment.
+
+
+### Bounded systemd control subprocesses (2026-11-23)
+
+Recovery supervisor control calls (`systemctl is-active`, `systemctl stop --no-block`, and `systemd-run`) now use a bounded subprocess runner with deadlines and kill/reap behavior on timeout. This prevents a stuck systemd client invocation from indefinitely blocking the orchestration caller. The polling loops remain separately bounded. Automated validation and real host service interaction are pending.
