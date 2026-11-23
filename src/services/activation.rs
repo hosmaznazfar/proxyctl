@@ -1094,7 +1094,9 @@ mod tests {
         // Use a bounded-duration sleeper rather than tail -f /dev/null. Some
         // environments or test runners can terminate follow-mode tail processes,
         // which makes the identity assertion flaky before the test sends a signal.
-        let mut child = Command::new("sleep")
+        let sleep = find_program("sleep").unwrap();
+        let exe = fs::canonicalize(sleep).unwrap();
+        let mut child = Command::new(&exe)
             .arg("3600")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1102,7 +1104,8 @@ mod tests {
             .spawn()
             .unwrap();
         let pid = child.id();
-        let exe = executable(pid).unwrap();
+        // Resolve the expected binary independently of /proc so the test cannot
+        // accidentally pin the short-lived pre-exec image returned by spawn().
         let ticks = await_identity(pid, &exe, Duration::from_secs(2)).unwrap();
 
         assert!(signal_verified(pid, &exe, ticks.saturating_add(1), libc::SIGTERM).is_err());
