@@ -5,6 +5,7 @@
 //! It never constructs shell commands or accepts raw netlink payloads.
 
 use anyhow::{Context, Result, ensure};
+use std::cmp::Reverse;
 
 use super::{
     journal::{
@@ -39,12 +40,15 @@ pub struct JournalRecoveryReport {
     pub resolved_intents: Vec<String>,
 }
 
-/// Execute recovery one operation at a time in reverse journal order.
+/// Execute recovery in dependency-safe teardown order: rules, interface, then route checks.
 ///
-/// Each loop obtains a new full inventory. The journal transition is fsynced by ManifestStore
-/// only after the backend confirms removal/absence. An unresolved intent is resolved only
-/// when fresh inventory proves the exact resource absent. Any mismatch or ambiguous identity
-/// stops recovery and leaves the journal available for another recovery attempt.
+/// Linux removes routes attached to a netdevice when that exact device is unregistered. The
+/// interface must therefore be released before route records are finalized. Route records are
+/// verification-only after link teardown; they are never deleted by a weaker route selector.
+///
+/// Each operation obtains a new full inventory. Journal progress is fsynced only after the
+/// backend confirms removal/absence. Any mismatch or ambiguous identity stops recovery and
+/// leaves the journal available for another attempt.
 pub fn recover<B: JournalRecoveryBackend>(
     store: &ManifestStore,
     backend: &mut B,
@@ -55,7 +59,18 @@ pub fn recover<B: JournalRecoveryBackend>(
         .context("no transaction journal is available for recovery")?;
     journal.validate()?;
 
-    for operation in journal.operations.iter().rev() {
+    let mut operations = journal.operations.iter().collect::<Vec<_>>();
+    operations.sort_by_key(|operation| {
+        let phase = match operation.kind {
+            JournalOperationKind::AddRule => 0u8,
+            JournalOperationKind::CreateInterface
+            | JournalOperationKind::CreatePersistentInterface => 1u8,
+            JournalOperationKind::AddRoute => 2u8,
+        };
+        (phase, Reverse(operation.sequence))
+    });
+
+    for operation in operations {
         if matches!(
             operation.state,
             JournalOperationState::Removed | JournalOperationState::Absent
