@@ -122,3 +122,8 @@ The transient systemd recovery unit name now includes both the complete activati
 
 The evidence-free `ActivationOrchestrator::activate` entrypoint is now private to the TUN module. External callers must use `activate_with_attachment_evidence`, which validates activation UUID, generation, interface, and pinned process binding before activation. This narrows the public API bypass, but the current `AttachmentEvidence` remains caller-supplied structural evidence; it is not yet an unforgeable receipt from the core-side adoption acknowledgement and must not be described as independent proof of attachment.
 - Follow-up attachment gate: `activate_with_attachment_evidence` now performs the live Linux Xray descriptor/interface check itself after validating the generation and process binding. A caller cannot activate merely by setting the structural `descriptor_transfer_confirmed` flag; the exact process must hold a TUN fd whose kernel fdinfo names the requested interface, and the live ifindex must match. This is Xray external-descriptor verification, not a universal sing-box/Mihomo adoption proof.
+
+
+### Broker-side live-core recovery guard
+
+Privileged broker recovery now independently checks the process identity persisted in the ownership manifest and refuses route/interface cleanup while that exact core process is still live. This closes the direct-helper-call gap: callers cannot bypass the managed supervisor's systemd stop step and ask the broker to remove active resources. A stale/reused PID does not block recovery because the check is tied to the persisted process start time and executable identity. Added a regression test covering rejection while the child is live and acceptance after it exits. The test is authored but has not yet been run locally.
