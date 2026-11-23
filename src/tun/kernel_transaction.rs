@@ -683,9 +683,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert!(
-            rollback(activation_id, &resources, "tun-proxyctl", 77, &mut backend).is_err()
-        );
+        assert!(rollback(activation_id, &resources, "tun-proxyctl", 77, &mut backend).is_err());
 
         assert_eq!(
             backend.removal_order,
