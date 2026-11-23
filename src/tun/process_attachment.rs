@@ -137,22 +137,11 @@ mod tests {
             executable: std::path::PathBuf::from("/usr/bin/true"),
         };
         assert!(
-            wait_for_process_tun_attachment(
-                &process,
-                "tun-proxyctl",
-                7,
-                Duration::from_secs(6)
-            )
-            .is_err()
+            wait_for_process_tun_attachment(&process, "tun-proxyctl", 7, Duration::from_secs(6))
+                .is_err()
         );
         assert!(
-            wait_for_process_tun_attachment(
-                &process,
-                "tun-proxyctl",
-                7,
-                Duration::ZERO
-            )
-            .is_err()
+            wait_for_process_tun_attachment(&process, "tun-proxyctl", 7, Duration::ZERO).is_err()
         );
     }
 }
