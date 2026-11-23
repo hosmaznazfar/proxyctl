@@ -141,8 +141,10 @@ pub fn spawn_native_core_service(
             stop.args(["-n", "--", SYSTEMCTL, "stop", &unit]);
             let cleanup = run_command(stop, Duration::from_secs(8), false);
             match (result, cleanup) {
-                (Err(error), Ok(output)) if output.success => return Err(error)
-                    .context("native systemd-run failed; transient unit stop was confirmed"),
+                (Err(error), Ok(output)) if output.success => {
+                    return Err(error)
+                        .context("native systemd-run failed; transient unit stop was confirmed");
+                }
                 (Err(error), cleanup) => return Err(error).context(format!(
                     "native systemd-run failed; bounded transient-unit cleanup result: {cleanup:?}"
                 )),
@@ -163,22 +165,39 @@ pub fn spawn_native_core_service(
             // Require the service to be actively running before binding the lifecycle to it.
             let state = run_bounded(
                 SUDO,
-                &["-n", "--", SYSTEMCTL, "show", "--property=ActiveState",
-                    "--property=SubState", "--value", &unit],
+                &[
+                    "-n",
+                    "--",
+                    SYSTEMCTL,
+                    "show",
+                    "--property=ActiveState",
+                    "--property=SubState",
+                    "--value",
+                    &unit,
+                ],
                 INSPECT_TIMEOUT,
                 true,
             )?;
             if is_active_running_state(state.success, &state.stdout) {
                 let output = run_bounded(
                     SUDO,
-                    &["-n", "--", SYSTEMCTL, "show", "--property=MainPID",
-                        "--value", &unit],
+                    &[
+                        "-n",
+                        "--",
+                        SYSTEMCTL,
+                        "show",
+                        "--property=MainPID",
+                        "--value",
+                        &unit,
+                    ],
                     INSPECT_TIMEOUT,
                     true,
                 )?;
                 if output.success
                     && let Ok(pid) = std::str::from_utf8(&output.stdout)
-                        .unwrap_or_default().trim().parse::<u32>()
+                        .unwrap_or_default()
+                        .trim()
+                        .parse::<u32>()
                     && pid > 0
                 {
                     let identity = ProcessIdentity::capture(pid)
@@ -201,8 +220,10 @@ pub fn spawn_native_core_service(
         Ok(identity) => Ok(identity),
         Err(error) => {
             let stop = run_bounded(
-                SUDO, &["-n", "--", SYSTEMCTL, "stop", &unit],
-                Duration::from_secs(8), false,
+                SUDO,
+                &["-n", "--", SYSTEMCTL, "stop", &unit],
+                Duration::from_secs(8),
+                false,
             );
             match stop {
                 Ok(output) if output.success => Err(error)

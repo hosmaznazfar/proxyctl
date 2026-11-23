@@ -188,9 +188,14 @@ pub fn spawn_xray_from_broker(
     // Allow the system manager to create one capability-confined transient unit. The
     // subsequent systemd-run invocation is non-interactive and cannot prompt mid-launch.
     let mut authorization = Command::new(SUDO);
-    authorization.arg("-v").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    authorization
+        .arg("-v")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     let authorization = run_bounded_command_status(
-        &mut authorization, Duration::from_secs(5),
+        &mut authorization,
+        Duration::from_secs(5),
         "sudo authorization for the Xray TUN service exceeded its five-second deadline",
     )?;
     ensure!(
@@ -276,9 +281,12 @@ pub fn spawn_xray_from_broker(
     if let Err(error) = start_result {
         let mut stop = Command::new(SUDO);
         stop.args(["-n", "--", SYSTEMCTL, "stop", &unit])
-            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         let _ = run_bounded_command_status(
-            &mut stop, Duration::from_secs(8),
+            &mut stop,
+            Duration::from_secs(8),
             "best-effort Xray startup cleanup exceeded its eight-second deadline",
         );
         return Err(error).context("Xray transient service startup failed");
@@ -309,15 +317,30 @@ pub fn spawn_xray_from_broker(
             "Xray core launcher peer credentials do not match the activation user"
         );
         let mut main_pid_command = Command::new(SUDO);
-        main_pid_command.args(["-n", "--", SYSTEMCTL, "show", "--property=MainPID", "--value"]).arg(&unit);
+        main_pid_command
+            .args([
+                "-n",
+                "--",
+                SYSTEMCTL,
+                "show",
+                "--property=MainPID",
+                "--value",
+            ])
+            .arg(&unit);
         let main_pid = run_bounded_command_output(
-            &mut main_pid_command, Duration::from_secs(3), 128,
+            &mut main_pid_command,
+            Duration::from_secs(3),
+            128,
             "Xray systemd MainPID inspection exceeded its three-second deadline",
         )?;
-        ensure!(main_pid.status.success(), "cannot inspect the exact Xray systemd service");
+        ensure!(
+            main_pid.status.success(),
+            "cannot inspect the exact Xray systemd service"
+        );
         let main_pid = String::from_utf8(main_pid.stdout)
             .context("systemd returned non-UTF-8 Xray service MainPID")?
-            .trim().parse::<u32>()
+            .trim()
+            .parse::<u32>()
             .context("systemd returned an invalid Xray service MainPID")?;
         ensure!(
             main_pid == peer.pid,
@@ -355,9 +378,12 @@ pub fn spawn_xray_from_broker(
         Err(error) => {
             let mut stop = Command::new(SUDO);
             stop.args(["-n", "--", SYSTEMCTL, "stop", &unit])
-                .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
             let _ = run_bounded_command_status(
-                &mut stop, Duration::from_secs(8),
+                &mut stop,
+                Duration::from_secs(8),
                 "best-effort Xray handoff cleanup exceeded its eight-second deadline",
             );
             let _ = service_command.wait();
@@ -479,14 +505,22 @@ fn run_bounded_command_output(
     timeout_message: &str,
 ) -> Result<BoundedCommandOutput> {
     ensure!(!timeout.is_zero(), "command timeout must be non-zero");
-    let mut output_file = tempfile::tempfile().context("cannot create bounded Xray command output file")?;
-    command.stdin(Stdio::null()).stdout(Stdio::from(output_file.try_clone()?)).stderr(Stdio::null());
-    let mut child = command.spawn().context("cannot start bounded Xray command")?;
+    let mut output_file =
+        tempfile::tempfile().context("cannot create bounded Xray command output file")?;
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(output_file.try_clone()?))
+        .stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .context("cannot start bounded Xray command")?;
     let deadline = std::time::Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
-            Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(20))
+            }
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -500,11 +534,19 @@ fn run_bounded_command_output(
         }
     };
     let size = output_file.metadata()?.len();
-    ensure!(size <= maximum_output, "Xray command output exceeded its bound");
+    ensure!(
+        size <= maximum_output,
+        "Xray command output exceeded its bound"
+    );
     output_file.seek(SeekFrom::Start(0))?;
     let mut stdout = Vec::new();
-    output_file.take(maximum_output + 1).read_to_end(&mut stdout)?;
-    ensure!(stdout.len() as u64 <= maximum_output, "Xray command output exceeded its bound");
+    output_file
+        .take(maximum_output + 1)
+        .read_to_end(&mut stdout)?;
+    ensure!(
+        stdout.len() as u64 <= maximum_output,
+        "Xray command output exceeded its bound"
+    );
     Ok(BoundedCommandOutput { status, stdout })
 }
 
@@ -905,7 +947,6 @@ pub fn stop_xray_generation(
     stop_core_service_generation(activation_id, generation, process)
 }
 
-
 #[cfg(test)]
 mod subprocess_tests {
     use super::*;
@@ -914,9 +955,9 @@ mod subprocess_tests {
     fn bounded_output_runner_captures_small_output() {
         let mut command = Command::new("/usr/bin/printf");
         command.arg("123");
-        let output = run_bounded_command_output(
-            &mut command, Duration::from_secs(1), 3, "printf timed out",
-        ).unwrap();
+        let output =
+            run_bounded_command_output(&mut command, Duration::from_secs(1), 3, "printf timed out")
+                .unwrap();
         assert!(output.status.success());
         assert_eq!(output.stdout, b"123");
     }
@@ -935,9 +976,15 @@ mod subprocess_tests {
         let mut command = Command::new("/usr/bin/sleep");
         command.arg("2");
         let started = std::time::Instant::now();
-        assert!(run_bounded_command_output(
-            &mut command, Duration::from_millis(30), 128, "sleep timed out",
-        ).is_err());
+        assert!(
+            run_bounded_command_output(
+                &mut command,
+                Duration::from_millis(30),
+                128,
+                "sleep timed out",
+            )
+            .is_err()
+        );
         assert!(started.elapsed() < Duration::from_secs(1));
     }
 }
