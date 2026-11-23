@@ -1341,3 +1341,7 @@ Linux rtnetlink does not provide an atomic full-fingerprint compare-and-delete o
 For sing-box and Mihomo, a successful config check or a caller-supplied evidence object is not sufficient. Before invoking the readiness callback or committing the process as Running, Proxyctl now independently checks the exact generation-bound MainPID's live `/proc/<pid>/fdinfo` for an `iff:` entry matching the expected persistent TUN interface. It also checks the kernel TUN marker and manifest-bound ifindex while holding a pidfd and revalidates process identity after inspection. Attachment polling is bounded to five seconds and failure triggers exact-generation stop/recovery.
 
 This confirms native descriptor attachment only. End-to-end proxied traffic, listener, route policy, DNS/firewall, socket mark, and physical-egress checks remain distinct readiness requirements; the native end-to-end path continues to execute them after attachment proof.
+
+### Linux fib-rule ABI and marker requirement
+
+The raw rtnetlink implementation uses the Linux UAPI attribute numbers `FRA_FWMARK=10`, `FRA_TABLE=15`, `FRA_FWMASK=16`, and `FRA_PROTOCOL=19`. Proxyctl writes protocol marker 99 on rule create/delete and uses the same marker for route protocol create/delete. The implementation verifies that fresh inventory reports marker 99 before issuing destructive route/rule cleanup. If the kernel or iproute2 cannot expose the marker, cleanup is rejected and the durable journal is retained.
