@@ -358,9 +358,25 @@ pub fn resume_managed_supervision(
     helper: &MutationHelper,
     coordinator: &LifecycleCoordinator,
 ) -> Result<MutationResponse> {
+    resume_managed_supervision_inner(helper, coordinator, None)
+}
+
+/// Resume only the requested generation. The identity check occurs inside the same
+/// resume entrypoint that binds the process identity and initiates cleanup/monitoring.
+fn resume_managed_supervision_inner(
+    helper: &MutationHelper,
+    coordinator: &LifecycleCoordinator,
+    expected: Option<(&str, u64)>,
+) -> Result<MutationResponse> {
     let current = coordinator
         .load_current()?
         .context("no managed TUN activation is available to resume")?;
+    if let Some((activation_id, generation)) = expected {
+        ensure!(
+            current.token.activation_id() == activation_id && current.token.generation() == generation,
+            "resume request does not match the persisted activation generation"
+        );
+    }
     let token = current.token;
     if matches!(
         current.snapshot.phase,
@@ -484,7 +500,7 @@ pub fn resume_managed_supervision_after_startup(
                 return Ok(());
             }
             SupervisorPhase::Running => {
-                resume_managed_supervision(helper, coordinator)?;
+                resume_managed_supervision_inner(helper, coordinator, Some((activation_id, generation)))?;
                 return Ok(());
             }
             SupervisorPhase::Cleaned => return Ok(()),
