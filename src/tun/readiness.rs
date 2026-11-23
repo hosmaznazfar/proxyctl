@@ -880,8 +880,16 @@ pub fn validate_dual_stack_probe_targets(targets: &[HttpProbeTarget]) -> Result<
         target.validate()?;
     }
     ensure!(
-        targets.iter().filter(|target| target.destination.is_ipv4()).count() == 1
-            && targets.iter().filter(|target| target.destination.is_ipv6()).count() == 1,
+        targets
+            .iter()
+            .filter(|target| target.destination.is_ipv4())
+            .count()
+            == 1
+            && targets
+                .iter()
+                .filter(|target| target.destination.is_ipv6())
+                .count()
+                == 1,
         "dual-stack TUN readiness requires one IPv4 and one IPv6 destination"
     );
     Ok(())
