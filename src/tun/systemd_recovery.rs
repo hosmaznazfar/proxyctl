@@ -15,6 +15,34 @@ use std::{
     time::{Duration, Instant},
 };
 
+
+/// Execute a systemd control command with a strict wall-clock deadline. Output is captured
+/// only after the child exits; on timeout the child is killed and reaped.
+fn run_bounded(mut command: Command, timeout: Duration, context: &'static str) -> Result<std::process::Output> {
+    command.stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = command.spawn().context(context)?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                anyhow::bail!("{context}: command exceeded its bounded deadline");
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context(context);
+            }
+        }
+    }
+    child.wait_with_output().context(context)
+}
+
 /// The recovery supervisor runs in the per-user systemd manager. Without lingering,
 /// that manager may be stopped at logout while the system-level core service and TUN
 /// routes remain active. Refuse activation unless systemd is configured to keep the
@@ -254,11 +282,9 @@ impl SystemdRecoverySupervisor {
 
     fn active_state(&self, identity: &SupervisorIdentity) -> Result<Option<String>> {
         self.validate_identity(identity)?;
-        let output = Command::new(&self.systemctl)
-            .args(["--user", "is-active"])
-            .arg(Self::unit(identity))
-            .output()
-            .context("could not query the TUN recovery service state")?;
+        let mut command = Command::new(&self.systemctl);
+        command.args(["--user", "is-active"]).arg(Self::unit(identity));
+        let output = run_bounded(command, Duration::from_secs(2), "could not query the TUN recovery service state")?;
         let state = String::from_utf8(output.stdout)
             .context("systemd returned a non-UTF-8 service state")?
             .trim()
@@ -291,8 +317,8 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             return Ok(());
         }
         let unit_arg = format!("--unit={}", Self::unit(identity));
-        let output = Command::new(&self.systemd_run)
-            .arg("--user")
+        let mut command = Command::new(&self.systemd_run);
+        command.arg("--user")
             .arg("--quiet")
             .arg("--no-block")
             .arg("--collect")
@@ -326,9 +352,8 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             .arg(&self.executable)
             .arg(&self.runtime)
             .arg(&identity.activation_id)
-            .arg(identity.generation.to_string())
-            .output()
-            .context("could not start the TUN recovery supervisor user service")?;
+            .arg(identity.generation.to_string());
+        let output = run_bounded(command, Duration::from_secs(3), "could not start the TUN recovery supervisor user service")?;
         if !output.status.success() {
             // A concurrent start may have won after the initial state query. Accept only
             // when systemd now reports this exact generation's unit as active/activating.
@@ -373,11 +398,9 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
         if self.active_state(identity)?.is_none() {
             return Ok(());
         }
-        let output = Command::new(&self.systemctl)
-            .args(["--user", "stop", "--no-block"])
-            .arg(Self::unit(identity))
-            .output()
-            .context("could not request stop of the TUN recovery supervisor user service")?;
+        let mut command = Command::new(&self.systemctl);
+        command.args(["--user", "stop", "--no-block"]).arg(Self::unit(identity));
+        let output = run_bounded(command, Duration::from_secs(2), "could not request stop of the TUN recovery supervisor user service")?;
         ensure!(
             output.status.success(),
             "systemctl could not stop the TUN recovery service: {}",
