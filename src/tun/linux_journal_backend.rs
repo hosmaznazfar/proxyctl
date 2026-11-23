@@ -272,8 +272,6 @@ impl LinuxJournalBackend {
                 // TUN ifindex as part of netdevice unregister. If a route remains after that
                 // operation, it is no longer safe to infer that it is ours: preserve it and
                 // retain the journal rather than deleting by a weaker route selector.
-                let _ = key;
-                let _ = expected;
                 Ok(ResourceState::ChangedOrForeign)
             }
             JournalOperationKind::AddRule => {
