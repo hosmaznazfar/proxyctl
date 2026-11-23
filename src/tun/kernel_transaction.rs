@@ -453,6 +453,7 @@ mod tests {
         native_create_count: usize,
         fail_create_after_intent: bool,
         route_interface_indexes: Vec<u32>,
+        removal_order: Vec<String>,
     }
 
     impl KernelTransactionBackend for FakeBackend {
@@ -528,6 +529,7 @@ mod tests {
             key: &str,
             fp: &str,
         ) -> Result<ResourceState> {
+            self.removal_order.push(key.to_owned());
             if self.fail_remove {
                 anyhow::bail!("injected rollback failure");
             }
@@ -539,6 +541,10 @@ mod tests {
             }
             match self.resources.get(key) {
                 None => Ok(ResourceState::AlreadyAbsent),
+                Some(current) if current == fp && key.starts_with("route:") => {
+                    // Route removal is verification-only after interface teardown.
+                    Ok(ResourceState::ChangedOrForeign)
+                }
                 Some(current) if current == fp => {
                     self.resources.remove(key);
                     Ok(ResourceState::Removed)
@@ -553,6 +559,7 @@ mod tests {
             name: &str,
             index: u32,
         ) -> Result<ResourceState> {
+            self.removal_order.push("interface".into());
             if self.fail_remove {
                 anyhow::bail!("injected interface rollback failure");
             }
@@ -560,6 +567,14 @@ mod tests {
                 None => Ok(ResourceState::AlreadyAbsent),
                 Some(item) if item.name == name && item.index == index && item.is_tun => {
                     self.interface = None;
+                    // Model the kernel purging all routes whose nexthop references this link.
+                    let owned_routes = self.resources.iter().filter_map(|(key, fingerprint)| {
+                        (key.starts_with("route:") && fingerprint == &format!("fp:{key}"))
+                            .then(|| key.clone())
+                    }).collect::<Vec<_>>();
+                    for key in owned_routes {
+                        self.resources.remove(&key);
+                    }
                     Ok(ResourceState::Removed)
                 }
                 Some(_) => Ok(ResourceState::ChangedOrForeign),
@@ -597,6 +612,44 @@ mod tests {
             owner_uid: 1000,
             owner_gid: 1000,
         }
+    }
+
+    #[test]
+    fn rollback_removes_rules_then_interface_and_only_verifies_routes() {
+        let activation_id = "12345678-1234-4234-8234-123456789abc";
+        let route_key = "route:v4:42420:0.0.0.0/0".to_owned();
+        let rule_key = "rule:v4:42420".to_owned();
+        let resources = vec![
+            super::super::ownership::OwnedResource {
+                key: route_key.clone(),
+                fingerprint: format!("fp:{route_key}"),
+            },
+            super::super::ownership::OwnedResource {
+                key: rule_key.clone(),
+                fingerprint: format!("fp:{rule_key}"),
+            },
+        ];
+        let mut backend = FakeBackend {
+            interface: Some(KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                is_tun: true,
+            }),
+            resources: BTreeMap::from([
+                (route_key.clone(), format!("fp:{route_key}")),
+                (rule_key.clone(), format!("fp:{rule_key}")),
+            ]),
+            ..Default::default()
+        };
+
+        rollback(activation_id, &resources, "tun-proxyctl", 77, &mut backend).unwrap();
+
+        assert_eq!(
+            backend.removal_order,
+            [rule_key.clone(), "interface".into(), route_key.clone()]
+        );
+        assert!(backend.resources.is_empty());
+        assert!(backend.interface.is_none());
     }
 
     #[test]
