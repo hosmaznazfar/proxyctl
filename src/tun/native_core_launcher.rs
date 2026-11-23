@@ -134,8 +134,8 @@ pub fn spawn_native_core_service(
         .arg("--")
         .arg(&executable)
         .args(&arguments);
-    let started = match run_command(command, START_TIMEOUT, false) {
-        Ok(output) if output.success => output,
+    match run_command(command, START_TIMEOUT, false) {
+        Ok(output) if output.success => (),
         result => {
             let mut stop = Command::new(SUDO);
             stop.args(["-n", "--", SYSTEMCTL, "stop", &unit]);
