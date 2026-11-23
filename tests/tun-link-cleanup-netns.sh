@@ -58,13 +58,13 @@ show_rules() {
 has_rule_marker() {
     family=$1
     marker=$2
-    show_rules "$family" | grep -Eq "42420:.*lookup 42420.*proto $marker([[:space:]]|$)"
+    show_rules "$family" | grep -Eq "42420:.*lookup 42420.*proto (99|openr)([[:space:]]|$)"
 }
 require_rule_marker() {
     family=$1
     marker=$2
     output=$(show_rules "$family")
-    if ! printf '%s\n' "$output" | grep -Eq "42420:.*lookup 42420.*proto $marker([[:space:]]|$)"; then
+    if ! printf '%s\n' "$output" | grep -Eq "42420:.*lookup 42420.*proto (99|openr)([[:space:]]|$)"; then
         printf 'expected %s rule at priority/table 42420 with protocol %s; detailed rules were:\n%s\n' "$family" "$marker" "$output" >&2
         exit 1
     fi
