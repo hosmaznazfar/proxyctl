@@ -359,6 +359,21 @@ impl<'a> ActivationOrchestrator<'a> {
                 );
             }
         };
+        if let Err(error) = super::xray_launcher::wait_for_process_tun_attachment(
+            &process,
+            &request.interface_name,
+            expected_ifindex,
+            Duration::from_secs(5),
+        ) {
+            self.stop_core_and_recover_generation(
+                &request.activation_id,
+                request.generation,
+                Some(&process),
+            )?;
+            return Err(error).context(
+                "native core did not independently adopt the exact persistent TUN interface",
+            );
+        }
         if let Err(error) = readiness(&process, &token) {
             self.stop_core_and_recover_generation(
                 &request.activation_id,
