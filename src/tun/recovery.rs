@@ -101,10 +101,7 @@ impl SupervisorIdentity {
         );
         ensure!(
             self.service_name
-                == format!(
-                    "proxyctl-tun-{}-g{}",
-                    self.activation_id, self.generation
-                ),
+                == format!("proxyctl-tun-{}-g{}", self.activation_id, self.generation),
             "supervisor service identity does not match its activation"
         );
         let manifest_path = std::path::Path::new(&self.manifest_path);

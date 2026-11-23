@@ -280,9 +280,7 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
 }
 
 /// Refuse privileged resource recovery while the manifest-bound core process is live.
-fn ensure_managed_core_stopped(
-    process: Option<&super::process::ProcessIdentity>,
-) -> Result<()> {
+fn ensure_managed_core_stopped(process: Option<&super::process::ProcessIdentity>) -> Result<()> {
     if let Some(process) = process {
         ensure!(
             !process.verify()?,
@@ -455,7 +453,9 @@ fn execute(
             }
             let journal = store.load_transaction_journal()?;
             ensure_managed_core_stopped(
-                manifest.as_ref().and_then(|snapshot| snapshot.core_process.as_ref()),
+                manifest
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.core_process.as_ref()),
             )?;
             if let Some(journal) = &journal {
                 ensure!(
