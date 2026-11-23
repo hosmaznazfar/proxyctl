@@ -147,3 +147,30 @@ The protocol-tagging change also corrected the raw fib-rule attribute identifier
 ### Upgrade behavior for pre-marker journals
 
 Journals/manifests created by earlier builds have no protocol-99 ownership marker on their route/rule entries. The new cleanup path intentionally does not infer ownership from the old table/priority selectors alone: it preserves those entries and retains the journal rather than deleting an untagged resource. Upgrading with an active legacy TUN activation therefore requires stopping the matching core and manually reviewing/cleaning the old resources before starting a new activation. This is a deliberate fail-closed compatibility boundary, not an automatic migration.
+
+
+## Phase 3 and 4 follow-up implementation (2026-11-23)
+
+### Dual-stack dataplane readiness
+
+- Added a shared validator requiring exactly one valid IPv4 and one valid IPv6 numeric HTTP target.
+- Added a native-core readiness composition that independently runs the existing route lookup, bounded TUN-routed HTTP exchange, listener/process verification, outbound socket-mark observation, physical-egress check, and DNS/firewall snapshot comparison for both families.
+- Added Xray dual-stack readiness using the same generation-bound live checks.
+- Added orchestration entrypoints for dual-stack Xray and sing-box/Mihomo activation. They keep the manifest Prepared until both family probes pass; any error follows the existing exact-generation stop and broker-recovery path.
+- Added regression coverage for missing, duplicate, and same-family target sets.
+
+The DNS assertion remains a preservation check against pre-activation state. These numeric-address HTTP probes do not perform a DNS query through the proxy and do not prove resolver, split-DNS, or DNS-over-TCP/UDP behavior. Those remain explicit host integration requirements.
+
+### Recovery supervisor logout safety
+
+- The systemd recovery supervisor runs in the activation user's manager, while the managed core is a system-level service. If the user manager stops at logout, the core and routes could outlive the recovery process.
+- The production systemd supervisor constructor now queries the current UID's Linger property with loginctl and requires an exact yes. The query is bounded to two seconds and fails closed on command errors, malformed output, or disabled lingering.
+- The existing activation rollback path handles supervisor-construction failure after kernel preparation. User-facing setup guidance is: sudo loginctl enable-linger $(id -un).
+- Added unit tests for explicit yes/no/empty/unknown linger-state values.
+
+### Current scope and verification
+
+- Systemd is the only implemented automatic recovery backend. Other detected init managers remain unsupported and activation must remain rejected there.
+- Unit/source changes are committed, but this follow-up has not been compiled, formatted, run through Clippy, or tested locally. The maintainer must validate the latest main before any live TUN activation.
+- Host-level proof is still required for IPv4 and IPv6 external reachability, DNS resolution behavior, logout with lingering enabled, supervisor restart, core crash, system shutdown, and recovery under concurrent startup/cleanup.
+- The default CLI activation gate remains closed. These orchestration APIs are not a declaration of production readiness.
