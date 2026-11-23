@@ -361,25 +361,53 @@ fn rollback<B: KernelTransactionBackend>(
     interface_index: u32,
     backend: &mut B,
 ) -> Result<()> {
-    for resource in resources.iter().rev() {
-        match backend.remove_resource_if_matches(
-            activation_id,
-            &resource.key,
-            &resource.fingerprint,
-        )? {
-            ResourceState::Removed | ResourceState::AlreadyAbsent => {}
-            ResourceState::ChangedOrForeign => {
-                anyhow::bail!(
-                    "rollback found a changed or foreign resource: {}",
-                    resource.key
-                )
-            }
-        }
+    // Policy rules must go first so no lookup can continue to select the TUN table.
+    for resource in resources
+        .iter()
+        .rev()
+        .filter(|resource| resource.key.starts_with("rule:"))
+    {
+        remove_resource(activation_id, resource, backend)?;
     }
+
+    // Linux removes routes bound to a netdevice when that exact device is unregistered.
+    // Use the generation-owned TUN descriptor/persistent-device handle instead of a
+    // route selector that cannot compare the complete canonical route fingerprint.
     match backend.remove_interface_if_matches(activation_id, interface_name, interface_index)? {
-        ResourceState::Removed | ResourceState::AlreadyAbsent => Ok(()),
+        ResourceState::Removed | ResourceState::AlreadyAbsent => {}
         ResourceState::ChangedOrForeign => {
             anyhow::bail!("rollback found a changed or foreign TUN interface")
+        }
+    }
+
+    // Route records are verification-only after link teardown. A surviving route is a
+    // conflict: preserve it and retain the journal rather than deleting by a weak selector.
+    for resource in resources
+        .iter()
+        .rev()
+        .filter(|resource| resource.key.starts_with("route:"))
+    {
+        remove_resource(activation_id, resource, backend)?;
+    }
+    Ok(())
+}
+
+fn remove_resource<B: KernelTransactionBackend>(
+    activation_id: &str,
+    resource: &super::ownership::OwnedResource,
+    backend: &mut B,
+) -> Result<()> {
+    match backend.remove_resource_if_matches(
+        activation_id,
+        &resource.key,
+        &resource.fingerprint,
+    )? {
+        ResourceState::Removed | ResourceState::AlreadyAbsent => Ok(()),
+        ResourceState::ChangedOrForeign => {
+            anyhow::bail!(
+                "rollback found a changed or foreign resource: {}",
+                resource.key
+            )
         }
     }
 }
