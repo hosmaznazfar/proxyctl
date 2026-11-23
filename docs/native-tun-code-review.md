@@ -308,3 +308,8 @@ A follow-up source audit found that the privileged rule-cleanup backend also nee
 
 The maintainer confirmed that the focused `broker_recovery_refuses_to_mutate_while_manifest_core_is_live` test and the subsequent `cargo test --all-targets --all-features` run both passed after replacing the unstable `tail -f /dev/null` test process with a bounded `sleep 30` fixture. This was test-fixture stabilization only; production recovery guard behavior was unchanged. The symbolic `openr` rule-marker regression is included in the successful full suite. The earlier namespace cleanup script validation remains confirmed and was not rerun for this fixture-only change.
 
+
+
+### Recovery supervisor unit sandboxing follow-up (2026-11-23)
+
+Source review found an opportunity to reduce the recovery supervisor's privileges and network exposure independently of the CAP_NET_ADMIN mutation helper. The transient systemd user unit now requests `NoNewPrivileges=yes`, empty `CapabilityBoundingSet` and `AmbientCapabilities`, `RestrictSUIDSGID=yes`, `RestrictNamespaces=yes`, and `RestrictAddressFamilies=AF_UNIX`. The supervisor is intended to coordinate identity/state and broker requests, not directly perform privileged kernel networking. This is additional sandboxing, not a privilege-boundary proof. It is unvalidated: the next local checkpoint must confirm systemd accepts these properties and that the supervisor can still inspect pinned processes, interact with the user/system manager, access its private runtime directory, and communicate with the helper. TUN remains gated.
