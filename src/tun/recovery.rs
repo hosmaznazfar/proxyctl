@@ -256,7 +256,7 @@ mod tests {
     fn supervisor_identity_rejects_service_name_injection() {
         let valid = SupervisorIdentity {
             activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            service_name: "proxyctl-tun-12345678-1234-4234-8234-123456789abc".into(),
+            service_name: "proxyctl-tun-12345678-1234-4234-8234-123456789abc-g1".into(),
             manifest_path: "/private/runtime/tun-manifest.json".into(),
             generation: 1,
         };
