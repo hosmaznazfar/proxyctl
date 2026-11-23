@@ -25,6 +25,10 @@ const RTPROT_PROXYCTL: u8 = PROXYCTL_ROUTE_PROTOCOL;
 const RT_SCOPE_UNIVERSE: u8 = 0;
 const RTN_UNICAST: u8 = 1;
 const FR_ACT_TO_TBL: u8 = 1;
+fn append_proxyctl_rule_protocol(attrs: &mut Vec<u8>) -> Result<()> {
+    attr(FRA_PROTOCOL, &[PROXYCTL_ROUTE_PROTOCOL], attrs)
+}
+
 fn family(f: AddressFamily) -> u8 {
     match f {
         AddressFamily::Ipv4 => libc::AF_INET as u8,
@@ -132,7 +136,7 @@ pub fn add_rule(rule: &PlannedRule) -> Result<()> {
     let mut attrs = Vec::new();
     attr(FRA_PRIORITY, &rule.priority.to_ne_bytes(), &mut attrs)?;
     attr(FRA_TABLE, &rule.lookup_table.to_ne_bytes(), &mut attrs)?;
-    attr(FRA_PROTOCOL, &[PROXYCTL_ROUTE_PROTOCOL], &mut attrs)?;
+    append_proxyctl_rule_protocol(&mut attrs)?;
     if let Some(mark) = rule.mark {
         ensure!(
             mark.mask != 0 && mark.value & !mark.mask == 0,
@@ -212,7 +216,7 @@ mod interface_alias_tests {
     #[test]
     fn proxyctl_rule_protocol_marker_is_encoded_as_exact_u8_selector() {
         let mut attrs = Vec::new();
-        attr(FRA_PROTOCOL, &[PROXYCTL_ROUTE_PROTOCOL], &mut attrs).unwrap();
+        append_proxyctl_rule_protocol(&mut attrs).unwrap();
         assert_eq!(u16::from_ne_bytes(attrs[0..2].try_into().unwrap()), 5);
         assert_eq!(u16::from_ne_bytes(attrs[2..4].try_into().unwrap()), FRA_PROTOCOL);
         assert_eq!(attrs[4], PROXYCTL_ROUTE_PROTOCOL);
