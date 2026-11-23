@@ -185,8 +185,6 @@ The DNS assertion remains a preservation check against pre-activation state. The
 
 ### Hosted CI verification (2026-11-23)
 
-GitHub Actions passed for commit c343bd9d12102af24c22b918fe0164e7bfdb547e. Formatting passed; Clippy passed with warnings denied; the full all-target test job reported 644 passed, 0 failed, and 1 ignored because the managed core binaries were unavailable. This hosted runner result does not substitute for the maintainer's local CachyOS build or live TUN/systemd/core integration. Local and host-level validation remain required.
-
 
 ## Phase 5 — privileged mutation-helper security audit (2026-11-23)
 
@@ -229,7 +227,7 @@ The source audit and added unit tests do not prove installed file capabilities, 
 - CI runs formatting, Clippy with warnings denied, and all-target/all-feature tests on Ubuntu using Rust 1.100.0, matching the package's declared `rust-version = "1.100"`. This verifies the declared compiler floor rather than silently relying on a different toolchain.
 - The TUN helper remains a separately installed root-owned executable with the narrowly scoped file capability contract described above. Packaging scripts and installed systemd units still require validation on a clean CachyOS host.
 - No automatic recovery backend other than systemd is implemented. Unsupported service managers must remain fail-closed.
-- The public TUN activation gate remains closed. Route cleanup now relies on kernel netdevice-unregister cleanup rather than a separate RTM_DELROUTE request; the backend verifies route absence afterwards. Policy-rule cleanup remains a protocol-tagged selector operation, and IPv4 unregister may flush other already-dead routes in the namespace. Both behaviors require namespace/host validation.
+- The public TUN activation gate remains closed. Route cleanup now relies on kernel netdevice-unregister cleanup rather than a separate RTM_DELROUTE request; the backend verifies route absence afterwards. Policy-rule cleanup remains a protocol-tagged selector operation with the documented omitted-attribute wildcard limitation. IPv4 unregister can flush unrelated already-dead routes and, with multipath enabled, a whole multipath route containing the TUN as one nexthop. Both behaviours require namespace/host validation and explicit acceptance.
 
 ### Required release validation
 - Run formatting, all-target/all-feature Clippy, all-target/all-feature tests, and a release build on the target machine.
