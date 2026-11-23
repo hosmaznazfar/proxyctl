@@ -354,3 +354,13 @@ A follow-up review covered `src/tun/mutation_helper_launcher.rs` and `src/tun/pr
 - These source-level checks do not establish real VMess/VLESS connectivity or TUN dataplane correctness. The next acceptance stage must use the maintainer's locally stored VMess and VLESS nodes without copying credentials into logs, commits, or chat.
 
 TUN remains gated pending the local host integration and real-node tests.
+
+### Xray CLI readiness family enforcement (2026-11-23)
+
+A service-to-orchestrator integration review found that the public Xray TUN command still called the single-target readiness API even though a dual-stack API already existed. The CLI now resolves the configured HTTP probe hostname before activation, selects one usable IPv4 and one usable IPv6 address, preserves the original Host header/path, and invokes the dual-stack orchestrator. Missing either family fails before kernel mutation. Loopback, link-local, unspecified, and multicast candidates are excluded. Regression tests cover family selection, missing-family rejection, and non-routable candidate filtering.
+
+This is a fail-closed integration correction. Formatting, Clippy, and all-target tests must be rerun locally before any real-node activation attempt. The default connectivity-check hostname must resolve to both address families on the test host. This does not prove DNS traffic itself is tunneled; it proves the numeric IPv4/IPv6 HTTP datapaths after pre-activation resolution.
+
+### Real VMess/VLESS host validation — pending
+
+After the Rust checks pass, the maintainer should select one known-good VMess node and one known-good VLESS node already stored in the local database, verify Xray compatibility, and test each separately through `proxyctl use <ID> --core xray --tun`. Stop and verify cleanup after each node. The test must record only node type, command exit status, HTTP status, and cleanup result; never include node URLs, UUIDs, passwords, flow values, generated configs, or unmasked logs in the repository or chat. The explicit Xray TUN path is experimental; sing-box and Mihomo remain disabled. Do not interpret a successful activation as DNS-through-proxy validation or production approval.
