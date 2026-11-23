@@ -170,7 +170,7 @@ pub fn delete_route(route: &PlannedRoute) -> Result<()> {
     );
     let mut p = vec![0u8; 12];
     p[0] = family(route.family);
-    p[4] = RTPROT_STATIC;
+    p[4] = RTPROT_PROXYCTL;
     p[5] = RT_SCOPE_UNIVERSE;
     p[6] = RTN_UNICAST;
     let mut attrs = Vec::new();
@@ -194,6 +194,7 @@ pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
     let mut attrs = Vec::new();
     attr(FRA_PRIORITY, &rule.priority.to_ne_bytes(), &mut attrs)?;
     attr(FRA_TABLE, &rule.lookup_table.to_ne_bytes(), &mut attrs)?;
+    append_proxyctl_rule_protocol(&mut attrs)?;
     if let Some(mark) = rule.mark {
         ensure!(
             mark.mask != 0 && mark.value & !mark.mask == 0,
