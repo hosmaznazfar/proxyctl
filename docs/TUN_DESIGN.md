@@ -1,7 +1,7 @@
 # Linux TUN design
 
-> Status: **activation disabled**. Only read-only network inspection is available.
-> Scope: Linux kernel networking across Linux distributions; service-manager integration is abstracted.
+> Status: managed activation orchestration and recovery code exist, but the default CLI activation gate remains closed pending host-level validation.
+> Scope: Linux kernel networking; automatic recovery is currently implemented only for systemd with a lingering per-user manager.
 > Goal: use one selected managed core's native TUN implementation, with exact Proxyctl-owned routing resources and crash recovery.
 
 ## Safety incident and current decision
@@ -213,7 +213,7 @@ A Linux-only discovery layer now enumerates executable `sudo`, `doas`, and `pkex
 
 ## Dataplane readiness evidence (offline contract)
 
-A fail-closed readiness evaluator now requires evidence for the exact manifest-owned TUN interface name and ifindex, verified core process identity, local listener, installed route policy, physical-egress bypass, successful end-to-end proxied traffic, and unchanged DNS/firewall state. Process liveness or a listening local port alone can never mark TUN ready. The evaluator consumes evidence only; no live probes are wired yet, so this does not make TUN activation available.
+A fail-closed readiness evaluator now requires evidence for the exact manifest-owned TUN interface name and ifindex, verified core process identity, local listener, installed route policy, physical-egress bypass, successful end-to-end proxied traffic, and unchanged DNS/firewall state. Process liveness or a listening local port alone can never mark TUN ready. The evaluator is backed by live Linux probes in explicit Xray, sing-box, and Mihomo end-to-end orchestration paths. A single-target path verifies the selected numeric-address family; a dual-stack path requires one IPv4 and one IPv6 HTTP target and runs both probes before the Running commit. These APIs do not enable the default CLI activation gate.
 
 
 ### Fake-process test stability
@@ -1349,3 +1349,22 @@ The raw rtnetlink implementation uses the Linux UAPI attribute numbers `FRA_FWMA
 ### Upgrade safety for legacy ownership records
 
 Pre-marker manifests and transaction journals are not automatically migrated. Their routes/rules do not carry protocol 99, so the new backend refuses to delete them based only on the former selectors. Keep the journal, stop the exact managed core, inspect the old resources, and resolve them manually before activating with this version. Do not run broad route/rule flush commands.
+
+
+## Phase 3 and 4 implementation status (2026-11-23)
+
+### Phase 3 — dataplane verification
+
+The explicit end-to-end activation APIs now include both single-family and dual-stack variants for Xray and for native sing-box/Mihomo. The dual-stack variants require exactly two valid numeric HTTP targets: one IPv4 and one IPv6. For each target, readiness independently checks the unmarked kernel route into the manifest-owned TUN table, performs a bounded direct application HTTP exchange, verifies the managed local listener and core process identity, observes a matching marked outbound core socket, checks physical-egress bypass policy, and compares DNS/firewall host snapshots. Both address families must pass before the lifecycle can commit Running.
+
+The current DNS guarantee is **configuration preservation**, not a functional DNS query through the proxy. The end-to-end HTTP probes use numeric destination addresses and intentionally do not invoke the host resolver. DNS query transport, resolver behavior, and split-DNS semantics therefore remain host-validation work and must not be described as proven. Likewise, the source-level probes do not replace live traffic testing on the target host, including external IPv4/IPv6 reachability and crash behavior.
+
+### Phase 4 — supervisor and service lifecycle
+
+The core services and recovery supervisor use distinct generation-bound systemd units. The recovery supervisor runs under the activation user's systemd manager; privileged cleanup remains in the persistent broker. Because the native core is a system-level service, a non-lingering user manager could otherwise disappear at logout while the core and routes remain. The SystemdRecoverySupervisor constructor now requires loginctl show-user UID --property=Linger --value to return exactly yes, with a bounded two-second query. If lingering is disabled or cannot be determined, supervisor construction fails; activation orchestration then follows its existing exact-generation rollback path. Enable lingering with sudo loginctl enable-linger $(id -un) before attempting managed TUN activation.
+
+The only automatic recovery backend currently implemented is systemd. OpenRC, runit, s6, dinit, and SysVinit detection exists, but those managers are not yet supported recovery backends and must remain fail-closed. Reboot clears kernel networking state, but orderly shutdown and real systemd unit ordering still require host-level validation. No claim is made that a user-manager supervisor is independent of systemd itself.
+
+### Validation boundary
+
+Unit tests cover dual-stack target-family validation and the linger-state parser. The new code has not been compiled or executed in the maintainer's local environment yet. TUN activation remains gated until the maintainer validates formatting, all targets, Clippy, actual systemd user lingering, both address families, DNS behavior, and crash/restart recovery on the target machine.
