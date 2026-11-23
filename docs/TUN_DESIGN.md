@@ -1309,3 +1309,8 @@ The latest source review covered generation-bound supervisor recovery, compatibi
 - The resume entrypoint rejects a manifest whose activation token differs from that expected identity before process monitoring or recovery is initiated. The general CLI resume path remains available without an explicit expected identity.
 - This narrows a check-to-resume race in the standalone recovery service. Kernel cleanup selector race limitations and live service-manager verification remain separate unresolved concerns.
 - No new automated regression test has yet been added for this narrow change; the existing test suite remains unexecuted during this implementation phase.
+
+
+### Prepared startup versus orphan cleanup
+
+The lifecycle coordinator serializes core-process binding and orphan cleanup with the same cross-process lifecycle lock. A supervisor that decides a Prepared generation has timed out must first durably claim it by changing the phase to CleanupPending. Only after that claim may it terminate a recorded process or request broker cleanup. A concurrent late startup commit then fails its Prepared-phase check instead of racing with cleanup. CleanupPending recovery also retries stopping the persisted process identity before broker resource recovery, so a crash between the durable claim and process termination does not skip the stop step.
