@@ -140,61 +140,64 @@ pub fn spawn_native_core_service(
         "systemd refused to start the generation-bound native core service"
     );
 
-    let deadline = Instant::now() + START_TIMEOUT;
-    loop {
-        // A non-zero MainPID can briefly remain observable while a unit is stopping.
-        // Require the service to be actively running before binding the lifecycle to it.
-        let state = run_bounded(
-            SUDO,
-            &[
-                "-n",
-                "--",
-                SYSTEMCTL,
-                "show",
-                "--property=ActiveState",
-                "--property=SubState",
-                "--value",
-                &unit,
-            ],
-            INSPECT_TIMEOUT,
-            true,
-        )?;
-        if is_active_running_state(state.success, &state.stdout) {
-            let output = run_bounded(
+    let identity_result = (|| -> Result<ProcessIdentity> {
+        let deadline = Instant::now() + START_TIMEOUT;
+        loop {
+            // A non-zero MainPID can briefly remain observable while a unit is stopping.
+            // Require the service to be actively running before binding the lifecycle to it.
+            let state = run_bounded(
                 SUDO,
-                &[
-                    "-n",
-                    "--",
-                    SYSTEMCTL,
-                    "show",
-                    "--property=MainPID",
-                    "--value",
-                    &unit,
-                ],
+                &["-n", "--", SYSTEMCTL, "show", "--property=ActiveState",
+                    "--property=SubState", "--value", &unit],
                 INSPECT_TIMEOUT,
                 true,
             )?;
-            if output.success
-                && let Ok(pid) = std::str::from_utf8(&output.stdout)
-                    .unwrap_or_default()
-                    .trim()
-                    .parse::<u32>()
-                && pid > 0
-            {
-                let identity = ProcessIdentity::capture(pid)
-                    .context("cannot capture native core systemd MainPID identity")?;
-                ensure!(
-                    identity.executable == executable && identity.verify()?,
-                    "native core systemd MainPID does not match the requested executable"
-                );
-                return Ok(identity);
+            if is_active_running_state(state.success, &state.stdout) {
+                let output = run_bounded(
+                    SUDO,
+                    &["-n", "--", SYSTEMCTL, "show", "--property=MainPID",
+                        "--value", &unit],
+                    INSPECT_TIMEOUT,
+                    true,
+                )?;
+                if output.success
+                    && let Ok(pid) = std::str::from_utf8(&output.stdout)
+                        .unwrap_or_default().trim().parse::<u32>()
+                    && pid > 0
+                {
+                    let identity = ProcessIdentity::capture(pid)
+                        .context("cannot capture native core systemd MainPID identity")?;
+                    ensure!(
+                        identity.executable == executable && identity.verify()?,
+                        "native core systemd MainPID does not match the requested executable"
+                    );
+                    return Ok(identity);
+                }
+            }
+            ensure!(
+                Instant::now() < deadline,
+                "native core service did not reach active/running with a verified MainPID before its startup deadline"
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    })();
+    match identity_result {
+        Ok(identity) => Ok(identity),
+        Err(error) => {
+            let stop = run_bounded(
+                SUDO, &["-n", "--", SYSTEMCTL, "stop", &unit],
+                Duration::from_secs(8), false,
+            );
+            match stop {
+                Ok(output) if output.success => Err(error)
+                    .context("native core startup inspection failed; transient service stop confirmed"),
+                Ok(_) => Err(error)
+                    .context("native core startup inspection failed and systemd did not confirm cleanup"),
+                Err(stop_error) => Err(error).context(format!(
+                    "native core startup inspection failed; bounded service cleanup also failed: {stop_error:#}"
+                )),
             }
         }
-        ensure!(
-            Instant::now() < deadline,
-            "native core service did not reach active/running with a verified MainPID before its startup deadline"
-        );
-        std::thread::sleep(Duration::from_millis(25));
     }
 }
 
