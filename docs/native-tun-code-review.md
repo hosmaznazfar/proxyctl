@@ -143,3 +143,7 @@ The gate applies to both sing-box and Mihomo after their generated native config
 ### rtnetlink selector ABI correction
 
 The protocol-tagging change also corrected the raw fib-rule attribute identifiers against the Linux UAPI: `FRA_FWMASK` is attribute 16 and `FRA_PROTOCOL` is attribute 19. The previous mask constant (11) did not encode a mark mask; it addressed a different fib-rule attribute. Regression assertions now pin the ABI values and the protocol-marker attribute encoding. The rule marker is applied on both creation and deletion, and the route protocol marker is applied on both route creation and deletion.
+
+### Upgrade behavior for pre-marker journals
+
+Journals/manifests created by earlier builds have no protocol-99 ownership marker on their route/rule entries. The new cleanup path intentionally does not infer ownership from the old table/priority selectors alone: it preserves those entries and retains the journal rather than deleting an untagged resource. Upgrading with an active legacy TUN activation therefore requires stopping the matching core and manually reviewing/cleaning the old resources before starting a new activation. This is a deliberate fail-closed compatibility boundary, not an automatic migration.
