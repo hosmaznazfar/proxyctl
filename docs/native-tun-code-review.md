@@ -111,3 +111,8 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 - The process termination and broker cleanup remain separate operations after the durable claim; failures preserve CleanupPending for retry.
 - This change and its regression test have not been compiled, formatted, or executed locally. Runtime process/service and kernel cleanup validation remain outstanding.
 - Follow-up hardening: cleanup now also rechecks and stops the persisted process identity when resuming an already-CleanupPending manifest. This covers a crash after the durable cleanup claim but before process termination completes; a failed stop leaves the manifest pending rather than allowing broker resource removal to proceed.
+
+
+### Generation-specific systemd supervisor identity
+
+The transient systemd recovery unit name now includes both the complete activation UUID and its generation (`proxyctl-tun-<uuid>-g<generation>.service`). Previously the unit name omitted generation even though the process arguments and manifest checks included it. Reusing an activation UUID with a later generation could therefore cause startup to mistake an older generation's active unit for the requested supervisor. The unit name, identity validator, and regression tests now bind both dimensions. This source change has not yet been run through local compilation, formatting, Clippy, or tests.
