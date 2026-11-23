@@ -426,21 +426,35 @@ mod tests {
             .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
             .unwrap();
 
-        assert_eq!(coordinator.claim_prepared_cleanup(&token).unwrap(), None);
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("tail")
+            .args(["-f", "/dev/null"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let identity = loop {
+            assert!(Instant::now() < deadline, "fake child did not become inspectable");
+            if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && identity.verify().unwrap_or(false)
+            {
+                break identity;
+            }
+            thread::sleep(Duration::from_millis(5));
+        };
+
+        assert_eq!(
+            coordinator.claim_prepared_cleanup(&token).unwrap(),
+            None
+        );
         let current = coordinator.load_current().unwrap().unwrap();
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
-        assert!(
-            coordinator
-                .bind_core_process(
-                    &token,
-                    ProcessIdentity {
-                        pid: 0,
-                        start_ticks: 1,
-                        executable: "/bin/sleep".into(),
-                    }
-                )
-                .is_err()
-        );
+        assert!(coordinator.bind_core_process(&token, identity).is_err());
+        child.kill().unwrap();
+        child.wait().unwrap();
     }
 
     #[cfg(target_os = "linux")]
