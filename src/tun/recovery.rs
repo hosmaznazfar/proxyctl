@@ -79,7 +79,7 @@ impl SupervisorIdentity {
         );
         let identity = Self {
             activation_id: activation_id.to_owned(),
-            service_name: format!("proxyctl-tun-{activation_id}"),
+            service_name: format!("proxyctl-tun-{activation_id}-g{generation}"),
             manifest_path: manifest_path.into(),
             generation,
         };
@@ -100,7 +100,7 @@ impl SupervisorIdentity {
             "invalid supervisor activation identity"
         );
         ensure!(
-            self.service_name == format!("proxyctl-tun-{}", self.activation_id),
+            self.service_name == format!("proxyctl-tun-{}-g{}", self.activation_id, self.generation),
             "supervisor service identity does not match its activation"
         );
         let manifest_path = std::path::Path::new(&self.manifest_path);
@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn supervisor_identity_wire_format_rejects_unknown_fields() {
-        let identity = br#"{"activation_id":"12345678-1234-4234-8234-123456789abc","service_name":"proxyctl-tun-12345678-1234-4234-8234-123456789abc","manifest_path":"/run/user/1000/proxyctl/tun-manifest.json","generation":1,"extra":true}"#;
+        let identity = br#"{"activation_id":"12345678-1234-4234-8234-123456789abc","service_name":"proxyctl-tun-12345678-1234-4234-8234-123456789abc-g1","manifest_path":"/run/user/1000/proxyctl/tun-manifest.json","generation":1,"extra":true}"#;
         assert!(serde_json::from_slice::<SupervisorIdentity>(identity).is_err());
     }
 
@@ -198,7 +198,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             identity.service_name,
-            "proxyctl-tun-12345678-1234-4234-8234-123456789abc"
+            "proxyctl-tun-12345678-1234-4234-8234-123456789abc-g9"
         );
         assert_eq!(identity.generation, 9);
         assert!(
@@ -215,14 +215,14 @@ mod tests {
     fn supervisor_service_identity_is_bound_to_activation_id() {
         let identity = SupervisorIdentity {
             activation_id: "12345678-1234-4234-8234-123456789abc".into(),
-            service_name: "proxyctl-tun-12345678-1234-4234-8234-123456789abc".into(),
+            service_name: "proxyctl-tun-12345678-1234-4234-8234-123456789abc-g1".into(),
             manifest_path: "/private/runtime/tun-manifest.json".into(),
             generation: 1,
         };
         identity.validate().unwrap();
 
         let mut mismatched = identity;
-        mismatched.service_name = "proxyctl-tun-87654321-1234-4234-8234-123456789abc".into();
+        mismatched.service_name = "proxyctl-tun-87654321-1234-4234-8234-123456789abc-g1".into();
         assert!(mismatched.validate().is_err());
     }
 
