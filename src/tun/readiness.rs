@@ -1875,7 +1875,7 @@ mod http_tun_probe_tests {
         assert!(validate_dual_stack_probe_targets(&[ipv4.clone(), ipv6.clone()]).is_ok());
         assert!(validate_dual_stack_probe_targets(&[ipv4.clone()]).is_err());
         assert!(validate_dual_stack_probe_targets(&[ipv4.clone(), ipv4]).is_err());
-        assert!(validate_dual_stack_probe_targets(&[ipv6.clone(), ipv6]).is_err());
+        assert!(validate_dual_stack_probe_targets(&[ipv6.clone(), ipv6.clone()]).is_err());
         assert!(validate_dual_stack_probe_targets(&[ipv6]).is_err());
     }
 
