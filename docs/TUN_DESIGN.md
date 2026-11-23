@@ -1494,3 +1494,8 @@ The public Xray TUN activation service now uses the dual-stack orchestrator rath
 The probe hostname is resolved before activation; this does not prove that DNS queries themselves traverse the proxy or that split-DNS behavior is correct. It also means the test host needs working IPv4 and IPv6 resolution and reachability for the configured endpoint. The default endpoint is connectivitycheck.gstatic.com; a custom --tun-probe-url must resolve to both families and return the expected 2xx status.
 
 Regression tests cover dual-family selection, missing-family failure, and filtering non-routable candidates. These source changes await maintainer-local formatting, Clippy, and all-target test results before real-node tests. Xray TUN remains experimental and not production-approved; sing-box and Mihomo TUN remain disabled.
+
+
+### Maintainer-local validation update — dual-stack CLI wiring (2026-11-23)
+
+The maintainer reports that `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --all-targets --all-features` passed after the CLI activation service was corrected to use dual-stack readiness for both Xray and native-core dispatch. The formatted source was pushed to `main`. This closes the Rust validation checkpoint for these changes only. Installed helper capabilities, transient systemd unit behavior, actual VMess/VLESS traffic, cleanup, and DNS semantics remain host-validation items; Xray TUN is still experimental and not production-approved.
