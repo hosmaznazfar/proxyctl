@@ -904,3 +904,40 @@ pub fn stop_xray_generation(
 ) -> Result<()> {
     stop_core_service_generation(activation_id, generation, process)
 }
+
+
+#[cfg(test)]
+mod subprocess_tests {
+    use super::*;
+
+    #[test]
+    fn bounded_output_runner_captures_small_output() {
+        let mut command = Command::new("/usr/bin/printf");
+        command.arg("123");
+        let output = run_bounded_command_output(
+            &mut command, Duration::from_secs(1), 3, "printf timed out",
+        ).unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"123");
+    }
+
+    #[test]
+    fn bounded_output_runner_rejects_output_over_limit() {
+        let mut command = Command::new("/usr/bin/printf");
+        command.arg("1234");
+        assert!(run_bounded_command_output(
+            &mut command, Duration::from_secs(1), 3, "printf timed out",
+        ).is_err());
+    }
+
+    #[test]
+    fn bounded_output_runner_kills_and_reaps_timed_out_child() {
+        let mut command = Command::new("/usr/bin/sleep");
+        command.arg("2");
+        let started = std::time::Instant::now();
+        assert!(run_bounded_command_output(
+            &mut command, Duration::from_millis(30), 128, "sleep timed out",
+        ).is_err());
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+}
