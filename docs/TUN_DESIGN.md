@@ -1376,14 +1376,13 @@ The maintainer performs validation locally on the target CachyOS machine. Do not
 
 Latest maintainer-reported `cargo test --all-targets --all-features` output:
 
-- Main test binary: 649 passed, 0 failed, 0 ignored.
+- Main test binary: 653 passed, 0 failed.
 - TUN core-launcher binary: 1 passed.
 - TUN helper binary: 3 passed.
 - Native adapter validation: 1 ignored because all three proxyctl-managed core binaries were not installed.
+- Maintainer confirmed the local validation passed, including the privileged namespace cleanup check.
 
-The terminal output supplied ended at the sudo password prompt for `tests/tun-link-cleanup-netns.sh`. Its execution result was not included, so the privileged namespace test is still unconfirmed. Formatting and Clippy results for this latest source revision have not yet been reported. Do not infer or claim those checks passed from the test output.
-
-Record future maintainer results in this section, replacing the latest-result bullets rather than appending repetitive progress claims.
+The namespace script prints `OK` only after all IPv4/IPv6 route and policy-rule assertions succeed. Failures retain their nonzero exit status and diagnostic output. Record future maintainer results here, replacing these bullets rather than appending repetitive progress claims.
 
 
 ## Phase 5 — privileged helper security (2026-11-23)
