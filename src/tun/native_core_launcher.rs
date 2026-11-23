@@ -95,7 +95,7 @@ pub fn spawn_native_core_service(
     let authorization = run_command(authorization, Duration::from_secs(5), false)
         .context("cannot request bounded authorization for native TUN core service")?;
     ensure!(
-        authorization.success(),
+        authorization.success,
         "sudo authorization was not granted for native TUN core service"
     );
 
