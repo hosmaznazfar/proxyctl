@@ -276,7 +276,9 @@ A source review against current iproute2 `ip/iprule.c` found that JSON rule dump
 
 The native-device rollback path previously synthesized an interface fingerprint without the generation alias, while live persistent-interface observations include that alias. Because cleanup compares complete fingerprints, rollback could refuse to release its own persistent TUN and retain the journal unnecessarily. The path now uses the complete applied fingerprint persisted in the journal and separately validates the requested name, ifindex, and TUN kind before cleanup. Regression tests pin alias preservation and reject identity mismatches. This correction was included in the maintainer's subsequent successful local test run.
 
-### Maintainer-local validation record (2026-11-23)
+#The `/dev/net/tun` open path now also checks the character device number is exactly Linux TUN major 10/minor 200 after `O_NOFOLLOW | O_CLOEXEC`; this prevents accepting an unrelated character device merely because it has the right file type. A pure device-number regression test was added.
+
+## Maintainer-local validation record (2026-11-23)
 
 The persistent-interface rollback fingerprint and policy-rule selector/recovery parsing corrections were validated locally on CachyOS. The maintainer reported the test suite passed. The namespace script's success marker is `OK`. Do not use hosted CI for this workflow.
 
