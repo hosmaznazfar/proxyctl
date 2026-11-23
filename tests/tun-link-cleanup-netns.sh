@@ -28,6 +28,13 @@ ip -n "$namespace" link set dev pctltest0 up
 ip -n "$namespace" -4 route add default dev pctltest0 table 42420 proto 99
 ip -n "$namespace" -6 route add default dev pctltest0 table 42420 proto 99
 
+# A foreign multipath route deliberately references both the TUN and loopback.
+# Linux may flush the entire fib_info when the TUN nexthop is unregistered, even
+# though the other nexthop is still usable. This records that cross-manager side effect.
+multipath_route_added=0
+if ip -n "$namespace" -4 route add 203.0.113.0/24 nexthop dev pctltest0 weight 1 nexthop dev lo weight 1 table 42420 proto static 2>/dev/null; then
+    multipath_route_added=1
+fi
 # Foreign routes deliberately share the private table but use another device.
 ip -n "$namespace" -4 route add 198.51.100.0/24 dev lo table 42420 proto static
 ip -n "$namespace" -6 route add 2001:db8:4242::/48 dev lo table 42420 proto static
@@ -76,6 +83,14 @@ if ip -n "$namespace" -6 route show table 42420 | grep -q '^default'; then
     exit 1
 fi
 ip -n "$namespace" -4 route show table 42420 | grep -q '198.51.100.0/24'
+if [ "$multipath_route_added" -eq 1 ] && ip -n "$namespace" -4 route show table 42420 | grep -q '203.0.113.0/24'; then
+    echo "foreign IPv4 multipath route referencing the TUN unexpectedly survived unregister" >&2
+    exit 1
+fi
 ip -n "$namespace" -6 route show table 42420 | grep -q '2001:db8:4242::/48'
 
-echo "OK"
+if [ "$multipath_route_added" -eq 1 ]; then
+    echo "OK (including expected foreign multipath-route flush side effect)"
+else
+    echo "OK (multipath route unsupported by this kernel/iproute2; that check was skipped)"
+fi
