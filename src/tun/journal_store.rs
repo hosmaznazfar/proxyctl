@@ -154,7 +154,7 @@ impl JournalStore {
         })
     }
 
-    /// Mark cleanup only after compare-and-delete confirms removal or absence.
+    /// Mark cleanup only after the backend confirms typed removal or verified absence.
     pub fn mark_operation_removed(
         &self,
         activation_id: &str,
