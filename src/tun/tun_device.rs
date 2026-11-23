@@ -117,6 +117,10 @@ fn ensure_descriptor_cloexec(fd: std::os::fd::RawFd) -> Result<()> {
     Ok(())
 }
 
+fn is_linux_tun_device_number(device: libc::dev_t) -> bool {
+    libc::major(device) == 10 && libc::minor(device) == 200
+}
+
 fn ensure_tun_character_device(file: &std::fs::File) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
 
@@ -126,7 +130,7 @@ fn ensure_tun_character_device(file: &std::fs::File) -> Result<()> {
         "/dev/net/tun is not a character device"
     );
     ensure!(
-        libc::major(metadata.rdev()) == 10 && libc::minor(metadata.rdev()) == 200,
+        is_linux_tun_device_number(metadata.rdev()),
         "/dev/net/tun has an unexpected device number (expected character device 10:200)"
     );
     Ok(())
@@ -404,11 +408,9 @@ mod persistent_tests {
     fn tun_device_number_requires_linux_tun_character_device() {
         let tun = libc::makedev(10, 200);
         let other_character_device = libc::makedev(10, 199);
-        assert_eq!(libc::major(tun), 10);
-        assert_eq!(libc::minor(tun), 200);
-        assert!(
-            libc::major(other_character_device) != 10 || libc::minor(other_character_device) != 200
-        );
+        assert!(is_linux_tun_device_number(tun));
+        assert!(!is_linux_tun_device_number(other_character_device));
+        assert!(!is_linux_tun_device_number(libc::makedev(1, 3)));
     }
 
     #[test]
