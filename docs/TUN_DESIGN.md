@@ -1332,7 +1332,7 @@ The privileged mutation broker independently verifies that the exact process ide
 
 ## Protocol-tagged kernel resource ownership (2026-11-23)
 
-Proxyctl-created routes and policy rules use protocol marker 99. Cleanup compares the complete current canonical inventory fingerprint and sends a typed delete selector carrying that marker, then verifies fresh inventory before persisting cleanup progress. Changed/foreign resources are preserved and the journal remains available for retry or manual resolution. The marker improves collision resistance and auditability but is not an authorization boundary against another privileged actor that deliberately reproduces the marker and selector.
+Historical note: the earlier cleanup implementation compared a full canonical inventory fingerprint and then sent typed route/rule delete selectors carrying protocol marker 99. That direct route-delete design was removed because Linux route deletion cannot atomically compare the complete fingerprint. Current route cleanup uses exact TUN netdevice unregister followed by route-absence verification; policy-rule cleanup still sends a protocol-tagged RTM_DELRULE selector. The marker remains in route/rule fingerprints for ownership diagnostics. See the current [link-owned route teardown design](#kernel-cleanup-redesign-route-teardown-through-owned-tun-unregister) below for the active contract.
 
 Linux rtnetlink does not provide an atomic full-fingerprint compare-and-delete operation for these resources. The implementation must not claim that it does. The residual concurrent privileged replacement race is documented as a kernel interface limitation; the operational safety policy is fail closed on every observed mismatch or ambiguous result, with no broad route/rule sweeps.
 
