@@ -271,3 +271,7 @@ The rule add/delete path now shares one validated payload builder, preventing th
 ### Recovery parsing of policy-rule marks
 
 A source review against current iproute2 `ip/iprule.c` found that JSON rule dumps emit `fwmark` and `fwmask` as separate fields; the mask is omitted when it is the full 32-bit mask. The previous journal cleanup parser expected a combined `value/mask` string and could therefore fail while reconstructing marked core-bypass rules. The parser now reads the separate fields, accepts string or unsigned-integer JSON forms, applies the full-mask default, and rejects malformed/out-of-mask values. Focused regression tests cover these cases. This is a source-level correction; maintainer local validation remains pending.
+
+### Persistent TUN rollback identity
+
+The native-device rollback path previously synthesized an interface fingerprint without the generation alias, while live persistent-interface observations include that alias. Because cleanup compares complete fingerprints, rollback could refuse to release its own persistent TUN and retain the journal unnecessarily. The path now uses the complete applied fingerprint persisted in the journal and separately validates the requested name, ifindex, and TUN kind before cleanup. Regression tests pin alias preservation and reject identity mismatches. This is an implementation correction awaiting maintainer-local compilation and tests.
