@@ -364,3 +364,10 @@ This is a fail-closed integration correction. Formatting, Clippy, and all-target
 ### Real VMess/VLESS host validation — pending
 
 After the Rust checks pass, the maintainer should select one known-good VMess node and one known-good VLESS node already stored in the local database, verify Xray compatibility, and test each separately through `proxyctl use <ID> --core xray --tun`. Stop and verify cleanup after each node. The test must record only node type, command exit status, HTTP status, and cleanup result; never include node URLs, UUIDs, passwords, flow values, generated configs, or unmasked logs in the repository or chat. The explicit Xray TUN path is experimental; sing-box and Mihomo remain disabled. Do not interpret a successful activation as DNS-through-proxy validation or production approval.
+
+
+### Maintainer-local validation update — dual-stack CLI wiring (2026-11-23)
+
+The maintainer reports that formatting, Clippy, and the complete all-targets/all-features Rust test suite passed after the Xray CLI readiness service was switched to the dual-stack orchestrator and the native-core activation arm was corrected to pass both family targets. The formatted changes were pushed to `main`. This validates compilation and automated tests for the current source state; it does not validate the installed helper bundle, systemd service behavior, or live VMess/VLESS traffic.
+
+The next acceptance step is host preparation followed by one local VMess Xray TUN test and, only after verified stop/cleanup, one VLESS test. Credentials and generated configurations must remain local and must not appear in logs shared to chat or committed. Xray TUN remains experimental; sing-box/Mihomo remain disabled.
