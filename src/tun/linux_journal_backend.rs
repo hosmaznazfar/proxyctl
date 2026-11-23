@@ -19,7 +19,7 @@ use super::{
     recovery::SupervisorPhase,
     resource_snapshot::observe_journal_resources,
     route_policy::{
-        AddressFamily, MarkSelector, PlannedRoute, PlannedRule, RouteType, RulePurpose,
+        AddressFamily, MarkSelector, PlannedRule, RulePurpose,
     },
     rtnetlink_mutations,
 };
@@ -259,58 +259,22 @@ impl LinuxJournalBackend {
                 Ok(ResourceState::Removed)
             }
             JournalOperationKind::AddRoute => {
-                let (family, table, _destination) = parse_route_key(key)?;
-                let value: Value = serde_json::from_str(&current)?;
-                ensure!(
-                    has_proxyctl_protocol_marker(&value),
-                    "route inventory does not prove the Proxyctl ownership protocol marker"
-                );
-                let dev = value
-                    .get("dev")
-                    .and_then(Value::as_str)
-                    .context("route fingerprint has no device")?;
                 let (owned_name, owned_index) = journal_interface_identity(&journal)?;
                 ensure!(
-                    owned_name == dev,
-                    "route fingerprint targets a different interface"
+                    !snapshot
+                        .interfaces
+                        .iter()
+                        .any(|item| item.name == owned_name || item.index == owned_index),
+                    "route cleanup verification ran before the owned TUN interface was removed"
                 );
-                if let Some(live_interface) =
-                    snapshot.interfaces.iter().find(|item| item.name == dev)
-                {
-                    ensure!(
-                        live_interface.is_tun && live_interface.index == owned_index,
-                        "route device name has been reused by a different interface identity"
-                    );
-                }
-                // The descriptor may have closed during a helper crash, which removes the
-                // non-persistent link. The journal's applied interface fingerprint still
-                // supplies the old ifindex needed to delete a surviving route selector.
-                if let Ok(retained) = self.owner.identity(&journal.activation_id, self.generation) {
-                    ensure!(
-                        retained.name == dev && retained.index == owned_index,
-                        "retained TUN descriptor does not match the journal identity"
-                    );
-                }
-                let route = PlannedRoute {
-                    family,
-                    destination: family.default_prefix().into(),
-                    table_id: table,
-                    interface_name: dev.into(),
-                    interface_index: owned_index,
-                    route_type: RouteType::Unicast,
-                };
-                rtnetlink_mutations::delete_route(&route)?;
-                let after = kernel_inventory::inspect_snapshot()?;
-                let after_journal = self
-                    .store
-                    .load_transaction_journal()?
-                    .context("journal disappeared during route removal")?;
-                let after_observed = observe_journal_resources(&after_journal, &after)?;
-                if after_observed.get(key).is_some_and(Option::is_none) {
-                    Ok(ResourceState::Removed)
-                } else {
-                    Ok(ResourceState::ChangedOrForeign)
-                }
+
+                // Do not issue RTM_DELROUTE. The kernel removes routes bound to the exact
+                // TUN ifindex as part of netdevice unregister. If a route remains after that
+                // operation, it is no longer safe to infer that it is ours: preserve it and
+                // retain the journal rather than deleting by a weaker route selector.
+                let _ = key;
+                let _ = expected;
+                Ok(ResourceState::ChangedOrForeign)
             }
             JournalOperationKind::AddRule => {
                 let (family, priority) = parse_rule_key(key)?;
