@@ -110,3 +110,4 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 - Added a regression test asserting that claiming cleanup persists CleanupPending and prevents a subsequent process bind.
 - The process termination and broker cleanup remain separate operations after the durable claim; failures preserve CleanupPending for retry.
 - This change and its regression test have not been compiled, formatted, or executed locally. Runtime process/service and kernel cleanup validation remain outstanding.
+- Follow-up hardening: cleanup now also rechecks and stops the persisted process identity when resuming an already-CleanupPending manifest. This covers a crash after the durable cleanup claim but before process termination completes; a failed stop leaves the manifest pending rather than allowing broker resource removal to proceed.
