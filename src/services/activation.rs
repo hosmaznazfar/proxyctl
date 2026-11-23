@@ -554,29 +554,19 @@ pub fn activate_tun_core(
     let probe_port = probe
         .port_or_known_default()
         .context("TUN readiness probe URL has no usable port")?;
-    let probe_destination = match probe_host {
-        url::Host::Ipv4(address) => std::net::SocketAddr::from((address, probe_port)),
-        url::Host::Ipv6(address) => std::net::SocketAddr::from((address, probe_port)),
+    let probe_addresses = match probe_host {
+        url::Host::Ipv4(address) => vec![std::net::SocketAddr::from((address, probe_port))],
+        url::Host::Ipv6(address) => vec![std::net::SocketAddr::from((address, probe_port))],
         url::Host::Domain(domain) => (domain, probe_port)
             .to_socket_addrs()
             .context("cannot resolve TUN readiness probe endpoint before activation")?
-            .next()
-            .context("TUN readiness probe host has no address")?,
+            .collect::<Vec<_>>(),
     };
-    let traffic_target = crate::tun::readiness::HttpProbeTarget {
-        destination: probe_destination,
-        host_header: probe
-            .host_str()
-            .context("TUN readiness probe URL has no host")?
-            .to_owned(),
-        path: if probe.path().is_empty() {
-            "/".into()
-        } else {
-            probe.path().to_owned()
-        },
+    let traffic_targets = build_dual_stack_probe_targets(
+        &probe,
+        probe_addresses,
         expected_status,
-    };
-    traffic_target.validate()?;
+    )?;
 
     let activation_id = fs::read_to_string("/proc/sys/kernel/random/uuid")
         .context("cannot obtain a kernel-generated activation UUID")?
@@ -618,14 +608,14 @@ pub fn activate_tun_core(
         crate::tun::activation_orchestrator::ActivationOrchestrator::new(&helper, &coordinator);
     let activation = match core {
         CoreId::Xray => orchestrator
-            .activate_xray_node_end_to_end(
+            .activate_xray_node_dual_stack_end_to_end(
                 request,
                 &node,
                 listen_port,
                 &executable,
                 Duration::from_secs(5),
                 expected_peers,
-                traffic_target,
+                traffic_targets,
                 Duration::from_secs(10),
                 64 * 1024,
             )
@@ -672,6 +662,55 @@ pub fn activate_tun_core(
     _expected_status: u16,
 ) -> anyhow::Result<()> {
     anyhow::bail!("managed native TUN activation is supported only on Linux");
+}
+
+#[cfg(target_os = "linux")]
+fn build_dual_stack_probe_targets(
+    probe: &url::Url,
+    addresses: impl IntoIterator<Item = std::net::SocketAddr>,
+    expected_status: u16,
+) -> anyhow::Result<Vec<crate::tun::readiness::HttpProbeTarget>> {
+    let host_header = probe
+        .host_str()
+        .context("TUN readiness probe URL has no host")?
+        .to_owned();
+    let path = if probe.path().is_empty() {
+        "/".to_owned()
+    } else {
+        probe.path().to_owned()
+    };
+    let mut ipv4 = None;
+    let mut ipv6 = None;
+    for address in addresses {
+        if address.ip().is_unspecified() || address.ip().is_multicast() {
+            continue;
+        }
+        if address.is_ipv4() && ipv4.is_none() {
+            ipv4 = Some(address);
+        } else if address.is_ipv6() && ipv6.is_none() {
+            ipv6 = Some(address);
+        }
+    }
+    let targets = vec![
+        crate::tun::readiness::HttpProbeTarget {
+            destination: ipv4.context(
+                "TUN readiness endpoint must resolve to a usable IPv4 address",
+            )?,
+            host_header: host_header.clone(),
+            path: path.clone(),
+            expected_status,
+        },
+        crate::tun::readiness::HttpProbeTarget {
+            destination: ipv6.context(
+                "TUN readiness endpoint must resolve to a usable IPv6 address",
+            )?,
+            host_header,
+            path,
+            expected_status,
+        },
+    ];
+    crate::tun::readiness::validate_dual_stack_probe_targets(&targets)?;
+    Ok(targets)
 }
 
 fn ensure_tun_mode_disabled(tun_enabled: bool) -> anyhow::Result<()> {
@@ -1338,5 +1377,61 @@ mod tests {
         let json = serde_json::to_string(&state).unwrap();
         assert!(!json.contains("uuid"));
         assert!(!json.contains("password"));
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tun_probe_target_tests {
+    use super::*;
+    use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+
+    #[test]
+    fn readiness_targets_require_one_usable_address_per_family() {
+        let probe = url::Url::parse("http://connectivity.example.test/generate_204").unwrap();
+        let targets = build_dual_stack_probe_targets(
+            &probe,
+            [
+                SocketAddr::from((Ipv4Addr::new(192, 0, 2, 10), 80)),
+                SocketAddr::from((Ipv6Addr::LOCALHOST, 80)),
+                SocketAddr::from((Ipv4Addr::new(192, 0, 2, 11), 80)),
+            ],
+            204,
+        )
+        .unwrap();
+
+        assert_eq!(targets.len(), 2);
+        assert!(targets[0].destination.is_ipv4());
+        assert!(targets[1].destination.is_ipv6());
+        assert_eq!(targets[0].host_header, "connectivity.example.test");
+        assert_eq!(targets[1].host_header, "connectivity.example.test");
+        assert_eq!(targets[0].path, "/generate_204");
+        assert_eq!(targets[1].path, "/generate_204");
+    }
+
+    #[test]
+    fn readiness_targets_reject_missing_address_family() {
+        let probe = url::Url::parse("http://connectivity.example.test/generate_204").unwrap();
+        let result = build_dual_stack_probe_targets(
+            &probe,
+            [SocketAddr::from((Ipv4Addr::new(192, 0, 2, 10), 80))],
+            204,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn readiness_targets_ignore_unspecified_and_multicast_addresses() {
+        let probe = url::Url::parse("http://connectivity.example.test/").unwrap();
+        let result = build_dual_stack_probe_targets(
+            &probe,
+            [
+                SocketAddr::from((Ipv4Addr::UNSPECIFIED, 80)),
+                SocketAddr::from((Ipv4Addr::new(224, 0, 0, 1), 80)),
+                SocketAddr::from((Ipv6Addr::UNSPECIFIED, 80)),
+                SocketAddr::from((Ipv6Addr::LOCALHOST, 80)),
+            ],
+            204,
+        );
+        assert!(result.is_err());
     }
 }
