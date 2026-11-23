@@ -1486,3 +1486,11 @@ These changes bound the local command clients and cleanup requests; they do not 
 
 
 Regression tests in `src/tun/xray_launcher.rs` exercise bounded stdout capture, rejection of output above the configured byte ceiling, and timeout termination/reaping of the direct child. They do not emulate systemd manager job semantics or verify real unit cleanup.
+
+## CLI dual-stack readiness wiring (2026-11-23)
+
+The public Xray TUN activation service now uses the dual-stack orchestrator rather than the older single-target API. Before any broker/kernel activation, it resolves the configured HTTP probe hostname and requires at least one usable address from each family. It selects one IPv4 and one IPv6 destination, retains the URL's Host header and path, and supplies both numeric targets to the dual-stack readiness gate. That gate independently verifies the unmarked route and bounded HTTP transaction for both families before the activation can commit Running. Unspecified, multicast, loopback, and link-local candidates are not eligible. If either family is absent, activation fails before kernel mutation.
+
+The probe hostname is resolved before activation; this does not prove that DNS queries themselves traverse the proxy or that split-DNS behavior is correct. It also means the test host needs working IPv4 and IPv6 resolution and reachability for the configured endpoint. The default endpoint is connectivitycheck.gstatic.com; a custom --tun-probe-url must resolve to both families and return the expected 2xx status.
+
+Regression tests cover dual-family selection, missing-family failure, and filtering non-routable candidates. These source changes await maintainer-local formatting, Clippy, and all-target test results before real-node tests. Xray TUN remains experimental and not production-approved; sing-box and Mihomo TUN remain disabled.
