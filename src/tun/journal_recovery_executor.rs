@@ -9,7 +9,8 @@ use std::cmp::Reverse;
 
 use super::{
     journal::{
-        JournalOperationKind, JournalOperationState, JournalRecoveryDecision, plan_journal_recovery,
+        JournalOperation, JournalOperationKind, JournalOperationState, JournalRecoveryDecision,
+        TransactionJournal, plan_journal_recovery,
     },
     kernel_inventory::KernelSnapshot,
     manifest_store::ManifestStore,
@@ -59,18 +60,7 @@ pub fn recover<B: JournalRecoveryBackend>(
         .context("no transaction journal is available for recovery")?;
     journal.validate()?;
 
-    let mut operations = journal.operations.iter().collect::<Vec<_>>();
-    operations.sort_by_key(|operation| {
-        let phase = match operation.kind {
-            JournalOperationKind::AddRule => 0u8,
-            JournalOperationKind::CreateInterface
-            | JournalOperationKind::CreatePersistentInterface => 1u8,
-            JournalOperationKind::AddRoute => 2u8,
-        };
-        (phase, Reverse(operation.sequence))
-    });
-
-    for operation in operations {
+    for operation in ordered_cleanup_operations(&journal) {
         if matches!(
             operation.state,
             JournalOperationState::Removed | JournalOperationState::Absent
@@ -197,4 +187,85 @@ pub fn recover<B: JournalRecoveryBackend>(
     );
     store.remove_completed_transaction_journal(&journal.activation_id, journal.generation)?;
     Ok(report)
+}
+
+fn ordered_cleanup_operations(journal: &TransactionJournal) -> Vec<&JournalOperation> {
+    let mut operations = journal.operations.iter().collect::<Vec<_>>();
+    operations.sort_by_key(|operation| {
+        let phase = match operation.kind {
+            JournalOperationKind::AddRule => 0u8,
+            JournalOperationKind::CreateInterface
+            | JournalOperationKind::CreatePersistentInterface => 1u8,
+            JournalOperationKind::AddRoute => 2u8,
+        };
+        (phase, Reverse(operation.sequence))
+    });
+    operations
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_orders_rules_before_link_and_route_verification_after_link() {
+        let journal = TransactionJournal {
+            schema_version: 1,
+            activation_id: "12345678-1234-4234-8234-123456789abc".into(),
+            generation: 9,
+            operations: vec![
+                JournalOperation {
+                    sequence: 0,
+                    kind: JournalOperationKind::CreatePersistentInterface,
+                    resource_key: "interface:tun-proxyctl".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("interface".into()),
+                },
+                JournalOperation {
+                    sequence: 1,
+                    kind: JournalOperationKind::AddRoute,
+                    resource_key: "route:v4:42420:0.0.0.0/0".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("route-v4".into()),
+                },
+                JournalOperation {
+                    sequence: 2,
+                    kind: JournalOperationKind::AddRoute,
+                    resource_key: "route:v6:42420:::/0".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("route-v6".into()),
+                },
+                JournalOperation {
+                    sequence: 3,
+                    kind: JournalOperationKind::AddRule,
+                    resource_key: "rule:v4:42410".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("rule-v4".into()),
+                },
+                JournalOperation {
+                    sequence: 4,
+                    kind: JournalOperationKind::AddRule,
+                    resource_key: "rule:v6:42410".into(),
+                    state: JournalOperationState::Applied,
+                    fingerprint: Some("rule-v6".into()),
+                },
+            ],
+        };
+
+        let ordered = ordered_cleanup_operations(&journal);
+        assert_eq!(
+            ordered.iter().map(|operation| operation.kind).collect::<Vec<_>>(),
+            [
+                JournalOperationKind::AddRule,
+                JournalOperationKind::AddRule,
+                JournalOperationKind::CreatePersistentInterface,
+                JournalOperationKind::AddRoute,
+                JournalOperationKind::AddRoute,
+            ]
+        );
+        assert_eq!(ordered[0].sequence, 4);
+        assert_eq!(ordered[1].sequence, 3);
+        assert_eq!(ordered[3].sequence, 2);
+        assert_eq!(ordered[4].sequence, 1);
+    }
 }
