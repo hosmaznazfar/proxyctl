@@ -5,7 +5,6 @@ use super::rtnetlink::RouteNetlink;
 use anyhow::{Result, ensure};
 use std::time::Duration;
 const RTM_NEWROUTE: u16 = 24;
-const RTM_DELROUTE: u16 = 25;
 const RTM_NEWRULE: u16 = 32;
 const RTM_DELRULE: u16 = 33;
 const NLM_F_REQUEST: u16 = 1;
@@ -162,32 +161,6 @@ pub fn add_rule(rule: &PlannedRule) -> Result<()> {
     Ok(())
 }
 
-/// Removes a route by its default prefix, table, interface, and Proxyctl protocol marker.
-pub fn delete_route(route: &PlannedRoute) -> Result<()> {
-    ensure!(
-        route.interface_index > 0
-            && route.table_id > 0
-            && route.destination == route.family.default_prefix(),
-        "route deletion selector invalid"
-    );
-    ensure!(
-        route.route_type == RouteType::Unicast,
-        "only unicast route deletion supported"
-    );
-    let mut p = vec![0u8; 12];
-    p[0] = family(route.family);
-    p[4] = RTPROT_PROXYCTL;
-    p[5] = RT_SCOPE_UNIVERSE;
-    p[6] = RTN_UNICAST;
-    let mut attrs = Vec::new();
-    attr(RTA_OIF, &route.interface_index.to_ne_bytes(), &mut attrs)?;
-    attr(RTA_TABLE, &route.table_id.to_ne_bytes(), &mut attrs)?;
-    p.extend(attrs);
-    let nl = request(RTM_DELROUTE, NLM_F_REQUEST | NLM_F_ACK, &p);
-    let mut sock = RouteNetlink::open()?;
-    sock.transact(&nl, Duration::from_secs(3))?;
-    Ok(())
-}
 /// Removes a policy rule using priority, table, optional mark, and Proxyctl protocol marker.
 pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
     ensure!(
