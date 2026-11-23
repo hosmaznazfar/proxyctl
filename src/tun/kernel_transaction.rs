@@ -400,11 +400,7 @@ fn remove_resource<B: KernelTransactionBackend>(
     resource: &super::ownership::OwnedResource,
     backend: &mut B,
 ) -> Result<()> {
-    match backend.remove_resource_if_matches(
-        activation_id,
-        &resource.key,
-        &resource.fingerprint,
-    )? {
+    match backend.remove_resource_if_matches(activation_id, &resource.key, &resource.fingerprint)? {
         ResourceState::Removed | ResourceState::AlreadyAbsent => Ok(()),
         ResourceState::ChangedOrForeign => {
             anyhow::bail!(
@@ -571,10 +567,14 @@ mod tests {
                 Some(item) if item.name == name && item.index == index && item.is_tun => {
                     self.interface = None;
                     // Model the kernel purging all routes whose nexthop references this link.
-                    let owned_routes = self.resources.iter().filter_map(|(key, fingerprint)| {
-                        (key.starts_with("route:") && fingerprint == &format!("fp:{key}"))
-                            .then(|| key.clone())
-                    }).collect::<Vec<_>>();
+                    let owned_routes = self
+                        .resources
+                        .iter()
+                        .filter_map(|(key, fingerprint)| {
+                            (key.starts_with("route:") && fingerprint == &format!("fp:{key}"))
+                                .then(|| key.clone())
+                        })
+                        .collect::<Vec<_>>();
                     for key in owned_routes {
                         self.resources.remove(&key);
                     }
