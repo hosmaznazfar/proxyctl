@@ -863,4 +863,3 @@ pub fn stop_xray_generation(
 ) -> Result<()> {
     stop_core_service_generation(activation_id, generation, process)
 }
-
