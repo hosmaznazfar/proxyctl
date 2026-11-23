@@ -1382,3 +1382,13 @@ The mutation helper remains a separate root-owned, non-setuid executable with on
 The typed protocol rejects unknown fields and invalid versions/identities, caps frames at 16 KiB, bounds allocation and I/O time, and requires a complete success response before the client reports success. Descriptor export is exact-generation-bound to a live in-memory broker backend. Malformed and unauthorized connections are isolated from the persistent accept loop. Recovery refuses to mutate while the exact manifest-bound core process is live and preserves durable recovery state on failure.
 
 The helper capability parser and peer authorization policy now have focused regression tests. The threat model is same-user: the helper is not intended to protect against malicious code already running under the same UID, and repeated same-user connections can cause bounded sequential-service denial of service. The audit does not replace verification of installed file capabilities, systemd unit confinement, crash behavior, or host network state. The default TUN activation gate remains closed.
+
+
+## Failure-injection and concurrency coverage (2026-11-23)
+
+The transaction test backend now has explicit regression coverage for failures before and after every planned route/rule mutation, ambiguous interface creation, rollback failure, journal-retention failure, invalid fingerprints, and manifest commit failure. Durable journal tests cover reopening with unresolved intents and generation mismatches. Broker tests cover malformed, truncated, oversized, unknown-field, and version-mismatched frames.
+
+A cross-instance lifecycle test races two independently opened coordinators for the same empty manifest slot. Exactly one activation may win; the other must fail, and the winning Prepared manifest must remain durable. This tests the on-disk lifecycle lock rather than only in-process sequencing.
+
+These tests do not establish power-loss atomicity, kernel-atomic route/rule compare-and-delete, systemd runtime behavior, or live dual-stack/DNS correctness. TUN remains gated pending clean-host integration validation and resolution or explicit acceptance of the documented rtnetlink cleanup race.
+
