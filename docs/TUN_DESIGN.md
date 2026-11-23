@@ -1329,3 +1329,15 @@ The evidence-free orchestrator path is internal-only. Public orchestrated Xray a
 ### Broker-side process-stop invariant
 
 The privileged mutation broker independently verifies that the exact process identity persisted in the active ownership manifest is no longer live before it mutates kernel resources for recovery. This is enforced even when recovery is requested directly through the helper rather than through the managed supervisor. The supervisor still stops the generation-specific systemd core unit first; the broker check is a second fail-closed boundary. If process identity inspection fails, recovery fails rather than assuming the process exited.
+
+## Protocol-tagged kernel resource ownership (2026-11-23)
+
+Proxyctl-created routes and policy rules use protocol marker 99. Cleanup compares the complete current canonical inventory fingerprint and sends a typed delete selector carrying that marker, then verifies fresh inventory before persisting cleanup progress. Changed/foreign resources are preserved and the journal remains available for retry or manual resolution. The marker improves collision resistance and auditability but is not an authorization boundary against another privileged actor that deliberately reproduces the marker and selector.
+
+Linux rtnetlink does not provide an atomic full-fingerprint compare-and-delete operation for these resources. The implementation must not claim that it does. The residual concurrent privileged replacement race is documented as a kernel interface limitation; the operational safety policy is fail closed on every observed mismatch or ambiguous result, with no broad route/rule sweeps.
+
+## Native core attachment proof (2026-11-23)
+
+For sing-box and Mihomo, a successful config check or a caller-supplied evidence object is not sufficient. Before invoking the readiness callback or committing the process as Running, Proxyctl now independently checks the exact generation-bound MainPID's live `/proc/<pid>/fdinfo` for an `iff:` entry matching the expected persistent TUN interface. It also checks the kernel TUN marker and manifest-bound ifindex while holding a pidfd and revalidates process identity after inspection. Attachment polling is bounded to five seconds and failure triggers exact-generation stop/recovery.
+
+This confirms native descriptor attachment only. End-to-end proxied traffic, listener, route policy, DNS/firewall, socket mark, and physical-egress checks remain distinct readiness requirements; the native end-to-end path continues to execute them after attachment proof.
