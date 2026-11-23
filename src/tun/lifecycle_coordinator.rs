@@ -640,5 +640,4 @@ mod tests {
         assert_eq!(current.phase, SupervisorPhase::Prepared);
         assert_eq!(current.generation, 17);
     }
-
 }
