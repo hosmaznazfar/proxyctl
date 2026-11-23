@@ -724,6 +724,57 @@ pub(crate) fn verify_xray_end_to_end_readiness(
     Ok(traffic.clone())
 }
 
+/// Run the complete Xray readiness sequence over one IPv4 and one IPv6 target.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn verify_xray_dual_stack_end_to_end_readiness(
+    runtime_directory: &Path,
+    process: &ProcessIdentity,
+    interface_name: &str,
+    expected: &super::readiness::ReadinessExpectation<'_>,
+    listener: std::net::SocketAddr,
+    listener_timeout: Duration,
+    plan: &super::route_policy::RoutingPolicyPlan,
+    expected_peers: &[std::net::SocketAddr],
+    transport: super::privilege_broker::BrokerSocketTransport,
+    targets: &[super::readiness::HttpProbeTarget],
+    activation_id: &str,
+    generation: u64,
+    probe_timeout: Duration,
+    maximum_response_bytes: usize,
+    baseline_host: &super::NetworkStatus,
+    current_host: &super::NetworkStatus,
+) -> Result<Vec<super::readiness::ProxyTrafficObservation>> {
+    super::readiness::validate_dual_stack_probe_targets(targets)?;
+    let mut observations = Vec::with_capacity(2);
+    for target in targets {
+        observations.push(verify_xray_end_to_end_readiness(
+            runtime_directory,
+            process,
+            interface_name,
+            expected,
+            listener,
+            listener_timeout,
+            plan,
+            expected_peers,
+            transport,
+            target,
+            activation_id,
+            generation,
+            probe_timeout,
+            maximum_response_bytes,
+            baseline_host,
+            current_host,
+        )?);
+    }
+    ensure!(
+        observations.len() == 2
+            && observations.iter().any(|item| item.destination.is_ipv4())
+            && observations.iter().any(|item| item.destination.is_ipv6()),
+        "Xray dual-stack readiness did not verify both address families"
+    );
+    Ok(observations)
+}
+
 /// Wait for Xray to expose the exact TUN attachment in kernel fdinfo.
 ///
 /// This is a bounded startup wait (maximum five seconds), not a traffic-readiness check.
