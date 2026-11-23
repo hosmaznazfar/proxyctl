@@ -788,6 +788,12 @@ mod tests {
         bytes
     }
 
+    fn response(kind: u16, sequence: u32, payload: &[u8]) -> Vec<u8> {
+        let mut bytes = message(kind, sequence, payload);
+        bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
+        bytes
+    }
+
     fn rtattr(kind: u16, value: &[u8]) -> Vec<u8> {
         let length = RTATTR_HEADER_LEN + value.len();
         let mut bytes = vec![0u8; (length + 3) & !3];
@@ -902,10 +908,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_datagrams_and_non_kernel_message_port_ids() {
+    fn rejects_empty_datagrams_and_wrong_destination_port_ids() {
         assert!(parse_datagram(&[], 7, 42).is_err());
-        let mut foreign = message(NLMSG_DONE, 7, &[]);
-        foreign[12..16].copy_from_slice(&42u32.to_ne_bytes());
+        let mut foreign = response(NLMSG_DONE, 7, &[]);
+        foreign[12..16].copy_from_slice(&43u32.to_ne_bytes());
         assert!(parse_datagram(&foreign, 7, 42).is_err());
     }
 
@@ -919,7 +925,7 @@ mod tests {
         original[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
         original[8..12].copy_from_slice(&7u32.to_ne_bytes());
         ack_payload.extend(original);
-        let bytes = message(NLMSG_ERROR, 7, &ack_payload);
+        let bytes = response(NLMSG_ERROR, 7, &ack_payload);
         let (messages, terminal) = parse_datagram(&bytes, 7, 42).unwrap();
         assert!(messages.is_empty());
         assert!(terminal);
@@ -935,31 +941,31 @@ mod tests {
         original[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
         original[8..12].copy_from_slice(&8u32.to_ne_bytes());
         payload.extend(original);
-        assert!(parse_datagram(&message(NLMSG_ERROR, 7, &payload), 7, 42).is_err());
+        assert!(parse_datagram(&response(NLMSG_ERROR, 7, &payload), 7, 42).is_err());
     }
 
     #[test]
     fn rejects_unrepresentable_netlink_error_code_without_panicking() {
         for error in [i32::MIN, 1] {
-            let bytes = message(NLMSG_ERROR, 7, &error.to_ne_bytes());
+            let bytes = response(NLMSG_ERROR, 7, &error.to_ne_bytes());
             assert!(parse_datagram(&bytes, 7, 42).is_err());
         }
     }
 
     #[test]
     fn rejects_interrupted_dump_and_done_error_status() {
-        let mut interrupted = message(NLMSG_DONE, 7, &[]);
+        let mut interrupted = response(NLMSG_DONE, 7, &[]);
         interrupted[6..8].copy_from_slice(&NLM_F_DUMP_INTR.to_ne_bytes());
         assert!(parse_datagram(&interrupted, 7, 42).is_err());
 
-        let failed = message(NLMSG_DONE, 7, &(-libc::EINTR).to_ne_bytes());
+        let failed = response(NLMSG_DONE, 7, &(-libc::EINTR).to_ne_bytes());
         assert!(parse_datagram(&failed, 7, 42).is_err());
 
         for invalid in [1i32, i32::MIN] {
-            let bytes = message(NLMSG_DONE, 7, &invalid.to_ne_bytes());
+            let bytes = response(NLMSG_DONE, 7, &invalid.to_ne_bytes());
             assert!(parse_datagram(&bytes, 7, 42).is_err());
         }
-        let truncated = message(NLMSG_DONE, 7, &[0, 0, 0]);
+        let truncated = response(NLMSG_DONE, 7, &[0, 0, 0]);
         assert!(parse_datagram(&truncated, 7, 42).is_err());
     }
 
@@ -967,20 +973,20 @@ mod tests {
     fn rejects_kernel_error_ack() {
         let mut payload = (-libc::EPERM).to_ne_bytes().to_vec();
         payload.extend([0u8; NETLINK_HEADER_LEN]);
-        let bytes = message(NLMSG_ERROR, 7, &payload);
+        let bytes = response(NLMSG_ERROR, 7, &payload);
         assert!(parse_datagram(&bytes, 7, 42).is_err());
     }
 
     #[test]
     fn rejects_messages_after_terminal_acknowledgement() {
-        let mut bytes = message(NLMSG_DONE, 7, &[]);
-        bytes.extend(message(99, 7, &[1]));
+        let mut bytes = response(NLMSG_DONE, 7, &[]);
+        bytes.extend(response(99, 7, &[1]));
         assert!(parse_datagram(&bytes, 7, 42).is_err());
     }
 
     #[test]
     fn rejects_wrong_sequence_and_truncated_headers() {
-        assert!(parse_datagram(&message(NLMSG_DONE, 8, &[]), 7, 42).is_err());
+        assert!(parse_datagram(&response(NLMSG_DONE, 8, &[]), 7, 42).is_err());
         assert!(parse_datagram(&[1, 2, 3], 7, 42).is_err());
     }
 
@@ -1084,7 +1090,7 @@ mod tests {
     }
     #[test]
     fn accepts_final_unpadded_non_aligned_netlink_message() {
-        let mut bytes = message(99, 7, &[1]);
+        let mut bytes = response(99, 7, &[1]);
         bytes.truncate(NETLINK_HEADER_LEN + 1);
         bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
         assert_eq!(parse_datagram(&bytes, 7, 42).unwrap(), (vec![bytes], false));
@@ -1092,7 +1098,7 @@ mod tests {
 
     #[test]
     fn accepts_final_unpadded_netlink_message_without_out_of_bounds_access() {
-        let mut bytes = message(NLMSG_DONE, 7, &[]);
+        let mut bytes = response(NLMSG_DONE, 7, &[]);
         bytes.truncate(NETLINK_HEADER_LEN);
         bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
         assert_eq!(parse_datagram(&bytes, 7, 42).unwrap(), (Vec::new(), true));
@@ -1100,10 +1106,10 @@ mod tests {
 
     #[test]
     fn rejects_nonzero_alignment_padding_and_truncated_padding() {
-        let mut padded = message(NLMSG_DONE, 7, &[1]);
+        let mut padded = response(NLMSG_DONE, 7, &[1]);
         *padded.last_mut().unwrap() = 0x7f;
         assert!(parse_datagram(&padded, 7, 42).is_err());
-        let mut truncated = message(NLMSG_DONE, 7, &[1]);
+        let mut truncated = response(NLMSG_DONE, 7, &[1]);
         truncated.pop();
         assert!(parse_datagram(&truncated, 7, 42).is_err());
     }
