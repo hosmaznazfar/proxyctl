@@ -20,9 +20,10 @@ use super::{
 
 /// Privileged operations required by journal recovery.
 ///
-/// Implementations must re-inspect the exact kernel identity immediately before deletion,
-/// compare the complete live fingerprint, and issue only the typed removal represented by
-/// `resource_key`. The method must never treat a prior snapshot alone as delete authority.
+/// Implementations must re-inspect exact kernel state immediately before mutation. Policy
+/// rules use typed protocol-tagged selectors; routes are never deleted directly and must be
+/// absent after the exact TUN interface is unregistered. A prior snapshot alone never grants
+/// deletion authority.
 pub trait JournalRecoveryBackend {
     fn inspect_fresh(&mut self) -> Result<KernelSnapshot>;
 
