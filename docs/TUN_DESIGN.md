@@ -1437,3 +1437,16 @@ The rtnetlink mutation module now builds add/delete rule payloads through one va
 ### Persistent-device rollback fingerprint correction
 
 A source review found that the transaction rollback entrypoint constructed a reduced interface fingerprint from only name, ifindex, and kind. Persistent native TUN fingerprints also include the generation-bound interface alias. The backend compares the complete live fingerprint with the supplied expected fingerprint, so the reduced rollback value caused a correctly owned persistent TUN to be classified as changed/foreign and preserved during rollback. The rollback path now retrieves the complete applied interface fingerprint from the durable journal, verifies that its name, ifindex, and TUN kind match the requested interface, and passes the unchanged complete fingerprint to the cleanup backend. Focused tests cover generation-alias preservation and mismatched/malformed interface identities. This closes a source-level rollback bug; the change still requires maintainer-local validation.
+
+### Maintainer-local validation for the latest cleanup corrections
+
+Before the next source implementation batch, run from the repository root on CachyOS:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+sudo sh tests/tun-link-cleanup-netns.sh
+```
+
+The first three commands run as the normal user; the namespace test runs separately with sudo. Stop at the first failure and share its complete output. Do not run hosted CI for this workflow. Passing these commands is necessary but not sufficient for TUN activation; live host integration and release validation remain outstanding.
