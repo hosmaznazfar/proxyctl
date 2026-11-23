@@ -266,6 +266,7 @@ fn validate_root_executable(path: &Path, allow_setuid: bool) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 struct BoundedOutput {
     success: bool,
     stdout: Vec<u8>,
