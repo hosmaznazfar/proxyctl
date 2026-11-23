@@ -330,3 +330,27 @@ These are source-level guarantees for Proxyctl's command clients, not proof that
 
 
 Regression tests in `src/tun/xray_launcher.rs` exercise bounded stdout capture, rejection of output above the configured byte ceiling, and timeout termination/reaping of the direct child. They do not emulate systemd manager job semantics or verify real unit cleanup.
+
+### Maintainer-local validation update — launcher deadline fix (2026-11-23)
+
+The maintainer reports that the latest local validation passed after the native-core authorization field-access correction:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+```
+
+This validates the Rust code and regression tests, including bounded Xray/native-core launcher subprocess behavior. It does not validate systemd manager job cancellation, real helper installation/capabilities, or live TUN traffic.
+
+### Mutation-helper and process-identity source audit (2026-11-23)
+
+A follow-up review covered `src/tun/mutation_helper_launcher.rs` and `src/tun/process.rs`.
+
+- Helper startup validates a private caller-owned runtime directory, serializes startup with a no-follow 0600 flock file, refuses to unlink an unresponsive socket, validates the root-owned helper executable, uses a bounded readiness deadline, and kills/reaps the directly spawned helper if readiness times out or child inspection fails.
+- The helper probe checks socket type, owner, exact 0600 mode, special bits, link count, and performs a protocol Ping before reuse.
+- Process monitoring pins a process instance with pidfd, validates start-time and canonical executable around procfs reads, bounds procfs reads, rejects divergent UID credentials, and uses pidfd signaling rather than numeric-PID signaling.
+- No production change was justified by this pass. The remaining limitations are environmental: same-UID processes are not a security boundary, a successful Ping proves liveness only at probe time, and pidfd/procfs behavior must still be exercised on the target kernel.
+- These source-level checks do not establish real VMess/VLESS connectivity or TUN dataplane correctness. The next acceptance stage must use the maintainer's locally stored VMess and VLESS nodes without copying credentials into logs, commits, or chat.
+
+TUN remains gated pending the local host integration and real-node tests.
