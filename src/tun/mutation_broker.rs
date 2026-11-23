@@ -25,7 +25,7 @@ use super::{
     kernel_transaction::{self, KernelTransaction},
     linux_journal_backend::LinuxJournalBackend,
     manifest_store::ManifestStore,
-    privilege_broker::read_broker_peer_credentials,
+    privilege_broker::{BrokerPeerCredentials, read_broker_peer_credentials},
     route_policy::RoutingPolicyPlan,
 };
 
@@ -200,6 +200,16 @@ impl MutationResponse {
     }
 }
 
+/// Authorize the kernel-authenticated peer before decoding any request bytes.
+fn authorize_mutation_peer(peer: BrokerPeerCredentials, effective_uid: u32) -> Result<()> {
+    ensure!(peer.pid > 0, "mutation broker peer has an invalid process ID");
+    ensure!(
+        peer.uid == effective_uid,
+        "mutation broker accepts requests only from its owning user"
+    );
+    Ok(())
+}
+
 /// Run until the service is stopped. The backend map is deliberately process-lifetime state:
 /// it retains descriptor-backed devices or native persistent-device ownership bookkeeping
 /// between independent client connections; the journal remains authoritative after restart.
@@ -225,10 +235,7 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
             stream.set_read_timeout(Some(IO_TIMEOUT))?;
             stream.set_write_timeout(Some(IO_TIMEOUT))?;
             let peer = read_broker_peer_credentials(&stream)?;
-            ensure!(
-                peer.uid == unsafe { libc::geteuid() },
-                "mutation broker accepts requests only from its owning user"
-            );
+            authorize_mutation_peer(peer, unsafe { libc::geteuid() })?;
             let request = read_request(&mut stream)?;
             if let MutationRequest::AttachDescriptor {
                 version: _,
@@ -791,6 +798,22 @@ mod tests {
             core_mark: 0x42,
             core_mark_mask: 0xff,
         }
+    }
+
+    #[test]
+    fn mutation_peer_authorization_requires_the_effective_user() {
+        let peer = BrokerPeerCredentials {
+            pid: 1234,
+            uid: 1000,
+            gid: 1000,
+        };
+        assert!(authorize_mutation_peer(peer, 1000).is_ok());
+        assert!(authorize_mutation_peer(peer, 1001).is_err());
+        assert!(authorize_mutation_peer(
+            BrokerPeerCredentials { pid: 0, ..peer },
+            1000
+        )
+        .is_err());
     }
 
     #[test]
