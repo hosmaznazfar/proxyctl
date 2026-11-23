@@ -261,6 +261,10 @@ impl LinuxJournalBackend {
             JournalOperationKind::AddRoute => {
                 let (family, table, _destination) = parse_route_key(key)?;
                 let value: Value = serde_json::from_str(&current)?;
+                ensure!(
+                    has_proxyctl_protocol_marker(&value),
+                    "route inventory does not prove the Proxyctl ownership protocol marker"
+                );
                 let dev = value
                     .get("dev")
                     .and_then(Value::as_str)
@@ -311,6 +315,10 @@ impl LinuxJournalBackend {
             JournalOperationKind::AddRule => {
                 let (family, priority) = parse_rule_key(key)?;
                 let value: Value = serde_json::from_str(&current)?;
+                ensure!(
+                    has_proxyctl_protocol_marker(&value),
+                    "rule inventory does not prove the Proxyctl ownership protocol marker"
+                );
                 let table_value = value
                     .get("table")
                     .or_else(|| value.get("lookup"))
@@ -556,6 +564,14 @@ impl JournalRecoveryBackend for LinuxJournalBackend {
     }
 }
 
+fn has_proxyctl_protocol_marker(value: &Value) -> bool {
+    const PROXYCTL_PROTOCOL: u64 = 99;
+    value.get("protocol").is_some_and(|protocol| {
+        protocol.as_u64() == Some(PROXYCTL_PROTOCOL)
+            || protocol.as_str() == Some("99")
+    })
+}
+
 fn journal_interface_identity(
     journal: &super::journal::TransactionJournal,
 ) -> Result<(String, u32)> {
@@ -664,6 +680,15 @@ fn parse_table_value(value: &Value) -> Result<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cleanup_requires_the_explicit_proxyctl_protocol_marker() {
+        assert!(has_proxyctl_protocol_marker(&serde_json::json!({"protocol": 99})));
+        assert!(has_proxyctl_protocol_marker(&serde_json::json!({"protocol": "99"})));
+        assert!(!has_proxyctl_protocol_marker(&serde_json::json!({"protocol": "static"})));
+        assert!(!has_proxyctl_protocol_marker(&serde_json::json!({"protocol": 4})));
+        assert!(!has_proxyctl_protocol_marker(&serde_json::json!({})));
+    }
 
     #[test]
     fn native_journal_generation_never_exports_a_descriptor() {
