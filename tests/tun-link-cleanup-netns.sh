@@ -35,6 +35,9 @@ ip -n "$namespace" -6 route add 2001:db8:4242::/48 dev lo table 42420 proto stat
 # Match the exact protocol-tagged policy-rule shape used by the TUN backend.
 ip -n "$namespace" -4 rule add pref 42420 table 42420 protocol 99
 ip -n "$namespace" -6 rule add pref 42420 table 42420 protocol 99
+# Same priority/table but a different route-protocol marker must remain foreign.
+ip -n "$namespace" -4 rule add pref 42420 table 42420 protocol 98
+ip -n "$namespace" -6 rule add pref 42420 table 42420 protocol 98
 
 ip -n "$namespace" -4 route show table 42420 | grep -q '^default'
 ip -n "$namespace" -6 route show table 42420 | grep -q '^default'
@@ -44,6 +47,16 @@ ip -n "$namespace" -6 rule show | grep -q '42420.*99'
 # Rules are removed by their typed selectors; routes are removed by link teardown.
 ip -n "$namespace" -4 rule del pref 42420 table 42420 protocol 99
 ip -n "$namespace" -6 rule del pref 42420 table 42420 protocol 99
+if ! ip -n "$namespace" -4 rule show | grep -q '42420.*98'; then
+    echo "foreign IPv4 rule with a different protocol marker was removed" >&2
+    exit 1
+fi
+if ! ip -n "$namespace" -6 rule show | grep -q '42420.*98'; then
+    echo "foreign IPv6 rule with a different protocol marker was removed" >&2
+    exit 1
+fi
+ip -n "$namespace" -4 rule del pref 42420 table 42420 protocol 98
+ip -n "$namespace" -6 rule del pref 42420 table 42420 protocol 98
 if ip -n "$namespace" -4 rule show | grep -q '42420.*99'; then
     echo "IPv4 Proxyctl policy rule survived explicit removal" >&2
     exit 1
