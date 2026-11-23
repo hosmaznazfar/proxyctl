@@ -296,18 +296,30 @@ fn stop_core_service_for_generation(
     Ok(())
 }
 
-fn terminate_prepared_core_process(
+fn stop_core_for_cleanup(
     coordinator: &LifecycleCoordinator,
     token: &ActivationToken,
 ) -> Result<()> {
-    let Some(identity) = coordinator.claim_prepared_cleanup(token)? else {
+    let current = coordinator
+        .load_current()?
+        .context("activation disappeared before cleanup could stop its core")?;
+    ensure!(
+        current.token == *token,
+        "core cleanup token does not match the active activation"
+    );
+    let identity = match current.snapshot.phase {
+        SupervisorPhase::Prepared => coordinator.claim_prepared_cleanup(token)?,
+        SupervisorPhase::CleanupPending => current.snapshot.core_process,
+        _ => anyhow::bail!("core can only be stopped for Prepared or CleanupPending activation"),
+    };
+    let Some(identity) = identity else {
         return Ok(());
     };
     if !identity.verify()? {
         return Ok(());
     }
     terminate_process_identity(&identity)
-        .context("cannot terminate the orphaned Prepared core process")
+        .context("cannot confirm termination of the cleanup-bound core process")
 }
 
 fn terminate_process_identity(identity: &ProcessIdentity) -> Result<()> {
@@ -376,9 +388,7 @@ fn resume_managed_supervision_inner(
         SupervisorPhase::CleanupPending | SupervisorPhase::Prepared
     ) {
         let phase = current.snapshot.phase;
-        if phase == SupervisorPhase::Prepared {
-            terminate_prepared_core_process(coordinator, &token)?;
-        }
+        stop_core_for_cleanup(coordinator, &token)?;
         stop_core_service_for_generation(&token, current.snapshot.core_process.as_ref())?;
         let response = helper.recover(token.activation_id().to_owned(), token.generation())?;
         anyhow::ensure!(
@@ -477,9 +487,7 @@ pub fn resume_managed_supervision_after_startup(
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
             SupervisorPhase::Prepared | SupervisorPhase::CleanupPending => {
-                if current.snapshot.phase == SupervisorPhase::Prepared {
-                    terminate_prepared_core_process(coordinator, &current.token)?;
-                }
+                stop_core_for_cleanup(coordinator, &current.token)?;
                 stop_core_service_for_generation(
                     &current.token,
                     current.snapshot.core_process.as_ref(),
