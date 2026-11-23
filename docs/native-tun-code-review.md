@@ -288,3 +288,9 @@ sudo sh tests/tun-link-cleanup-netns.sh
 ```
 
 Run the first three commands from the repository root as the normal user. Run the namespace script separately with sudo; it creates and removes a temporary network namespace. If a command fails, provide its complete output and stop before running the remaining commands so the failure can be fixed first. This checkpoint does not authorize enabling TUN; host traffic, DNS, firewall, crash-recovery, and packaging validation remain outstanding.
+
+### Process identity test-fixture exec synchronization (2026-11-23)
+
+A maintainer-local test run exposed three failures in tests that launch short-lived fake child processes and immediately inspect `/proc/<pid>/exe`. Rust's `Command::spawn()` can return before the child completes `execve()`; an immediate executable lookup can therefore observe the transient pre-exec image. Capturing that path as the expected identity makes later pidfd verification correctly reject the process once its executable changes. This was a fixture synchronization race, not evidence that pidfd identity checks should be relaxed.
+
+The broker and lifecycle fixtures now resolve the expected `sleep` executable independently, wait until the child reports that exact canonical executable and a stable start-time identity, and only then open the pidfd or bind the process. The service activation pidfd test likewise derives its expected executable from the resolved `sleep` binary instead of sampling `/proc` immediately after spawn. Production identity verification remains fail-closed. These changes are awaiting maintainer-local formatting, Clippy, and test validation.
