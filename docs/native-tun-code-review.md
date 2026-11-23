@@ -264,3 +264,8 @@ The recovery executor now processes journal operations in cleanup dependency ord
 - Maintainer-local test run (2026-11-23): `cargo test --all-targets --all-features` reported 649 passed, 0 failed, 0 ignored in the main test binary; the core-launcher binary reported 1 passed; the helper binary reported 3 passed; the native-adapter integration test was ignored because all three managed core binaries were not installed. The pasted terminal output then reached the sudo password prompt for `tests/tun-link-cleanup-netns.sh` but was truncated before its result, so the privileged namespace test remains unconfirmed.
 - The default TUN activation gate remains closed.
 
+
+
+### Policy-rule request encoder regression coverage
+
+The rule add/delete path now shares one validated payload builder, preventing the two operations from silently drifting in family, action, priority, table, protocol marker, or optional fwmark/mask encoding. Tests assert the marker and marked bypass selector bytes and explicitly pin the all-traffic proxy rule's lack of a mark selector. This makes the kernel wildcard limitation visible in the source test suite; it does not remove the limitation or establish atomic full-fingerprint deletion.
