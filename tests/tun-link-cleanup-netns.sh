@@ -78,4 +78,4 @@ fi
 ip -n "$namespace" -4 route show table 42420 | grep -q '198.51.100.0/24'
 ip -n "$namespace" -6 route show table 42420 | grep -q '2001:db8:4242::/48'
 
-echo "TUN link teardown removed only the IPv4/IPv6 routes bound to that link"
+echo "OK"
