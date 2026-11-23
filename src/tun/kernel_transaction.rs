@@ -570,10 +570,10 @@ mod tests {
                     let owned_routes = self
                         .resources
                         .iter()
-                        .filter_map(|(key, fingerprint)| {
-                            (key.starts_with("route:") && fingerprint == &format!("fp:{key}"))
-                                .then(|| key.clone())
+                        .filter(|&(key, fingerprint)| {
+                            key.starts_with("route:") && fingerprint == &format!("fp:{key}")
                         })
+                        .map(|(key, _)| key.clone())
                         .collect::<Vec<_>>();
                     for key in owned_routes {
                         self.resources.remove(&key);
