@@ -58,3 +58,7 @@ Applied source corrections for the reported diagnostics:
 - The helper launcher validates private runtime directory ownership/mode and a root-owned helper executable before connecting/starting. Existing unresponsive socket paths are not unlinked blindly.
 - No confirmed code change was applied in this review slice. Remaining runtime/package boundary verification includes helper capability installation, socket creation/removal ownership, service process lifetime, and fault injection under concurrent/replayed requests. These remain blockers for activation enablement.
 
+
+## Kernel cleanup compare/delete limitation
+
+The Linux journal backend performs a fresh resource inventory, compares canonical fingerprints, issues narrowly typed route/rule/interface deletion requests, and verifies the post-delete inventory before recording durable cleanup progress. However, the inspected route/rule delete selectors are not a kernel-atomic conditional operation against the entire previously observed fingerprint. An external actor can theoretically change a matching resource between inspection and deletion. `src/tun/kernel_transaction.rs` now documents this limitation instead of claiming atomic compare-and-delete. This remains a critical unresolved race and an explicit activation blocker; source inspection is not sufficient to declare it safe.
