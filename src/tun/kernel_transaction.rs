@@ -656,6 +656,49 @@ mod tests {
     }
 
     #[test]
+    fn rollback_preserves_a_foreign_route_that_survives_link_teardown() {
+        let activation_id = "12345678-1234-4234-8234-123456789abc";
+        let route_key = "route:v4:42420:0.0.0.0/0".to_owned();
+        let rule_key = "rule:v4:42410".to_owned();
+        let resources = vec![
+            super::super::ownership::OwnedResource {
+                key: route_key.clone(),
+                fingerprint: format!("fp:{route_key}"),
+            },
+            super::super::ownership::OwnedResource {
+                key: rule_key.clone(),
+                fingerprint: format!("fp:{rule_key}"),
+            },
+        ];
+        let mut backend = FakeBackend {
+            interface: Some(KernelInterfaceRecord {
+                name: "tun-proxyctl".into(),
+                index: 77,
+                is_tun: true,
+            }),
+            resources: BTreeMap::from([
+                (route_key.clone(), "foreign-replacement".into()),
+                (rule_key.clone(), format!("fp:{rule_key}")),
+            ]),
+            ..Default::default()
+        };
+
+        assert!(
+            rollback(activation_id, &resources, "tun-proxyctl", 77, &mut backend).is_err()
+        );
+
+        assert_eq!(
+            backend.removal_order,
+            [rule_key.clone(), "interface".into(), route_key.clone()]
+        );
+        assert_eq!(
+            backend.resources.get(&route_key).map(String::as_str),
+            Some("foreign-replacement")
+        );
+        assert!(backend.interface.is_none());
+    }
+
+    #[test]
     fn native_transaction_retains_journal_after_ambiguous_route_failure() {
         let mut backend = FakeBackend {
             fail_add_at: Some(1),
