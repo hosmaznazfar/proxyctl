@@ -61,7 +61,7 @@ Applied source corrections for the reported diagnostics:
 
 ## Kernel cleanup compare/delete limitation
 
-The Linux journal backend performs a fresh resource inventory, compares canonical fingerprints, issues narrowly typed route/rule/interface deletion requests, and verifies the post-delete inventory before recording durable cleanup progress. However, the inspected route/rule delete selectors are not a kernel-atomic conditional operation against the entire previously observed fingerprint. An external actor can theoretically change a matching resource between inspection and deletion. `src/tun/kernel_transaction.rs` now documents this limitation instead of claiming atomic compare-and-delete. This remains a critical unresolved race and an explicit activation blocker; source inspection is not sufficient to declare it safe.
+This section records the earlier direct route/rule deletion design and is superseded by the 2026-11-23 link-owned route teardown redesign below. The direct RTM_DELROUTE primitive has been removed. Policy-rule cleanup remains selector-based and is still not a full canonical-fingerprint compare-and-delete against every possible rule attribute.
 
 ## Native attachment and end-to-end readiness review
 
@@ -92,7 +92,7 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 
 ### Activation gate status
 
-**Keep TUN activation disabled.** The rtnetlink cleanup race, end-to-end host/runtime proof, attachment/dataplane integration, packaging, and crash/fault-injection coverage remain unresolved. Source review and green unit tests alone cannot close these blockers.
+**Keep TUN activation disabled.** Direct route deletion has been removed in favor of exact TUN link teardown and post-teardown route verification. Policy-rule selector limitations, IPv4 global dead-route flush side effects, end-to-end host/runtime proof, attachment/dataplane integration, packaging, and crash/fault-injection coverage remain unresolved. Source review and green unit tests alone cannot close these blockers.
 
 
 ## Generation-bound startup resume hardening
@@ -222,14 +222,14 @@ The source audit and added unit tests do not prove installed file capabilities, 
 - CI runs formatting, Clippy with warnings denied, and all-target/all-feature tests on Ubuntu using Rust 1.100.0, matching the package's declared `rust-version = "1.100"`. This verifies the declared compiler floor rather than silently relying on a different toolchain.
 - The TUN helper remains a separately installed root-owned executable with the narrowly scoped file capability contract described above. Packaging scripts and installed systemd units still require validation on a clean CachyOS host.
 - No automatic recovery backend other than systemd is implemented. Unsupported service managers must remain fail-closed.
-- The public TUN activation gate remains closed. In particular, rtnetlink route/rule cleanup cannot atomically compare the complete observed fingerprint with deletion; external mutation between inventory and delete remains a known race and a release blocker.
+- The public TUN activation gate remains closed. Route cleanup now relies on kernel netdevice-unregister cleanup rather than a separate RTM_DELROUTE request; the backend verifies route absence afterwards. Policy-rule cleanup remains a protocol-tagged selector operation, and IPv4 unregister may flush other already-dead routes in the namespace. Both behaviors require namespace/host validation.
 
 ### Required release validation
 - Run formatting, all-target/all-feature Clippy, all-target/all-feature tests, and a release build on the target machine.
 - Validate helper installation/removal and exact file capabilities from a clean install.
 - Exercise IPv4 and IPv6 external traffic, DNS behavior, firewall preservation, core crash, helper crash, supervisor restart, logout with lingering, shutdown, and recovery after interrupted journal operations.
 - Run concurrent activation/deactivation/recovery tests against isolated Linux network namespaces and verify foreign routes/rules/interfaces are never removed.
-- Do not describe managed TUN as production-ready or enable the default activation gate until the cleanup race has a defensible resolution and the host-level matrix passes.
+- Do not describe managed TUN as production-ready or enable the default activation gate until the policy-rule cleanup boundary is accepted, kernel side effects are validated, and the host-level matrix passes.
 
 
 ### Release artifact completeness
@@ -237,3 +237,23 @@ The source audit and added unit tests do not prove installed file capabilities, 
 - The helper installer remains an explicit root-run packaging step; publishing the helper binary does not install file capabilities or enable TUN automatically. The separate install/remove scripts must still be exercised on the target host.
 
 - The helper remover now validates all three installed bundle paths (regular files, no symlinks, root ownership) before deleting any of them, preventing a later invalid path from leaving an avoidable partial uninstall. CI also performs a POSIX shell syntax check on both packaging scripts.
+
+## Kernel cleanup redesign — link-owned routes (2026-11-23)
+
+The direct route deletion path has been removed from `src/tun/rtnetlink_mutations.rs`. Cleanup now follows this order:
+
+1. Delete the protocol-tagged policy rules.
+2. Release the exact generation-owned TUN descriptor or persistent device.
+3. Re-inspect the kernel and mark each journaled route absent only after the route is gone. A surviving route is preserved as a conflict; there is no direct-delete fallback.
+
+This avoids the separate route inventory/RTM_DELROUTE race for Proxyctl's direct-OIF routes. Linux IPv4 unregister handling marks nexthops dead and can run fib_flush; IPv6 fib6_ifdown removes routes whose nexthop device is the unregistered interface. The route forms created here use RTA_OIF rather than shared RTA_NH_ID objects. Kernel references are recorded in docs/TUN_DESIGN.md.
+
+The recovery executor now processes journal operations in cleanup dependency order (rules, interface, routes), and rollback uses the same order. Added tests cover the ordering and route-verification-after-interface-teardown contract. The opt-in `tests/tun-link-cleanup-netns.sh` script checks IPv4/IPv6 route cleanup and preservation of unrelated same-table routes in a temporary network namespace. CI checks the script's shell syntax but does not execute it.
+
+### Residual limitations
+
+- Policy rules still use the exact known Proxyctl selector (family/action/priority/table/fwmark/mask/protocol marker 99), but the Linux API does not offer a compare-and-delete against the entire canonical JSON record. Marker 99 improves collision resistance; it is not an authorization boundary against a privileged actor intentionally reproducing the marker and selector.
+- IPv4 NETDEV_UNREGISTER can trigger fib_flush over dead FIB entries in the namespace. This may remove unrelated routes that were already dead; the target-host and namespace test results must be reviewed before treating the behavior as acceptable.
+- No local build, Rust test, Clippy, or privileged namespace test was run as part of this source edit. The user must run the local validation checkpoint before live TUN testing.
+- The default TUN activation gate remains closed.
+
