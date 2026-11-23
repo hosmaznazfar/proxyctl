@@ -18,9 +18,7 @@ use super::{
     persistent_tun_owner::{NativePersistentTunOwner, PersistentTunOwner},
     recovery::SupervisorPhase,
     resource_snapshot::observe_journal_resources,
-    route_policy::{
-        AddressFamily, MarkSelector, PlannedRule, RulePurpose,
-    },
+    route_policy::{AddressFamily, MarkSelector, PlannedRule, RulePurpose},
     rtnetlink_mutations,
 };
 
