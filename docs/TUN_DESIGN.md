@@ -1466,3 +1466,8 @@ A follow-up source audit found that the privileged rule-cleanup backend also nee
 ## Recovery supervisor service hardening (2026-11-23)
 
 The transient systemd user service for the recovery supervisor is further constrained: `NoNewPrivileges=yes`, empty capability bounding and ambient capability sets, `RestrictSUIDSGID=yes`, `RestrictNamespaces=yes`, and `RestrictAddressFamilies=AF_UNIX`. Its role is process identity/lifecycle coordination, durable runtime state, and communicating with the mutation helper over a Unix socket; it should not gain network-family access or kernel capabilities. Existing protections (private temporary directory, restricted system/home access, kernel tunables/modules/control groups protections, memory W^X, lock-personality, and realtime restrictions) remain in place. These additional systemd properties have not yet been validated against the target CachyOS/systemd version or actual supervisor execution and must be checked before activation is enabled.
+
+
+### Recovery supervisor sandbox validation (2026-11-23)
+
+The maintainer reported that the local validation commands passed after the transient recovery-supervisor systemd service sandbox properties were added: formatting check, Clippy across all targets/features with warnings denied, and the complete all-targets/all-features test suite. This validates compilation and the automated suite for that change. The systemd service sandbox properties and real recovery-supervisor lifecycle remain unvalidated on-host; the activation gate stays closed pending the focused host integration checks and the broader documented kernel side-effect assessment.
