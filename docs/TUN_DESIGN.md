@@ -1373,3 +1373,12 @@ Unit tests cover dual-stack target-family validation and the linger-state parser
 ### Automated CI result (2026-11-23)
 
 GitHub Actions CI passed for commit c343bd9d12102af24c22b918fe0164e7bfdb547e: cargo fmt --all -- --check, cargo clippy --all-targets --all-features -- -D warnings, and cargo test --all-targets. The test job reported 644 passed, 0 failed, and 1 ignored (the existing managed-core-binary integration test). This is hosted CI validation, not a local CachyOS run and not live TUN/systemd dataplane validation. The maintainer must still run the commands below and perform host integration checks before enabling activation.
+
+
+## Phase 5 — privileged helper security (2026-11-23)
+
+The mutation helper remains a separate root-owned, non-setuid executable with only `CAP_NET_ADMIN` file capabilities. At startup it verifies exact effective/permitted capability sets, an empty inheritable set, enables `no_new_privs`, disables dumpability, and does not spawn child processes. The broker authenticates Unix peers using kernel SO_PEERCRED before parsing requests and restricts mutation access to its owning UID; activation ownership IDs are additionally bound to that peer.
+
+The typed protocol rejects unknown fields and invalid versions/identities, caps frames at 16 KiB, bounds allocation and I/O time, and requires a complete success response before the client reports success. Descriptor export is exact-generation-bound to a live in-memory broker backend. Malformed and unauthorized connections are isolated from the persistent accept loop. Recovery refuses to mutate while the exact manifest-bound core process is live and preserves durable recovery state on failure.
+
+The helper capability parser and peer authorization policy now have focused regression tests. The threat model is same-user: the helper is not intended to protect against malicious code already running under the same UID, and repeated same-user connections can cause bounded sequential-service denial of service. The audit does not replace verification of installed file capabilities, systemd unit confinement, crash behavior, or host network state. The default TUN activation gate remains closed.
