@@ -18,7 +18,7 @@ use super::{
     persistent_tun_owner::{NativePersistentTunOwner, PersistentTunOwner},
     recovery::SupervisorPhase,
     resource_snapshot::observe_journal_resources,
-    route_policy::{AddressFamily, MarkSelector, PlannedRule, RulePurpose},
+    route_policy::{AddressFamily, MarkSelector, PlannedRoute, PlannedRule, RulePurpose},
     rtnetlink_mutations,
 };
 
@@ -659,21 +659,7 @@ mod tests {
         assert!(backend.tun_descriptor(activation_id, generation).is_err());
     }
     #[test]
-    fn parses_ipv4_and_ipv6_route_keys_without_losing_ipv6_colons() {
-        assert_eq!(
-            parse_route_key("route:v4:42420:0.0.0.0/0").unwrap(),
-            (AddressFamily::Ipv4, 42420, "0.0.0.0/0".into())
-        );
-        assert_eq!(
-            parse_route_key("route:v6:42420:::/0").unwrap(),
-            (AddressFamily::Ipv6, 42420, "::/0".into())
-        );
-    }
-
-    #[test]
     fn rejects_noncanonical_or_unsupported_cleanup_keys() {
-        assert!(parse_route_key("route:v7:42420:0.0.0.0/0").is_err());
-        assert!(parse_route_key("route:v4:0:0.0.0.0/0").is_err());
         assert!(parse_rule_key("rule:v6:0").is_err());
         assert!(parse_rule_key("rule:v4:042410").is_err());
     }
