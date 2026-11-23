@@ -300,3 +300,5 @@ The broker and lifecycle fixtures now resolve the expected `sleep` executable in
 ### Maintainer-local validation update (2026-11-23)
 
 The latest maintainer run reported 654 passed and 0 failed in the main test binary, plus 1 passed in the core-launcher binary and 3 passed in the helper binary. The native-adapter test remained ignored because all three managed core binaries were not installed. The namespace cleanup test passed on the maintainer's CachyOS host. The trace showed iproute2 rendering protocol 99 as `openr` (RTPROT_OPENR); the matcher accepts either representation while retaining exact matching for marker 98. The script completed all assertions and namespace teardown.
+
+A follow-up source audit found that the privileged rule-cleanup backend also needed to recognize iproute2 JSON's symbolic `openr` representation of protocol 99. The backend now accepts numeric `99`, string `"99"`, or string `"openr"`, with a regression test; all other protocol values remain foreign. This source/test change is committed but awaits the next maintainer-local Rust validation.
