@@ -101,3 +101,12 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 - The resume entrypoint rejects a manifest whose activation token differs from that expected identity before process monitoring or recovery is initiated. The general CLI resume path remains available without an explicit expected identity.
 - This narrows a check-to-resume race in the standalone recovery service. Kernel cleanup selector race limitations and live service-manager verification remain separate unresolved concerns.
 - No new automated regression test has yet been added for this narrow change; the existing test suite remains unexecuted during this implementation phase.
+
+
+## Prepared-startup cleanup race hardening
+
+- Found a race in orphan cleanup: the supervisor could read a Prepared manifest, then terminate its recorded core after a concurrent lifecycle coordinator had committed that same activation to Running.
+- Added a lifecycle-lock-protected `claim_prepared_cleanup` transition. It atomically verifies the exact activation token and changes Prepared to CleanupPending before any process termination is attempted. The normal bind/commit path accepts only Prepared, so a late startup commit is now rejected once cleanup owns the generation.
+- Added a regression test asserting that claiming cleanup persists CleanupPending and prevents a subsequent process bind.
+- The process termination and broker cleanup remain separate operations after the durable claim; failures preserve CleanupPending for retry.
+- This change and its regression test have not been compiled, formatted, or executed locally. Runtime process/service and kernel cleanup validation remain outstanding.
