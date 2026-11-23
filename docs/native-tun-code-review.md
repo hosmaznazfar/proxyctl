@@ -99,7 +99,7 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 
 ### Activation gate status
 
-**Keep TUN activation disabled.** Direct route deletion has been removed in favor of exact TUN link teardown and post-teardown route verification. Policy-rule selector limitations, IPv4 global dead-route flush side effects, end-to-end host/runtime proof, attachment/dataplane integration, packaging, and crash/fault-injection coverage remain unresolved. Source review and green unit tests alone cannot close these blockers.
+**Keep Xray TUN experimental and restricted to controlled maintainer testing; do not treat it as production-ready.** The explicit Xray CLI path exists, but the kernel cleanup ownership limitations, IPv4 global dead-route flush side effects, systemd/helper host behavior, crash/reboot recovery, DNS semantics, and real VMess/VLESS dataplane results remain unresolved. sing-box and Mihomo TUN activation remain disabled. Source review and green unit tests alone cannot close these blockers.
 
 
 ## Generation-bound startup resume hardening
