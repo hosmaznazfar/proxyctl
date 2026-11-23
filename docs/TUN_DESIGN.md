@@ -1314,3 +1314,8 @@ The latest source review covered generation-bound supervisor recovery, compatibi
 ### Prepared startup versus orphan cleanup
 
 The lifecycle coordinator serializes core-process binding and orphan cleanup with the same cross-process lifecycle lock. A supervisor that decides a Prepared generation has timed out must first durably claim it by changing the phase to CleanupPending. Only after that claim may it terminate a recorded process or request broker cleanup. A concurrent late startup commit then fails its Prepared-phase check instead of racing with cleanup. CleanupPending recovery also retries stopping the persisted process identity before broker resource recovery, so a crash between the durable claim and process termination does not skip the stop step.
+
+
+### Generation-specific systemd supervisor identity
+
+The transient systemd recovery unit name now includes both the complete activation UUID and its generation (`proxyctl-tun-<uuid>-g<generation>.service`). Previously the unit name omitted generation even though the process arguments and manifest checks included it. Reusing an activation UUID with a later generation could therefore cause startup to mistake an older generation's active unit for the requested supervisor. The unit name, identity validator, and regression tests now bind both dimensions. This source change has not yet been run through local compilation, formatting, Clippy, or tests.
