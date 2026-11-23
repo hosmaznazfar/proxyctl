@@ -117,10 +117,7 @@ impl LifecycleCoordinator {
     /// The lifecycle lock makes this transition mutually exclusive with bind_core_process:
     /// once CleanupPending is durable, a concurrent startup commit can no longer succeed.
     #[cfg(target_os = "linux")]
-    pub fn claim_prepared_cleanup(
-        &self,
-        token: &ActivationToken,
-    ) -> Result<()> {
+    pub fn claim_prepared_cleanup(&self, token: &ActivationToken) -> Result<()> {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         let mut snapshot = self
             .store
@@ -439,7 +436,10 @@ mod tests {
             .unwrap();
         let deadline = Instant::now() + Duration::from_secs(2);
         let identity = loop {
-            assert!(Instant::now() < deadline, "fake child did not become inspectable");
+            assert!(
+                Instant::now() < deadline,
+                "fake child did not become inspectable"
+            );
             if let Ok(identity) = ProcessIdentity::capture(child.id())
                 && identity.verify().unwrap_or(false)
             {

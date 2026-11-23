@@ -170,20 +170,25 @@ impl<'a> ActivationOrchestrator<'a> {
                 Some(&process),
             )
             .context("supervisor startup failed and exact-generation rollback was unsuccessful")?;
-            return Err(error).context("cannot activate without an independent recovery supervisor");
+            return Err(error)
+                .context("cannot activate without an independent recovery supervisor");
         }
 
-        managed_activation::commit_prepared_managed_process(self.coordinator, &token, process.clone())
-            .map_err(|error| {
-                // Keep the supervisor independent: terminate only the captured process and let
-                // the generation-bound service own recovery if compensation is incomplete.
-                let _ = self.stop_core_and_recover_generation(
-                    &request.activation_id,
-                    request.generation,
-                    Some(&process),
-                );
-                error.context("unified TUN process commit failed")
-            })
+        managed_activation::commit_prepared_managed_process(
+            self.coordinator,
+            &token,
+            process.clone(),
+        )
+        .map_err(|error| {
+            // Keep the supervisor independent: terminate only the captured process and let
+            // the generation-bound service own recovery if compensation is incomplete.
+            let _ = self.stop_core_and_recover_generation(
+                &request.activation_id,
+                request.generation,
+                Some(&process),
+            );
+            error.context("unified TUN process commit failed")
+        })
     }
 
     /// Core-dispatched node activation. Only adapters with a concrete broker-owned
@@ -834,9 +839,8 @@ impl<'a> ActivationOrchestrator<'a> {
         if matches!(recovery.as_ref(), Ok(response) if response.success) {
             return Ok(());
         }
-        let store = super::manifest_store::ManifestStore::open(
-            self.coordinator.runtime_directory()?,
-        )?;
+        let store =
+            super::manifest_store::ManifestStore::open(self.coordinator.runtime_directory()?)?;
         let recovery_message = match &recovery {
             Ok(response) => response.message.clone(),
             Err(error) => format!("{error:#}"),
@@ -944,9 +948,8 @@ impl<'a> ActivationOrchestrator<'a> {
         // The independent systemd supervisor may win the race and finish the same generation
         // while the explicit stop request is waiting. Accept that only when both durable
         // ownership records are absent; never infer success from a failed IPC response alone.
-        let store = super::manifest_store::ManifestStore::open(
-            self.coordinator.runtime_directory()?,
-        )?;
+        let store =
+            super::manifest_store::ManifestStore::open(self.coordinator.runtime_directory()?)?;
         let recovery_message = match &recovery {
             Ok(response) => response.message.clone(),
             Err(error) => format!("{error:#}"),
@@ -1000,7 +1003,6 @@ impl<'a> ActivationOrchestrator<'a> {
         Ok(())
     }
 }
-
 
 fn canonical_activation_id(value: &str) -> bool {
     value.len() == 36

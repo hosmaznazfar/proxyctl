@@ -381,7 +381,8 @@ fn resume_managed_supervision_inner(
         .context("no managed TUN activation is available to resume")?;
     if let Some((activation_id, generation)) = expected {
         ensure!(
-            current.token.activation_id() == activation_id && current.token.generation() == generation,
+            current.token.activation_id() == activation_id
+                && current.token.generation() == generation,
             "resume request does not match the persisted activation generation"
         );
     }
@@ -504,7 +505,11 @@ pub fn resume_managed_supervision_after_startup(
                 return Ok(());
             }
             SupervisorPhase::Running => {
-                resume_managed_supervision_inner(helper, coordinator, Some((activation_id, generation)))?;
+                resume_managed_supervision_inner(
+                    helper,
+                    coordinator,
+                    Some((activation_id, generation)),
+                )?;
                 return Ok(());
             }
             SupervisorPhase::Cleaned => return Ok(()),
