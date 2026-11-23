@@ -1,6 +1,6 @@
 # Linux TUN design
 
-> Status: managed activation orchestration and recovery code exist, but the default CLI activation gate remains closed pending host-level validation.
+> Status: managed activation orchestration and recovery code exist. Route teardown now relies on exact TUN netdevice unregister followed by route-absence verification; policy rules still use protocol-tagged selectors. The default CLI activation gate remains closed pending local namespace and target-host validation.
 > Scope: Linux kernel networking; automatic recovery is currently implemented only for systemd with a lingering per-user manager.
 > Goal: use one selected managed core's native TUN implementation, with exact Proxyctl-owned routing resources and crash recovery.
 
@@ -1391,4 +1391,29 @@ The transaction test backend now has explicit regression coverage for failures b
 A cross-instance lifecycle test races two independently opened coordinators for the same empty manifest slot. Exactly one activation may win; the other must fail, and the winning Prepared manifest must remain durable. This tests the on-disk lifecycle lock rather than only in-process sequencing.
 
 These tests do not establish power-loss atomicity, kernel-atomic route/rule compare-and-delete, systemd runtime behavior, or live dual-stack/DNS correctness. TUN remains gated pending clean-host integration validation and resolution or explicit acceptance of the documented rtnetlink cleanup race.
+
+## Kernel cleanup redesign: route teardown through owned TUN unregister (2026-11-23)
+
+The previous implementation issued RTM_DELROUTE after taking a fresh route snapshot. The kernel delete selector could not compare every canonical route attribute with that snapshot in one atomic operation. The typed direct-route-delete primitive has now been removed.
+
+The new teardown sequence is:
+
+1. Remove the generation's protocol-tagged IPv4/IPv6 policy rules.
+2. Release the exact generation-owned TUN device. Descriptor mode closes the retained TUN fd. Persistent-device mode attaches a cleanup fd to the existing TUN, verifies its name, ifindex, and generation alias on that attached device, clears TUN persistence, and closes the fd.
+3. Take a fresh kernel inventory for each journaled route. The route operation is marked removed/absent only when the exact route identity is no longer present. If a route survives, Proxyctl preserves it and retains the journal; it never falls back to RTM_DELROUTE.
+
+This uses Linux's normal netdevice-unregister cleanup for routes whose nexthop references the TUN device. IPv4 netdevice unregister calls fib_disable_ip/fib_sync_down_dev and flushes dead FIB entries; IPv6 fib6_ifdown removes routes whose nexthop device is the unregistered device. Proxyctl's routes are created with a direct output-interface selector, not an externally shared RTA_NH_ID nexthop object. Relevant kernel implementations: [IPv4 fib_frontend.c](https://github.com/torvalds/linux/blob/master/net/ipv4/fib_frontend.c), [IPv4 fib_semantics.c](https://github.com/torvalds/linux/blob/master/net/ipv4/fib_semantics.c), and [IPv6 route.c](https://linux.googlesource.com/linux/torvalds/linux/+/7be19f9327d9a015ff97f97381e3bec163cd93cb/net/ipv6/route.c).
+
+The journal recovery executor no longer follows a simple reverse append order. It processes rules first, the interface second, and route records last. This is necessary because interface unregister is now the route-removal operation. The transaction rollback path follows the same dependency order. Fake-backend coverage asserts that rules are removed before the interface and routes are only verified after interface teardown.
+
+### Remaining kernel boundary and side effects
+
+- Policy rules still use a typed RTM_DELRULE selector containing family, action, priority, lookup table, fwmark/mask when applicable, and FRA_PROTOCOL marker 99. The kernel selector is narrower than the full JSON fingerprint. The marker reduces accidental collisions but is not an authorization boundary against a privileged actor deliberately reproducing the marker and selector; changed live fingerprints remain conflicts.
+- IPv4 device unregister can trigger fib_flush after marking a nexthop dead. That flush can remove other already-dead IPv4 routes in the same network namespace, not only Proxyctl's route. This is normal kernel behavior but is a host-level side effect that must be observed and assessed; it is not a claim that unregister is globally side-effect-free.
+- IPv6 fib6_ifdown has a specific path for routes using shared nexthop objects. Proxyctl does not create routes with RTA_NH_ID; namespace tests must continue to cover the exact direct-OIF route form used by this project.
+- If a route remains after interface teardown, cleanup stops and retains the journal. No broad route flush or direct route delete is permitted.
+
+The new opt-in integration test is `tests/tun-link-cleanup-netns.sh`. It creates a temporary network namespace, installs IPv4/IPv6 TUN default routes and protocol-tagged rules, adds unrelated routes to the same table through loopback, unregisters the TUN device, and checks that only the TUN-bound defaults disappear. It requires root, iproute2, TUN support, and IPv6 support. CI checks only its POSIX shell syntax; it does not execute the privileged namespace test.
+
+**Activation remains disabled.** This redesign removes the direct route snapshot/delete race, but does not by itself certify policy-rule cleanup, kernel side effects, actual traffic, DNS/firewall preservation, supervisor recovery, or clean-host packaging. The target CachyOS namespace test and full host matrix remain required.
 
