@@ -16,7 +16,8 @@ namespace="proxyctl-cleanup-$$"
 cleanup() {
     ip netns del "$namespace" >/dev/null 2>&1 || true
 }
-trap cleanup 0 HUP INT TERM
+trap cleanup 0
+trap 'cleanup; exit 1' HUP INT TERM
 
 ip netns add "$namespace"
 ip -n "$namespace" tuntap add dev pctltest0 mode tun
@@ -42,6 +43,14 @@ ip -n "$namespace" -6 rule show | grep -q '42420.*99'
 # Rules are removed by their typed selectors; routes are removed by link teardown.
 ip -n "$namespace" -4 rule del pref 42420 table 42420 protocol 99
 ip -n "$namespace" -6 rule del pref 42420 table 42420 protocol 99
+if ip -n "$namespace" -4 rule show | grep -q '42420.*99'; then
+    echo "IPv4 Proxyctl policy rule survived explicit removal" >&2
+    exit 1
+fi
+if ip -n "$namespace" -6 rule show | grep -q '42420.*99'; then
+    echo "IPv6 Proxyctl policy rule survived explicit removal" >&2
+    exit 1
+fi
 ip -n "$namespace" link del dev pctltest0
 
 if ip -n "$namespace" -4 route show table 42420 | grep -q '^default'; then
