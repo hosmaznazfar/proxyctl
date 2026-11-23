@@ -206,7 +206,7 @@ Only one Proxyctl-managed core may be active at a time. Switching validates the 
 
 Setup and non-check update operations targeting the currently active core stop that exact tracked process before invoking the installer; update check-only remains read-only. Activation state and credentials-bearing runtime configuration are stored under the private Proxyctl runtime directory (0700 directory, 0600 files). State contains process identity and node/core identifiers only, not node credentials. Proxyctl uses only its own managed core binary path, never PATH fallback, and never manages another application's processes or core installations. The other managed core binaries remain idle and consume disk space only.
 
-## TUN status inspection (read-only; activation disabled)
+## TUN status inspection (read-only)
 
 Read-only inspection remains available independently of activation:
 
