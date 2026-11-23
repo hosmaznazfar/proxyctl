@@ -313,3 +313,8 @@ The maintainer confirmed that the focused `broker_recovery_refuses_to_mutate_whi
 ### Recovery supervisor unit sandboxing follow-up (2026-11-23)
 
 Source review found an opportunity to reduce the recovery supervisor's privileges and network exposure independently of the CAP_NET_ADMIN mutation helper. The transient systemd user unit now requests `NoNewPrivileges=yes`, empty `CapabilityBoundingSet` and `AmbientCapabilities`, `RestrictSUIDSGID=yes`, `RestrictNamespaces=yes`, and `RestrictAddressFamilies=AF_UNIX`. The supervisor is intended to coordinate identity/state and broker requests, not directly perform privileged kernel networking. This is additional sandboxing, not a privilege-boundary proof. It is unvalidated: the next local checkpoint must confirm systemd accepts these properties and that the supervisor can still inspect pinned processes, interact with the user/system manager, access its private runtime directory, and communicate with the helper. TUN remains gated.
+
+
+### Systemd command deadline hardening (2026-11-23)
+
+Added a reusable bounded subprocess runner for systemd control operations. `systemctl is-active` and stop requests are bounded to two seconds; transient `systemd-run` startup invocation is bounded to three seconds. Timeout paths kill and reap the child before returning failure. These are code-level bounds, not proof of manager responsiveness or successful stop semantics; timeout/host behavior remains to be validated locally.
