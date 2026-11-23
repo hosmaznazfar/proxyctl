@@ -327,3 +327,6 @@ The native-core launcher previously had an unbounded sudo authorization call and
 The Xray launcher now bounds sudo authorization, captures MainPID output through a size-limited temporary file with a 128-byte ceiling, and bounds startup/handoff failure stop requests. The direct unbounded `status()`/`output()` calls were removed from these launcher paths. Timeout handlers kill and reap the local child process before returning.
 
 These are source-level guarantees for Proxyctl's command clients, not proof that the system manager cancels an already-submitted job or finishes cleanup. Local formatting, Clippy, and all-target tests must pass; actual systemd unit startup/stop and interrupted-start recovery remain host validation requirements. TUN activation remains disabled.
+
+
+Regression tests in `src/tun/xray_launcher.rs` exercise bounded stdout capture, rejection of output above the configured byte ceiling, and timeout termination/reaping of the direct child. They do not emulate systemd manager job semantics or verify real unit cleanup.
