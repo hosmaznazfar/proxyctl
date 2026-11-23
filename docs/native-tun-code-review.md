@@ -252,8 +252,8 @@ The recovery executor now processes journal operations in cleanup dependency ord
 
 ### Residual limitations
 
-- Policy rules still use the exact known Proxyctl selector (family/action/priority/table/fwmark/mask/protocol marker 99), but the Linux API does not offer a compare-and-delete against the entire canonical JSON record. Marker 99 improves collision resistance; it is not an authorization boundary against a privileged actor intentionally reproducing the marker and selector.
+- Policy rules use family/action/priority/table/fwmark/mask/protocol marker 99. Current Linux fib_rule_find matches supplied selector fields (including FRA_PROTOCOL) during the serialized RTM_DELRULE operation, so a foreign rule with a different protocol/table/priority/action/mark is not selected. Fields omitted from the delete request remain wildcards; a replacement that keeps every supplied field but adds extra selectors could still match. Marker 99 is not an authorization boundary against a privileged actor intentionally reproducing the selector. The namespace test now places a foreign rule at the same priority/table with protocol 98 and verifies it survives deletion of protocol 99.
 - IPv4 NETDEV_UNREGISTER can trigger fib_flush over dead FIB entries in the namespace. This may remove unrelated routes that were already dead; the target-host and namespace test results must be reviewed before treating the behavior as acceptable.
-- No local build, Rust test, Clippy, or privileged namespace test was run as part of this source edit. The user must run the local validation checkpoint before live TUN testing.
+- GitHub CI passed formatting, shell syntax, Clippy with warnings denied, and all-target/all-feature Rust tests at commit `382a90c`; the later script-only update also passed CI at `5f5aa72`. The privileged namespace test and CachyOS host matrix have not been executed. The user must run the local validation checkpoint before live TUN testing.
 - The default TUN activation gate remains closed.
 
