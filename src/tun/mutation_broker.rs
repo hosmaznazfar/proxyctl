@@ -804,7 +804,7 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
         let identity = loop {
             assert!(std::time::Instant::now() < deadline);
             if let Ok(identity) = super::super::process::ProcessIdentity::capture(child.id())
