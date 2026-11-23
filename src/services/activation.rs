@@ -562,11 +562,7 @@ pub fn activate_tun_core(
             .context("cannot resolve TUN readiness probe endpoint before activation")?
             .collect::<Vec<_>>(),
     };
-    let traffic_targets = build_dual_stack_probe_targets(
-        &probe,
-        probe_addresses,
-        expected_status,
-    )?;
+    let traffic_targets = build_dual_stack_probe_targets(&probe, probe_addresses, expected_status)?;
 
     let activation_id = fs::read_to_string("/proc/sys/kernel/random/uuid")
         .context("cannot obtain a kernel-generated activation UUID")?
@@ -698,17 +694,15 @@ fn build_dual_stack_probe_targets(
     }
     let targets = vec![
         crate::tun::readiness::HttpProbeTarget {
-            destination: ipv4.context(
-                "TUN readiness endpoint must resolve to a usable IPv4 address",
-            )?,
+            destination: ipv4
+                .context("TUN readiness endpoint must resolve to a usable IPv4 address")?,
             host_header: host_header.clone(),
             path: path.clone(),
             expected_status,
         },
         crate::tun::readiness::HttpProbeTarget {
-            destination: ipv6.context(
-                "TUN readiness endpoint must resolve to a usable IPv6 address",
-            )?,
+            destination: ipv6
+                .context("TUN readiness endpoint must resolve to a usable IPv6 address")?,
             host_header,
             path,
             expected_status,
