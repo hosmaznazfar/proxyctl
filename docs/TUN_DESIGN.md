@@ -1,6 +1,6 @@
 # Linux TUN design
 
-> Status: managed activation orchestration and recovery code exist. Route teardown now relies on exact TUN netdevice unregister followed by route-absence verification; policy rules still use protocol-tagged selectors. The default CLI activation gate remains closed pending local namespace and target-host validation.
+> Status: managed activation orchestration and recovery code exist. Route teardown relies on exact TUN netdevice unregister followed by route-absence verification; policy rules still use protocol-tagged selectors. The maintainer has now passed the privileged CachyOS namespace cleanup test, including its supported IPv4 multipath-route side-effect assertion. The default CLI activation gate remains closed pending explicit assessment of broader kernel side effects and the target-host integration matrix.
 > Scope: Linux kernel networking; automatic recovery is currently implemented only for systemd with a lingering per-user manager.
 > Goal: use one selected managed core's native TUN implementation, with exact Proxyctl-owned routing resources and crash recovery.
 
@@ -1376,13 +1376,14 @@ The maintainer performs validation locally on the target CachyOS machine. Do not
 
 Latest maintainer-reported `cargo test --all-targets --all-features` output:
 
-- Main test binary: 653 passed, 0 failed.
+- Main test binary: 654 passed, 0 failed.
 - TUN core-launcher binary: 1 passed.
 - TUN helper binary: 3 passed.
 - Native adapter validation: 1 ignored because all three proxyctl-managed core binaries were not installed.
-- Maintainer confirmed the local validation passed, including the privileged namespace cleanup check.
+- Core-launcher binary: 1 passed; helper binary: 3 passed; native adapter validation: 1 ignored because all three managed core binaries were not installed.
+- Maintainer subsequently reran `sh -n tests/tun-link-cleanup-netns.sh` and `sudo sh -x tests/tun-link-cleanup-netns.sh`; the namespace test passed with `OK (including expected foreign multipath-route flush side effect)`.
 
-The namespace script prints an `OK` result only after all mandatory IPv4/IPv6 route and policy-rule assertions succeed. The message identifies whether the multipath side-effect check ran or was skipped. Failures retain their nonzero exit status and diagnostic output. The newly added multipath assertion requires local validation. Record future maintainer results here, replacing these bullets rather than appending repetitive progress claims.
+The successful namespace run verified removal of both TUN-bound default routes and the protocol-99 rules, preservation of protocol-98 foreign rules and unrelated same-table routes, and the expected removal of a foreign IPv4 multipath route containing a TUN nexthop. This confirms the tested kernel behavior; it does not establish that the broader side effect is acceptable on a host with other network managers. The namespace-wide IPv4 dead-route flush behavior and full target-host matrix remain outstanding. Record future maintainer results here, replacing these bullets rather than appending repetitive progress claims.
 
 
 ## Phase 5 — privileged helper security (2026-11-23)
@@ -1425,7 +1426,7 @@ The journal recovery executor no longer follows a simple reverse append order. I
 
 The opt-in integration test is `tests/tun-link-cleanup-netns.sh`. It creates a temporary network namespace, installs IPv4/IPv6 TUN default routes and protocol-tagged rules, adds same-priority/table foreign rules with a different protocol marker, and adds unrelated same-table routes through loopback. Rule-marker preconditions and postconditions use `ip -details rule show`, since the default human-readable rule output does not expose the protocol marker consistently across iproute2/kernel combinations. The matcher accepts both numeric protocol 99 and its iproute2 name `openr` (RTPROT_OPENR); other marker values remain exact. A failed precondition prints the detailed rule dump. It also attempts to add a foreign IPv4 multipath route with one nexthop through the TUN and one through loopback. After unregistering the TUN, it checks that Proxyctl-tagged rules and TUN-bound defaults disappear, unrelated foreign routes/rules survive, and (if supported) the entire multipath route is removed as the documented kernel side effect. The script requires root, iproute2, TUN support, and IPv6 support; it explicitly reports when multipath setup is unsupported. CI checks only POSIX shell syntax and does not execute this privileged test.
 
-**Activation remains disabled.** This redesign removes the direct route snapshot/delete race, but does not by itself certify policy-rule cleanup, kernel side effects, actual traffic, DNS/firewall preservation, supervisor recovery, or clean-host packaging. The target CachyOS namespace test and full host matrix remain required.
+**Activation remains disabled.** This redesign removes the direct route snapshot/delete race, but does not by itself certify policy-rule cleanup, kernel side effects, actual traffic, DNS/firewall preservation, supervisor recovery, or clean-host packaging. The target CachyOS namespace test has passed, including the multipath case. The broader impact assessment and full host matrix remain required.
 
 
 
@@ -1458,4 +1459,4 @@ The broker and lifecycle fixtures now resolve the expected `sleep` executable in
 
 ### Maintainer-local validation update (2026-11-23)
 
-The latest maintainer run reported 654 passed and 0 failed in the main test binary, plus 1 passed in the core-launcher binary and 3 passed in the helper binary. The native-adapter test remained ignored because all three managed core binaries were not installed. The namespace cleanup test did not reach teardown: its trace stopped at a precondition that searched the default `ip rule show` output for the numeric protocol marker. The script now inspects detailed rule output, checks both the protocol-tagged and foreign rules before mutation, and prints the detailed dump if a marker precondition is not visible. This shell-only correction still requires a rerun; no namespace cleanup result is claimed for this attempt.
+The latest maintainer run reported 654 passed and 0 failed in the main test binary, plus 1 passed in the core-launcher binary and 3 passed in the helper binary. The native-adapter test remained ignored because all three managed core binaries were not installed. The namespace cleanup test passed on the maintainer's CachyOS host. Its trace confirmed that iproute2 renders protocol 99 as `openr` (RTPROT_OPENR); the matcher now accepts either representation while retaining exact matching for foreign marker 98. The test completed teardown and reported `OK (including expected foreign multipath-route flush side effect)`.
