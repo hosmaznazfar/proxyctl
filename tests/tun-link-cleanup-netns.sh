@@ -20,6 +20,7 @@ trap cleanup 0
 trap 'cleanup; exit 1' HUP INT TERM
 
 ip netns add "$namespace"
+ip -n "$namespace" link set dev lo up
 ip -n "$namespace" tuntap add dev pctltest0 mode tun
 ip -n "$namespace" link set dev pctltest0 up
 
