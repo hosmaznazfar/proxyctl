@@ -869,6 +869,87 @@ pub fn verify_native_core_end_to_end_readiness(
     Ok(preflight.evidence)
 }
 
+/// Validate that a pair of explicit HTTP targets covers exactly one IPv4 and one IPv6 path.
+#[cfg(target_os = "linux")]
+pub fn validate_dual_stack_probe_targets(targets: &[HttpProbeTarget]) -> Result<()> {
+    ensure!(
+        targets.len() == 2,
+        "dual-stack TUN readiness requires exactly two HTTP targets"
+    );
+    for target in targets {
+        target.validate()?;
+    }
+    ensure!(
+        targets.iter().filter(|target| target.destination.is_ipv4()).count() == 1
+            && targets.iter().filter(|target| target.destination.is_ipv6()).count() == 1,
+        "dual-stack TUN readiness requires one IPv4 and one IPv6 destination"
+    );
+    Ok(())
+}
+
+/// Verify both IPv4 and IPv6 application flows through the exact TUN routing policy.
+///
+/// Each target is routed independently with an unmarked kernel lookup and a real bounded
+/// HTTP exchange. Listener, process, socket-mark, physical-egress, DNS-preservation, and
+/// firewall-preservation checks are repeated for each address family. This proves numeric
+/// address dataplane paths; it does not claim to exercise DNS resolution.
+#[cfg(target_os = "linux")]
+#[allow(clippy::too_many_arguments)]
+pub fn verify_native_core_dual_stack_end_to_end_readiness(
+    runtime_directory: &std::path::Path,
+    process: &super::process::ProcessIdentity,
+    interface_name: &str,
+    interface_index: u32,
+    core_mark: u32,
+    core_mark_mask: u32,
+    listener: SocketAddr,
+    listener_timeout: Duration,
+    plan: &super::route_policy::RoutingPolicyPlan,
+    expected_peers: &[SocketAddr],
+    transport: super::privilege_broker::BrokerSocketTransport,
+    targets: &[HttpProbeTarget],
+    activation_id: &str,
+    generation: u64,
+    probe_timeout: Duration,
+    maximum_response_bytes: usize,
+    baseline_host: &super::NetworkStatus,
+    current_host: &super::NetworkStatus,
+) -> Result<ReadinessEvidence> {
+    validate_dual_stack_probe_targets(targets)?;
+    let mut combined: Option<ReadinessEvidence> = None;
+    for target in targets {
+        let evidence = verify_native_core_end_to_end_readiness(
+            runtime_directory,
+            process,
+            interface_name,
+            interface_index,
+            core_mark,
+            core_mark_mask,
+            listener,
+            listener_timeout,
+            plan,
+            expected_peers,
+            transport,
+            target,
+            activation_id,
+            generation,
+            probe_timeout,
+            maximum_response_bytes,
+            baseline_host,
+            current_host,
+        )?;
+        if let Some(previous) = &combined {
+            ensure!(
+                previous == &evidence,
+                "IPv4 and IPv6 readiness observations disagree"
+            );
+        } else {
+            combined = Some(evidence);
+        }
+    }
+    combined.context("dual-stack readiness produced no evidence")
+}
+
 #[cfg(not(target_os = "linux"))]
 #[allow(clippy::too_many_arguments)]
 pub fn verify_native_core_end_to_end_readiness(
@@ -1767,6 +1848,27 @@ mod http_tun_probe_tests {
             path: "/health".into(),
             expected_status: 200,
         }
+    }
+
+    #[test]
+    fn dual_stack_probe_targets_require_one_address_per_family() {
+        let ipv4 = HttpProbeTarget {
+            destination: "198.51.100.10:80".parse().unwrap(),
+            host_header: "probe.example".into(),
+            path: "/health".into(),
+            expected_status: 204,
+        };
+        let ipv6 = HttpProbeTarget {
+            destination: "[2001:db8::10]:80".parse().unwrap(),
+            host_header: "probe.example".into(),
+            path: "/health".into(),
+            expected_status: 204,
+        };
+        assert!(validate_dual_stack_probe_targets(&[ipv4.clone(), ipv6.clone()]).is_ok());
+        assert!(validate_dual_stack_probe_targets(&[ipv4.clone()]).is_err());
+        assert!(validate_dual_stack_probe_targets(&[ipv4.clone(), ipv4]).is_err());
+        assert!(validate_dual_stack_probe_targets(&[ipv6.clone(), ipv6]).is_err());
+        assert!(validate_dual_stack_probe_targets(&[ipv6]).is_err());
     }
 
     #[test]
