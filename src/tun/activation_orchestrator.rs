@@ -128,6 +128,12 @@ impl<'a> ActivationOrchestrator<'a> {
         evidence
             .validate_binding(&request, &process)
             .context("invalid TUN attachment evidence")?;
+        super::xray_launcher::verify_xray_tun_attachment(
+            &process,
+            &evidence.interface_name,
+            evidence.interface_index,
+        )
+        .context("core process does not independently hold the requested TUN interface")?;
         self.activate(request, process)
     }
 
