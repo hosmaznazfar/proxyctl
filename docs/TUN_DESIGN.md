@@ -1301,3 +1301,11 @@ The Linux journal backend performs a fresh resource inventory, compares canonica
 The latest source review covered generation-bound supervisor recovery, compatibility handoff, broker authentication/framing, durable journal ordering, kernel resource identity cleanup, native attachment, readiness, and module responsibilities. It committed the compatibility supervisor handoff change and clarified the rtnetlink race limitation. This review pass did not run tests, formatting, Clippy, CI, core binaries, or host network/TUN operations.
 
 **Activation remains gated.** Kernel deletion is not atomic against full live fingerprints; attachment and dataplane behavior require independent end-to-end host validation; service/packaging crash recovery and comprehensive fault injection remain unfinished. See `docs/native-tun-code-review.md` for the detailed review log and validation checklist.
+
+
+## Generation-bound startup resume hardening
+
+- Startup recovery now passes the supervisor's expected activation ID and generation into the same resume entrypoint that loads the durable manifest and binds its process identity.
+- The resume entrypoint rejects a manifest whose activation token differs from that expected identity before process monitoring or recovery is initiated. The general CLI resume path remains available without an explicit expected identity.
+- This narrows a check-to-resume race in the standalone recovery service. Kernel cleanup selector race limitations and live service-manager verification remain separate unresolved concerns.
+- Tests for this change are authored in the source workflow but have not been run locally in this implementation phase.
