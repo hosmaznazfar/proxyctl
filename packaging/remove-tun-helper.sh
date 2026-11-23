@@ -22,14 +22,13 @@ case "$LIBEXEC_MODE" in
         ;;
 esac
 
-remove_owned_file() {
+validate_owned_file() {
     destination=$1
     if [ -L "$destination" ]; then
         echo "Refusing to remove a symlink at $destination." >&2
         return 1
     fi
     if [ ! -e "$destination" ]; then
-        echo "Not installed: $destination"
         return 0
     fi
     if [ ! -f "$destination" ]; then
@@ -40,6 +39,20 @@ remove_owned_file() {
     if [ "$owner" != "0:0" ]; then
         echo "Refusing to remove a file not owned by root:root: $destination" >&2
         return 1
+    fi
+}
+
+# Validate the entire bundle before deleting any member, so an unexpected path
+# cannot cause a partially completed uninstall.
+validate_owned_file /usr/libexec/proxyctl-tun-helper
+validate_owned_file /usr/libexec/proxyctl-tun-core-launcher
+validate_owned_file /usr/libexec/proxyctl-tun-supervisor
+
+remove_owned_file() {
+    destination=$1
+    if [ ! -e "$destination" ]; then
+        echo "Not installed: $destination"
+        return 0
     fi
     if [ "$destination" = "/usr/libexec/proxyctl-tun-helper" ] && command -v setcap >/dev/null 2>&1; then
         setcap -r "$destination" 2>/dev/null || true
