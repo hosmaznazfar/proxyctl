@@ -616,17 +616,18 @@ pub fn activate_tun_core(
                 64 * 1024,
             )
             .map(|activation| activation.managed),
-        CoreId::SingBox | CoreId::Mihomo => orchestrator.activate_native_core_node_dual_stack_end_to_end(
-            core,
-            request,
-            &node,
-            listen_port,
-            &executable,
-            expected_peers,
-            traffic_targets,
-            Duration::from_secs(10),
-            64 * 1024,
-        ),
+        CoreId::SingBox | CoreId::Mihomo => orchestrator
+            .activate_native_core_node_dual_stack_end_to_end(
+                core,
+                request,
+                &node,
+                listen_port,
+                &executable,
+                expected_peers,
+                traffic_targets,
+                Duration::from_secs(10),
+                64 * 1024,
+            ),
     }
     .with_context(|| {
         format!("{core} TUN activation failed its broker transaction or end-to-end readiness gate")
