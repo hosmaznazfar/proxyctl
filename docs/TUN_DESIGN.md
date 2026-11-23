@@ -1319,3 +1319,8 @@ The lifecycle coordinator serializes core-process binding and orphan cleanup wit
 ### Generation-specific systemd supervisor identity
 
 The transient systemd recovery unit name now includes both the complete activation UUID and its generation (`proxyctl-tun-<uuid>-g<generation>.service`). Previously the unit name omitted generation even though the process arguments and manifest checks included it. Reusing an activation UUID with a later generation could therefore cause startup to mistake an older generation's active unit for the requested supervisor. The unit name, identity validator, and regression tests now bind both dimensions. This source change has not yet been run through local compilation, formatting, Clippy, or tests.
+
+
+### Public activation entrypoint and attachment verification
+
+The evidence-free orchestrator path is internal-only. Public orchestrated Xray activation requires generation- and process-bound attachment evidence and independently rechecks the live kernel state: the pinned core process must hold a TUN descriptor whose `/proc/<pid>/fdinfo` record names the requested interface, and the current interface index must match. The evidence structure alone is not treated as proof. This check is specific to Xray's passed-descriptor mode; native named-device cores still require their own independent attachment and dataplane verification before they can be considered fully integrated.
