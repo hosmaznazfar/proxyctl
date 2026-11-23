@@ -24,8 +24,13 @@ if [ ! -f "$SUPERVISOR_SOURCE" ] || [ ! -x "$SUPERVISOR_SOURCE" ] || [ -L "$SUPE
     echo "Built recovery supervisor must be a regular, non-symlink executable: $SUPERVISOR_SOURCE" >&2
     exit 2
 fi
+# Create the standard system executable directory when the host does not
+# provide it. Never follow or replace a pre-existing symlink.
+if [ ! -e /usr/libexec ] && [ ! -L /usr/libexec ]; then
+    install -d -o root -g root -m 0755 /usr/libexec
+fi
 if [ -L /usr/libexec ] || [ ! -d /usr/libexec ]; then
-    echo "/usr/libexec must be an existing real directory." >&2
+    echo "/usr/libexec must be a real directory (not a symlink)." >&2
     exit 1
 fi
 LIBEXEC_OWNER=$(stat -c '%u:%g' /usr/libexec)
