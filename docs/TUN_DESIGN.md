@@ -1380,7 +1380,6 @@ Latest maintainer-reported `cargo test --all-targets --all-features` output:
 - TUN core-launcher binary: 1 passed.
 - TUN helper binary: 3 passed.
 - Native adapter validation: 1 ignored because all three proxyctl-managed core binaries were not installed.
-- Core-launcher binary: 1 passed; helper binary: 3 passed; native adapter validation: 1 ignored because all three managed core binaries were not installed.
 - Maintainer subsequently reran `sh -n tests/tun-link-cleanup-netns.sh` and `sudo sh -x tests/tun-link-cleanup-netns.sh`; the namespace test passed with `OK (including expected foreign multipath-route flush side effect)`.
 
 The successful namespace run verified removal of both TUN-bound default routes and the protocol-99 rules, preservation of protocol-98 foreign rules and unrelated same-table routes, and the expected removal of a foreign IPv4 multipath route containing a TUN nexthop. This confirms the tested kernel behavior; it does not establish that the broader side effect is acceptable on a host with other network managers. The namespace-wide IPv4 dead-route flush behavior and full target-host matrix remain outstanding. Record future maintainer results here, replacing these bullets rather than appending repetitive progress claims.
@@ -1455,7 +1454,7 @@ The first three commands run as the normal user; the namespace test runs separat
 
 A maintainer-local test run exposed three failures in tests that launch short-lived fake child processes and immediately inspect `/proc/<pid>/exe`. Rust's `Command::spawn()` can return before the child completes `execve()`; an immediate executable lookup can therefore observe the transient pre-exec image. Capturing that path as the expected identity makes later pidfd verification correctly reject the process once its executable changes. This was a fixture synchronization race, not evidence that pidfd identity checks should be relaxed.
 
-The broker and lifecycle fixtures now resolve the expected `sleep` executable independently, wait until the child reports that exact canonical executable and a stable start-time identity, and only then open the pidfd or bind the process. The service activation pidfd test likewise derives its expected executable from the resolved `sleep` binary instead of sampling `/proc` immediately after spawn. Production identity verification remains fail-closed. These changes are awaiting maintainer-local formatting, Clippy, and test validation.
+The broker and lifecycle fixtures now resolve the expected `sleep` executable independently, wait until the child reports that exact canonical executable and a stable start-time identity, and only then open the pidfd or bind the process. The service activation pidfd test likewise derives its expected executable from the resolved `sleep` binary instead of sampling `/proc` immediately after spawn. Production identity verification remains fail-closed. The maintainer's subsequent local Rust test run passed, including the fixture synchronization regressions.
 
 ### Maintainer-local validation update (2026-11-23)
 
