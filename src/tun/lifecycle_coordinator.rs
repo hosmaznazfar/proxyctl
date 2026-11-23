@@ -112,6 +112,35 @@ impl LifecycleCoordinator {
             .transpose()
     }
 
+    /// Atomically claim an orphaned Prepared activation for cleanup.
+    ///
+    /// The lifecycle lock makes this transition mutually exclusive with bind_core_process:
+    /// once CleanupPending is durable, a concurrent startup commit can no longer succeed.
+    #[cfg(target_os = "linux")]
+    pub fn claim_prepared_cleanup(
+        &self,
+        token: &ActivationToken,
+    ) -> Result<Option<ProcessIdentity>> {
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        let mut snapshot = self
+            .store
+            .load()?
+            .context("no TUN recovery manifest exists")?;
+        ensure!(
+            snapshot.manifest.activation_id == token.activation_id
+                && snapshot.generation == token.generation,
+            "stale TUN lifecycle token does not match the active activation"
+        );
+        ensure!(
+            snapshot.phase == SupervisorPhase::Prepared,
+            "only a Prepared activation can be claimed for orphan cleanup"
+        );
+        let process = snapshot.core_process.clone();
+        snapshot.phase = SupervisorPhase::CleanupPending;
+        self.store.write(&snapshot)?;
+        Ok(process)
+    }
+
     /// Bind the exact launched core process to a prepared activation before committing startup.
     /// A pidfd pins the process instance throughout the durable write, preventing PID reuse from
     /// redirecting the identity check. If the process exits after the final liveness check, the
@@ -385,6 +414,33 @@ mod tests {
         std::fs::write(&path, "").unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
         assert!(LifecycleLock::acquire(&path, Duration::from_millis(50)).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn claiming_prepared_cleanup_prevents_a_late_core_commit() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().join("runtime")).unwrap();
+        let coordinator = LifecycleCoordinator::new(store).unwrap();
+        let token = coordinator
+            .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
+            .unwrap();
+
+        assert_eq!(coordinator.claim_prepared_cleanup(&token).unwrap(), None);
+        let current = coordinator.load_current().unwrap().unwrap();
+        assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
+        assert!(
+            coordinator
+                .bind_core_process(
+                    &token,
+                    ProcessIdentity {
+                        pid: 0,
+                        start_ticks: 1,
+                        executable: "/bin/sleep".into(),
+                    }
+                )
+                .is_err()
+        );
     }
 
     #[cfg(target_os = "linux")]
