@@ -232,7 +232,7 @@ mod tests {
                 JournalOperation {
                     sequence: 2,
                     kind: JournalOperationKind::AddRoute,
-                    resource_key: "route:v6:42420::/0".into(),
+                    resource_key: "route:v6:42420:::/0".into(),
                     state: JournalOperationState::Applied,
                     fingerprint: Some("route-v6".into()),
                 },
@@ -253,6 +253,7 @@ mod tests {
             ],
         };
 
+        journal.validate().unwrap();
         let ordered = ordered_cleanup_operations(&journal);
         assert_eq!(
             ordered
