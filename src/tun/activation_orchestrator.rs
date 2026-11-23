@@ -143,12 +143,12 @@ impl<'a> ActivationOrchestrator<'a> {
             self.coordinator.load_current()?.is_none(),
             "an activation manifest already exists; recover it before creating another"
         );
-        managed_activation::activate_managed_core(
+        let (token, _) = managed_activation::prepare_managed_activation(
             self.helper,
             self.coordinator,
-            request.activation_id,
+            request.activation_id.clone(),
             request.generation,
-            request.interface_name,
+            request.interface_name.clone(),
             request.owner_uid,
             request.owner_gid,
             request.table_id,
@@ -156,9 +156,34 @@ impl<'a> ActivationOrchestrator<'a> {
             request.proxy_priority,
             request.core_mark,
             request.core_mark_mask,
-            process,
         )
-        .context("unified TUN activation failed")
+        .context("unified TUN activation preparation failed")?;
+
+        let prepared = ManagedActivation {
+            token: token.clone(),
+            activation_message: "prepared activation awaiting supervised process commit".into(),
+        };
+        if let Err(error) = self.start_recovery_supervisor(&prepared) {
+            self.stop_core_and_recover_generation(
+                &request.activation_id,
+                request.generation,
+                Some(&process),
+            )
+            .context("supervisor startup failed and exact-generation rollback was unsuccessful")?;
+            return Err(error).context("cannot activate without an independent recovery supervisor");
+        }
+
+        managed_activation::commit_prepared_managed_process(self.coordinator, &token, process.clone())
+            .map_err(|error| {
+                // Keep the supervisor independent: terminate only the captured process and let
+                // the generation-bound service own recovery if compensation is incomplete.
+                let _ = self.stop_core_and_recover_generation(
+                    &request.activation_id,
+                    request.generation,
+                    Some(&process),
+                );
+                error.context("unified TUN process commit failed")
+            })
     }
 
     /// Core-dispatched node activation. Only adapters with a concrete broker-owned
