@@ -134,11 +134,27 @@ pub fn spawn_native_core_service(
         .arg("--")
         .arg(&executable)
         .args(&arguments);
-    let started = run_command(command, START_TIMEOUT, false)?;
-    ensure!(
-        started.success,
-        "systemd refused to start the generation-bound native core service"
-    );
+    let started = match run_command(command, START_TIMEOUT, false) {
+        Ok(output) if output.success => output,
+        result => {
+            let mut stop = Command::new(SUDO);
+            stop.args(["-n", "--", SYSTEMCTL, "stop", &unit]);
+            let cleanup = run_command(stop, Duration::from_secs(8), false);
+            match (result, cleanup) {
+                (Err(error), Ok(output)) if output.success => return Err(error)
+                    .context("native systemd-run failed; transient unit stop was confirmed"),
+                (Err(error), cleanup) => return Err(error).context(format!(
+                    "native systemd-run failed; bounded transient-unit cleanup result: {cleanup:?}"
+                )),
+                (Ok(_), Ok(output)) if output.success => anyhow::bail!(
+                    "systemd refused to start the native core service; transient unit stop was confirmed"
+                ),
+                (Ok(_), cleanup) => anyhow::bail!(
+                    "systemd refused to start the native core service; bounded transient-unit cleanup result: {cleanup:?}"
+                ),
+            }
+        }
+    };
 
     let identity_result = (|| -> Result<ProcessIdentity> {
         let deadline = Instant::now() + START_TIMEOUT;
