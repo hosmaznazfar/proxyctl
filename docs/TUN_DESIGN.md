@@ -1283,3 +1283,7 @@ Pure routing-policy validation now additionally checks consistency of route iden
 ## Compatibility activation supervisor handoff (review update)
 
 The compatibility activation orchestrator now starts the generation-bound recovery supervisor while the manifest is still Prepared, before committing the supplied process identity as Running. If supervisor startup fails, the exact activation generation is stopped/recovered. Commit compensation is attempted against the same identity and generation. This integration change is source-only and remains unverified locally; public activation remains gated and live systemd validation is required.
+
+## Kernel cleanup compare/delete limitation
+
+The Linux journal backend performs a fresh resource inventory, compares canonical fingerprints, issues narrowly typed route/rule/interface deletion requests, and verifies the post-delete inventory before recording durable cleanup progress. However, the inspected route/rule delete selectors are not a kernel-atomic conditional operation against the entire previously observed fingerprint. An external actor can theoretically change a matching resource between inspection and deletion. `src/tun/kernel_transaction.rs` now documents this limitation instead of claiming atomic compare-and-delete. This remains a critical unresolved race and an explicit activation blocker; source inspection is not sufficient to declare it safe.
