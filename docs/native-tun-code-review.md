@@ -219,7 +219,7 @@ The source audit and added unit tests do not prove installed file capabilities, 
 ## Phase 7 — final source audit and release-readiness boundary
 
 ### CI and compatibility contract
-- CI runs formatting, Clippy with warnings denied, and all-target/all-feature tests on Ubuntu using Rust 1.99.1. The repository's documented minimum Rust compatibility target remains Rust 1.90; the workflow toolchain is newer and therefore does not independently prove the minimum-version contract.
+- CI runs formatting, Clippy with warnings denied, and all-target/all-feature tests on Ubuntu using Rust 1.100.0, matching the package's declared `rust-version = "1.100"`. This verifies the declared compiler floor rather than silently relying on a different toolchain.
 - The TUN helper remains a separately installed root-owned executable with the narrowly scoped file capability contract described above. Packaging scripts and installed systemd units still require validation on a clean CachyOS host.
 - No automatic recovery backend other than systemd is implemented. Unsupported service managers must remain fail-closed.
 - The public TUN activation gate remains closed. In particular, rtnetlink route/rule cleanup cannot atomically compare the complete observed fingerprint with deletion; external mutation between inventory and delete remains a known race and a release blocker.
