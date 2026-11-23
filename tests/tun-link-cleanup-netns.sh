@@ -90,7 +90,7 @@ fi
 ip -n "$namespace" -6 route show table 42420 | grep -q '2001:db8:4242::/48'
 
 if [ "$multipath_route_added" -eq 1 ]; then
-    echo "OK (including expected foreign multipath-route flush side effect)"
+    printf "%s\n" "OK (including expected foreign multipath-route flush side effect)" >&2
 else
-    echo "OK (multipath route unsupported by this kernel/iproute2; that check was skipped)"
+    printf "%s\n" "OK (multipath route unsupported by this kernel/iproute2; that check was skipped)" >&2
 fi
