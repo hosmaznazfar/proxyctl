@@ -48,27 +48,50 @@ ip -n "$namespace" -6 rule add pref 42420 table 42420 protocol 98
 
 ip -n "$namespace" -4 route show table 42420 | grep -q '^default'
 ip -n "$namespace" -6 route show table 42420 | grep -q '^default'
-ip -n "$namespace" -4 rule show | grep -q '42420.*99'
-ip -n "$namespace" -6 rule show | grep -q '42420.*99'
+
+# Use detailed output because the protocol marker is not part of the default
+# human-readable rule format on every supported iproute2/kernel combination.
+show_rules() {
+    family=$1
+    ip -details -n "$namespace" "$family" rule show
+}
+has_rule_marker() {
+    family=$1
+    marker=$2
+    show_rules "$family" | grep -Eq "42420:.*lookup 42420.*proto $marker([[:space:]]|$)"
+}
+require_rule_marker() {
+    family=$1
+    marker=$2
+    output=$(show_rules "$family")
+    if ! printf '%s\\n' "$output" | grep -Eq "42420:.*lookup 42420.*proto $marker([[:space:]]|$)"; then
+        printf 'expected %s rule at priority/table 42420 with protocol %s; detailed rules were:\\n%s\\n' "$family" "$marker" "$output" >&2
+        exit 1
+    fi
+}
+require_rule_marker -4 99
+require_rule_marker -6 99
+require_rule_marker -4 98
+require_rule_marker -6 98
 
 # Rules are removed by their typed selectors; routes are removed by link teardown.
 ip -n "$namespace" -4 rule del pref 42420 table 42420 protocol 99
 ip -n "$namespace" -6 rule del pref 42420 table 42420 protocol 99
-if ! ip -n "$namespace" -4 rule show | grep -q '42420.*98'; then
+if ! has_rule_marker -4 98; then
     echo "foreign IPv4 rule with a different protocol marker was removed" >&2
     exit 1
 fi
-if ! ip -n "$namespace" -6 rule show | grep -q '42420.*98'; then
+if ! has_rule_marker -6 98; then
     echo "foreign IPv6 rule with a different protocol marker was removed" >&2
     exit 1
 fi
 ip -n "$namespace" -4 rule del pref 42420 table 42420 protocol 98
 ip -n "$namespace" -6 rule del pref 42420 table 42420 protocol 98
-if ip -n "$namespace" -4 rule show | grep -q '42420.*99'; then
+if has_rule_marker -4 99; then
     echo "IPv4 Proxyctl policy rule survived explicit removal" >&2
     exit 1
 fi
-if ip -n "$namespace" -6 rule show | grep -q '42420.*99'; then
+if has_rule_marker -6 99; then
     echo "IPv6 Proxyctl policy rule survived explicit removal" >&2
     exit 1
 fi
