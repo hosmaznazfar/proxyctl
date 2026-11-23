@@ -308,7 +308,10 @@ fn stop_core_for_cleanup(
         "core cleanup token does not match the active activation"
     );
     let identity = match current.snapshot.phase {
-        SupervisorPhase::Prepared => coordinator.claim_prepared_cleanup(token)?,
+        SupervisorPhase::Prepared => {
+            coordinator.claim_prepared_cleanup(token)?;
+            None
+        }
         SupervisorPhase::CleanupPending => current.snapshot.core_process,
         _ => anyhow::bail!("core can only be stopped for Prepared or CleanupPending activation"),
     };
