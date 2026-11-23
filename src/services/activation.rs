@@ -1392,7 +1392,7 @@ mod tun_probe_target_tests {
             &probe,
             [
                 SocketAddr::from((Ipv4Addr::new(192, 0, 2, 10), 80)),
-                SocketAddr::from((Ipv6Addr::LOCALHOST, 80)),
+                SocketAddr::from((Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0x10), 80)),
                 SocketAddr::from((Ipv4Addr::new(192, 0, 2, 11), 80)),
             ],
             204,
