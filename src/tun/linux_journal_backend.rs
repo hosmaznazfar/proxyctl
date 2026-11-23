@@ -567,8 +567,7 @@ impl JournalRecoveryBackend for LinuxJournalBackend {
 fn has_proxyctl_protocol_marker(value: &Value) -> bool {
     const PROXYCTL_PROTOCOL: u64 = 99;
     value.get("protocol").is_some_and(|protocol| {
-        protocol.as_u64() == Some(PROXYCTL_PROTOCOL)
-            || protocol.as_str() == Some("99")
+        protocol.as_u64() == Some(PROXYCTL_PROTOCOL) || protocol.as_str() == Some("99")
     })
 }
 
@@ -683,10 +682,18 @@ mod tests {
 
     #[test]
     fn cleanup_requires_the_explicit_proxyctl_protocol_marker() {
-        assert!(has_proxyctl_protocol_marker(&serde_json::json!({"protocol": 99})));
-        assert!(has_proxyctl_protocol_marker(&serde_json::json!({"protocol": "99"})));
-        assert!(!has_proxyctl_protocol_marker(&serde_json::json!({"protocol": "static"})));
-        assert!(!has_proxyctl_protocol_marker(&serde_json::json!({"protocol": 4})));
+        assert!(has_proxyctl_protocol_marker(
+            &serde_json::json!({"protocol": 99})
+        ));
+        assert!(has_proxyctl_protocol_marker(
+            &serde_json::json!({"protocol": "99"})
+        ));
+        assert!(!has_proxyctl_protocol_marker(
+            &serde_json::json!({"protocol": "static"})
+        ));
+        assert!(!has_proxyctl_protocol_marker(
+            &serde_json::json!({"protocol": 4})
+        ));
         assert!(!has_proxyctl_protocol_marker(&serde_json::json!({})));
     }
 
