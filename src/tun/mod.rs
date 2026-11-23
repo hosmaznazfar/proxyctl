@@ -41,6 +41,7 @@ pub mod persistent_tun_owner;
 pub mod privilege_broker;
 #[cfg(target_os = "linux")]
 pub mod process;
+#[cfg(target_os = "linux")]
 pub mod process_attachment;
 pub mod readiness;
 pub mod recovery;
