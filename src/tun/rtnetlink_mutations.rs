@@ -129,15 +129,22 @@ pub fn add_route(route: &PlannedRoute) -> Result<()> {
     nl.clear();
     Ok(())
 }
-/// Installs a typed routing policy rule. The selector and table are encoded as attributes.
-pub fn add_rule(rule: &PlannedRule) -> Result<()> {
+fn rule_payload(rule: &PlannedRule) -> Result<Vec<u8>> {
     ensure!(
         rule.priority > 0 && rule.lookup_table > 0,
         "rule identity invalid"
     );
-    let mut p = vec![0u8; 12];
-    p[0] = family(rule.family);
-    p[7] = FR_ACT_TO_TBL;
+    ensure!(
+        matches!(
+            (rule.purpose, rule.mark),
+            (super::route_policy::RulePurpose::ProxyTraffic, None)
+                | (super::route_policy::RulePurpose::CoreTrafficBypass, Some(_))
+        ),
+        "rule purpose and mark selector disagree"
+    );
+    let mut payload = vec![0u8; 12];
+    payload[0] = family(rule.family);
+    payload[7] = FR_ACT_TO_TBL;
     let mut attrs = Vec::new();
     attr(FRA_PRIORITY, &rule.priority.to_ne_bytes(), &mut attrs)?;
     attr(FRA_TABLE, &rule.lookup_table.to_ne_bytes(), &mut attrs)?;
@@ -150,40 +157,32 @@ pub fn add_rule(rule: &PlannedRule) -> Result<()> {
         attr(FRA_FWMARK, &mark.value.to_ne_bytes(), &mut attrs)?;
         attr(FRA_FWMASK, &mark.mask.to_ne_bytes(), &mut attrs)?;
     }
-    p.extend(attrs);
+    payload.extend(attrs);
+    Ok(payload)
+}
+
+/// Installs a typed routing policy rule. The selector and table are encoded as attributes.
+pub fn add_rule(rule: &PlannedRule) -> Result<()> {
+    let payload = rule_payload(rule)?;
     let nl = request(
         RTM_NEWRULE,
         NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
-        &p,
+        &payload,
     );
     let mut sock = RouteNetlink::open()?;
     sock.transact(&nl, Duration::from_secs(3))?;
     Ok(())
 }
 
-/// Removes a policy rule using priority, table, optional mark, and Proxyctl protocol marker.
+/// Removes a policy rule using its typed identity and Proxyctl protocol marker.
+///
+/// The unmarked proxy-traffic rule intentionally has no fwmark attribute because it must
+/// match all traffic marks. Linux therefore treats omitted mark/interface/UID/port selectors
+/// as wildcards in fib_rule_find; the complete live fingerprint check cannot make those
+/// omitted kernel delete selectors exact. This limitation is documented in TUN_DESIGN.md.
 pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
-    ensure!(
-        rule.priority > 0 && rule.lookup_table > 0,
-        "rule deletion selector invalid"
-    );
-    let mut p = vec![0u8; 12];
-    p[0] = family(rule.family);
-    p[7] = FR_ACT_TO_TBL;
-    let mut attrs = Vec::new();
-    attr(FRA_PRIORITY, &rule.priority.to_ne_bytes(), &mut attrs)?;
-    attr(FRA_TABLE, &rule.lookup_table.to_ne_bytes(), &mut attrs)?;
-    append_proxyctl_rule_protocol(&mut attrs)?;
-    if let Some(mark) = rule.mark {
-        ensure!(
-            mark.mask != 0 && mark.value & !mark.mask == 0,
-            "invalid mark selector"
-        );
-        attr(FRA_FWMARK, &mark.value.to_ne_bytes(), &mut attrs)?;
-        attr(FRA_FWMASK, &mark.mask.to_ne_bytes(), &mut attrs)?;
-    }
-    p.extend(attrs);
-    let nl = request(RTM_DELRULE, NLM_F_REQUEST | NLM_F_ACK, &p);
+    let payload = rule_payload(rule)?;
+    let nl = request(RTM_DELRULE, NLM_F_REQUEST | NLM_F_ACK, &payload);
     let mut sock = RouteNetlink::open()?;
     sock.transact(&nl, Duration::from_secs(3))?;
     Ok(())
@@ -222,6 +221,75 @@ mod interface_alias_tests {
             u16::from_ne_bytes(mask_attribute[2..4].try_into().unwrap()),
             16
         );
+    }
+
+    fn find_attribute(payload: &[u8], wanted: u16) -> Option<&[u8]> {
+        let mut offset = 12usize;
+        while offset + 4 <= payload.len() {
+            let length = u16::from_ne_bytes(payload[offset..offset + 2].try_into().ok()?) as usize;
+            let kind = u16::from_ne_bytes(payload[offset + 2..offset + 4].try_into().ok()?);
+            if length < 4 || offset + length > payload.len() {
+                return None;
+            }
+            if kind == wanted {
+                return Some(&payload[offset + 4..offset + length]);
+            }
+            offset = (offset + length + 3) & !3;
+        }
+        None
+    }
+
+    #[test]
+    fn rule_payload_pins_protocol_and_marked_bypass_selectors() {
+        use super::super::route_policy::{MarkSelector, RulePurpose};
+        let proxy = PlannedRule {
+            family: AddressFamily::Ipv4,
+            priority: 42_420,
+            purpose: RulePurpose::ProxyTraffic,
+            mark: None,
+            lookup_table: 42_420,
+        };
+        let proxy_payload = rule_payload(&proxy).unwrap();
+        assert_eq!(proxy_payload[0], libc::AF_INET as u8);
+        assert_eq!(proxy_payload[7], FR_ACT_TO_TBL);
+        assert_eq!(
+            find_attribute(&proxy_payload, FRA_PROTOCOL),
+            Some(&[PROXYCTL_ROUTE_PROTOCOL][..])
+        );
+        // No mark selector is correct for the all-traffic proxy rule, but means the
+        // kernel's delete matcher treats any mark condition on a colliding rule as wildcard.
+        assert!(find_attribute(&proxy_payload, FRA_FWMARK).is_none());
+        assert!(find_attribute(&proxy_payload, FRA_FWMASK).is_none());
+
+        let bypass = PlannedRule {
+            family: AddressFamily::Ipv6,
+            priority: 42_410,
+            purpose: RulePurpose::CoreTrafficBypass,
+            mark: Some(MarkSelector { value: 0x42, mask: 0xff }),
+            lookup_table: 42_420,
+        };
+        let bypass_payload = rule_payload(&bypass).unwrap();
+        assert_eq!(
+            find_attribute(&bypass_payload, FRA_FWMARK),
+            Some(&0x42u32.to_ne_bytes()[..])
+        );
+        assert_eq!(
+            find_attribute(&bypass_payload, FRA_FWMASK),
+            Some(&0xffu32.to_ne_bytes()[..])
+        );
+    }
+
+    #[test]
+    fn rule_payload_rejects_purpose_mark_mismatch() {
+        use super::super::route_policy::RulePurpose;
+        let invalid = PlannedRule {
+            family: AddressFamily::Ipv4,
+            priority: 42_420,
+            purpose: RulePurpose::ProxyTraffic,
+            mark: Some(super::super::route_policy::MarkSelector { value: 1, mask: 1 }),
+            lookup_table: 42_420,
+        };
+        assert!(rule_payload(&invalid).is_err());
     }
 
     #[test]
