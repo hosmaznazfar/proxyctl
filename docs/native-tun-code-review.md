@@ -267,3 +267,7 @@ The recovery executor now processes journal operations in cleanup dependency ord
 ### Policy-rule request encoder regression coverage
 
 The rule add/delete path now shares one validated payload builder, preventing the two operations from silently drifting in family, action, priority, table, protocol marker, or optional fwmark/mask encoding. Tests assert the marker and marked bypass selector bytes and explicitly pin the all-traffic proxy rule's lack of a mark selector. This makes the kernel wildcard limitation visible in the source test suite; it does not remove the limitation or establish atomic full-fingerprint deletion.
+
+### Recovery parsing of policy-rule marks
+
+A source review against current iproute2 `ip/iprule.c` found that JSON rule dumps emit `fwmark` and `fwmask` as separate fields; the mask is omitted when it is the full 32-bit mask. The previous journal cleanup parser expected a combined `value/mask` string and could therefore fail while reconstructing marked core-bypass rules. The parser now reads the separate fields, accepts string or unsigned-integer JSON forms, applies the full-mask default, and rejects malformed/out-of-mask values. Focused regression tests cover these cases. This is a source-level correction; maintainer local validation remains pending.
