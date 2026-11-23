@@ -1324,3 +1324,8 @@ The transient systemd recovery unit name now includes both the complete activati
 ### Public activation entrypoint and attachment verification
 
 The evidence-free orchestrator path is internal-only. Public orchestrated Xray activation requires generation- and process-bound attachment evidence and independently rechecks the live kernel state: the pinned core process must hold a TUN descriptor whose `/proc/<pid>/fdinfo` record names the requested interface, and the current interface index must match. The evidence structure alone is not treated as proof. This check is specific to Xray's passed-descriptor mode; native named-device cores still require their own independent attachment and dataplane verification before they can be considered fully integrated.
+
+
+### Broker-side process-stop invariant
+
+The privileged mutation broker independently verifies that the exact process identity persisted in the active ownership manifest is no longer live before it mutates kernel resources for recovery. This is enforced even when recovery is requested directly through the helper rather than through the managed supervisor. The supervisor still stops the generation-specific systemd core unit first; the broker check is a second fail-closed boundary. If process identity inspection fails, recovery fails rather than assuming the process exited.
