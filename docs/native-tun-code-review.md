@@ -37,3 +37,15 @@ Applied source corrections for the reported diagnostics:
 - `cargo clippy --all-targets --all-features -- -D warnings`: compilation failed on the same diagnostics.
 - The above compile fixes have been committed to `main`, but they are **not verified** until the maintainer reruns formatting, tests, and Clippy against the latest commit.
 - No tests, formatting, Clippy, CI, or host TUN/network mutations were run by this review pass.
+
+## Recovery integration review — compatibility activation boundary
+
+- `ActivationOrchestrator::activate` previously delegated to a compatibility composition that prepared and committed Running without starting the independent generation-bound recovery service at this orchestration boundary.
+- Updated it to prepare/adopt the exact generation, start the supervisor while the durable manifest remains Prepared, and then bind/commit the captured process identity. Supervisor startup failure triggers exact-generation stop/recovery compensation. Commit failure attempts the same generation-bound compensation while the independently started supervisor remains available if cleanup is incomplete.
+- This source change has not been locally compiled, formatted, or tested. TUN remains gated. The service executable installation contract and runtime service startup still need host validation.
+
+### Current review execution policy
+
+- Source review and code/test/documentation updates are committed incrementally directly to `main`.
+- Local validation is deferred until the review checklist is exhausted, as requested.
+- No host network/TUN state was changed.
