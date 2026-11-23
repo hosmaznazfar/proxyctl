@@ -359,7 +359,7 @@ impl<'a> ActivationOrchestrator<'a> {
                 );
             }
         };
-        if let Err(error) = super::xray_launcher::wait_for_process_tun_attachment(
+        if let Err(error) = super::process_attachment::wait_for_process_tun_attachment(
             &process,
             &request.interface_name,
             expected_ifindex,
