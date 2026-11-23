@@ -275,3 +275,16 @@ A source review against current iproute2 `ip/iprule.c` found that JSON rule dump
 ### Persistent TUN rollback identity
 
 The native-device rollback path previously synthesized an interface fingerprint without the generation alias, while live persistent-interface observations include that alias. Because cleanup compares complete fingerprints, rollback could refuse to release its own persistent TUN and retain the journal unnecessarily. The path now uses the complete applied fingerprint persisted in the journal and separately validates the requested name, ifindex, and TUN kind before cleanup. Regression tests pin alias preservation and reject identity mismatches. This is an implementation correction awaiting maintainer-local compilation and tests.
+
+### Next maintainer-local validation checkpoint
+
+The latest source changes include persistent-interface rollback fingerprint handling and policy-rule selector/recovery parsing corrections. Before continuing into the next implementation area, validate this revision locally on CachyOS (do not use hosted CI for this workflow):
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+sudo sh tests/tun-link-cleanup-netns.sh
+```
+
+Run the first three commands from the repository root as the normal user. Run the namespace script separately with sudo; it creates and removes a temporary network namespace. If a command fails, provide its complete output and stop before running the remaining commands so the failure can be fixed first. This checkpoint does not authorize enabling TUN; host traffic, DNS, firewall, crash-recovery, and packaging validation remain outstanding.
