@@ -314,6 +314,14 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
             .arg("--property=LockPersonality=yes")
             .arg("--property=MemoryDenyWriteExecute=yes")
             .arg("--property=RestrictRealtime=yes")
+            // The user supervisor only coordinates process identity, durable state, and
+            // Unix-socket broker requests; it must never acquire ambient kernel authority.
+            .arg("--property=NoNewPrivileges=yes")
+            .arg("--property=CapabilityBoundingSet=")
+            .arg("--property=AmbientCapabilities=")
+            .arg("--property=RestrictSUIDSGID=yes")
+            .arg("--property=RestrictNamespaces=yes")
+            .arg("--property=RestrictAddressFamilies=AF_UNIX")
             .arg("--")
             .arg(&self.executable)
             .arg(&self.runtime)
