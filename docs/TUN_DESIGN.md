@@ -1428,3 +1428,8 @@ The new opt-in integration test is `tests/tun-link-cleanup-netns.sh`. It creates
 
 **Activation remains disabled.** This redesign removes the direct route snapshot/delete race, but does not by itself certify policy-rule cleanup, kernel side effects, actual traffic, DNS/firewall preservation, supervisor recovery, or clean-host packaging. The target CachyOS namespace test and full host matrix remain required.
 
+
+
+### Policy-rule selector regression coverage
+
+The rtnetlink mutation module now builds add/delete rule payloads through one validated encoder. Regression tests pin the family/action header, protocol marker 99, priority/table attributes, and the fwmark/mask attributes on marked core-bypass rules. They also assert that the ordinary proxy-traffic rule omits fwmark/mask because it must match all packet marks. This is intentional semantics, not an accidental omission; it is also why Linux's delete matcher cannot distinguish that rule from a same-marker/same-priority/same-table foreign rule carrying additional selectors. The test documents the encoding contract and does not claim to remove that kernel limitation.
