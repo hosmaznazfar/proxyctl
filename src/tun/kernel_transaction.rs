@@ -116,6 +116,9 @@ pub trait KernelTransactionBackend {
 
     fn add_owned_rule(&mut self, activation_id: &str, rule: &PlannedRule) -> Result<String>;
 
+    /// Remove a policy rule by its typed ownership selector, or verify that a route
+    /// disappeared after the owned TUN interface was unregistered. Route deletion must
+    /// never be issued directly through a weaker RTM_DELROUTE selector.
     fn remove_resource_if_matches(
         &mut self,
         activation_id: &str,
