@@ -25,16 +25,31 @@ fn restrict_helper_capabilities() -> anyhow::Result<()> {
 
     const CAPABILITY_VERSION_3: u32 = 0x2008_0522;
     const CAP_NET_ADMIN: u32 = 1 << 12;
-    let header = CapabilityHeader { version: CAPABILITY_VERSION_3, pid: 0 };
+    let header = CapabilityHeader {
+        version: CAPABILITY_VERSION_3,
+        pid: 0,
+    };
     let data = [
-        CapabilityData { effective: CAP_NET_ADMIN, permitted: CAP_NET_ADMIN, inheritable: 0 },
-        CapabilityData { effective: 0, permitted: 0, inheritable: 0 },
+        CapabilityData {
+            effective: CAP_NET_ADMIN,
+            permitted: CAP_NET_ADMIN,
+            inheritable: 0,
+        },
+        CapabilityData {
+            effective: 0,
+            permitted: 0,
+            inheritable: 0,
+        },
     ];
 
     // SAFETY: Both pointers refer to initialized ABI-compatible structures
     // for the duration of the capset syscall. pid=0 targets this process.
     let result = unsafe {
-        libc::syscall(libc::SYS_capset, &header as *const CapabilityHeader, data.as_ptr())
+        libc::syscall(
+            libc::SYS_capset,
+            &header as *const CapabilityHeader,
+            data.as_ptr(),
+        )
     };
     ensure!(
         result == 0,

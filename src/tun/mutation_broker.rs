@@ -835,7 +835,10 @@ mod tests {
             let mut backends = BTreeMap::new();
             let message = execute(request, &runtime, &mut backends).unwrap();
             write_response(&mut stream, &MutationResponse::success(message)).unwrap();
-            assert!(backends.is_empty(), "Ping must not create an activation backend");
+            assert!(
+                backends.is_empty(),
+                "Ping must not create an activation backend"
+            );
         });
 
         let response = call(&socket, &MutationRequest::Ping { version: VERSION }).unwrap();
