@@ -88,8 +88,10 @@ fn valid_activation_id(value: &str) -> bool {
 /// the kernel mutation, then persist the observed exact fingerprint before reporting success.
 /// A crash between those writes leaves an ambiguous intent that recovery must inspect; it must
 /// never delete a resource based on a guessed name. The journal must survive controller/core
-/// termination. Deletion must compare the current complete fingerprint atomically with the
-/// delete, then durably mark cleanup progress. A successful add must return a non-empty
+/// termination. Cleanup must re-inspect the complete fingerprint immediately before mutation,
+/// use the narrowest typed kernel operation available, verify the post-mutation inventory, and
+/// durably mark cleanup progress. Linux rtnetlink cannot make full-fingerprint deletion atomic.
+/// A successful add must return a non-empty
 /// fingerprint. The Linux journal backend implements both descriptor and persistent-device modes.
 pub trait KernelTransactionBackend {
     fn create_owned_interface(
