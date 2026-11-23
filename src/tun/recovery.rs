@@ -212,6 +212,31 @@ mod tests {
     }
 
     #[test]
+    fn supervisor_service_names_are_unique_per_generation() {
+        let activation_id = "12345678-1234-4234-8234-123456789abc";
+        let first = SupervisorIdentity::for_activation(
+            activation_id,
+            "/run/user/1000/proxyctl/tun-manifest.json",
+            7,
+        )
+        .unwrap();
+        let second = SupervisorIdentity::for_activation(
+            activation_id,
+            "/run/user/1000/proxyctl/tun-manifest.json",
+            8,
+        )
+        .unwrap();
+
+        assert_ne!(first.service_name, second.service_name);
+        assert!(first.service_name.ends_with("-g7"));
+        assert!(second.service_name.ends_with("-g8"));
+
+        let mut forged = second;
+        forged.service_name = first.service_name;
+        assert!(forged.validate().is_err());
+    }
+
+    #[test]
     fn supervisor_service_identity_is_bound_to_activation_id() {
         let identity = SupervisorIdentity {
             activation_id: "12345678-1234-4234-8234-123456789abc".into(),
