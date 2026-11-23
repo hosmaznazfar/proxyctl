@@ -436,18 +436,16 @@ impl KernelTransactionBackend for LinuxJournalBackend {
     ) -> Result<ResourceState> {
         self.journal_identity(id)?;
         let key = format!("interface:{name}");
-        let fp =
-            serde_json::to_string(&serde_json::json!({"ifindex":index,"kind":"tun","name":name}))?;
         let journal = self
             .store
             .load_transaction_journal()?
             .context("transaction journal is missing while removing the TUN interface")?;
-        let interface_kind = journal
+        let interface_operation = journal
             .operations
             .iter()
             .find(|operation| operation.resource_key == key)
-            .map(|operation| operation.kind)
             .context("journal has no interface creation operation")?;
+        let interface_kind = interface_operation.kind;
         ensure!(
             matches!(
                 interface_kind,
@@ -456,7 +454,23 @@ impl KernelTransactionBackend for LinuxJournalBackend {
             ),
             "journal interface operation has an invalid kind"
         );
-        let state = self.remove_live(interface_kind, &key, &fp)?;
+        ensure!(
+            interface_operation.state == JournalOperationState::Applied,
+            "interface cleanup requires a durably applied interface operation"
+        );
+        let fp = interface_operation
+            .fingerprint
+            .as_deref()
+            .context("journal interface operation has no applied fingerprint")?;
+        let fingerprint: Value = serde_json::from_str(fp)
+            .context("journal interface fingerprint is malformed")?;
+        ensure!(
+            fingerprint.get("name").and_then(Value::as_str) == Some(name)
+                && fingerprint.get("ifindex").and_then(Value::as_u64) == Some(index as u64)
+                && fingerprint.get("kind").and_then(Value::as_str) == Some("tun"),
+            "requested interface identity does not match its durable journal fingerprint"
+        );
+        let state = self.remove_live(interface_kind, &key, fp)?;
         if matches!(state, ResourceState::Removed | ResourceState::AlreadyAbsent) {
             self.store
                 .mark_operation_removed(id, self.generation, &key)?;
