@@ -83,7 +83,14 @@ This section records the earlier direct route/rule deletion design and is supers
 
 Source-level passes covered recovery lifecycle/generation binding, activation handoff, systemd supervisor contract, broker transport/authorization, journal ordering, kernel cleanup identity/fingerprint behavior, attachment/readiness composition, and architectural boundaries. The review made one activation-handoff code change and documented the rtnetlink compare/delete race and other host-validation blockers. No test, formatter, Clippy, CI, core-launch, or host networking/TUN operation was performed during this review phase, per maintainer workflow.
 
-### Required local validation after review changes
+
+### Maintainer-owned validation policy
+
+- The maintainer runs formatting, Clippy, Rust tests, privileged namespace tests, and host integration checks locally.
+- Do not trigger, poll, or report GitHub Actions CI for routine implementation commits unless the maintainer explicitly asks for hosted CI.
+- Do not repeat validation instructions or report hosted CI status in progress updates. Record the latest maintainer-reported local result here and request only the next test whose result is still missing.
+
+### Remaining local validation
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --all-targets --all-features -- -D warnings`
@@ -254,6 +261,6 @@ The recovery executor now processes journal operations in cleanup dependency ord
 
 - Policy rules use family/action/priority/table/fwmark/mask/protocol marker 99. Current Linux fib_rule_find matches supplied selector fields (including FRA_PROTOCOL) during the serialized RTM_DELRULE operation, so a foreign rule with a different protocol/table/priority/action/mark is not selected. Fields omitted from the delete request remain wildcards; a replacement that keeps every supplied field but adds extra selectors could still match. Marker 99 is not an authorization boundary against a privileged actor intentionally reproducing the selector. The namespace test now places a foreign rule at the same priority/table with protocol 98 and verifies it survives deletion of protocol 99.
 - IPv4 NETDEV_UNREGISTER can trigger fib_flush over dead FIB entries in the namespace. This may remove unrelated routes that were already dead; the target-host and namespace test results must be reviewed before treating the behavior as acceptable.
-- GitHub CI passed formatting, shell syntax, Clippy with warnings denied, and all-target/all-feature Rust tests at commit `309dd0a` (including the cleanup-order, journal-state, foreign-route, and canonical IPv6-key regressions). The privileged namespace test was syntax-checked but not executed; the CachyOS host matrix has not been run. The user must run the namespace test and local host validation before live TUN testing.
+- Maintainer-local test run (2026-11-23): `cargo test --all-targets --all-features` reported 649 passed, 0 failed, 0 ignored in the main test binary; the core-launcher binary reported 1 passed; the helper binary reported 3 passed; the native-adapter integration test was ignored because all three managed core binaries were not installed. The pasted terminal output then reached the sudo password prompt for `tests/tun-link-cleanup-netns.sh` but was truncated before its result, so the privileged namespace test remains unconfirmed.
 - The default TUN activation gate remains closed.
 
