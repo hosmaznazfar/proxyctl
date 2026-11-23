@@ -49,3 +49,12 @@ Applied source corrections for the reported diagnostics:
 - Source review and code/test/documentation updates are committed incrementally directly to `main`.
 - Local validation is deferred until the review checklist is exhausted, as requested.
 - No host network/TUN state was changed.
+
+## Broker authorization and transport review (source inspection)
+
+- The persistent mutation broker authenticates Unix peers with peer credentials and accepts requests only from the effective-UID owner. Activation owner UID/GID are required to match the authenticated peer. Descriptor-export requests are generation-bound to a live broker backend.
+- Requests and responses use bounded length-prefixed frames, strict typed JSON request variants, protocol-version checks, monotonic I/O deadlines, and error envelopes bounded to avoid unbounded attacker-controlled diagnostics.
+- The persistent server isolates per-connection handling failures and continues accepting connections; malformed or unauthorized requests do not directly terminate its service loop.
+- The helper launcher validates private runtime directory ownership/mode and a root-owned helper executable before connecting/starting. Existing unresponsive socket paths are not unlinked blindly.
+- No confirmed code change was applied in this review slice. Remaining runtime/package boundary verification includes helper capability installation, socket creation/removal ownership, service process lifetime, and fault injection under concurrent/replayed requests. These remain blockers for activation enablement.
+
