@@ -55,16 +55,26 @@ show_rules() {
     family=$1
     ip -details -n "$namespace" "$family" rule show
 }
+rule_protocol_pattern() {
+    marker=$1
+    if [ "$marker" = 99 ]; then
+        printf '(99|openr)'
+    else
+        printf '%s' "$marker"
+    fi
+}
 has_rule_marker() {
     family=$1
     marker=$2
-    show_rules "$family" | grep -Eq "42420:.*lookup 42420.*proto (99|openr)([[:space:]]|$)"
+    pattern=$(rule_protocol_pattern "$marker")
+    show_rules "$family" | grep -Eq "42420:.*lookup 42420.*proto $pattern([[:space:]]|$)"
 }
 require_rule_marker() {
     family=$1
     marker=$2
+    pattern=$(rule_protocol_pattern "$marker")
     output=$(show_rules "$family")
-    if ! printf '%s\n' "$output" | grep -Eq "42420:.*lookup 42420.*proto (99|openr)([[:space:]]|$)"; then
+    if ! printf '%s\n' "$output" | grep -Eq "42420:.*lookup 42420.*proto $pattern([[:space:]]|$)"; then
         printf 'expected %s rule at priority/table 42420 with protocol %s; detailed rules were:\n%s\n' "$family" "$marker" "$output" >&2
         exit 1
     fi
