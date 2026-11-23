@@ -682,7 +682,14 @@ fn build_dual_stack_probe_targets(
     let mut ipv4 = None;
     let mut ipv6 = None;
     for address in addresses {
-        if address.ip().is_unspecified() || address.ip().is_multicast() {
+        if address.ip().is_unspecified()
+            || address.ip().is_multicast()
+            || address.ip().is_loopback()
+            || match address.ip() {
+                std::net::IpAddr::V4(ip) => ip.is_link_local(),
+                std::net::IpAddr::V6(ip) => ip.is_unicast_link_local(),
+            }
+        {
             continue;
         }
         if address.is_ipv4() && ipv4.is_none() {
