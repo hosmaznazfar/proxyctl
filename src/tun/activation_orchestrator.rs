@@ -131,7 +131,7 @@ impl<'a> ActivationOrchestrator<'a> {
         self.activate(request, process)
     }
 
-    pub fn activate(
+    fn activate(
         &self,
         request: ActivationRequest,
         process: ProcessIdentity,
