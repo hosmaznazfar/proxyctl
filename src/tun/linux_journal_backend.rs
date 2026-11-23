@@ -548,8 +548,12 @@ fn validate_interface_fingerprint(fingerprint: &str, name: &str, index: u32) -> 
 
 fn has_proxyctl_protocol_marker(value: &Value) -> bool {
     const PROXYCTL_PROTOCOL: u64 = 99;
+    // iproute2 resolves RTPROT_OPENR (99) to "openr" in both detailed
+    // human-readable output and JSON. Accept that canonical name as well as
+    // numeric representations; all other protocol names remain foreign.
     value.get("protocol").is_some_and(|protocol| {
-        protocol.as_u64() == Some(PROXYCTL_PROTOCOL) || protocol.as_str() == Some("99")
+        protocol.as_u64() == Some(PROXYCTL_PROTOCOL)
+            || matches!(protocol.as_str(), Some("99" | "openr"))
     })
 }
 
@@ -706,6 +710,9 @@ mod tests {
         ));
         assert!(has_proxyctl_protocol_marker(
             &serde_json::json!({"protocol": "99"})
+        ));
+        assert!(has_proxyctl_protocol_marker(
+            &serde_json::json!({"protocol": "openr"})
         ));
         assert!(!has_proxyctl_protocol_marker(
             &serde_json::json!({"protocol": "static"})
