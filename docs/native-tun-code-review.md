@@ -69,3 +69,27 @@ The Linux journal backend performs a fresh resource inventory, compares canonica
 - sing-box and Mihomo currently use native named-device creation rather than the broker-owned external-descriptor contract. Their configuration and capability-confined launch code do not establish independent broker exclusive ownership or fully verified dataplane readiness for this review's intended model.
 - AttachmentEvidence is structurally validated and generation/process-bound but remains caller-supplied evidence; it cannot substitute for independently verified adoption and traffic checks.
 - The CLI/public activation gate remains closed. Live core attachment, actual traffic/routing/DNS/firewall invariants, failure handling under core/service crashes, and packaging integration remain incomplete verification requirements.
+
+## Architecture/SOLID review and phase closeout
+
+### Architectural findings
+
+- The state-transition model is pure and backend-independent; the production supervisor delegates mutation to the persistent broker and process identity is pidfd-bound. This separation is worth preserving.
+- Activation orchestration, managed activation, core launchers, readiness, supervisor service lifecycle, and kernel transaction responsibilities are separated into modules, but orchestration still has broad multi-argument APIs and cross-module coordination. A later API refactor should introduce validated request/context structs without changing lifecycle behavior or weakening the gated boundary.
+- Three targeted Clippy allowances for argument counts remain documented in the recent code history. They are architectural debt, not grounds for broad lint suppression.
+- The systemd transient service implementation and packaging contract have not been exercised in the target host. The compatibility activation now starts the recovery supervisor before Running, but cannot prove service startup/crash recovery in the real environment.
+
+### Review completion summary
+
+Source-level passes covered recovery lifecycle/generation binding, activation handoff, systemd supervisor contract, broker transport/authorization, journal ordering, kernel cleanup identity/fingerprint behavior, attachment/readiness composition, and architectural boundaries. The review made one activation-handoff code change and documented the rtnetlink compare/delete race and other host-validation blockers. No test, formatter, Clippy, CI, core-launch, or host networking/TUN operation was performed during this review phase, per maintainer workflow.
+
+### Required local validation after review changes
+
+- `cargo fmt --all -- --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test --all-targets`
+- Focused TUN tests and native adapter integration validation once all managed core binaries are installed.
+
+### Activation gate status
+
+**Keep TUN activation disabled.** The rtnetlink cleanup race, end-to-end host/runtime proof, attachment/dataplane integration, packaging, and crash/fault-injection coverage remain unresolved. Source review and green unit tests alone cannot close these blockers.
