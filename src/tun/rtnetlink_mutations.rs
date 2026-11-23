@@ -18,7 +18,10 @@ const FRA_PRIORITY: u16 = 6;
 const FRA_FWMARK: u16 = 10;
 const FRA_FWMASK: u16 = 11;
 const FRA_TABLE: u16 = 15;
-const RTPROT_STATIC: u8 = 4;
+const FRA_PROTOCOL: u16 = 21;
+// Locally assigned protocol marker used to distinguish Proxyctl-owned routes/rules.
+const PROXYCTL_ROUTE_PROTOCOL: u8 = 99;
+const RTPROT_PROXYCTL: u8 = PROXYCTL_ROUTE_PROTOCOL;
 const RT_SCOPE_UNIVERSE: u8 = 0;
 const RTN_UNICAST: u8 = 1;
 const FR_ACT_TO_TBL: u8 = 1;
@@ -99,7 +102,7 @@ pub fn add_route(route: &PlannedRoute) -> Result<()> {
     );
     let mut p = vec![0u8; 12];
     p[0] = family(route.family);
-    p[4] = RTPROT_STATIC;
+    p[4] = RTPROT_PROXYCTL;
     p[5] = RT_SCOPE_UNIVERSE;
     p[6] = RTN_UNICAST;
     p[7] = 0;
@@ -129,6 +132,7 @@ pub fn add_rule(rule: &PlannedRule) -> Result<()> {
     let mut attrs = Vec::new();
     attr(FRA_PRIORITY, &rule.priority.to_ne_bytes(), &mut attrs)?;
     attr(FRA_TABLE, &rule.lookup_table.to_ne_bytes(), &mut attrs)?;
+    attr(FRA_PROTOCOL, &[PROXYCTL_ROUTE_PROTOCOL], &mut attrs)?;
     if let Some(mark) = rule.mark {
         ensure!(
             mark.mask != 0 && mark.value & !mark.mask == 0,
@@ -204,6 +208,16 @@ pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
 #[cfg(test)]
 mod interface_alias_tests {
     use super::*;
+
+    #[test]
+    fn proxyctl_rule_protocol_marker_is_encoded_as_exact_u8_selector() {
+        let mut attrs = Vec::new();
+        attr(FRA_PROTOCOL, &[PROXYCTL_ROUTE_PROTOCOL], &mut attrs).unwrap();
+        assert_eq!(u16::from_ne_bytes(attrs[0..2].try_into().unwrap()), 5);
+        assert_eq!(u16::from_ne_bytes(attrs[2..4].try_into().unwrap()), FRA_PROTOCOL);
+        assert_eq!(attrs[4], PROXYCTL_ROUTE_PROTOCOL);
+        assert_eq!(RTPROT_PROXYCTL, PROXYCTL_ROUTE_PROTOCOL);
+    }
 
     #[test]
     fn validates_generation_alias_before_netlink_mutation() {
