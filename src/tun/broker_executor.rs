@@ -158,20 +158,35 @@ mod tests {
     };
 
     fn live_child() -> (std::process::Child, ProcessIdentity, ProcessHandle) {
-        let mut child = Command::new("sleep")
+        let executable = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|directory| directory.join("sleep"))
+            .find(|path| path.is_file())
+            .and_then(|path| std::fs::canonicalize(path).ok())
+            .expect("sleep utility is required for broker process tests");
+        let mut child = Command::new(&executable)
             .arg("30")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let identity = match ProcessIdentity::capture(child.id()) {
-            Ok(identity) => identity,
-            Err(error) => {
+
+        // Command::spawn returns before the child has necessarily completed execve.
+        // Never capture the transient pre-exec image as the expected executable.
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let identity = loop {
+            if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && identity.executable == executable
+                && identity.verify().unwrap_or(false)
+            {
+                break identity;
+            }
+            if std::time::Instant::now() >= deadline {
                 let _ = child.kill();
                 let _ = child.wait();
-                panic!("fake child identity could not be captured: {error:#}");
+                panic!("fake child did not reach its expected executable identity");
             }
+            std::thread::sleep(Duration::from_millis(5));
         };
         let handle = match ProcessHandle::open(identity.clone()) {
             Ok(handle) => handle,
