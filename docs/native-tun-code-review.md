@@ -62,3 +62,10 @@ Applied source corrections for the reported diagnostics:
 ## Kernel cleanup compare/delete limitation
 
 The Linux journal backend performs a fresh resource inventory, compares canonical fingerprints, issues narrowly typed route/rule/interface deletion requests, and verifies the post-delete inventory before recording durable cleanup progress. However, the inspected route/rule delete selectors are not a kernel-atomic conditional operation against the entire previously observed fingerprint. An external actor can theoretically change a matching resource between inspection and deletion. `src/tun/kernel_transaction.rs` now documents this limitation instead of claiming atomic compare-and-delete. This remains a critical unresolved race and an explicit activation blocker; source inspection is not sufficient to declare it safe.
+
+## Native attachment and end-to-end readiness review
+
+- The source has an Xray broker descriptor handoff/launch path, bounded attachment wait, kernel fdinfo/interface verification, and composable readiness checks. This remains dependent on the separately packaged systemd shim/core launcher and host behavior; source-level evidence is not live end-to-end validation.
+- sing-box and Mihomo currently use native named-device creation rather than the broker-owned external-descriptor contract. Their configuration and capability-confined launch code do not establish independent broker exclusive ownership or fully verified dataplane readiness for this review's intended model.
+- AttachmentEvidence is structurally validated and generation/process-bound but remains caller-supplied evidence; it cannot substitute for independently verified adoption and traffic checks.
+- The CLI/public activation gate remains closed. Live core attachment, actual traffic/routing/DNS/firewall invariants, failure handling under core/service crashes, and packaging integration remain incomplete verification requirements.
