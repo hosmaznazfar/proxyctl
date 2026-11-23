@@ -5,6 +5,44 @@
 //! Neither mode accepts shell commands, executable paths, raw netlink payloads, or arbitrary ioctls.
 
 #[cfg(target_os = "linux")]
+fn restrict_helper_capabilities() -> anyhow::Result<()> {
+    use anyhow::{Context, ensure};
+
+    // Linux capability ABI v3. Preserve the one permitted/effective capability
+    // granted by the helper file capability and clear inherited capabilities
+    // carried by the invoking desktop/session process.
+    #[repr(C)]
+    struct CapabilityHeader {
+        version: u32,
+        pid: i32,
+    }
+    #[repr(C)]
+    struct CapabilityData {
+        effective: u32,
+        permitted: u32,
+        inheritable: u32,
+    }
+
+    const CAPABILITY_VERSION_3: u32 = 0x2008_0522;
+    const CAP_NET_ADMIN: u32 = 1 << 12;
+    let header = CapabilityHeader { version: CAPABILITY_VERSION_3, pid: 0 };
+    let data = [
+        CapabilityData { effective: CAP_NET_ADMIN, permitted: CAP_NET_ADMIN, inheritable: 0 },
+        CapabilityData { effective: 0, permitted: 0, inheritable: 0 },
+    ];
+
+    // SAFETY: Both pointers refer to initialized ABI-compatible structures
+    // for the duration of the capset syscall. pid=0 targets this process.
+    let result = unsafe {
+        libc::syscall(libc::SYS_capset, &header as *const CapabilityHeader, data.as_ptr())
+    };
+    ensure!(
+        result == 0,
+        std::io::Error::last_os_error().context("cannot restrict helper capabilities to CAP_NET_ADMIN")
+    );
+    Ok(())
+}
+#[cfg(target_os = "linux")]
 fn validate_capability_status(status: &str) -> anyhow::Result<()> {
     use anyhow::ensure;
 
@@ -165,7 +203,10 @@ fn main() -> anyhow::Result<()> {
     );
 
     // Do not permit a file-capability helper to be used as a general-purpose
-    // privilege trampoline. No child process is ever spawned by this executable.
+    // privilege trampoline. First discard inheritable capabilities inherited
+    // from the invoking session, then require the exact effective/permitted set.
+    // No child process is ever spawned by this executable.
+    restrict_helper_capabilities()?;
     let status = std::fs::read_to_string("/proc/self/status")
         .context("cannot inspect helper capability state")?;
     validate_capability_status(&status)?;
