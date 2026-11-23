@@ -1294,3 +1294,10 @@ The Linux journal backend performs a fresh resource inventory, compares canonica
 - sing-box and Mihomo currently use native named-device creation rather than the broker-owned external-descriptor contract. Their configuration and capability-confined launch code do not establish independent broker exclusive ownership or fully verified dataplane readiness for this review's intended model.
 - AttachmentEvidence is structurally validated and generation/process-bound but remains caller-supplied evidence; it cannot substitute for independently verified adoption and traffic checks.
 - The CLI/public activation gate remains closed. Live core attachment, actual traffic/routing/DNS/firewall invariants, failure handling under core/service crashes, and packaging integration remain incomplete verification requirements.
+
+
+## Review closeout and outstanding activation blockers
+
+The latest source review covered generation-bound supervisor recovery, compatibility handoff, broker authentication/framing, durable journal ordering, kernel resource identity cleanup, native attachment, readiness, and module responsibilities. It committed the compatibility supervisor handoff change and clarified the rtnetlink race limitation. This review pass did not run tests, formatting, Clippy, CI, core binaries, or host network/TUN operations.
+
+**Activation remains gated.** Kernel deletion is not atomic against full live fingerprints; attachment and dataplane behavior require independent end-to-end host validation; service/packaging crash recovery and comprehensive fault injection remain unfinished. See `docs/native-tun-code-review.md` for the detailed review log and validation checklist.
