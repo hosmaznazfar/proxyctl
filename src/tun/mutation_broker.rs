@@ -819,8 +819,10 @@ mod tests {
     fn broker_recovery_refuses_to_mutate_while_manifest_core_is_live() {
         use std::process::{Command, Stdio};
 
-        let mut child = Command::new("tail")
-            .args(["-f", "/dev/null"])
+        // Use the same bounded sleep fixture as the process-identity tests.
+        // Some minimal tail implementations do not keep -f /dev/null alive.
+        let mut child = Command::new("sleep")
+            .arg("30")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
