@@ -1382,7 +1382,7 @@ Latest maintainer-reported `cargo test --all-targets --all-features` output:
 - Native adapter validation: 1 ignored because all three proxyctl-managed core binaries were not installed.
 - Maintainer confirmed the local validation passed, including the privileged namespace cleanup check.
 
-The namespace script prints `OK` only after all IPv4/IPv6 route and policy-rule assertions succeed. Failures retain their nonzero exit status and diagnostic output. Record future maintainer results here, replacing these bullets rather than appending repetitive progress claims.
+The namespace script prints an `OK` result only after all mandatory IPv4/IPv6 route and policy-rule assertions succeed. The message identifies whether the multipath side-effect check ran or was skipped. Failures retain their nonzero exit status and diagnostic output. The newly added multipath assertion requires local validation. Record future maintainer results here, replacing these bullets rather than appending repetitive progress claims.
 
 
 ## Phase 5 — privileged helper security (2026-11-23)
@@ -1423,7 +1423,7 @@ The journal recovery executor no longer follows a simple reverse append order. I
 - IPv6 fib6_ifdown has a specific path for routes using shared nexthop objects. Proxyctl does not create routes with RTA_NH_ID; namespace tests must continue to cover the exact direct-OIF route form used by this project.
 - If a route remains after interface teardown, cleanup stops and retains the journal. No broad route flush or direct route delete is permitted.
 
-The new opt-in integration test is `tests/tun-link-cleanup-netns.sh`. It creates a temporary network namespace, installs IPv4/IPv6 TUN default routes and protocol-tagged rules, adds same-priority/table foreign rules with a different protocol marker, adds unrelated routes to the same table through loopback, unregisters the TUN device, and checks that the Proxyctl-tagged rules and TUN-bound defaults disappear while foreign rules/routes remain. It requires root, iproute2, TUN support, and IPv6 support. CI checks only its POSIX shell syntax; it does not execute the privileged namespace test.
+The opt-in integration test is `tests/tun-link-cleanup-netns.sh`. It creates a temporary network namespace, installs IPv4/IPv6 TUN default routes and protocol-tagged rules, adds same-priority/table foreign rules with a different protocol marker, and adds unrelated same-table routes through loopback. It also attempts to add a foreign IPv4 multipath route with one nexthop through the TUN and one through loopback. After unregistering the TUN, it checks that Proxyctl-tagged rules and TUN-bound defaults disappear, unrelated foreign routes/rules survive, and (if supported) the entire multipath route is removed as the documented kernel side effect. The script requires root, iproute2, TUN support, and IPv6 support; it explicitly reports when multipath setup is unsupported. CI checks only POSIX shell syntax and does not execute this privileged test.
 
 **Activation remains disabled.** This redesign removes the direct route snapshot/delete race, but does not by itself certify policy-rule cleanup, kernel side effects, actual traffic, DNS/firewall preservation, supervisor recovery, or clean-host packaging. The target CachyOS namespace test and full host matrix remain required.
 
