@@ -23,7 +23,10 @@ fn validate_capability_status(status: &str) -> anyhow::Result<()> {
             "CapInh" => &mut inheritable,
             _ => continue,
         };
-        ensure!(slot.is_none(), "helper capability status contains a duplicate field");
+        ensure!(
+            slot.is_none(),
+            "helper capability status contains a duplicate field"
+        );
         *slot = Some(u64::from_str_radix(value.trim(), 16)?);
     }
     ensure!(
@@ -45,28 +48,38 @@ mod tests {
 
     #[test]
     fn accepts_only_the_exact_net_admin_capability_set() {
-        validate_capability_status(&status("0000000000001000", "0000000000001000", "0000000000000000"))
-            .unwrap();
+        validate_capability_status(&status(
+            "0000000000001000",
+            "0000000000001000",
+            "0000000000000000",
+        ))
+        .unwrap();
     }
 
     #[test]
     fn rejects_extra_missing_or_inheritable_capabilities() {
-        assert!(validate_capability_status(&status("0000000000003000", "0000000000003000", "0")).is_err());
-        assert!(validate_capability_status(&status("0000000000001000", "0000000000003000", "0")).is_err());
-        assert!(validate_capability_status(&status("0000000000001000", "0000000000001000", "1000")).is_err());
+        assert!(
+            validate_capability_status(&status("0000000000003000", "0000000000003000", "0"))
+                .is_err()
+        );
+        assert!(
+            validate_capability_status(&status("0000000000001000", "0000000000003000", "0"))
+                .is_err()
+        );
+        assert!(
+            validate_capability_status(&status("0000000000001000", "0000000000001000", "1000"))
+                .is_err()
+        );
         assert!(validate_capability_status("CapEff: 1000\nCapPrm: 1000\n").is_err());
     }
 
     #[test]
     fn rejects_duplicate_or_malformed_capability_fields() {
-        assert!(validate_capability_status(
-            "CapEff: 1000\nCapEff: 1000\nCapPrm: 1000\nCapInh: 0\n"
-        )
-        .is_err());
-        assert!(validate_capability_status(
-            "CapEff: not-hex\nCapPrm: 1000\nCapInh: 0\n"
-        )
-        .is_err());
+        assert!(
+            validate_capability_status("CapEff: 1000\nCapEff: 1000\nCapPrm: 1000\nCapInh: 0\n")
+                .is_err()
+        );
+        assert!(validate_capability_status("CapEff: not-hex\nCapPrm: 1000\nCapInh: 0\n").is_err());
     }
 }
 
