@@ -462,14 +462,7 @@ impl KernelTransactionBackend for LinuxJournalBackend {
             .fingerprint
             .as_deref()
             .context("journal interface operation has no applied fingerprint")?;
-        let fingerprint: Value = serde_json::from_str(fp)
-            .context("journal interface fingerprint is malformed")?;
-        ensure!(
-            fingerprint.get("name").and_then(Value::as_str) == Some(name)
-                && fingerprint.get("ifindex").and_then(Value::as_u64) == Some(index as u64)
-                && fingerprint.get("kind").and_then(Value::as_str) == Some("tun"),
-            "requested interface identity does not match its durable journal fingerprint"
-        );
+        validate_interface_fingerprint(fp, name, index)?;
         let state = self.remove_live(interface_kind, &key, fp)?;
         if matches!(state, ResourceState::Removed | ResourceState::AlreadyAbsent) {
             self.store
@@ -539,6 +532,18 @@ impl JournalRecoveryBackend for LinuxJournalBackend {
     ) -> Result<ResourceState> {
         self.remove_live(kind, key, expected)
     }
+}
+
+fn validate_interface_fingerprint(fingerprint: &str, name: &str, index: u32) -> Result<()> {
+    let value: Value = serde_json::from_str(fingerprint)
+        .context("journal interface fingerprint is malformed")?;
+    ensure!(
+        value.get("name").and_then(Value::as_str) == Some(name)
+            && value.get("ifindex").and_then(Value::as_u64) == Some(index as u64)
+            && value.get("kind").and_then(Value::as_str) == Some("tun"),
+        "requested interface identity does not match its durable journal fingerprint"
+    );
+    Ok(())
 }
 
 fn has_proxyctl_protocol_marker(value: &Value) -> bool {
@@ -661,6 +666,40 @@ fn parse_table_value(value: &Value) -> Result<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interface_fingerprint_validation_preserves_persistent_generation_alias() {
+        let fingerprint = serde_json::json!({
+            "alias": "proxyctl:12345678-1234-4234-8234-123456789abc:7",
+            "ifindex": 91,
+            "kind": "tun",
+            "name": "tun-proxyctl"
+        })
+        .to_string();
+        assert!(validate_interface_fingerprint(&fingerprint, "tun-proxyctl", 91).is_ok());
+        assert!(validate_interface_fingerprint(&fingerprint, "tun-proxyctl", 92).is_err());
+        assert!(validate_interface_fingerprint(&fingerprint, "tun-other", 91).is_err());
+    }
+
+    #[test]
+    fn interface_fingerprint_validation_rejects_missing_or_wrong_kind() {
+        assert!(
+            validate_interface_fingerprint(
+                r#"{"ifindex":91,"kind":"dummy","name":"tun-proxyctl"}"#,
+                "tun-proxyctl",
+                91
+            )
+            .is_err()
+        );
+        assert!(
+            validate_interface_fingerprint(
+                r#"{"ifindex":91,"name":"tun-proxyctl"}"#,
+                "tun-proxyctl",
+                91
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn cleanup_requires_the_explicit_proxyctl_protocol_marker() {
