@@ -6,7 +6,7 @@
 
 #[cfg(target_os = "linux")]
 fn restrict_helper_capabilities() -> anyhow::Result<()> {
-    use anyhow::{Context, ensure};
+    use anyhow::ensure;
 
     // Linux capability ABI v3. Preserve the one permitted/effective capability
     // granted by the helper file capability and clear inherited capabilities
@@ -38,7 +38,8 @@ fn restrict_helper_capabilities() -> anyhow::Result<()> {
     };
     ensure!(
         result == 0,
-        std::io::Error::last_os_error().context("cannot restrict helper capabilities to CAP_NET_ADMIN")
+        "cannot restrict helper capabilities to CAP_NET_ADMIN: {}",
+        std::io::Error::last_os_error()
     );
     Ok(())
 }
