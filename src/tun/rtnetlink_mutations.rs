@@ -25,6 +25,12 @@ const RTPROT_PROXYCTL: u8 = PROXYCTL_ROUTE_PROTOCOL;
 const RT_SCOPE_UNIVERSE: u8 = 0;
 const RTN_UNICAST: u8 = 1;
 const FR_ACT_TO_TBL: u8 = 1;
+fn set_proxyctl_route_protocol(header: &mut [u8]) -> Result<()> {
+    ensure!(header.len() >= 8, "route header is truncated");
+    header[4] = RTPROT_PROXYCTL;
+    Ok(())
+}
+
 fn append_proxyctl_rule_protocol(attrs: &mut Vec<u8>) -> Result<()> {
     attr(FRA_PROTOCOL, &[PROXYCTL_ROUTE_PROTOCOL], attrs)
 }
@@ -106,7 +112,7 @@ pub fn add_route(route: &PlannedRoute) -> Result<()> {
     );
     let mut p = vec![0u8; 12];
     p[0] = family(route.family);
-    p[4] = RTPROT_PROXYCTL;
+    set_proxyctl_route_protocol(&mut p)?;
     p[5] = RT_SCOPE_UNIVERSE;
     p[6] = RTN_UNICAST;
     p[7] = 0;
@@ -213,6 +219,14 @@ pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
 #[cfg(test)]
 mod interface_alias_tests {
     use super::*;
+
+    #[test]
+    fn proxyctl_route_protocol_marker_is_written_to_route_header() {
+        let mut header = [0u8; 12];
+        set_proxyctl_route_protocol(&mut header).unwrap();
+        assert_eq!(header[4], 99);
+        assert!(set_proxyctl_route_protocol(&mut header[..4]).is_err());
+    }
 
     #[test]
     fn proxyctl_rule_protocol_marker_is_encoded_as_exact_u8_selector() {
