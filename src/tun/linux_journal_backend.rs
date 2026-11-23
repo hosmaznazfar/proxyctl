@@ -535,8 +535,8 @@ impl JournalRecoveryBackend for LinuxJournalBackend {
 }
 
 fn validate_interface_fingerprint(fingerprint: &str, name: &str, index: u32) -> Result<()> {
-    let value: Value = serde_json::from_str(fingerprint)
-        .context("journal interface fingerprint is malformed")?;
+    let value: Value =
+        serde_json::from_str(fingerprint).context("journal interface fingerprint is malformed")?;
     ensure!(
         value.get("name").and_then(Value::as_str) == Some(name)
             && value.get("ifindex").and_then(Value::as_u64) == Some(index as u64)
@@ -620,14 +620,12 @@ fn parse_mark(value: &Value, mask: Option<&Value>) -> Result<MarkSelector> {
         let text = value
             .as_str()
             .with_context(|| format!("{field} is not a string or unsigned integer"))?;
-        let (radix, digits) = if let Some(hex) = text
-            .strip_prefix("0x")
-            .or_else(|| text.strip_prefix("0X"))
-        {
-            (16, hex)
-        } else {
-            (10, text)
-        };
+        let (radix, digits) =
+            if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+                (16, hex)
+            } else {
+                (10, text)
+            };
         u32::from_str_radix(digits, radix).with_context(|| format!("invalid {field}"))
     }
 
@@ -771,7 +769,13 @@ mod tests {
                 mask: 255
             }
         );
-        assert!(parse_mark(&serde_json::json!("0x100"), Some(&serde_json::json!("0xff"))).is_err());
+        assert!(
+            parse_mark(
+                &serde_json::json!("0x100"),
+                Some(&serde_json::json!("0xff"))
+            )
+            .is_err()
+        );
         assert!(parse_mark(&serde_json::json!("0x42"), Some(&serde_json::json!("0"))).is_err());
         assert!(parse_mark(&serde_json::json!("not-a-mark"), None).is_err());
     }

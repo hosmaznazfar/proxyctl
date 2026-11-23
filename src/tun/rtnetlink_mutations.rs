@@ -265,7 +265,10 @@ mod interface_alias_tests {
             family: AddressFamily::Ipv6,
             priority: 42_410,
             purpose: RulePurpose::CoreTrafficBypass,
-            mark: Some(MarkSelector { value: 0x42, mask: 0xff }),
+            mark: Some(MarkSelector {
+                value: 0x42,
+                mask: 0xff,
+            }),
             lookup_table: 42_420,
         };
         let bypass_payload = rule_payload(&bypass).unwrap();
