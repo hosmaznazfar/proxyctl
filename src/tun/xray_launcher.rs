@@ -274,10 +274,13 @@ pub fn spawn_xray_from_broker(
         }
     };
     if let Err(error) = start_result {
-        let _ = Command::new(SUDO)
-            .args(["-n", "--", SYSTEMCTL, "stop"])
-            .arg(&unit)
-            .status();
+        let mut stop = Command::new(SUDO);
+        stop.args(["-n", "--", SYSTEMCTL, "stop", &unit])
+            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        let _ = run_bounded_command_status(
+            &mut stop, Duration::from_secs(8),
+            "best-effort Xray startup cleanup exceeded its eight-second deadline",
+        );
         return Err(error).context("Xray transient service startup failed");
     }
 
@@ -350,9 +353,13 @@ pub fn spawn_xray_from_broker(
     match handoff_result {
         Ok(identity) => Ok((service_command, identity)),
         Err(error) => {
-            let _ = Command::new(SUDO)
-                .args(["-n", "--", SYSTEMCTL, "stop", &unit])
-                .status();
+            let mut stop = Command::new(SUDO);
+            stop.args(["-n", "--", SYSTEMCTL, "stop", &unit])
+                .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+            let _ = run_bounded_command_status(
+                &mut stop, Duration::from_secs(8),
+                "best-effort Xray handoff cleanup exceeded its eight-second deadline",
+            );
             let _ = service_command.wait();
             Err(error)
                 .context("Xray descriptor handoff failed; transient service stop was requested")
