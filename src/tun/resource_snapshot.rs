@@ -1,7 +1,8 @@
 //! Read-only comparison of durable ownership records with a kernel snapshot.
 //!
 //! Snapshot comparison is advisory: the kernel can change immediately after inspection.
-//! A production cleanup backend must still perform an atomic compare-and-delete operation.
+//! Cleanup backends must re-inspect immediately before mutation and verify the result afterwards;
+//! Linux rtnetlink does not provide an atomic full-fingerprint compare-and-delete primitive.
 
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
