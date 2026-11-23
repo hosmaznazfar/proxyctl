@@ -162,7 +162,7 @@ pub fn add_rule(rule: &PlannedRule) -> Result<()> {
     Ok(())
 }
 
-/// Removes a route only by its exact default prefix, table, and interface selector.
+/// Removes a route by its default prefix, table, interface, and Proxyctl protocol marker.
 pub fn delete_route(route: &PlannedRoute) -> Result<()> {
     ensure!(
         route.interface_index > 0
@@ -188,7 +188,7 @@ pub fn delete_route(route: &PlannedRoute) -> Result<()> {
     sock.transact(&nl, Duration::from_secs(3))?;
     Ok(())
 }
-/// Removes a policy rule using the exact priority/table and optional mark selector.
+/// Removes a policy rule using priority, table, optional mark, and Proxyctl protocol marker.
 pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
     ensure!(
         rule.priority > 0 && rule.lookup_table > 0,
@@ -240,6 +240,12 @@ mod interface_alias_tests {
         assert_eq!(FRA_FWMASK, 16);
         assert_eq!(FRA_TABLE, 15);
         assert_eq!(FRA_PROTOCOL, 19);
+        let mut mask_attribute = Vec::new();
+        attr(FRA_FWMASK, &0xffu32.to_ne_bytes(), &mut mask_attribute).unwrap();
+        assert_eq!(
+            u16::from_ne_bytes(mask_attribute[2..4].try_into().unwrap()),
+            16
+        );
     }
 
     #[test]
