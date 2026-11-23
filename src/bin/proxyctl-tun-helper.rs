@@ -5,6 +5,72 @@
 //! Neither mode accepts shell commands, executable paths, raw netlink payloads, or arbitrary ioctls.
 
 #[cfg(target_os = "linux")]
+fn validate_capability_status(status: &str) -> anyhow::Result<()> {
+    use anyhow::ensure;
+
+    const CAP_NET_ADMIN: u64 = 1u64 << 12;
+    let mut effective = None;
+    let mut permitted = None;
+    let mut inheritable = None;
+    for line in status.lines() {
+        let (field, value) = match line.split_once(':') {
+            Some(pair) => pair,
+            None => continue,
+        };
+        let slot = match field {
+            "CapEff" => &mut effective,
+            "CapPrm" => &mut permitted,
+            "CapInh" => &mut inheritable,
+            _ => continue,
+        };
+        ensure!(slot.is_none(), "helper capability status contains a duplicate field");
+        *slot = Some(u64::from_str_radix(value.trim(), 16)?);
+    }
+    ensure!(
+        effective == Some(CAP_NET_ADMIN)
+            && permitted == Some(CAP_NET_ADMIN)
+            && inheritable == Some(0),
+        "helper must have exactly CAP_NET_ADMIN effective/permitted and no inheritable capabilities"
+    );
+    Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    fn status(effective: &str, permitted: &str, inheritable: &str) -> String {
+        format!("CapEff:\t{effective}\nCapPrm:\t{permitted}\nCapInh:\t{inheritable}\n")
+    }
+
+    #[test]
+    fn accepts_only_the_exact_net_admin_capability_set() {
+        validate_capability_status(&status("0000000000001000", "0000000000001000", "0000000000000000"))
+            .unwrap();
+    }
+
+    #[test]
+    fn rejects_extra_missing_or_inheritable_capabilities() {
+        assert!(validate_capability_status(&status("0000000000003000", "0000000000003000", "0")).is_err());
+        assert!(validate_capability_status(&status("0000000000001000", "0000000000003000", "0")).is_err());
+        assert!(validate_capability_status(&status("0000000000001000", "0000000000001000", "1000")).is_err());
+        assert!(validate_capability_status("CapEff: 1000\nCapPrm: 1000\n").is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_or_malformed_capability_fields() {
+        assert!(validate_capability_status(
+            "CapEff: 1000\nCapEff: 1000\nCapPrm: 1000\nCapInh: 0\n"
+        )
+        .is_err());
+        assert!(validate_capability_status(
+            "CapEff: not-hex\nCapPrm: 1000\nCapInh: 0\n"
+        )
+        .is_err());
+    }
+}
+
+#[cfg(target_os = "linux")]
 struct OwnedBrokerSocket {
     listener: std::os::unix::net::UnixListener,
     path: std::path::PathBuf,
@@ -89,23 +155,7 @@ fn main() -> anyhow::Result<()> {
     // privilege trampoline. No child process is ever spawned by this executable.
     let status = std::fs::read_to_string("/proc/self/status")
         .context("cannot inspect helper capability state")?;
-    let capability = 1u64 << 12; // CAP_NET_ADMIN
-    let mut effective = None;
-    let mut permitted = None;
-    let mut inheritable = None;
-    for line in status.lines() {
-        if let Some(value) = line.strip_prefix("CapEff:") {
-            effective = Some(u64::from_str_radix(value.trim(), 16)?);
-        } else if let Some(value) = line.strip_prefix("CapPrm:") {
-            permitted = Some(u64::from_str_radix(value.trim(), 16)?);
-        } else if let Some(value) = line.strip_prefix("CapInh:") {
-            inheritable = Some(u64::from_str_radix(value.trim(), 16)?);
-        }
-    }
-    ensure!(
-        effective == Some(capability) && permitted == Some(capability) && inheritable == Some(0),
-        "helper must have exactly CAP_NET_ADMIN effective/permitted and no inheritable capabilities"
-    );
+    validate_capability_status(&status)?;
     let no_new_privileges = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) };
     ensure!(
         no_new_privileges == 0,
