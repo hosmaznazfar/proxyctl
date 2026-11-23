@@ -816,6 +816,38 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_ping_round_trips_through_broker_transport_without_mutation() {
+        use std::os::unix::net::UnixListener;
+
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("ping.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        let runtime = directory.path().to_path_buf();
+
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(IO_TIMEOUT)).unwrap();
+            stream.set_write_timeout(Some(IO_TIMEOUT)).unwrap();
+            let peer = read_broker_peer_credentials(&stream).unwrap();
+            authorize_mutation_peer(peer, unsafe { libc::geteuid() }).unwrap();
+            let request = read_request(&mut stream).unwrap();
+            request.validate().unwrap();
+            let mut backends = BTreeMap::new();
+            let message = execute(request, &runtime, &mut backends).unwrap();
+            write_response(&mut stream, &MutationResponse::success(message)).unwrap();
+            assert!(backends.is_empty(), "Ping must not create an activation backend");
+        });
+
+        let response = call(&socket, &MutationRequest::Ping { version: VERSION }).unwrap();
+        assert!(response.success);
+        assert_eq!(
+            response.message,
+            "mutation broker ready; no durable activation is pending"
+        );
+        server.join().unwrap();
+    }
+
+    #[test]
     fn broker_recovery_refuses_to_mutate_while_manifest_core_is_live() {
         use std::process::{Command, Stdio};
 
