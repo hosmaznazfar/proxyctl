@@ -255,7 +255,10 @@ mod tests {
 
         let ordered = ordered_cleanup_operations(&journal);
         assert_eq!(
-            ordered.iter().map(|operation| operation.kind).collect::<Vec<_>>(),
+            ordered
+                .iter()
+                .map(|operation| operation.kind)
+                .collect::<Vec<_>>(),
             [
                 JournalOperationKind::AddRule,
                 JournalOperationKind::AddRule,
