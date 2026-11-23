@@ -206,3 +206,28 @@ The helper's authority is intentionally limited to Linux network administration,
 The broker has no per-UID rate limit or concurrent worker pool. Its fixed frame and I/O deadlines bound each connection, but repeated same-user connections can delay legitimate requests. This is an availability limitation, not an authorization bypass.
 
 The source audit and added unit tests do not prove installed file capabilities, systemd service confinement, socket lifecycle behavior under process crashes, or kernel/network behavior on the target host. The default CLI TUN activation gate remains closed pending local CI-equivalent checks and host-level integration. No live network/TUN state was modified during this phase.
+
+
+## Phase 6 — failure injection and concurrency regression coverage
+
+- Reviewed the existing transaction fake-backend matrix: it injects failures before and after each route/rule mutation, ambiguous interface creation, invalid/empty fingerprints, failed rollback, failed journal retention, manifest commit failure, and journal finalization failure. The expected invariant is preservation of unresolved resources and recovery journal; ambiguous mutation errors never trigger speculative rollback.
+- Reviewed durable journal reopen/recovery tests for unresolved intents, wrong generations, incomplete removals, duplicate keys, and inventory uncertainty. Reviewed broker framing tests for oversized, truncated, malformed, unknown-field, and version-mismatched messages.
+- Added a cross-instance concurrency regression test to `src/tun/lifecycle_coordinator.rs`. Two independently opened coordinators race to create the first activation manifest in the same runtime directory. The test requires exactly one winner, one rejected activation, and a durable Prepared manifest belonging to the winner. This exercises the filesystem lifecycle lock rather than merely serializing calls through one in-memory coordinator.
+- Existing lifecycle tests also cover lock exclusion/release, symlink and hard-link rejection, stale-token rejection when generations are reused, and preventing a late core bind after cleanup has claimed a Prepared activation.
+- These are deterministic unit/fake-backend tests. They do not simulate power loss, kernel netlink races, actual helper process termination, systemd restart ordering, or live namespace dataplane behavior. Those remain host/integration validation requirements.
+
+## Phase 7 — final source audit and release-readiness boundary
+
+### CI and compatibility contract
+- CI runs formatting, Clippy with warnings denied, and all-target/all-feature tests on Ubuntu using Rust 1.99.1. The repository's documented minimum Rust compatibility target remains Rust 1.90; the workflow toolchain is newer and therefore does not independently prove the minimum-version contract.
+- The TUN helper remains a separately installed root-owned executable with the narrowly scoped file capability contract described above. Packaging scripts and installed systemd units still require validation on a clean CachyOS host.
+- No automatic recovery backend other than systemd is implemented. Unsupported service managers must remain fail-closed.
+- The public TUN activation gate remains closed. In particular, rtnetlink route/rule cleanup cannot atomically compare the complete observed fingerprint with deletion; external mutation between inventory and delete remains a known race and a release blocker.
+
+### Required release validation
+- Run formatting, all-target/all-feature Clippy, all-target/all-feature tests, and a release build on the target machine.
+- Validate helper installation/removal and exact file capabilities from a clean install.
+- Exercise IPv4 and IPv6 external traffic, DNS behavior, firewall preservation, core crash, helper crash, supervisor restart, logout with lingering, shutdown, and recovery after interrupted journal operations.
+- Run concurrent activation/deactivation/recovery tests against isolated Linux network namespaces and verify foreign routes/rules/interfaces are never removed.
+- Do not describe managed TUN as production-ready or enable the default activation gate until the cleanup race has a defensible resolution and the host-level matrix passes.
+
