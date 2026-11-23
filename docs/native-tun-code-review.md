@@ -235,3 +235,5 @@ The source audit and added unit tests do not prove installed file capabilities, 
 ### Release artifact completeness
 - The tagged release workflow now builds all declared binaries and packages the CLI, privileged TUN helper, core launcher, and recovery supervisor as separate Linux executables with a combined SHA-256 manifest. This matches the executable set expected by the helper installer rather than publishing only the CLI.
 - The helper installer remains an explicit root-run packaging step; publishing the helper binary does not install file capabilities or enable TUN automatically. The separate install/remove scripts must still be exercised on the target host.
+
+- The helper remover now validates all three installed bundle paths (regular files, no symlinks, root ownership) before deleting any of them, preventing a later invalid path from leaving an avoidable partial uninstall. CI also performs a POSIX shell syntax check on both packaging scripts.
