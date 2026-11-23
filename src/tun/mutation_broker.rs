@@ -279,6 +279,19 @@ pub fn serve(listener: &UnixListener, runtime_directory: &Path) -> Result<()> {
     }
 }
 
+/// Refuse privileged resource recovery while the manifest-bound core process is live.
+fn ensure_managed_core_stopped(
+    process: Option<&super::process::ProcessIdentity>,
+) -> Result<()> {
+    if let Some(process) = process {
+        ensure!(
+            !process.verify()?,
+            "refusing TUN resource recovery while the manifest-bound core process is still live"
+        );
+    }
+    Ok(())
+}
+
 fn execute(
     request: MutationRequest,
     directory: &Path,
@@ -441,6 +454,9 @@ fn execute(
                 );
             }
             let journal = store.load_transaction_journal()?;
+            ensure_managed_core_stopped(
+                manifest.as_ref().and_then(|snapshot| snapshot.core_process.as_ref()),
+            )?;
             if let Some(journal) = &journal {
                 ensure!(
                     journal.activation_id == activation_id && journal.generation == generation,
@@ -775,6 +791,35 @@ mod tests {
             core_mark: 0x42,
             core_mark_mask: 0xff,
         }
+    }
+
+    #[test]
+    fn broker_recovery_refuses_to_mutate_while_manifest_core_is_live() {
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("tail")
+            .args(["-f", "/dev/null"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let identity = loop {
+            assert!(std::time::Instant::now() < deadline);
+            if let Ok(identity) = super::super::process::ProcessIdentity::capture(child.id())
+                && identity.verify().unwrap_or(false)
+            {
+                break identity;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+
+        assert!(ensure_managed_core_stopped(Some(&identity)).is_err());
+        child.kill().unwrap();
+        child.wait().unwrap();
+        assert!(ensure_managed_core_stopped(Some(&identity)).is_ok());
+        assert!(ensure_managed_core_stopped(None).is_ok());
     }
 
     #[test]
