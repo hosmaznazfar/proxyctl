@@ -320,8 +320,13 @@ mod tests {
         use crate::tun::process::ProcessIdentity;
         use std::process::{Command, Stdio};
 
-        let child = Command::new("tail")
-            .args(["-f", "/dev/null"])
+        let executable = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|directory| directory.join("sleep"))
+            .find(|path| path.is_file())
+            .and_then(|path| std::fs::canonicalize(path).ok())
+            .expect("sleep utility is required for lifecycle process tests");
+        let child = Command::new(&executable)
+            .arg("3600")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -331,9 +336,10 @@ mod tests {
         let identity = loop {
             assert!(
                 Instant::now() < deadline,
-                "fake child did not remain available long enough to capture its identity"
+                "fake child did not reach its expected executable identity"
             );
             if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && identity.executable == executable
                 && identity.verify().unwrap_or(false)
             {
                 break identity;
