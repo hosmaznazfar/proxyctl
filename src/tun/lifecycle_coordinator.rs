@@ -595,4 +595,50 @@ mod tests {
             child.wait().unwrap();
         }
     }
+
+    #[test]
+    fn concurrent_activation_claims_are_serialized_across_coordinator_instances() {
+        use std::sync::{Arc, Barrier};
+
+        let directory = tempfile::tempdir().unwrap();
+        let runtime = directory.path().join("runtime");
+        let barrier = Arc::new(Barrier::new(2));
+        let activation_ids = [
+            "12345678-1234-4234-8234-123456789abc",
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        ];
+
+        let outcomes = std::thread::scope(|scope| {
+            let handles = activation_ids.map(|activation_id| {
+                let runtime = runtime.clone();
+                let barrier = Arc::clone(&barrier);
+                scope.spawn(move || {
+                    let store = ManifestStore::open(runtime).unwrap();
+                    let coordinator = LifecycleCoordinator::new(store).unwrap();
+                    barrier.wait();
+                    coordinator.create_prepared(&snapshot(activation_id))
+                })
+            });
+            handles.map(|handle| handle.join().unwrap())
+        });
+
+        assert_eq!(
+            outcomes.iter().filter(|outcome| outcome.is_ok()).count(),
+            1,
+            "exactly one competing activation may claim the empty manifest slot"
+        );
+        assert_eq!(
+            outcomes.iter().filter(|outcome| outcome.is_err()).count(),
+            1,
+            "the losing activation must fail instead of overwriting the winner"
+        );
+
+        let store = ManifestStore::open(runtime).unwrap();
+        let current = store.load().unwrap().expect("winning manifest is durable");
+        let winning_id = &current.manifest.activation_id;
+        assert!(activation_ids.contains(&winning_id.as_str()));
+        assert_eq!(current.phase, SupervisorPhase::Prepared);
+        assert_eq!(current.generation, 17);
+    }
+
 }
