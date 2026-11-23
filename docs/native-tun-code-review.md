@@ -179,3 +179,30 @@ The DNS assertion remains a preservation check against pre-activation state. The
 ### Hosted CI verification (2026-11-23)
 
 GitHub Actions passed for commit c343bd9d12102af24c22b918fe0164e7bfdb547e. Formatting passed; Clippy passed with warnings denied; the full all-target test job reported 644 passed, 0 failed, and 1 ignored because the managed core binaries were unavailable. This hosted runner result does not substitute for the maintainer's local CachyOS build or live TUN/systemd/core integration. Local and host-level validation remain required.
+
+
+## Phase 5 — privileged mutation-helper security audit (2026-11-23)
+
+### Source audit
+
+Reviewed the installed helper, capability installation script, persistent mutation broker, Unix socket binding, request/response framing, peer credentials, descriptor export, and recovery request handling.
+
+- The helper is installed root-owned, non-setuid, and with only the file capability `cap_net_admin=ep`; the ordinary Proxyctl executable and core/supervisor launchers are checked to have no file capabilities.
+- The helper refuses to run unless its effective and permitted capability sets contain exactly CAP_NET_ADMIN and its inheritable set is empty. It enables `no_new_privs`, disables dumpability, and does not spawn child processes or act as a generic privilege trampoline.
+- The mutation socket is created under a caller-owned private directory with mode 0600. The helper records the socket device/inode and removes only that exact socket on exit. The launcher serializes startup with a no-follow, private, single-link lock file and does not unlink an unresponsive socket.
+- The broker reads kernel-provided SO_PEERCRED before decoding request bytes and accepts only its effective UID. Activation owner UID/GID must also match the authenticated peer. Descriptor export is limited to an in-memory backend for the exact activation ID and generation.
+- Requests use a strict tagged enum with unknown fields denied, version and identity validation, a 16 KiB frame cap, bounded allocation, and monotonic three-second read/write deadlines. Responses are bounded and the client requires a complete valid success envelope before accepting a descriptor or reporting success.
+- Per-connection parse/authentication/execution errors are isolated; the persistent accept loop continues. Recovery verifies manifest and journal identity, refuses to mutate while the manifest-bound core process is live, and retains the backend/journal when recovery or finalization fails.
+
+### New regression coverage
+
+- Extracted the helper capability-set validation into a testable parser. Tests require exactly CAP_NET_ADMIN in effective/permitted sets, zero inheritable capabilities, and reject missing, duplicate, malformed, extra, or inheritable capability values.
+- Extracted the mutation broker's peer authorization into a single policy function used before request decoding. Tests cover same-UID acceptance, foreign-UID rejection, and invalid peer PID rejection.
+
+### Explicit security boundaries
+
+The helper's authority is intentionally limited to Linux network administration, but CAP_NET_ADMIN is still powerful within the host network namespace. The broker is a same-user privilege boundary, not a boundary against malicious code already running as the same UID. A same-UID process can invoke the typed helper operations and can deny service by occupying the sequential broker connection loop; this does not grant a different UID access or provide arbitrary command execution.
+
+The broker has no per-UID rate limit or concurrent worker pool. Its fixed frame and I/O deadlines bound each connection, but repeated same-user connections can delay legitimate requests. This is an availability limitation, not an authorization bypass.
+
+The source audit and added unit tests do not prove installed file capabilities, systemd service confinement, socket lifecycle behavior under process crashes, or kernel/network behavior on the target host. The default CLI TUN activation gate remains closed pending local CI-equivalent checks and host-level integration. No live network/TUN state was modified during this phase.
