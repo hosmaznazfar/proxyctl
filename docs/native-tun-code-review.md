@@ -318,3 +318,12 @@ Source review found an opportunity to reduce the recovery supervisor's privilege
 ### Systemd command deadline hardening (2026-11-23)
 
 Added a reusable bounded subprocess runner for systemd control operations. `systemctl is-active` and stop requests are bounded to two seconds; transient `systemd-run` startup invocation is bounded to three seconds. Timeout paths kill and reap the child before returning failure. These are code-level bounds, not proof of manager responsiveness or successful stop semantics; timeout/host behavior remains to be validated locally.
+
+
+### Native/Xray launcher subprocess deadline review (2026-11-23)
+
+The native-core launcher previously had an unbounded sudo authorization call and could return from service-state/MainPID inspection errors without requesting cleanup of the transient unit. Authorization is now bounded, ambiguous systemd-run outcomes trigger a bounded stop request, and any failed active-state/MainPID verification also requests a bounded stop for the exact activation/generation unit.
+
+The Xray launcher now bounds sudo authorization, captures MainPID output through a size-limited temporary file with a 128-byte ceiling, and bounds startup/handoff failure stop requests. The direct unbounded `status()`/`output()` calls were removed from these launcher paths. Timeout handlers kill and reap the local child process before returning.
+
+These are source-level guarantees for Proxyctl's command clients, not proof that the system manager cancels an already-submitted job or finishes cleanup. Local formatting, Clippy, and all-target tests must pass; actual systemd unit startup/stop and interrupted-start recovery remain host validation requirements. TUN activation remains disabled.
