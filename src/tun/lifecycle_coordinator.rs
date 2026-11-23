@@ -120,7 +120,7 @@ impl LifecycleCoordinator {
     pub fn claim_prepared_cleanup(
         &self,
         token: &ActivationToken,
-    ) -> Result<Option<ProcessIdentity>> {
+    ) -> Result<()> {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         let mut snapshot = self
             .store
@@ -135,10 +135,12 @@ impl LifecycleCoordinator {
             snapshot.phase == SupervisorPhase::Prepared,
             "only a Prepared activation can be claimed for orphan cleanup"
         );
-        let process = snapshot.core_process.clone();
+        ensure!(
+            snapshot.core_process.is_none(),
+            "Prepared activation unexpectedly contains a core process identity"
+        );
         snapshot.phase = SupervisorPhase::CleanupPending;
-        self.store.write(&snapshot)?;
-        Ok(process)
+        self.store.write(&snapshot)
     }
 
     /// Bind the exact launched core process to a prepared activation before committing startup.
@@ -446,10 +448,7 @@ mod tests {
             thread::sleep(Duration::from_millis(5));
         };
 
-        assert_eq!(
-            coordinator.claim_prepared_cleanup(&token).unwrap(),
-            None
-        );
+        coordinator.claim_prepared_cleanup(&token).unwrap();
         let current = coordinator.load_current().unwrap().unwrap();
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
         assert!(coordinator.bind_core_process(&token, identity).is_err());
