@@ -286,9 +286,12 @@ impl LinuxJournalBackend {
                 let table = parse_table_value(table_value)?;
                 let mark = value
                     .get("fwmark")
-                    .and_then(Value::as_str)
-                    .map(parse_mark)
+                    .map(|mark| parse_mark(mark, value.get("fwmask")))
                     .transpose()?;
+                ensure!(
+                    value.get("fwmask").is_none() || value.get("fwmark").is_some(),
+                    "rule fingerprint has a mask without a mark"
+                );
                 let rule = PlannedRule {
                     family,
                     priority,
@@ -590,10 +593,32 @@ fn parse_family(value: &str) -> Result<AddressFamily> {
         _ => anyhow::bail!("unsupported address family"),
     }
 }
-fn parse_mark(value: &str) -> Result<MarkSelector> {
-    let (value, mask) = value.split_once('/').context("invalid fwmark selector")?;
-    let value = u32::from_str_radix(value.trim_start_matches("0x"), 16)?;
-    let mask = u32::from_str_radix(mask.trim_start_matches("0x"), 16)?;
+fn parse_mark(value: &Value, mask: Option<&Value>) -> Result<MarkSelector> {
+    fn parse_u32(value: &Value, field: &str) -> Result<u32> {
+        if let Some(number) = value.as_u64() {
+            return u32::try_from(number).with_context(|| format!("{field} exceeds u32"));
+        }
+        let text = value
+            .as_str()
+            .with_context(|| format!("{field} is not a string or unsigned integer"))?;
+        let (radix, digits) = if let Some(hex) = text
+            .strip_prefix("0x")
+            .or_else(|| text.strip_prefix("0X"))
+        {
+            (16, hex)
+        } else {
+            (10, text)
+        };
+        u32::from_str_radix(digits, radix).with_context(|| format!("invalid {field}"))
+    }
+
+    // iproute2 JSON emits the fwmark and fwmask as separate fields. When the
+    // mask is the full u32 mask, iproute2 omits fwmask entirely.
+    let value = parse_u32(value, "fwmark")?;
+    let mask = mask
+        .map(|mask| parse_u32(mask, "fwmask"))
+        .transpose()?
+        .unwrap_or(u32::MAX);
     ensure!(mask != 0 && value & !mask == 0, "invalid fwmark selector");
     Ok(MarkSelector { value, mask })
 }
@@ -671,15 +696,30 @@ mod tests {
     }
 
     #[test]
-    fn parses_only_valid_marked_rule_selectors() {
+    fn parses_iproute2_json_fwmark_and_fwmask_fields() {
         assert_eq!(
-            parse_mark("0x42/0xff").unwrap(),
+            parse_mark(&serde_json::json!("0x42"), Some(&serde_json::json!("0xff"))).unwrap(),
             MarkSelector {
                 value: 0x42,
                 mask: 0xff
             }
         );
-        assert!(parse_mark("0x100/0xff").is_err());
-        assert!(parse_mark("0x42/0").is_err());
+        assert_eq!(
+            parse_mark(&serde_json::json!("0x42"), None).unwrap(),
+            MarkSelector {
+                value: 0x42,
+                mask: u32::MAX
+            }
+        );
+        assert_eq!(
+            parse_mark(&serde_json::json!(66), Some(&serde_json::json!(255))).unwrap(),
+            MarkSelector {
+                value: 66,
+                mask: 255
+            }
+        );
+        assert!(parse_mark(&serde_json::json!("0x100"), Some(&serde_json::json!("0xff"))).is_err());
+        assert!(parse_mark(&serde_json::json!("0x42"), Some(&serde_json::json!("0"))).is_err());
+        assert!(parse_mark(&serde_json::json!("not-a-mark"), None).is_err());
     }
 }
