@@ -15,6 +15,59 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// The recovery supervisor runs in the per-user systemd manager. Without lingering,
+/// that manager may be stopped at logout while the system-level core service and TUN
+/// routes remain active. Refuse activation unless systemd is configured to keep the
+/// user's manager alive independently of login sessions.
+fn ensure_user_manager_lingering() -> Result<()> {
+    const LOGINCTL: &str = "/usr/bin/loginctl";
+    let uid = unsafe { libc::geteuid() }.to_string();
+    let mut child = Command::new(LOGINCTL)
+        .args(["show-user", &uid, "--property=Linger", "--value"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .context("cannot query systemd user lingering state with loginctl")?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(20));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                anyhow::bail!("loginctl linger-state query exceeded its two-second deadline");
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("cannot inspect loginctl linger-state query");
+            }
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .context("cannot collect loginctl linger-state response")?;
+    ensure!(
+        output.status.success(),
+        "loginctl could not determine whether the current user's systemd manager lingers"
+    );
+    let value = String::from_utf8(output.stdout)
+        .context("loginctl returned a non-UTF-8 linger-state value")?;
+    validate_linger_value(&value)
+}
+
+fn validate_linger_value(value: &str) -> Result<()> {
+    ensure!(
+        value.trim() == "yes",
+        "TUN recovery requires a persistent systemd user manager; enable it with sudo loginctl enable-linger $(id -un) before activation"
+    );
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct SystemdRecoverySupervisor {
     systemd_run: PathBuf,
@@ -34,6 +87,7 @@ impl SystemdRecoverySupervisor {
                 == super::service_manager::ServiceManager::Systemd,
             "automatic TUN recovery currently requires systemd"
         );
+        ensure_user_manager_lingering()?;
         Ok(Self::new(
             "/usr/bin/systemd-run",
             "/usr/bin/systemctl",
@@ -339,6 +393,15 @@ impl RecoverySupervisor for SystemdRecoverySupervisor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linger_gate_accepts_only_explicit_yes() {
+        assert!(validate_linger_value("yes\n").is_ok());
+        assert!(validate_linger_value("no\n").is_err());
+        assert!(validate_linger_value("").is_err());
+        assert!(validate_linger_value("unknown\n").is_err());
+        assert!(validate_linger_value("yes extra\n").is_err());
+    }
 
     #[test]
     fn unit_name_contains_the_complete_activation_uuid_and_generation() {
