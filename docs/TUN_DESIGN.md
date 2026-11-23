@@ -1476,3 +1476,10 @@ The maintainer reported that the local validation commands passed after the tran
 ### Bounded systemd control subprocesses (2026-11-23)
 
 Recovery supervisor control calls (`systemctl is-active`, `systemctl stop --no-block`, and `systemd-run`) now use a bounded subprocess runner with deadlines and kill/reap behavior on timeout. This prevents a stuck systemd client invocation from indefinitely blocking the orchestration caller. The polling loops remain separately bounded. Automated validation and real host service interaction are pending.
+
+
+### Native and Xray launcher subprocess bounds (2026-11-23)
+
+Native-core and Xray launcher control commands now apply explicit wall-clock deadlines to sudo authorization, transient-unit inspection, and failure cleanup. Xray MainPID output is captured through a temporary file and capped at 128 bytes; no launcher path uses unbounded `Command::status()` or `Command::output()`. Timeout and wait-error paths kill and reap the local command process. If native startup returns an ambiguous result or its service state/MainPID cannot be verified, Proxyctl requests a bounded stop of that exact generation-scoped unit and reports whether systemd confirmed cleanup. Xray handoff/startup failures likewise issue bounded generation-scoped stop requests.
+
+These changes bound the local command clients and cleanup requests; they do not guarantee that systemd itself completes a stop within its requested timeout or that a killed systemd-run client cancels a manager job. The activation gate remains closed pending target-host validation of service behavior and recovery after interrupted starts.
