@@ -32,7 +32,7 @@ ip -n "$namespace" -6 route add default dev pctltest0 table 42420 proto 99
 # Linux may flush the entire fib_info when the TUN nexthop is unregistered, even
 # though the other nexthop is still usable. This records that cross-manager side effect.
 multipath_route_added=0
-if ip -n "$namespace" -4 route add 203.0.113.0/24 nexthop dev pctltest0 weight 1 nexthop dev lo weight 1 table 42420 proto static 2>/dev/null; then
+if ip -n "$namespace" -4 route add 203.0.113.0/24 table 42420 proto static nexthop dev pctltest0 weight 1 nexthop dev lo weight 1 2>/dev/null; then
     multipath_route_added=1
 fi
 # Foreign routes deliberately share the private table but use another device.
