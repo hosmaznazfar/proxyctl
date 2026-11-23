@@ -174,3 +174,8 @@ The DNS assertion remains a preservation check against pre-activation state. The
 - Unit/source changes are committed, but this follow-up has not been compiled, formatted, run through Clippy, or tested locally. The maintainer must validate the latest main before any live TUN activation.
 - Host-level proof is still required for IPv4 and IPv6 external reachability, DNS resolution behavior, logout with lingering enabled, supervisor restart, core crash, system shutdown, and recovery under concurrent startup/cleanup.
 - The default CLI activation gate remains closed. These orchestration APIs are not a declaration of production readiness.
+
+
+### Hosted CI verification (2026-11-23)
+
+GitHub Actions passed for commit c343bd9d12102af24c22b918fe0164e7bfdb547e. Formatting passed; Clippy passed with warnings denied; the full all-target test job reported 644 passed, 0 failed, and 1 ignored because the managed core binaries were unavailable. This hosted runner result does not substitute for the maintainer's local CachyOS build or live TUN/systemd/core integration. Local and host-level validation remain required.
