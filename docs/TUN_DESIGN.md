@@ -1345,3 +1345,7 @@ This confirms native descriptor attachment only. End-to-end proxied traffic, lis
 ### Linux fib-rule ABI and marker requirement
 
 The raw rtnetlink implementation uses the Linux UAPI attribute numbers `FRA_FWMARK=10`, `FRA_TABLE=15`, `FRA_FWMASK=16`, and `FRA_PROTOCOL=19`. Proxyctl writes protocol marker 99 on rule create/delete and uses the same marker for route protocol create/delete. The implementation verifies that fresh inventory reports marker 99 before issuing destructive route/rule cleanup. If the kernel or iproute2 cannot expose the marker, cleanup is rejected and the durable journal is retained.
+
+### Upgrade safety for legacy ownership records
+
+Pre-marker manifests and transaction journals are not automatically migrated. Their routes/rules do not carry protocol 99, so the new backend refuses to delete them based only on the former selectors. Keep the journal, stop the exact managed core, inspect the old resources, and resolve them manually before activating with this version. Do not run broad route/rule flush commands.
