@@ -16,6 +16,7 @@ pub mod broker_transport;
 #[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
 pub mod egress_probe;
+pub mod launch_spec;
 pub mod journal;
 pub mod journal_recovery_executor;
 pub mod journal_store;
