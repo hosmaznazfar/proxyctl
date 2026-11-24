@@ -1,5 +1,6 @@
 //! CLI command handlers. Argument definitions remain in the parent CLI module.
 use super::*;
+use std::io::IsTerminal;
 
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let Some(command) = cli.command else {
