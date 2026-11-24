@@ -539,15 +539,9 @@ mod tests {
 
     #[test]
     fn use_foreground_is_available_only_for_loopback_mode() {
-        let parsed = Cli::try_parse_from([
-            "proxyctl",
-            "use",
-            "7",
-            "--core",
-            "xray",
-            "--foreground",
-        ])
-        .expect("ordinary foreground activation arguments should parse");
+        let parsed =
+            Cli::try_parse_from(["proxyctl", "use", "7", "--core", "xray", "--foreground"])
+                .expect("ordinary foreground activation arguments should parse");
         assert!(matches!(
             parsed.command,
             Some(Command::Use {
