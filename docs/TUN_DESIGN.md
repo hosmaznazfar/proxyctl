@@ -38,6 +38,8 @@ Implementation sequence and current boundary:
 
 This replaces the former requirement for a separately installed mutation-helper package, Xray launcher binary, and systemd transient service. Those components are legacy implementation details to be retired as the single-executable session architecture is introduced. Do not mix the two privilege models in one activation.
 
+**Historical implementation note:** Sections below may describe the former helper, file-capability, Xray-launcher, or systemd-service implementation as it existed during earlier experiments. Those descriptions are retained as engineering history and migration evidence, not as current installation or activation instructions. Do not install or start the legacy helper bundle for a new session. The current executable gate rejects new TUN activation; only exact stop/recovery of an already-existing legacy generation may use the compatibility backend.
+
 ## Safety incident and current decision
 
 A live sing-box TUN run was associated with loss of internet connectivity. Review found that the previous implementation compared post-stop network state with a baseline but did not restore Proxyctl-created routes or rules. A forced core termination or application crash could therefore leave routing state behind.
