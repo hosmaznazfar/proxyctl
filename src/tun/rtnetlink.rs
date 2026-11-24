@@ -1062,6 +1062,95 @@ mod tests {
         assert!(validate_kernel_sender(&sender, length + 1).is_err());
     }
 
+    fn typed_mutation_request(kind: u16, flags: u16, fixed_payload_len: usize) -> Vec<u8> {
+        let mut payload = vec![0u8; fixed_payload_len];
+        if kind == RTM_NEWLINK {
+            payload[4..8].copy_from_slice(&7i32.to_ne_bytes());
+            let mut alias = b"proxyctl:test\0".to_vec();
+            let attr_len = (RTATTR_HEADER_LEN + alias.len()) as u16;
+            let mut attr = Vec::new();
+            attr.extend_from_slice(&attr_len.to_ne_bytes());
+            attr.extend_from_slice(&20u16.to_ne_bytes());
+            attr.append(&mut alias);
+            while !attr.len().is_multiple_of(4) { attr.push(0); }
+            payload.extend(attr);
+        } else if kind == RTM_NEWROUTE || kind == RTM_NEWRULE || kind == RTM_DELRULE {
+            payload[0] = libc::AF_INET as u8;
+            let mut attr = Vec::new();
+            attr.extend_from_slice(&8u16.to_ne_bytes());
+            attr.extend_from_slice(&4u16.to_ne_bytes());
+            attr.extend_from_slice(&7u32.to_ne_bytes());
+            payload.extend(attr);
+        }
+        message(kind, 0, &payload).tap_flags(flags)
+    }
+
+    trait SetRequestFlags {
+        fn tap_flags(self, flags: u16) -> Self;
+    }
+
+    impl SetRequestFlags for Vec<u8> {
+        fn tap_flags(mut self, flags: u16) -> Self {
+            self[6..8].copy_from_slice(&flags.to_ne_bytes());
+            self
+        }
+    }
+
+    #[test]
+    fn accepts_only_typed_route_link_and_rule_mutation_requests() {
+        let cases = [
+            (RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, IFINFO_MESSAGE_LEN),
+            (RTM_NEWROUTE, NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL, 12),
+            (RTM_NEWRULE, NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL, 12),
+            (RTM_DELRULE, NLM_F_REQUEST | NLM_F_ACK, 12),
+        ];
+        for (kind, flags, payload_len) in cases {
+            validate_request(&typed_mutation_request(kind, flags, payload_len)).unwrap();
+        }
+    }
+
+    #[test]
+    fn rejects_mutation_requests_with_wrong_flags_or_truncated_headers() {
+        for (kind, payload_len) in [(RTM_NEWLINK, IFINFO_MESSAGE_LEN), (RTM_NEWROUTE, 12), (RTM_NEWRULE, 12), (RTM_DELRULE, 12)] {
+            let valid_flags = match kind {
+                RTM_NEWLINK | RTM_DELRULE => NLM_F_REQUEST | NLM_F_ACK,
+                _ => NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+            };
+            let valid = typed_mutation_request(kind, valid_flags, payload_len);
+            let mut wrong_flags = valid.clone();
+            wrong_flags[6..8].copy_from_slice(&NLM_F_REQUEST.to_ne_bytes());
+            assert!(validate_request(&wrong_flags).is_err());
+            let mut short = valid;
+            short.truncate(NETLINK_HEADER_LEN + payload_len - 1);
+            let len = short.len() as u32;
+            short[0..4].copy_from_slice(&len.to_ne_bytes());
+            assert!(validate_request(&short).is_err());
+        }
+    }
+
+    #[test]
+    fn accepts_ack_for_exact_route_mutation_request_and_rejects_mismatch() {
+        let request = typed_mutation_request(
+            RTM_NEWROUTE,
+            NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+            12,
+        );
+        let mut header = request[..NETLINK_HEADER_LEN].to_vec();
+        header[8..12].copy_from_slice(&7u32.to_ne_bytes());
+        let mut ack_payload = 0i32.to_ne_bytes().to_vec();
+        ack_payload.extend_from_slice(&header);
+        let ack = response(NLMSG_ERROR, 7, &ack_payload);
+        let (messages, terminal) = parse_datagram(&ack, 7, 42, &header).unwrap();
+        assert!(messages.is_empty());
+        assert!(terminal);
+
+        let mut mismatched = header.clone();
+        mismatched[4..6].copy_from_slice(&RTM_NEWRULE.to_ne_bytes());
+        let mut bad_payload = 0i32.to_ne_bytes().to_vec();
+        bad_payload.extend_from_slice(&mismatched);
+        assert!(parse_datagram(&response(NLMSG_ERROR, 7, &bad_payload), 7, 42, &header).is_err());
+    }
+
     #[test]
     fn accepts_only_canonical_unfiltered_link_dump_request() {
         let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
