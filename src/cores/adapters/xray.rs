@@ -291,7 +291,7 @@ impl CoreAdapter for XrayAdapter {
             .as_array_mut()
             .ok_or_else(|| anyhow::anyhow!("Xray activation inbounds must be an array"))?
             .push(json!({
-                "tag": "tun-in", "protocol": "tun",
+                "tag": "tun-in", "protocol": "tun", "port": 0,
                 "settings": {
                     "name": super::XRAY_TUN_INTERFACE_NAME, "mtu": 1500,
                     "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
@@ -456,6 +456,7 @@ mod config_contract_tests {
         )
         .unwrap();
         assert_eq!(tun["inbounds"][1]["protocol"], "tun");
+        assert_eq!(tun["inbounds"][1]["port"], 0);
         assert_eq!(
             tun["inbounds"][1]["settings"]["name"],
             super::super::XRAY_TUN_INTERFACE_NAME
