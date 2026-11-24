@@ -336,12 +336,40 @@ impl CoreAdapter for XrayAdapter {
             super::validation::run_validator(command, "could not run Xray config validation")?;
         ensure!(
             output.status.success(),
-            "Xray rejected the generated configuration (exit status {:?}; {})",
+            "Xray rejected the generated configuration (exit status {:?}; {}).{}",
             output.status.code(),
-            summarize_validation_failure(&output.stdout, &output.stderr)
+            summarize_validation_failure(&output.stdout, &output.stderr),
+            if std::env::var_os("PROXYCTL_SHOW_CORE_DIAGNOSTICS").is_some() {
+                format!(
+                    "\nXray native diagnostics (PROXYCTL_SHOW_CORE_DIAGNOSTICS is enabled; may contain server addresses, paths, or other sensitive config values):\n{}",
+                    detailed_validation_output(&output.stdout, &output.stderr)
+                )
+            } else {
+                "\nFor the exact Xray error, rerun with PROXYCTL_SHOW_CORE_DIAGNOSTICS=1 (native output may contain sensitive values).".to_owned()
+            }
         );
         Ok(())
     }
+}
+
+/// Format the native validator output for an explicit, local debugging opt-in.
+/// Bound each stream so a malformed core cannot flood the terminal.
+fn detailed_validation_output(stdout: &[u8], stderr: &[u8]) -> String {
+    const MAX_STREAM_BYTES: usize = 8 * 1024;
+    fn excerpt(bytes: &[u8]) -> String {
+        let shown = &bytes[..bytes.len().min(MAX_STREAM_BYTES)];
+        let mut text = String::from_utf8_lossy(shown).trim().to_owned();
+        if bytes.len() > shown.len() {
+            text.push_str(&format!("\\n... truncated {} additional bytes", bytes.len() - shown.len()));
+        }
+        if text.is_empty() {
+            "(empty)".to_owned()
+        } else {
+            text
+        }
+    }
+
+    format!("stdout:\\n{}\\nstderr:\\n{}", excerpt(stdout), excerpt(stderr))
 }
 
 fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> String {
@@ -426,6 +454,18 @@ fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> String {
 #[cfg(test)]
 mod validation_diagnostic_tests {
     use super::summarize_validation_failure;
+
+    #[test]
+    fn detailed_diagnostics_include_both_streams_and_are_bounded() {
+        let output = super::detailed_validation_output(b"field: bad value", b"decoder failed");
+        assert!(output.contains("stdout:\\nfield: bad value"));
+        assert!(output.contains("stderr:\\ndecoder failed"));
+
+        let oversized = vec![b'x'; 9 * 1024];
+        let output = super::detailed_validation_output(&oversized, b"");
+        assert!(output.contains("truncated 1024 additional bytes"));
+        assert!(output.len() < 9 * 1024);
+    }
 
     #[test]
     fn validation_diagnostics_identify_the_specific_xray_failure_stage() {
