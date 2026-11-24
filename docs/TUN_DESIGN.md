@@ -1591,6 +1591,10 @@ A request rejected by local request validation or socket setup is explicitly mar
 These are source-level corrections. They require maintainer-local formatting, Clippy, the full test suite, and the existing namespace/host integration checks. They do not authorize bypassing recovery of an already-retained journal or skipping the end-to-end readiness gate.
 
 
+### Journal state ordering during recovery (2026-11-24)
+
+Journal validation permits a final unresolved intent after earlier cleanup progress. This represents the recovery sequence where an exact interface resource has already been removed and the broker must still inspect an ambiguous later route or rule intent before resolving it. It does not permit a later operation to be marked Applied after any earlier operation is Removed or Absent: once cleanup progress is recorded, the transaction cannot move back into an applied state. The validator enforces this monotonic transition and retains the final-intent recovery exception.
+ 
 ### Linux route-message header field offsets (2026-11-24)
 
 The typed default-route encoder follows the Linux `struct rtmsg` byte layout exactly: `rtm_family` at offset 0, destination/source prefix lengths at offsets 1–2, TOS at 3, table at 4, protocol at 5, scope at 6, route type at 7, and flags at 8–11. Proxyctl uses the `RTA_TABLE` attribute for dedicated table IDs outside the one-byte `rtm_table` field, leaving that header byte zero. The locally assigned Proxyctl route-protocol marker is written only to offset 5. A regression test exercises the same route-payload builder used by the live mutation path and pins all relevant offsets, including the unicast route type. This corrects a malformed route request that the kernel rejected with `EINVAL`; it does not reconcile any already-retained activation journal or establish end-to-end TUN readiness.
