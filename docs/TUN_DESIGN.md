@@ -1,8 +1,8 @@
 # Linux TUN design
 
-> Status: managed activation orchestration and recovery code exist. Route teardown relies on exact TUN netdevice unregister followed by route-absence verification; policy rules still use protocol-tagged selectors. The maintainer has now passed the privileged CachyOS namespace cleanup test, including its supported IPv4 multipath-route side-effect assertion. The default CLI activation gate remains closed pending explicit assessment of broader kernel side effects and the target-host integration matrix.
-> Scope: Linux kernel networking; automatic recovery is currently implemented only for systemd with a lingering per-user manager.
-> Goal: use one selected managed core's native TUN implementation, with exact Proxyctl-owned routing resources and crash recovery.
+> Status: offline journal/manifest, route/rule mutation, cleanup, and readiness groundwork exist. The old runtime implementation still uses a separate helper and systemd service and is not the selected final architecture. The top-level managed-session status command is implemented; TUN start/stop, same-executable privileged supervision, and foreground lifecycle are pending. The default TUN activation gate remains closed.
+> Scope: Linux kernel networking and a portable detached session owner. The legacy systemd/helper backend is migration input only, not the target design.
+> Goal: keep ordinary proxy sessions unprivileged and elevate only TUN sessions, with one installed Proxyctl executable owning the background core and exact recovery lifecycle.
 
 ## Selected CLI, session, and privilege model
 
