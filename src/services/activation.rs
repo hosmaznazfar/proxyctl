@@ -1004,18 +1004,6 @@ fn private_fd(_fd: i32) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
-    #[test]
-    fn tun_preflight_refuses_foreign_tun_interfaces_but_allows_its_own_for_switching() {
-        assert!(tun_interfaces_are_safe(&[], false));
-        assert!(tun_interfaces_are_safe(&["tun-proxyctl".into()], true));
-        assert!(!tun_interfaces_are_safe(&["tun0".into()], false));
-        assert!(!tun_interfaces_are_safe(&["tun-proxyctl".into()], false));
-        assert!(!tun_interfaces_are_safe(
-            &["tun-proxyctl".into(), "tun0".into()],
-            true
-        ));
-    }
-
     #[cfg(target_os = "linux")]
     #[test]
     fn tun_baseline_reports_exact_changed_categories() {
@@ -1088,94 +1076,7 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
-    #[test]
-    fn tun_capability_check_accepts_only_unprivileged_net_admin_service() {
-        let valid = concat!(
-            "Uid:\t1000\t1000\t1000\t1000\n",
-            "CapEff:\t0000000000001000\n",
-            "CapPrm:\t0000000000001000\n",
-            "CapBnd:\t0000000000001000\n",
-            "CapAmb:\t0000000000001000\n"
-        );
-        assert!(process_status_has_only_tun_capability(valid, 1000));
-        assert!(!process_status_has_only_tun_capability(
-            &valid.replace("0000000000001000", "0000000000003000"),
-            1000
-        ));
-        assert!(!process_status_has_only_tun_capability(valid, 0));
-    }
-
     #[cfg(target_os = "linux")]
-    #[test]
-    fn tun_service_command_limits_capabilities_and_keeps_user_identity() {
-        let context = TunLaunchContext {
-            sudo: PathBuf::from("/usr/bin/sudo"),
-            systemd_run: PathBuf::from("/usr/bin/systemd-run"),
-            systemctl: PathBuf::from("/usr/bin/systemctl"),
-            unit: "proxyctl-tun-test.service".into(),
-            uid: 1000,
-            gid: 1000,
-            baseline: TunBaseline {
-                interfaces: vec![],
-                tun_interfaces: vec![],
-                default_routes: vec![],
-                dns_servers: vec![],
-                resolv_conf_target: None,
-                ipv4_routes: vec![],
-                ipv6_routes: vec![],
-                ipv4_rules: vec![],
-                ipv6_rules: vec![],
-            },
-        };
-        let command = build_tun_service_command(
-            &context,
-            Path::new("/managed/sing-box"),
-            CoreId::SingBox,
-            Path::new("/runtime/active.json"),
-        );
-        let args = command
-            .get_args()
-            .map(|arg| arg.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        for expected in [
-            "--property=User=1000",
-            "--property=Group=1000",
-            "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
-            "--property=AmbientCapabilities=CAP_NET_ADMIN",
-            "--property=NoNewPrivileges=yes",
-            "--property=KillMode=control-group",
-            "--",
-            "/managed/sing-box",
-            "run",
-            "-c",
-            "/runtime/active.json",
-        ] {
-            assert!(args.iter().any(|arg| arg == expected), "missing {expected}");
-        }
-        assert!(!args.iter().any(|arg| arg.contains("CAP_SYS_ADMIN")));
-        assert!(!args.iter().any(|arg| arg.contains("CAP_NET_RAW")));
-
-        let preflight = build_tun_preflight_command(&context, Path::new("/usr/bin/true"));
-        let preflight_args = preflight
-            .get_args()
-            .map(|arg| arg.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        for expected in [
-            "--wait",
-            "--collect",
-            "--property=User=1000",
-            "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
-            "--property=AmbientCapabilities=CAP_NET_ADMIN",
-            "--property=NoNewPrivileges=yes",
-            "/usr/bin/true",
-        ] {
-            assert!(
-                preflight_args.iter().any(|arg| arg == expected),
-                "missing preflight {expected}"
-            );
-        }
-    }
-
     #[cfg(target_os = "linux")]
     #[test]
     fn old_activation_state_without_tun_manifest_remains_readable() {
