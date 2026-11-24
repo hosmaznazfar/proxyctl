@@ -30,6 +30,12 @@ There is one installable application package and one installed `proxyctl` execut
 
 A successful TUN launch must retain exact generation/process identity, durable resource ownership, serialized start/stop/switch transitions, and fail-closed cleanup. The supervisor must outlive the invoking terminal, monitor the exact core process, and clean up on core exit. A supervisor crash or reboot must not leave traffic blackholed; this requires explicit kernel behavior analysis and fault-injection/host validation. Do not claim this is solved merely because the supervisor is detached. The design remains experimental and the default activation gate remains closed until the cleanup side effects and host matrix described below are accepted.
 
+Implementation sequence and current boundary:
+
+1. The top-level `proxyctl status` command is now present as a read-only view of the tracked activation record. It reports node/core/mode/listener and compares the recorded PID, start time, and executable when a process record exists. If only a TUN manifest or transaction journal remains, it reports that recovery/inspection is needed without attempting cleanup.
+2. The `tun start` and `tun stop` mode transitions, same-executable privileged session owner, and foreground lifecycle are not yet wired. They must be implemented against the selected root-session architecture, not as aliases over the former systemd/helper flow.
+3. Until that migration is complete, the old TUN activation path must remain gated. In particular, do not ask the maintainer to retry activation through the existing separate helper/service path; it has the known procfs identity failure and conflicts with the selected privilege model.
+
 This replaces the former requirement for a separately installed mutation-helper package, Xray launcher binary, and systemd transient service. Those components are legacy implementation details to be retired as the single-executable session architecture is introduced. Do not mix the two privilege models in one activation.
 
 ## Safety incident and current decision
