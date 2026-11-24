@@ -143,6 +143,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             return Ok(());
         }
+        Command::Status => {
+            crate::services::activation::status()?;
+            return Ok(());
+        }
         Command::Stop => {
             crate::services::activation::stop()?;
             return Ok(());
