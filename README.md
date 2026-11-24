@@ -224,7 +224,7 @@ It reports Linux network interfaces, detected TUN/TAP devices, IPv4/IPv6 default
 
 The status command never creates or deletes interfaces, changes routes, alters DNS, modifies firewall rules, starts a proxy core, or requests elevated privileges.
 
-TUN inspection through `proxyctl tun status` is read-only. The intended session interface is:
+TUN inspection through `proxyctl tun status` is read-only. The following is the target session interface; `tun start`, `tun stop`, and new `use --tun` activations are not available until the single-executable supervisor migration is complete:
 
 ~~~sh
 # Start or switch the active node into TUN mode (requires sudo authorization).
