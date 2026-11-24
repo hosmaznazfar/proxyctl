@@ -1672,3 +1672,8 @@ The next implementation must replace the refusal with a bounded, authenticated l
 ## Launch specification (data-contract slice)
 
 The supervisor migration now defines a version-1 JSON launch specification containing only the selected node ID, enumerated core (`sing-box`, `xray`, or `mihomo`), and listener port. The decoder rejects empty or over-16-KiB payloads, unknown fields, unsupported versions, zero node IDs, and zero ports. The encoder applies the same validation and size limit. This contract is data validation only; it is not yet accepted from stdin by the supervisor, nor does it launch processes, resolve node data, read arbitrary paths, or mutate host networking. Root-side core path verification and generation of configuration from trusted/validated node data remain future work.
+
+
+### Supervisor bootstrap compile-boundary correction (2026-11-24)
+
+The hidden supervisor command is handled explicitly in both CLI dispatch matches, preserving the management-command early-return boundary and preventing accidental fallthrough into database initialization. The help-visibility regression test imports Clap's `CommandFactory` trait so it can construct and render the command tree. These are compile-boundary fixes only; the supervisor remains fail-closed and does not accept launch data or mutate networking.
