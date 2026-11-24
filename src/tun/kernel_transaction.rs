@@ -1036,7 +1036,10 @@ mod tests {
                 ..Default::default()
             };
             let error = apply(&transaction(), &mut backend).unwrap_err();
-            assert!(format!("{error:#}").contains("before transmission"), "step {failed_step}");
+            assert!(
+                format!("{error:#}").contains("before transmission"),
+                "step {failed_step}"
+            );
             assert!(backend.interface.is_none(), "step {failed_step}");
             assert!(backend.resources.is_empty(), "step {failed_step}");
             assert!(!backend.journal_retained, "step {failed_step}");

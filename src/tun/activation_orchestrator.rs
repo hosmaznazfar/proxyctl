@@ -1318,14 +1318,24 @@ mod request_tests {
         let content = br#"{"inbounds":[],"outbounds":[]}"#;
         let config = write_private_xray_tun_config(directory.path(), content).unwrap();
 
-        assert_eq!(config.path().extension().and_then(|value| value.to_str()), Some("json"));
+        assert_eq!(
+            config.path().extension().and_then(|value| value.to_str()),
+            Some("json")
+        );
         assert_eq!(std::fs::read(config.path()).unwrap(), content);
         assert_eq!(
-            std::fs::metadata(config.path()).unwrap().permissions().mode() & 0o777,
+            std::fs::metadata(config.path())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
             0o600
         );
         let path = config.path().to_owned();
         drop(config);
-        assert!(!path.exists(), "temporary Xray config must be removed on drop");
+        assert!(
+            !path.exists(),
+            "temporary Xray config must be removed on drop"
+        );
     }
 }

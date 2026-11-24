@@ -652,30 +652,62 @@ fn validate_kernel_sender(sender: &libc::sockaddr_nl, sender_len: libc::socklen_
 fn validate_attribute_stream(bytes: &[u8]) -> Result<()> {
     let mut offset = 0usize;
     while offset < bytes.len() {
-        ensure!(bytes.len() - offset >= RTATTR_HEADER_LEN, "truncated NETLINK_ROUTE attribute header");
+        ensure!(
+            bytes.len() - offset >= RTATTR_HEADER_LEN,
+            "truncated NETLINK_ROUTE attribute header"
+        );
         let length = u16::from_ne_bytes(bytes[offset..offset + 2].try_into()?) as usize;
-        ensure!(length >= RTATTR_HEADER_LEN && length <= bytes.len() - offset, "invalid NETLINK_ROUTE attribute length");
-        let aligned = length.checked_add(3).map(|value| value & !3).context("NETLINK_ROUTE attribute alignment overflow")?;
+        ensure!(
+            length >= RTATTR_HEADER_LEN && length <= bytes.len() - offset,
+            "invalid NETLINK_ROUTE attribute length"
+        );
+        let aligned = length
+            .checked_add(3)
+            .map(|value| value & !3)
+            .context("NETLINK_ROUTE attribute alignment overflow")?;
         let remaining = bytes.len() - offset;
-        ensure!(aligned <= remaining || length == remaining, "truncated NETLINK_ROUTE attribute padding");
+        ensure!(
+            aligned <= remaining || length == remaining,
+            "truncated NETLINK_ROUTE attribute padding"
+        );
         if aligned <= remaining {
-            ensure!(bytes[offset + length..offset + aligned].iter().all(|byte| *byte == 0), "non-zero NETLINK_ROUTE attribute padding");
+            ensure!(
+                bytes[offset + length..offset + aligned]
+                    .iter()
+                    .all(|byte| *byte == 0),
+                "non-zero NETLINK_ROUTE attribute padding"
+            );
         }
-        offset = offset.checked_add(if aligned <= remaining { aligned } else { length }).context("NETLINK_ROUTE attribute offset overflow")?;
+        offset = offset
+            .checked_add(if aligned <= remaining {
+                aligned
+            } else {
+                length
+            })
+            .context("NETLINK_ROUTE attribute offset overflow")?;
     }
     Ok(())
 }
 
 fn validate_request(bytes: &[u8]) -> Result<()> {
-    ensure!(bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM, "invalid netlink request length");
+    ensure!(
+        bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM,
+        "invalid netlink request length"
+    );
     let declared = u32::from_ne_bytes(bytes[0..4].try_into()?);
-    ensure!(declared as usize == bytes.len(), "netlink request length does not match its header");
+    ensure!(
+        declared as usize == bytes.len(),
+        "netlink request length does not match its header"
+    );
     let kind = u16::from_ne_bytes(bytes[4..6].try_into()?);
     let flags = u16::from_ne_bytes(bytes[6..8].try_into()?);
     let sequence = u32::from_ne_bytes(bytes[8..12].try_into()?);
     let port_id = u32::from_ne_bytes(bytes[12..16].try_into()?);
     ensure!(kind != 0, "netlink request has an unspecified message type");
-    ensure!(sequence == 0 && port_id == 0, "netlink request must not supply sequence or port identity");
+    ensure!(
+        sequence == 0 && port_id == 0,
+        "netlink request must not supply sequence or port identity"
+    );
     let (fixed_payload_len, expected_flags) = match kind {
         RTM_GETLINK => (IFINFO_MESSAGE_LEN, NLM_F_REQUEST | NLM_F_DUMP),
         RTM_NEWLINK => (IFINFO_MESSAGE_LEN, NLM_F_REQUEST | NLM_F_ACK),
@@ -683,12 +715,21 @@ fn validate_request(bytes: &[u8]) -> Result<()> {
         RTM_DELRULE => (12, NLM_F_REQUEST | NLM_F_ACK),
         _ => anyhow::bail!("NETLINK_ROUTE request type is not permitted"),
     };
-    ensure!(flags == expected_flags, "NETLINK_ROUTE request uses an unsupported flag combination");
+    ensure!(
+        flags == expected_flags,
+        "NETLINK_ROUTE request uses an unsupported flag combination"
+    );
     let payload = &bytes[NETLINK_HEADER_LEN..];
     if kind == RTM_GETLINK {
-        ensure!(payload.len() == fixed_payload_len && payload.iter().all(|byte| *byte == 0), "RTM_GETLINK inspection request must be the canonical unfiltered dump");
+        ensure!(
+            payload.len() == fixed_payload_len && payload.iter().all(|byte| *byte == 0),
+            "RTM_GETLINK inspection request must be the canonical unfiltered dump"
+        );
     } else {
-        ensure!(payload.len() >= fixed_payload_len, "NETLINK_ROUTE mutation payload is shorter than its message header");
+        ensure!(
+            payload.len() >= fixed_payload_len,
+            "NETLINK_ROUTE mutation payload is shorter than its message header"
+        );
         validate_attribute_stream(&payload[fixed_payload_len..])?;
     }
     Ok(())
@@ -843,14 +884,19 @@ mod tests {
 
     fn canonical_dump_header(sequence: u32) -> Vec<u8> {
         let mut header = vec![0u8; NETLINK_HEADER_LEN];
-        header[0..4].copy_from_slice(&((NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN) as u32).to_ne_bytes());
+        header[0..4]
+            .copy_from_slice(&((NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN) as u32).to_ne_bytes());
         header[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
         header[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
         header[8..12].copy_from_slice(&sequence.to_ne_bytes());
         header
     }
 
-    fn parse_test_datagram(bytes: &[u8], sequence: u32, port_id: u32) -> Result<(Vec<Vec<u8>>, bool)> {
+    fn parse_test_datagram(
+        bytes: &[u8],
+        sequence: u32,
+        port_id: u32,
+    ) -> Result<(Vec<Vec<u8>>, bool)> {
         let header = canonical_dump_header(sequence);
         parse_datagram(bytes, sequence, port_id, &header)
     }
@@ -1093,7 +1139,9 @@ mod tests {
             attr.extend_from_slice(&attr_len.to_ne_bytes());
             attr.extend_from_slice(&20u16.to_ne_bytes());
             attr.append(&mut alias);
-            while !attr.len().is_multiple_of(4) { attr.push(0); }
+            while !attr.len().is_multiple_of(4) {
+                attr.push(0);
+            }
             payload.extend(attr);
         } else if kind == RTM_NEWROUTE || kind == RTM_NEWRULE || kind == RTM_DELRULE {
             payload[0] = libc::AF_INET as u8;
@@ -1112,8 +1160,16 @@ mod tests {
     fn accepts_only_typed_route_link_and_rule_mutation_requests() {
         let cases = [
             (RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, IFINFO_MESSAGE_LEN),
-            (RTM_NEWROUTE, NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL, 12),
-            (RTM_NEWRULE, NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL, 12),
+            (
+                RTM_NEWROUTE,
+                NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+                12,
+            ),
+            (
+                RTM_NEWRULE,
+                NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
+                12,
+            ),
             (RTM_DELRULE, NLM_F_REQUEST | NLM_F_ACK, 12),
         ];
         for (kind, flags, payload_len) in cases {
@@ -1123,7 +1179,12 @@ mod tests {
 
     #[test]
     fn rejects_mutation_requests_with_wrong_flags_or_truncated_headers() {
-        for (kind, payload_len) in [(RTM_NEWLINK, IFINFO_MESSAGE_LEN), (RTM_NEWROUTE, 12), (RTM_NEWRULE, 12), (RTM_DELRULE, 12)] {
+        for (kind, payload_len) in [
+            (RTM_NEWLINK, IFINFO_MESSAGE_LEN),
+            (RTM_NEWROUTE, 12),
+            (RTM_NEWRULE, 12),
+            (RTM_DELRULE, 12),
+        ] {
             let valid_flags = match kind {
                 RTM_NEWLINK | RTM_DELRULE => NLM_F_REQUEST | NLM_F_ACK,
                 _ => NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
@@ -1243,7 +1304,10 @@ mod tests {
         let mut bytes = response(99, 7, &[1]);
         bytes.truncate(NETLINK_HEADER_LEN + 1);
         bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
-        assert_eq!(parse_test_datagram(&bytes, 7, 42).unwrap(), (vec![bytes], false));
+        assert_eq!(
+            parse_test_datagram(&bytes, 7, 42).unwrap(),
+            (vec![bytes], false)
+        );
     }
 
     #[test]
@@ -1251,7 +1315,10 @@ mod tests {
         let mut bytes = response(NLMSG_DONE, 7, &[]);
         bytes.truncate(NETLINK_HEADER_LEN);
         bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
-        assert_eq!(parse_test_datagram(&bytes, 7, 42).unwrap(), (Vec::new(), true));
+        assert_eq!(
+            parse_test_datagram(&bytes, 7, 42).unwrap(),
+            (Vec::new(), true)
+        );
     }
 
     #[test]
