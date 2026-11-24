@@ -480,6 +480,40 @@ mod validation_diagnostic_tests {
         );
         assert!(summarize_validation_failure(b"", b"REALITY private-value").contains("REALITY"));
     }
+
+    #[test]
+    fn opaque_validation_failures_include_safe_stream_metadata_and_fingerprint() {
+        let empty = summarize_validation_failure(b"", b"");
+        assert!(empty.contains("without writing a diagnostic"));
+        assert!(empty.contains("stdout=0 bytes, stderr=0 bytes"));
+        assert!(empty.contains("diagnostic fingerprint=sha256:"));
+        assert!(empty.contains("raw diagnostics withheld"));
+
+        let opaque = summarize_validation_failure(b"", b"private-host private-credential");
+        assert!(opaque.contains("unclassified configuration validation error"));
+        assert!(opaque.contains("stderr=43 bytes"));
+        assert!(!opaque.contains("private-host"));
+        assert!(!opaque.contains("private-credential"));
+    }
+
+    #[test]
+    fn validation_classifier_prefers_the_nested_component_over_loader_wrapper() {
+        let summary = summarize_validation_failure(
+            b"",
+            b"failed to load config files: failed to build inbound handler for protocol tun",
+        );
+        assert!(summary.contains("TUN inbound configuration"));
+    }
+
+    #[test]
+    fn validation_classifier_reads_stdout_when_stderr_is_empty() {
+        let summary = summarize_validation_failure(
+            b"failed to build outbound handler for protocol vless",
+            b"",
+        );
+        assert!(summary.contains("proxy outbound configuration"));
+        assert!(summary.contains("stdout=49 bytes, stderr=0 bytes"));
+    }
 }
 
 #[cfg(test)]
