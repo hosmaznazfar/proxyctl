@@ -1,8 +1,8 @@
 //! Minimal systemd-launched Xray exec shim for broker-owned TUN descriptors.
 //!
-//! The service manager grants only CAP_NET_ADMIN to this process. It receives one
-//! generation-scoped TUN descriptor from the unprivileged controller, validates the
-//! interface identity, starts the managed Xray child, then drops its own capabilities.
+//! The service manager grants no Linux capabilities to this process. The broker creates
+//! and configures the TUN device, then transfers its already-open descriptor. This launcher
+//! validates the interface identity and starts Xray without network-administration privileges.
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]
@@ -20,9 +20,6 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-
-#[cfg(target_os = "linux")]
-const CAP_NET_ADMIN: u64 = 1 << 12;
 
 #[cfg(target_os = "linux")]
 fn main() {
@@ -162,8 +159,8 @@ fn run() -> Result<()> {
     // not this shim, so the returned identity remains valid after the handoff. Any failure
     // before the identity receipt is delivered must terminate and reap this exact child.
     let startup = (|| -> Result<()> {
-        drop_launcher_capabilities()
-            .context("cannot drop the core launch shim's capabilities after Xray exec")?;
+        // Neither the shim nor Xray has capabilities, so procfs identity checks remain
+        // available to the unprivileged controller and supervisor.
         let identity = proxyctl::tun::process::ProcessIdentity::capture(child.id())
             .context("cannot capture the spawned Xray process identity")?;
         ensure!(
@@ -234,62 +231,6 @@ fn send_process_identity(
 }
 
 #[cfg(target_os = "linux")]
-fn drop_launcher_capabilities() -> Result<()> {
-    #[repr(C)]
-    struct CapHeader {
-        version: u32,
-        pid: i32,
-    }
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CapData {
-        effective: u32,
-        permitted: u32,
-        inheritable: u32,
-    }
-
-    // Linux capability ABI v3. The Xray child inherited its ambient CAP_NET_ADMIN at
-    // exec; the long-lived descriptor handoff shim no longer needs any capability.
-    let ambient = unsafe {
-        libc::prctl(
-            libc::PR_CAP_AMBIENT,
-            libc::PR_CAP_AMBIENT_CLEAR_ALL,
-            0,
-            0,
-            0,
-        )
-    };
-    ensure!(ambient == 0, "cannot clear launcher ambient capabilities");
-    let header = CapHeader {
-        version: 0x2008_0522,
-        pid: 0,
-    };
-    let data = [CapData {
-        effective: 0,
-        permitted: 0,
-        inheritable: 0,
-    }; 2];
-    let result =
-        unsafe { libc::syscall(libc::SYS_capset, &header as *const CapHeader, data.as_ptr()) };
-    ensure!(
-        result == 0,
-        "cannot drop launcher effective/permitted capabilities"
-    );
-    let status = fs::read_to_string("/proc/self/status")?;
-    for field in ["CapEff:", "CapPrm:", "CapInh:", "CapAmb:"] {
-        let value = status
-            .lines()
-            .find_map(|line| line.strip_prefix(field))
-            .context("capability status is incomplete after dropping launcher privileges")?;
-        ensure!(
-            u64::from_str_radix(value.trim(), 16)? == 0,
-            "core launcher retained a capability after dropping its privilege set"
-        );
-    }
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
 fn verify_capability_boundary() -> Result<()> {
     let status = fs::read_to_string("/proc/self/status")
         .context("cannot inspect core launcher capability state")?;
@@ -315,13 +256,13 @@ fn verify_capability_boundary() -> Result<()> {
         }
     }
     ensure!(
-        effective == Some(CAP_NET_ADMIN)
-            && permitted == Some(CAP_NET_ADMIN)
-            && bounding == Some(CAP_NET_ADMIN)
-            && inheritable == Some(CAP_NET_ADMIN)
-            && ambient == Some(CAP_NET_ADMIN)
+        effective == Some(0)
+            && permitted == Some(0)
+            && bounding == Some(0)
+            && inheritable == Some(0)
+            && ambient == Some(0)
             && no_new_privileges == Some(true),
-        "core launcher must run with exactly ambient/effective/permitted/bounding CAP_NET_ADMIN and NoNewPrivileges"
+        "core launcher and Xray must run without Linux capabilities and with NoNewPrivileges"
     );
     Ok(())
 }
