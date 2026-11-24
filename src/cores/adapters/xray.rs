@@ -461,28 +461,6 @@ mod validation_diagnostic_tests {
 }
 
 #[cfg(test)]
-mod validation_diagnostic_tests {
-    use super::summarize_validation_failure;
-
-    #[test]
-    fn validation_diagnostics_are_categorized_without_exposing_raw_output() {
-        let summary = summarize_validation_failure(
-            b"",
-            b"failed to build inbound config: secret=do-not-print and private-host",
-        );
-        assert!(summary.contains("loopback HTTP inbound"));
-        assert!(!summary.contains("do-not-print"));
-        assert!(!summary.contains("private-host"));
-    }
-
-    #[test]
-    fn validation_diagnostics_identify_tls_and_unknown_fields() {
-        assert!(summarize_validation_failure(b"", b"unknown field").contains("unrecognized"));
-        assert!(summarize_validation_failure(b"", b"TLS certificate invalid").contains("TLS"));
-    }
-}
-
-#[cfg(test)]
 mod config_contract_tests {
     use super::*;
     use crate::parser::parse_proxy_url;
