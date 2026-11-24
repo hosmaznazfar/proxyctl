@@ -24,6 +24,15 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             return Ok(());
         }
+        Command::__TunSupervisor => {
+            anyhow::ensure!(
+                unsafe { libc::geteuid() } == 0,
+                "internal TUN supervisor entry point must run with root privileges"
+            );
+            anyhow::bail!(
+                "internal TUN supervisor protocol is not implemented; no privileged networking was changed"
+            );
+        }
         Command::Tun { command } => {
             match command {
                 TunCommand::Start { .. } | TunCommand::Stop => {
