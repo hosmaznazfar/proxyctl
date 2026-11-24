@@ -30,9 +30,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             crate::tun::inspect()?.print();
             let manager = crate::tun::service_manager::ServiceManager::detect();
             let backend = crate::tun::recovery::RecoveryBackendKind::for_manager(manager);
-            println!("Init/service manager: {}", manager.as_str());
+            println!("Detected init/service manager: {}", manager.as_str());
             println!(
-                "Crash-recovery supervisor: {}",
+                "Legacy systemd/helper recovery backend: {} (compatibility path only; not used for new TUN activation)",
                 if backend.is_implemented() {
                     format!("{} (implemented)", backend.as_str())
                 } else {
