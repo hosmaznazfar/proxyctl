@@ -17,6 +17,26 @@ use crate::{
     domain::ProxyNode,
 };
 
+fn write_private_xray_tun_config(
+    runtime: &Path,
+    content: &[u8],
+) -> Result<tempfile::NamedTempFile> {
+    // Xray selects its config parser from the filename extension. Keep the JSON suffix
+    // even though the file itself is private, randomly named, and deleted on drop.
+    let mut config = tempfile::Builder::new()
+        .prefix("proxyctl-xray-tun-")
+        .suffix(".json")
+        .tempfile_in(runtime)
+        .context("cannot create a private Xray TUN configuration in the shared service runtime")?;
+    config
+        .write_all(content)
+        .context("cannot write the generated Xray TUN configuration")?;
+    config
+        .flush()
+        .context("cannot flush the generated Xray TUN configuration")?;
+    Ok(config)
+}
+
 use super::{
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     managed_activation::{self, ManagedActivation},
@@ -836,18 +856,7 @@ impl<'a> ActivationOrchestrator<'a> {
             .coordinator
             .runtime_directory()
             .context("cannot resolve the private TUN activation runtime directory")?;
-        let mut config = tempfile::Builder::new()
-            .prefix("proxyctl-xray-tun-")
-            .tempfile_in(&runtime)
-            .context(
-                "cannot create a private Xray TUN configuration in the shared service runtime",
-            )?;
-        config
-            .write_all(&generated.content)
-            .context("cannot write the generated Xray TUN configuration")?;
-        config
-            .flush()
-            .context("cannot flush the generated Xray TUN configuration")?;
+        let config = write_private_xray_tun_config(&runtime, &generated.content)?;
         core.validate_config(executable, config.path())
             .context("Xray rejected the generated TUN configuration before activation")?;
         self.activate_xray_with_readiness(
@@ -1299,5 +1308,24 @@ mod request_tests {
         let mut r = valid();
         r.bypass_priority = 1;
         assert!(r.validate().is_err());
+    }
+
+    #[test]
+    fn xray_tun_validation_file_has_json_suffix_and_private_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let content = br#"{"inbounds":[],"outbounds":[]}"#;
+        let config = write_private_xray_tun_config(directory.path(), content).unwrap();
+
+        assert_eq!(config.path().extension().and_then(|value| value.to_str()), Some("json"));
+        assert_eq!(std::fs::read(config.path()).unwrap(), content);
+        assert_eq!(
+            std::fs::metadata(config.path()).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let path = config.path().to_owned();
+        drop(config);
+        assert!(!path.exists(), "temporary Xray config must be removed on drop");
     }
 }
