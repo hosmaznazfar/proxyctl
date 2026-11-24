@@ -212,6 +212,8 @@ Setup and non-check update operations targeting the currently active core stop t
 
 ## TUN status inspection (read-only)
 
+The top-level `proxyctl status` command reports the tracked Proxyctl session, selected node/core, mode, listener, and whether the recorded process identity still matches. It does not signal processes or mutate network state. `proxyctl tun status` remains the separate read-only host-network inspection command.
+
 Read-only inspection remains available independently of activation:
 
 ~~~sh
