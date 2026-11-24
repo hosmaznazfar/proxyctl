@@ -1,4 +1,4 @@
-//! Xray Linux launcher using a broker-owned TUN descriptor and a capability-confined systemd unit.
+//! Xray Linux launcher using a broker-owned TUN descriptor and a capability-free systemd unit.
 //!
 //! The transient service receives only CAP_NET_ADMIN, accepts one authenticated descriptor
 //! handoff, and keeps the Xray child in its control group. This module does not activate routes,
@@ -42,7 +42,7 @@ impl Drop for PrivateSocketCleanup {
     }
 }
 
-/// Start Xray in a capability-confined transient service and pass its exact generation-bound TUN fd.
+/// Start Xray without Linux capabilities and pass its exact generation-bound TUN fd.
 ///
 /// The service shim duplicates the descriptor for Xray and returns the identity of the actual
 /// Xray child, not the shim or the systemd-run client.
@@ -185,7 +185,7 @@ pub fn spawn_xray_from_broker(
     );
     listener.set_nonblocking(true)?;
 
-    // Allow the system manager to create one capability-confined transient unit. The
+    // Allow the system manager to create one capability-free transient unit. The
     // subsequent systemd-run invocation is non-interactive and cannot prompt mid-launch.
     let mut authorization = Command::new(SUDO);
     authorization
@@ -254,7 +254,7 @@ pub fn spawn_xray_from_broker(
         .stderr(Stdio::null());
     let mut service_command = launcher
         .spawn()
-        .context("cannot start the capability-confined Xray TUN service")?;
+        .context("cannot start the capability-free Xray TUN service")?;
 
     let start_deadline = std::time::Instant::now() + Duration::from_secs(10);
     let start_result = loop {
