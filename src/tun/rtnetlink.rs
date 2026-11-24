@@ -1103,18 +1103,9 @@ mod tests {
             attr.extend_from_slice(&7u32.to_ne_bytes());
             payload.extend(attr);
         }
-        message(kind, 0, &payload).tap_flags(flags)
-    }
-
-    trait SetRequestFlags {
-        fn tap_flags(self, flags: u16) -> Self;
-    }
-
-    impl SetRequestFlags for Vec<u8> {
-        fn tap_flags(mut self, flags: u16) -> Self {
-            self[6..8].copy_from_slice(&flags.to_ne_bytes());
-            self
-        }
+        let mut request = message(kind, 0, &payload);
+        request[6..8].copy_from_slice(&flags.to_ne_bytes());
+        request
     }
 
     #[test]
@@ -1177,6 +1168,15 @@ mod tests {
         let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
         request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
         validate_request(&request).unwrap();
+    }
+
+    #[test]
+    fn local_request_validation_errors_are_classified_as_not_transmitted() {
+        let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
+        request[6..8].copy_from_slice(&NLM_F_REQUEST.to_ne_bytes());
+        let error = validate_request(&request).unwrap_err();
+        let marked = mark_request_not_sent(error);
+        assert!(is_request_not_sent(&marked));
     }
 
     #[test]
