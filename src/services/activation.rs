@@ -160,95 +160,67 @@ pub fn activate(
     }
     #[cfg(target_os = "linux")]
     {
-        let foreground_child = {
-        let (runtime, state_path) = paths()?;
-        let _lock = RuntimeLock::acquire(&runtime)?;
-        let db = NodeDatabase::open(default_database_path()?)?;
-        let record = db
-            .get_node(node_id)?
-            .with_context(|| format!("node #{node_id} not found"))?;
-        ensure!(
-            !record.is_deleted(),
-            "node #{node_id} is deleted; restore it first"
-        );
-        let node = record.node;
-        drop(db);
-
-        let executable = core_binary_path(core)?;
-        ensure!(
-            executable.is_file(),
-            "{core} is not installed by Proxyctl; run setup --core {core}"
-        );
-        let executable = fs::canonicalize(executable)?;
-        let managed = fs::canonicalize(managed_cores_path()?)?;
-        ensure!(
-            executable.starts_with(&managed),
-            "refusing to run a core outside Proxyctl's managed directory"
-        );
-        let adapter = adapters::adapter(core);
-        let compatibility = adapter.compatibility(&node);
-        ensure!(
-            compatibility.is_supported(),
-            "{core} does not support this node: {}",
-            compatibility
-                .reason
-                .as_deref()
-                .unwrap_or("unsupported configuration")
-        );
-
-        let port = match port_override {
-            Some(port) => port,
-            None => crate::services::listener_config::listen_port()?,
-        };
-        validate_listen_port(port)?;
-        ensure_port_available(port)?;
-        let generated = if tun_enabled {
-            anyhow::bail!(
-                "TUN activation must use the dedicated generation-bound Xray broker lifecycle, not the loopback activation path"
+        let (foreground_child, state_path) = {
+            let (runtime, state_path) = paths()?;
+            let _lock = RuntimeLock::acquire(&runtime)?;
+            let db = NodeDatabase::open(default_database_path()?)?;
+            let record = db
+                .get_node(node_id)?
+                .with_context(|| format!("node #{node_id} not found"))?;
+            ensure!(
+                !record.is_deleted(),
+                "node #{node_id} is deleted; restore it first"
             );
-        } else {
-            adapter.generate_activation_config(&node, port)
-        }
-        .with_context(|| {
-            if tun_enabled {
-                format!(
-                    "could not generate loopback mixed SOCKS5/HTTP plus native TUN {core} config"
-                )
-            } else {
-                format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config")
-            }
-        })?;
-        adapters::validation::validate_generated_config(core, &generated, &executable)
-            .with_context(|| format!("{core} rejected the activation config"))?;
+            let node = record.node;
+            drop(db);
 
-        // Do not interrupt the existing activation until the replacement config validates.
-        let config = runtime.join(format!("active-{node_id}-{}-{port}.json", core.as_str()));
-        let mut command = Command::new(&executable);
-        match core {
-            CoreId::SingBox | CoreId::Xray => {
-                command.arg("run").arg("-c").arg(&config);
+            let executable = core_binary_path(core)?;
+            ensure!(
+                executable.is_file(),
+                "{core} is not installed by Proxyctl; run setup --core {core}"
+            );
+            let executable = fs::canonicalize(executable)?;
+            let managed = fs::canonicalize(managed_cores_path()?)?;
+            ensure!(
+                executable.starts_with(&managed),
+                "refusing to run a core outside Proxyctl's managed directory"
+            );
+            let adapter = adapters::adapter(core);
+            let compatibility = adapter.compatibility(&node);
+            ensure!(
+                compatibility.is_supported(),
+                "{core} does not support this node: {}",
+                compatibility
+                    .reason
+                    .as_deref()
+                    .unwrap_or("unsupported configuration")
+            );
+
+            let port = match port_override {
+                Some(port) => port,
+                None => crate::services::listener_config::listen_port()?,
+            };
+            validate_listen_port(port)?;
+            ensure_port_available(port)?;
+            let generated = adapter
+                .generate_activation_config(&node, port)
+                .with_context(|| {
+                    format!("could not generate loopback-only mixed SOCKS5/HTTP {core} config")
+                })?;
+            adapters::validation::validate_generated_config(core, &generated, &executable)
+                .with_context(|| format!("{core} rejected the activation config"))?;
+
+            let config = runtime.join(format!("active-{node_id}-{}-{port}.json", core.as_str()));
+            let mut command = Command::new(&executable);
+            match core {
+                CoreId::SingBox | CoreId::Xray => {
+                    command.arg("run").arg("-c").arg(&config);
+                }
+                CoreId::Mihomo => {
+                    command.arg("-f").arg(&config);
+                }
             }
-            CoreId::Mihomo => {
-                command.arg("-f").arg(&config);
-            }
-        }
-        if tun_enabled {
-            let context = prepare_tun_launch(&runtime, &state_path)?;
-            launch_tun_managed(
-                &runtime,
-                &state_path,
-                &managed,
-                &executable,
-                &config,
-                &generated.content,
-                node_id,
-                core,
-                port,
-                context,
-                WAIT,
-            )?;
-        } else {
-            launch_managed(
+            let child = launch_managed(
                 &runtime,
                 &state_path,
                 &managed,
@@ -261,11 +233,16 @@ pub fn activate(
                 command,
                 WAIT,
                 foreground,
-            )?
+            )?;
+            (child, state_path)
         };
+
         if let Some(mut child) = foreground_child {
-            let status = child.wait().context("could not wait for the foreground proxy core")?;
-            finish_foreground(&state_path_for_current_user()?, child.id(), status.success())?;
+            let pid = child.id();
+            let status = child
+                .wait()
+                .context("could not wait for the foreground proxy core")?;
+            finish_foreground(&state_path, pid, status.success())?;
             if !status.success() {
                 anyhow::bail!("foreground {core} process exited with status {status}");
             }
@@ -273,27 +250,13 @@ pub fn activate(
             return Ok(());
         }
         println!("Activated node #{node_id} with {core}.");
+        let port = port_override.unwrap_or(crate::services::listener_config::listen_port()?);
         println!(
             "Shared SOCKS5/HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
         );
-        if tun_enabled {
-            println!(
-                "Native TUN interface tun-proxyctl is active; DNS and firewall settings were not changed."
-            );
-            println!(
-                "The core runs as your user with only CAP_NET_ADMIN in a transient systemd service."
-            );
-        } else {
-            println!("System proxy, DNS, routes, firewall, and TUN were not changed.");
-        }
+        println!("System proxy, DNS, routes, firewall, and TUN were not changed.");
         Ok(())
     }
-}
-
-/// Resolve the current user's activation state path after foreground ownership was released.
-#[cfg(target_os = "linux")]
-fn state_path_for_current_user() -> anyhow::Result<PathBuf> {
-    Ok(paths()?.1)
 }
 
 /// Stop the selected core before setup/update replaces its managed executable.
