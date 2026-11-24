@@ -907,13 +907,23 @@ fn finish_foreground(state_path: &Path, pid: u32, exit_success: bool) -> anyhow:
         "foreground activation state path changed; refusing cleanup"
     );
     let _lock = RuntimeLock::acquire(&runtime)?;
-    let bytes = fs::read(state_path)
-        .context("foreground core exited but its activation state is missing; inspect status")?;
+    let bytes = match fs::read(state_path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // The top-level stop command may already have removed this child's state.
+            return Ok(());
+        }
+        Err(error) => return Err(error).context("cannot read foreground activation state"),
+    };
     let state: ActiveProcess = serde_json::from_slice(&bytes)
         .context("foreground activation state is corrupt; refusing cleanup")?;
+    if state.pid != pid {
+        // A newer activation owns the shared state path. Never remove its files.
+        return Ok(());
+    }
     ensure!(
-        state.pid == pid && state.tun.is_none() && state.start_ticks > 0,
-        "foreground activation state no longer belongs to the waited process; refusing cleanup"
+        state.tun.is_none() && state.start_ticks > 0,
+        "foreground activation state has an invalid process identity; refusing cleanup"
     );
     ensure!(
         state.config.parent() == Some(runtime.as_path())
