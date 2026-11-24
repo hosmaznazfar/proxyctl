@@ -12,6 +12,23 @@ use super::{
     route_policy::{PlannedRoute, PlannedRule, RoutingPolicyPlan},
 };
 
+#[derive(Debug)]
+pub(crate) struct MutationNotApplied;
+
+impl std::fmt::Display for MutationNotApplied {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("kernel mutation was not transmitted")
+    }
+}
+
+impl std::error::Error for MutationNotApplied {}
+
+fn is_mutation_not_applied(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .any(|cause| cause.downcast_ref::<MutationNotApplied>().is_some())
+}
+
 /// Operations are ordered so policy is installed only after the TUN device exists and is up.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApplyStep {
@@ -256,6 +273,10 @@ fn apply_with_device_mode<B: KernelTransactionBackend>(
         for route in &ordered_routes {
             let fingerprint = match backend.add_owned_route(activation_id, route) {
                 Ok(fingerprint) => fingerprint,
+                Err(error) if is_mutation_not_applied(&error) => {
+                    return Err(error)
+                        .context("route add was rejected before transmission; rollback is safe");
+                }
                 Err(error) => {
                     ambiguous_mutation_error = true;
                     return Err(error)
@@ -274,6 +295,10 @@ fn apply_with_device_mode<B: KernelTransactionBackend>(
         for rule in &ordered_rules {
             let fingerprint = match backend.add_owned_rule(activation_id, rule) {
                 Ok(fingerprint) => fingerprint,
+                Err(error) if is_mutation_not_applied(&error) => {
+                    return Err(error)
+                        .context("rule add was rejected before transmission; rollback is safe");
+                }
                 Err(error) => {
                     ambiguous_mutation_error = true;
                     return Err(error)
