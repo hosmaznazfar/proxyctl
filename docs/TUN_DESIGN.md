@@ -1689,3 +1689,8 @@ The internal supervisor subcommand now declares its exact parser token (`__tun-s
 The version-1 launch specification now has a stream reader for the hidden same-executable supervisor entry point. It reads at most 16 KiB plus one detection byte, rejects empty or oversized input, and passes the complete bounded payload through the existing strict JSON decoder. The decoder continues to reject unknown fields, unsupported versions, zero node IDs, and zero listener ports. Reading through EOF ensures the protocol does not leave trailing bytes for another parser.
 
 This transport is not yet a launch protocol: the supervisor does not resolve node data, open the database, trust caller-supplied paths, launch a core, create runtime state, or mutate networking. The next dispatch integration may validate the received document and then stop explicitly. Root-side configuration generation, executable trust checks, process ownership, and lifecycle handling remain separate security gates.
+
+
+### Supervisor input dispatch boundary
+
+The hidden `__tun-supervisor` command now enforces the root check before reading input, rejects an interactive terminal as its input source, and reads the launch document from standard input through the bounded reader. A valid document is decoded and validated, after which the command exits with an explicit not-implemented error. Invalid, empty, oversized, malformed, or terminal-backed input fails before any privileged operation. The validated fields are intentionally not acted upon yet; this stage still performs no database access, core execution, runtime-file creation, or network mutation.
