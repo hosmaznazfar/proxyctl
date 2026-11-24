@@ -1177,6 +1177,13 @@ mod tests {
         assert!(error.contains("not the loopback activation path"));
     }
 
+    #[test]
+    fn new_tun_activation_stays_fail_closed_during_supervisor_migration() {
+        let error = ensure_tun_session_backend_ready().unwrap_err().to_string();
+        assert!(error.contains("single-executable supervisor migration"));
+        assert!(error.contains("existing generations"));
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn managed_process_uses_unified_proxyctl_argv0_without_changing_executable() {
