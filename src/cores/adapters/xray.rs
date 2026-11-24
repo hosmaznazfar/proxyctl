@@ -1,7 +1,7 @@
 use std::{path::Path, process::Command};
 
 use anyhow::ensure;
-use serde_json::json;
+use serde_json::json;\nuse sha2::{Digest, Sha256};
 
 use crate::{
     cores::CoreId,
@@ -343,62 +343,84 @@ impl CoreAdapter for XrayAdapter {
     }
 }
 
-fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'static str {
-    // Xray's "run -test" command calls startXray(): it loads and builds the
-    // configuration, but deliberately does not start the server. Classify the
-    // innermost known failure stage before the generic "failed to load config
-    // files" wrapper. Never include the original diagnostic: it can contain
-    // proxy credentials, hostnames, paths, or other user configuration.
+fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> String {
+    // Xray's "run -test" command loads and builds configuration without starting
+    // the server. Keep its potentially sensitive output private, but attach stream
+    // sizes and a stable digest so an opaque failure can be correlated precisely.
     let diagnostic = format!(
         "{} {}",
         String::from_utf8_lossy(stdout),
         String::from_utf8_lossy(stderr)
     )
     .to_ascii_lowercase();
-
-    if diagnostic.contains("unknown field")
+    let stage = if diagnostic.trim().is_empty() {
+        "Xray exited unsuccessfully without writing a diagnostic"
+    } else if diagnostic.contains("unknown field")
         || diagnostic.contains("unknown config field")
         || diagnostic.contains("unknown configuration field")
     {
-        "Xray rejected an unrecognized configuration field; raw diagnostics withheld"
-    } else if diagnostic.contains("failed to load inbound detour config for protocol tun")
+        "Xray rejected an unrecognized configuration field"
+    } else if diagnostic.contains("protocol tun")
+        || diagnostic.contains("tun inbound")
+        || diagnostic.contains("inbound detour config for protocol tun")
         || diagnostic.contains("failed to build inbound handler for protocol tun")
-        || diagnostic.contains("protocol tun")
     {
-        "Xray failed while loading or building the TUN inbound configuration; raw diagnostics withheld"
-    } else if diagnostic.contains("failed to load inbound detour config for protocol mixed")
-        || diagnostic.contains("failed to build inbound handler for protocol mixed")
-        || diagnostic.contains("protocol mixed")
+        "Xray failed while loading or building the TUN inbound configuration"
+    } else if diagnostic.contains("protocol mixed")
+        || diagnostic.contains("mixed inbound")
         || diagnostic.contains("failed to build inbound")
         || diagnostic.contains("invalid inbound")
     {
-        "Xray rejected the loopback mixed HTTP/SOCKS inbound; raw diagnostics withheld"
+        "Xray rejected the loopback mixed HTTP/SOCKS inbound"
+    } else if diagnostic.contains("failed to build sockopt")
+        || diagnostic.contains("sockopt")
+        || diagnostic.contains("socket option")
+    {
+        "Xray rejected the proxy outbound socket options"
     } else if diagnostic.contains("failed to build outbound")
         || diagnostic.contains("failed to load outbound detour config")
         || diagnostic.contains("invalid outbound")
+        || diagnostic.contains("outbound handler")
     {
-        "Xray rejected the proxy outbound configuration; raw diagnostics withheld"
-    } else if diagnostic.contains("failed to build sockopt") || diagnostic.contains("sockopt") {
-        "Xray rejected the proxy outbound socket options; raw diagnostics withheld"
+        "Xray rejected the proxy outbound configuration"
     } else if diagnostic.contains("reality") {
-        "Xray rejected the proxy REALITY settings; raw diagnostics withheld"
+        "Xray rejected the proxy REALITY settings"
     } else if diagnostic.contains("tls") || diagnostic.contains("certificate") {
-        "Xray rejected the proxy TLS or certificate settings; raw diagnostics withheld"
+        "Xray rejected the proxy TLS or certificate settings"
     } else if diagnostic.contains("failed to parse")
         || diagnostic.contains("invalid character")
         || diagnostic.contains("unexpected end of json")
         || diagnostic.contains("invalid json")
+        || diagnostic.contains("json syntax")
     {
-        "Xray could not parse the generated JSON configuration; raw diagnostics withheld"
+        "Xray could not parse the generated JSON configuration"
     } else if diagnostic.contains("failed to create server") {
-        "Xray parsed the configuration but failed while constructing its server; raw diagnostics withheld"
+        "Xray parsed the configuration but failed while constructing its server"
     } else if diagnostic.contains("failed to load config files")
         || diagnostic.contains("failed to load config")
+        || diagnostic.contains("failed to build config")
     {
-        "Xray failed while loading or building the generated configuration; raw diagnostics withheld"
+        "Xray failed while loading or building the generated configuration"
     } else {
-        "Xray returned a configuration validation error; raw diagnostics withheld"
-    }
+        "Xray returned an unclassified configuration validation error"
+    };
+
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(stdout);
+    hasher.update([0]);
+    hasher.update(stderr);
+    let digest = hasher.finalize();
+    let fingerprint = digest[..8]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+
+    format!(
+        "{stage}; captured stdout={} bytes, stderr={} bytes; diagnostic fingerprint=sha256:{fingerprint}; raw diagnostics withheld",
+        stdout.len(),
+        stderr.len()
+    )
 }
 
 #[cfg(test)]
