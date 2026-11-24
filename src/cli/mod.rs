@@ -545,7 +545,7 @@ fn selected_ids(path: &std::path::Path, selectors: &[String]) -> anyhow::Result<
 
 #[cfg(test)]
 mod tests {
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
 
     use super::{Cli, Command, TunCommand, display_core_version};
 
