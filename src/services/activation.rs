@@ -150,15 +150,17 @@ pub fn activate(
     core: CoreId,
     tun_enabled: bool,
     port_override: Option<u16>,
+    foreground: bool,
 ) -> anyhow::Result<()> {
     ensure_tun_mode_disabled(tun_enabled)?;
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (node_id, core, tun_enabled, port_override);
+        let _ = (node_id, core, tun_enabled, port_override, foreground);
         anyhow::bail!("activation currently requires Linux process-identity support");
     }
     #[cfg(target_os = "linux")]
     {
+        let foreground_child = {
         let (runtime, state_path) = paths()?;
         let _lock = RuntimeLock::acquire(&runtime)?;
         let db = NodeDatabase::open(default_database_path()?)?;
@@ -258,7 +260,17 @@ pub fn activate(
                 port,
                 command,
                 WAIT,
-            )?;
+                foreground,
+            )?
+        };
+        if let Some(mut child) = foreground_child {
+            let status = child.wait().context("could not wait for the foreground proxy core")?;
+            finish_foreground(&state_path_for_current_user()?, child.id(), status.success())?;
+            if !status.success() {
+                anyhow::bail!("foreground {core} process exited with status {status}");
+            }
+            println!("Foreground {core} process exited successfully.");
+            return Ok(());
         }
         println!("Activated node #{node_id} with {core}.");
         println!(
@@ -276,6 +288,12 @@ pub fn activate(
         }
         Ok(())
     }
+}
+
+/// Resolve the current user's activation state path after foreground ownership was released.
+#[cfg(target_os = "linux")]
+fn state_path_for_current_user() -> anyhow::Result<PathBuf> {
+    Ok(paths()?.1)
 }
 
 /// Stop the selected core before setup/update replaces its managed executable.
@@ -425,7 +443,8 @@ fn launch_managed(
     port: u16,
     mut command: Command,
     timeout: Duration,
-) -> anyhow::Result<()> {
+    foreground: bool,
+) -> anyhow::Result<Option<std::process::Child>> {
     ensure!(
         executable.starts_with(managed_root),
         "refusing to run a core outside Proxyctl's managed directory"
@@ -443,10 +462,11 @@ fn launch_managed(
         return Err(error);
     }
     configure_process_identity(&mut command);
+    let output = if foreground { Stdio::inherit() } else { Stdio::null() };
     let mut child = match command
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(output)
+        .stderr(if foreground { Stdio::inherit() } else { Stdio::null() })
         .spawn()
     {
         Ok(child) => child,
@@ -485,12 +505,17 @@ fn launch_managed(
         return Err(error);
     }
     // Persist ownership before readiness checks so failure can safely stop this exact process.
-    drop(child);
     if let Err(error) = await_listener(pid, start_ticks, port, timeout) {
         let _ = stop_locked(runtime, state_path, managed_root);
+        let _ = child.wait();
         return Err(error);
     }
-    Ok(())
+    if foreground {
+        Ok(Some(child))
+    } else {
+        drop(child);
+        Ok(None)
+    }
 }
 
 /// Activate one managed Xray node through the generation-bound broker TUN lifecycle.
@@ -910,6 +935,40 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
     fs::remove_file(state_path)?;
     Ok(())
 }
+/// Clear foreground state only when it still belongs to the exact process we waited for.
+#[cfg(target_os = "linux")]
+fn finish_foreground(state_path: &Path, pid: u32, exit_success: bool) -> anyhow::Result<()> {
+    let (runtime, expected_state_path) = paths()?;
+    ensure!(
+        state_path == expected_state_path,
+        "foreground activation state path changed; refusing cleanup"
+    );
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    let bytes = fs::read(state_path)
+        .context("foreground core exited but its activation state is missing; inspect status")?;
+    let state: ActiveProcess = serde_json::from_slice(&bytes)
+        .context("foreground activation state is corrupt; refusing cleanup")?;
+    ensure!(
+        state.pid == pid && state.tun.is_none() && state.start_ticks > 0,
+        "foreground activation state no longer belongs to the waited process; refusing cleanup"
+    );
+    ensure!(
+        state.config.parent() == Some(runtime.as_path())
+            && state.config.file_name().is_some_and(|name| name.to_string_lossy().starts_with("active-")),
+        "foreground config path is outside the private runtime directory; refusing cleanup"
+    );
+    ensure!(
+        !matches_process(state.pid, &state.executable, state.start_ticks),
+        "foreground process still matches its recorded identity; refusing to remove its state"
+    );
+    fs::remove_file(&state.config).context("could not remove exited foreground core config")?;
+    fs::remove_file(state_path).context("could not remove exited foreground activation state")?;
+    if !exit_success {
+        eprintln!("The foreground core exited unsuccessfully; its exact stale state was cleaned.");
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 fn private_dir(path: &Path) -> anyhow::Result<()> {
     use std::os::unix::fs::PermissionsExt;
