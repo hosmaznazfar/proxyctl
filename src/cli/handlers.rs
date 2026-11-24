@@ -24,9 +24,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        Command::Tun {
-            command: TunCommand::Status,
-        } => {
+        Command::Tun { command } => {
+            match command {
+                TunCommand::Start { .. } | TunCommand::Stop => {
+                    anyhow::bail!("TUN session start/stop is not yet implemented; activation remains fail-closed during the supervisor migration");
+                }
+                TunCommand::Status => {}
+            }
             crate::tun::inspect()?.print();
             let manager = crate::tun::service_manager::ServiceManager::detect();
             let backend = crate::tun::recovery::RecoveryBackendKind::for_manager(manager);
