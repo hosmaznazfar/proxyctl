@@ -118,7 +118,7 @@ SUPERVISOR_STAGING=
 trap - EXIT HUP INT TERM
 
 echo "Installed $DESTINATION with only cap_net_admin=ep."
-echo "Installed $CORE_LAUNCHER_DESTINATION without file capabilities; it receives CAP_NET_ADMIN only from its constrained systemd unit."
+echo "Installed $CORE_LAUNCHER_DESTINATION without file capabilities; the Xray service and core run with an empty capability set."
 echo "Installed $SUPERVISOR_DESTINATION without file capabilities."
 echo "The helper supports the read-only --socket mode and persistent typed --mutation-socket mode."
 echo "Start the mutation mode explicitly with: /usr/libexec/proxyctl-tun-helper --mutation-socket PATH"
