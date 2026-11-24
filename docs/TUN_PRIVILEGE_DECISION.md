@@ -91,13 +91,13 @@ Proxyctl intentionally improves the handoff and lifecycle boundaries:
 The repository currently has:
 
 - a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-1 launch specification, and then deliberately exits as not implemented;
-- a version-1 request containing node ID, core enum, and listener port, but not yet the generated configuration payload;
+- a version-2 request containing node ID, core enum, listener port, and the generated native configuration as bounded JSON data;
 - user-owned managed core binaries under the private data directory;
 - TUN adapters with different native device-attachment contracts;
 - offline manifest/journal, route/rule mutation, cleanup, and readiness groundwork;
 - a closed TUN activation gate.
 
-The existing launch specification is therefore only a bootstrap transport test. It is not yet the accepted final request contract. The next implementation slice must revise the request to carry the already-generated configuration (with a separately justified byte limit), remove the privileged need to resolve the node ID from redb, and add tests for the exact request/credential boundary. No core launch, root runtime creation, or host network mutation is part of this documentation decision.
+The current version-2 launch specification now carries the already-generated configuration as a JSON string, rejects non-object or invalid JSON documents, enforces a 1 MiB configuration limit, and allows a bounded wire envelope sized for JSON string escaping. This removes any need for the privileged process to open redb or reconstruct the node from its ID. The hidden supervisor still only validates the request and exits as not implemented. The next implementation slice must connect the unprivileged activation path to this request, then add the invoking-UID and root-runtime boundaries. No core launch, root runtime creation, or host network mutation is part of this contract change.
 
 ## Non-goals
 
