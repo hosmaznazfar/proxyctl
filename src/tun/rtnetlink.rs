@@ -40,6 +40,27 @@ const NLM_F_CREATE: u16 = 0x400;
 const NLM_F_DUMP: u16 = 0x300;
 
 #[derive(Debug)]
+pub(crate) struct NetlinkRequestNotSent;
+
+impl std::fmt::Display for NetlinkRequestNotSent {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("NETLINK_ROUTE request was rejected before transmission")
+    }
+}
+
+impl std::error::Error for NetlinkRequestNotSent {}
+
+pub(crate) fn mark_request_not_sent(error: anyhow::Error) -> anyhow::Error {
+    error.context(NetlinkRequestNotSent)
+}
+
+pub(crate) fn is_request_not_sent(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .any(|cause| cause.downcast_ref::<NetlinkRequestNotSent>().is_some())
+}
+
+#[derive(Debug)]
 pub(crate) struct RouteNetlink {
     fd: OwnedFd,
     sequence: u32,
@@ -129,7 +150,7 @@ impl RouteNetlink {
     /// Send one already-encoded request and collect its matching multipart response.
     /// Callers must not expose arbitrary caller-provided bytes across the privilege boundary.
     pub(crate) fn transact(&mut self, request: &[u8], timeout: Duration) -> Result<Vec<Vec<u8>>> {
-        validate_request(request)?;
+        validate_request(request).map_err(mark_request_not_sent)?;
         ensure!(!timeout.is_zero(), "NETLINK_ROUTE timeout must be positive");
         self.sequence = self
             .sequence
