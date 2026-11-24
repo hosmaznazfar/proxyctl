@@ -46,6 +46,10 @@ A live sing-box TUN run was associated with loss of internet connectivity. Revie
 
 TUN activation remains rejected before process start, privilege escalation, or network mutation. `proxyctl tun status` remains read-only. Ordinary loopback activation, setup, updates, and benchmarks must not change interfaces, routes, policy rules, DNS, resolver configuration, or firewall state.
 
+## Legacy launcher retirement during supervisor migration
+
+The obsolete TUN start/preflight implementation for the former helper plus transient-systemd launch model has been removed from the active runtime module. The compatibility code now contains only the inspection and exact-stop/recovery operations needed by already-persisted legacy generations. This does not enable new TUN activation, alter existing network resources, or change the selected single-executable root-session architecture. New TUN activation remains fail-closed until that architecture is implemented and validated.
+
 ## Legacy activation-state recovery
 
 Older development and TUN experiments could leave the ordinary activation state file pointing at a transient systemd unit after the core had never published a PID. That record is not an exact ownership manifest. Normal loopback activation must not be blocked forever by unrelated host changes such as Docker bridge removal, but it must not guess which route or interface to delete.
