@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 #[cfg(target_os = "linux")]
-use std::{io::Read, os::unix::process::CommandExt};
+use std::os::unix::process::CommandExt;
 #[cfg(target_os = "linux")]
 use tun_runtime::*;
 
