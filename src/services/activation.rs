@@ -12,6 +12,8 @@ mod tun_runtime;
 #[cfg(target_os = "linux")]
 use identity::*;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -22,8 +24,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-#[cfg(target_os = "linux")]
-use std::os::unix::process::CommandExt;
 #[cfg(target_os = "linux")]
 use tun_runtime::*;
 

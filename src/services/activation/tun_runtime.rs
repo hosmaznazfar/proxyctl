@@ -55,10 +55,7 @@ pub(super) fn find_program(name: &str) -> anyhow::Result<PathBuf> {
     anyhow::bail!("required utility {name} was not found in PATH")
 }
 
-pub(super) fn systemd_property(
-    context: &TunStopContext,
-    property: &str,
-) -> anyhow::Result<String> {
+pub(super) fn systemd_property(context: &TunStopContext, property: &str) -> anyhow::Result<String> {
     let output = Command::new(&context.sudo)
         .args(["-n", "--"])
         .arg(&context.systemctl)
