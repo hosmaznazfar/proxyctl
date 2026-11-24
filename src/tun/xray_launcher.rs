@@ -216,8 +216,10 @@ pub fn spawn_xray_from_broker(
         .arg(format!("--property=Group={gid}"))
         .args([
             "--property=Type=exec",
-            "--property=CapabilityBoundingSet=CAP_NET_ADMIN",
-            "--property=AmbientCapabilities=CAP_NET_ADMIN",
+            // The broker creates/configures the TUN device and passes its already-open fd.
+            // Xray only performs packet I/O; it must not receive network-administration caps.
+            "--property=CapabilityBoundingSet=",
+            "--property=AmbientCapabilities=",
             "--property=NoNewPrivileges=yes",
             "--property=KillMode=control-group",
             "--property=KillSignal=SIGTERM",
@@ -581,7 +583,6 @@ fn run_bounded_command_status(
 }
 
 fn verify_xray_capability_boundary(identity: &ProcessIdentity, expected_uid: u32) -> Result<()> {
-    const CAP_NET_ADMIN: u64 = 1 << 12;
     let status = fs::read_to_string(format!("/proc/{}/status", identity.pid))
         .context("cannot inspect managed Xray capability state")?;
     let field = |name: &str| {
@@ -602,8 +603,8 @@ fn verify_xray_capability_boundary(identity: &ProcessIdentity, expected_uid: u32
     for name in ["CapEff:", "CapPrm:", "CapBnd:", "CapInh:", "CapAmb:"] {
         let value = field(name).context("managed Xray capability status is incomplete")?;
         ensure!(
-            u64::from_str_radix(value, 16)? == CAP_NET_ADMIN,
-            "managed Xray must have exactly CAP_NET_ADMIN in its effective, permitted, bounding, and ambient sets"
+            u64::from_str_radix(value, 16)? == 0,
+            "managed Xray must have an empty effective, permitted, bounding, inheritable, and ambient capability set"
         );
     }
     ensure!(
