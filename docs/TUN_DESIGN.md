@@ -1521,3 +1521,11 @@ The helper's capability-status parser already has automated coverage for the exa
 ### Xray TUN inbound schema validation correction (2026-11-24)
 
 The generated Xray TUN inbound explicitly sets `port: 0`, matching Xray-core v26.11.9's upstream TUN configuration example, which requires an inbound port field even though the TUN inbound does not listen on a conventional TCP/UDP port. The adapter's contract test asserts the zero port. This correction addresses a schema discrepancy identified during validation-failure investigation; it does not certify activation, readiness, or host mutation safety. Local formatting, Clippy, and test validation are pending.
+
+### Xray 26.11.9 validation-stage semantics and diagnostics (2026-11-24)
+
+Proxyctl validates its generated Xray TUN document with `xray run -test -c <file>`. In Xray 26.11.9, this command calls `startXray`, which loads the configuration and constructs the core instance; it returns before `server.Start()`. Consequently, a failure from this command is a configuration-load or core-construction failure. It must not be described as a TUN device-open, descriptor-adoption, interface-permission, route, or readiness failure: those operations occur later during runtime startup.
+
+The Xray adapter now classifies known failure stages separately: TUN inbound configuration, loopback mixed inbound, proxy outbound, socket options, TLS/REALITY, JSON parsing, and core construction/config loading. It emits only fixed allowlisted summaries. Raw Xray output remains withheld because it can include node credentials, server addresses, configuration paths, and other private values. An unrecognized diagnostic retains a generic validation-error summary rather than guessing a cause.
+
+This diagnostic improvement does not claim that the currently observed TUN config-load failure is fixed. The exact underlying cause can only be selected once the new stage-specific summary identifies the failing Xray build path. The adapter's JSON contract tests alone do not substitute for validation by the managed Xray 26.11.9 binary.
