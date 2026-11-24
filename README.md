@@ -222,7 +222,28 @@ It reports Linux network interfaces, detected TUN/TAP devices, IPv4/IPv6 default
 
 The status command never creates or deletes interfaces, changes routes, alters DNS, modifies firewall rules, starts a proxy core, or requests elevated privileges.
 
-TUN inspection through `proxyctl tun status` is read-only. The explicit `proxyctl use NODE --core xray --tun` path is available for controlled Linux/CachyOS validation only; it is experimental and not production-approved. It requires the packaged helper bundle, a working systemd user manager with lingering enabled, and an HTTP readiness endpoint that resolves to both IPv4 and IPv6. The service now requires one successful TUN-routed HTTP probe per address family before committing activation. sing-box and Mihomo TUN activation remain disabled. Automatic recovery is implemented only for systemd; unsupported service managers fail closed.
+TUN inspection through `proxyctl tun status` is read-only. The intended session interface is:
+
+~~~sh
+# Start or switch the active node into TUN mode (requires sudo authorization).
+proxyctl tun start
+
+# Return the active node to ordinary loopback proxy mode.
+proxyctl tun stop
+
+# The same transition can be requested directly during activation.
+proxyctl use NODE --core xray --tun
+
+# Inspect the managed session and its mode.
+proxyctl status
+
+# Stop either mode.
+proxyctl stop
+~~~
+
+Both ordinary and TUN sessions are backgrounded by default. `proxyctl use NODE --core CORE --foreground` is the explicit foreground/debugging form. `tun start` switches the currently active node/core into TUN mode; it does not select a different node. `tun stop` returns that same node/core to ordinary loopback mode, while `stop` stops the managed session entirely. The `use --tun` flag remains a shortcut for selecting a node and starting it directly in TUN mode.
+
+The target privilege boundary follows the v2rayN-style TUN-only elevation model: ordinary Proxyctl operation and loopback cores remain unprivileged; starting TUN requests root authorization for the TUN session only. The privileged background owner is the same Proxyctl executable, not a separately installed helper package, daemon, launcher, or supervisor binary. No setuid bit or permanent file capabilities are used. This command and privilege model is being implemented incrementally; it does not imply that the current TUN backend is production-ready or that every core/init manager is supported. At this stage Xray remains the only experimental native TUN adapter, and the default activation gate remains closed pending the documented kernel-side-effect assessment and real-host validation.
 
 Cleanup removes policy rules first, then releases the exact generation-owned TUN descriptor or persistent device. Linux removes routes attached to that device during netdevice unregister; Proxyctl verifies their absence afterwards and never issues a direct route delete. A surviving route is preserved as a conflict. Policy-rule removal remains a typed protocol-tagged selector operation, not a full canonical-fingerprint compare-and-delete against every possible rule attribute. IPv4 device unregister can trigger a namespace-wide dead-route flush and can remove an entire IPv4 multipath route if any nexthop references the TUN, even when alternate nexthops exist; the namespace test has reproduced the multipath-route side effect, but the broader host impact and namespace-wide dead-route flush still require explicit assessment before activation. The namespace regression script is `tests/tun-link-cleanup-netns.sh`; run it with `sudo sh tests/tun-link-cleanup-netns.sh`. It requires root, iproute2, TUN support, and IPv6 support.
 
