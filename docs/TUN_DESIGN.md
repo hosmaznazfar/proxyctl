@@ -1529,3 +1529,13 @@ Proxyctl validates its generated Xray TUN document with `xray run -test -c <file
 The Xray adapter now classifies known failure stages separately: TUN inbound configuration, loopback mixed inbound, proxy outbound, socket options, TLS/REALITY, JSON parsing, and core construction/config loading. It emits only fixed allowlisted summaries. Raw Xray output remains withheld because it can include node credentials, server addresses, configuration paths, and other private values. An unrecognized diagnostic retains a generic validation-error summary rather than guessing a cause.
 
 This diagnostic improvement does not claim that the currently observed TUN config-load failure is fixed. The exact underlying cause can only be selected once the new stage-specific summary identifies the failing Xray build path. The adapter's JSON contract tests alone do not substitute for validation by the managed Xray 26.11.9 binary.
+
+## Xray native configuration validation diagnostics
+
+Xray TUN activation validates its generated native configuration before the broker prepares any interface, route, policy rule, or other host resource. A validation failure therefore means the core rejected the document before TUN activation begins; it is not evidence of a kernel, broker, descriptor-transfer, or readiness failure.
+
+The validator reports the narrowest recognizable component stage: JSON parsing, TUN inbound construction, loopback mixed inbound construction, proxy outbound construction, outbound socket options, TLS/REALITY settings, or server construction. The nested component is classified before generic configuration-loader wrappers so that the useful inner failure is not hidden by Xray's outer error.
+
+Raw Xray stdout/stderr are deliberately not printed because diagnostics may contain proxy credentials, hostnames, addresses, and private paths. Every validation failure instead includes captured stdout/stderr byte counts and a SHA-256 diagnostic fingerprint. The fingerprint lets maintainers correlate repeated failures without exposing the diagnostic itself. An empty-output failure is reported separately from an unrecognized non-empty diagnostic; the latter is explicitly labelled unclassified rather than guessed.
+
+If a failure is unclassified, use the fingerprint and byte counts when reporting it. Do not infer that a particular generated field is invalid from the exit status alone. Validation still happens before broker-owned TUN resource preparation, and the safety gate must not be bypassed to obtain more verbose core logs.
