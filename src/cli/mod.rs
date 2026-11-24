@@ -337,7 +337,7 @@ enum Command {
         apply: bool,
     },
     /// Internal privileged TUN supervisor entry point.
-    #[command(hide = true)]
+    #[command(name = "__tun-supervisor", hide = true)]
     __TunSupervisor,
 
     /// Inspect Linux networking state without changing it.
