@@ -1589,3 +1589,8 @@ Acknowledgements are checked against the exact outstanding request header rather
 A request rejected by local request validation or socket setup is explicitly marked as not transmitted. The journal backend resolves that operation intent as absent, and the transaction coordinator can safely roll back earlier completed steps. Failures after transmission remain ambiguous: their journal is retained for exact recovery and no speculative rollback is attempted. The distinction is covered by regression tests for route, rule, and interface-alias request forms, exact ACK matching, and safe rollback of known-unsent operations.
 
 These are source-level corrections. They require maintainer-local formatting, Clippy, the full test suite, and the existing namespace/host integration checks. They do not authorize bypassing recovery of an already-retained journal or skipping the end-to-end readiness gate.
+
+
+### Linux route-message header field offsets (2026-11-24)
+
+The typed default-route encoder follows the Linux `struct rtmsg` byte layout exactly: `rtm_family` at offset 0, destination/source prefix lengths at offsets 1–2, TOS at 3, table at 4, protocol at 5, scope at 6, route type at 7, and flags at 8–11. Proxyctl uses the `RTA_TABLE` attribute for dedicated table IDs outside the one-byte `rtm_table` field, leaving that header byte zero. The locally assigned Proxyctl route-protocol marker is written only to offset 5. A regression test exercises the same route-payload builder used by the live mutation path and pins all relevant offsets, including the unicast route type. This corrects a malformed route request that the kernel rejected with `EINVAL`; it does not reconcile any already-retained activation journal or establish end-to-end TUN readiness.
