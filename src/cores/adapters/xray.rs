@@ -369,7 +369,7 @@ fn detailed_validation_output(stdout: &[u8], stderr: &[u8]) -> String {
         }
     }
 
-    format!("stdout:\\n{}\\nstderr:\\n{}", excerpt(stdout), excerpt(stderr))
+    format!("stdout:\n{}\nstderr:\n{}", excerpt(stdout), excerpt(stderr))
 }
 
 fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> String {
@@ -458,8 +458,8 @@ mod validation_diagnostic_tests {
     #[test]
     fn detailed_diagnostics_include_both_streams_and_are_bounded() {
         let output = super::detailed_validation_output(b"field: bad value", b"decoder failed");
-        assert!(output.contains("stdout:\\nfield: bad value"));
-        assert!(output.contains("stderr:\\ndecoder failed"));
+        assert!(output.contains("stdout:\nfield: bad value"));
+        assert!(output.contains("stderr:\ndecoder failed"));
 
         let oversized = vec![b'x'; 9 * 1024];
         let output = super::detailed_validation_output(&oversized, b"");
