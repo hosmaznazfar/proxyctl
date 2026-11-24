@@ -298,6 +298,11 @@ impl CoreAdapter for XrayAdapter {
                     "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
                     "autoSystemRoutingTable": [], "autoOutboundsInterface": "auto",
                     "autoSystemDnsToGateway": false
+                },
+                "sniffing": {
+                    "enabled": true,
+                    "destOverride": ["http", "tls"],
+                    "routeOnly": true
                 }
             }));
         let outbounds = document
@@ -633,6 +638,12 @@ mod config_contract_tests {
             tun["inbounds"][1]["settings"]["autoSystemDnsToGateway"],
             false
         );
+        assert_eq!(tun["inbounds"][1]["sniffing"]["enabled"], true);
+        assert_eq!(
+            tun["inbounds"][1]["sniffing"]["destOverride"],
+            serde_json::json!(["http", "tls"])
+        );
+        assert_eq!(tun["inbounds"][1]["sniffing"]["routeOnly"], true);
 
         assert_eq!(
             tun["outbounds"][0]["streamSettings"]["sockopt"]["mark"],
