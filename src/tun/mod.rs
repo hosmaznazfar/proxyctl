@@ -16,13 +16,13 @@ pub mod broker_transport;
 #[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
 pub mod egress_probe;
-pub mod launch_spec;
 pub mod journal;
 pub mod journal_recovery_executor;
 pub mod journal_store;
 pub mod kernel_backend;
 pub mod kernel_inventory;
 pub mod kernel_transaction;
+pub mod launch_spec;
 pub mod lifecycle_coordinator;
 #[cfg(target_os = "linux")]
 pub mod linux_journal_backend;
