@@ -26,7 +26,7 @@ const RTN_UNICAST: u8 = 1;
 const FR_ACT_TO_TBL: u8 = 1;
 fn set_proxyctl_route_protocol(header: &mut [u8]) -> Result<()> {
     ensure!(header.len() >= 8, "route header is truncated");
-    header[4] = RTPROT_PROXYCTL;
+    header[5] = RTPROT_PROXYCTL;
     Ok(())
 }
 
@@ -112,9 +112,8 @@ pub fn add_route(route: &PlannedRoute) -> Result<()> {
     let mut p = vec![0u8; 12];
     p[0] = family(route.family);
     set_proxyctl_route_protocol(&mut p)?;
-    p[5] = RT_SCOPE_UNIVERSE;
-    p[6] = RTN_UNICAST;
-    p[7] = 0;
+    p[6] = RT_SCOPE_UNIVERSE;
+    p[7] = RTN_UNICAST;
     let mut attrs = Vec::new();
     attr(RTA_OIF, &route.interface_index.to_ne_bytes(), &mut attrs)?;
     attr(RTA_TABLE, &route.table_id.to_ne_bytes(), &mut attrs)?;
@@ -196,8 +195,33 @@ mod interface_alias_tests {
     fn proxyctl_route_protocol_marker_is_written_to_route_header() {
         let mut header = [0u8; 12];
         set_proxyctl_route_protocol(&mut header).unwrap();
-        assert_eq!(header[4], 99);
+        assert_eq!(header[5], RTPROT_PROXYCTL);
+        assert_eq!(header[4], 0, "rtm_table uses the extended RTA_TABLE attribute");
         assert!(set_proxyctl_route_protocol(&mut header[..4]).is_err());
+    }
+
+    #[test]
+    fn default_route_payload_uses_linux_rtmsg_field_offsets() {
+        let route = PlannedRoute {
+            family: AddressFamily::Ipv4,
+            destination: AddressFamily::Ipv4.default_prefix(),
+            table_id: 10_000,
+            interface_index: 7,
+            route_type: RouteType::Unicast,
+        };
+        let mut payload = vec![0u8; 12];
+        payload[0] = family(route.family);
+        set_proxyctl_route_protocol(&mut payload).unwrap();
+        payload[6] = RT_SCOPE_UNIVERSE;
+        payload[7] = RTN_UNICAST;
+        assert_eq!(payload[0], libc::AF_INET as u8, "rtm_family");
+        assert_eq!(payload[1], 0, "rtm_dst_len for default route");
+        assert_eq!(payload[2], 0, "rtm_src_len");
+        assert_eq!(payload[3], 0, "rtm_tos");
+        assert_eq!(payload[4], 0, "rtm_table uses RTA_TABLE for table 10000");
+        assert_eq!(payload[5], RTPROT_PROXYCTL, "rtm_protocol");
+        assert_eq!(payload[6], RT_SCOPE_UNIVERSE, "rtm_scope");
+        assert_eq!(payload[7], RTN_UNICAST, "rtm_type");
     }
 
     #[test]
