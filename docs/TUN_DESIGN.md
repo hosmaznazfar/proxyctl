@@ -115,6 +115,22 @@ This evidence is deliberately narrower than end-to-end readiness: it does not pr
 - The adapter must expose enough information for Proxyctl's route manager to create the correct routes and bypass rule. If a core cannot operate safely with externally managed routing, that core is unsupported in TUN mode.
 - Keep one active core only; do not introduce tun2socks, a second packet engine, or a permanent always-on daemon.
 
+## Xray descriptor-service capability boundary
+
+The Xray transient systemd service runs with an empty capability bounding, effective,
+permitted, inheritable, and ambient set, plus `NoNewPrivileges=yes`. The mutation broker
+alone creates/configures the TUN interface and owns the kernel routes/rules. It passes an
+already-open, caller-owned TUN descriptor to the Xray launcher over the generation-scoped
+Unix socket; the launcher validates the descriptor and Xray only performs packet I/O.
+Neither process needs `CAP_NET_ADMIN` after descriptor creation.
+
+This is also required for reliable process-identity verification. Linux procfs may deny
+an unprivileged same-UID reader access to `/proc/PID/exe` when the target process has
+capabilities absent from the reader. Giving the launcher or Xray `CAP_NET_ADMIN` therefore
+breaks the controller's canonical-executable checks. Do not restore ambient capabilities
+to this service: any future operation that truly requires network administration must be
+performed by the narrowly scoped broker, not by the proxy core.
+
 ## Process identity
 
 Normal activation presents the process as `proxyctl-core` in argv[0] and Linux's short `comm` name where permitted. This is a display identity only. `/proc/PID/exe` remains the canonical upstream binary path and is authoritative for ownership checks. Never fake executable identity or signal processes based only on display names.
