@@ -1598,3 +1598,8 @@ Journal entries record the state of each resource independently; their sequence 
 ### Linux route-message header field offsets (2026-11-24)
 
 The typed default-route encoder follows the Linux `struct rtmsg` byte layout exactly: `rtm_family` at offset 0, destination/source prefix lengths at offsets 1–2, TOS at 3, table at 4, protocol at 5, scope at 6, route type at 7, and flags at 8–11. Proxyctl uses the `RTA_TABLE` attribute for dedicated table IDs outside the one-byte `rtm_table` field, leaving that header byte zero. The locally assigned Proxyctl route-protocol marker is written only to offset 5. A regression test exercises the same route-payload builder used by the live mutation path and pins all relevant offsets, including the unicast route type. This corrects a malformed route request that the kernel rejected with `EINVAL`; it does not reconcile any already-retained activation journal or establish end-to-end TUN readiness.
+
+
+### Linux fib-rule protocol attribute number (2026-11-24)
+
+A host activation reached both IPv4 and IPv6 default-route installation, then the kernel rejected the first policy-rule mutation with `EINVAL`. Inspection found that the typed rule encoder used attribute type 19 for `FRA_PROTOCOL`. In the Linux UAPI `enum fib_rule немного` attribute ordering, type 19 is `FRA_L3MDEV`, while `FRA_PROTOCOL` is type 21. The encoder and its regression assertion now use 21, preserving the one-byte Proxyctl protocol marker. This corrects the policy-rule attribute identifier; maintainer-local formatting, Clippy, tests, and another controlled host activation are still required. Any failed attempt must be recovered through the broker before retrying. Xray TUN remains experimental and not production-approved.
