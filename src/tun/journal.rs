@@ -178,7 +178,6 @@ impl TransactionJournal {
         let mut interface_seen = false;
         let mut rules_started = false;
         let mut unresolved_intent_seen = false;
-        let mut cleanup_started = false;
         for (index, operation) in self.operations.iter().enumerate() {
             match operation.kind {
                 JournalOperationKind::CreateInterface
@@ -248,7 +247,6 @@ impl TransactionJournal {
                     );
                 }
                 JournalOperationState::Removed => {
-                    cleanup_started = true;
                     ensure!(
                         operation
                             .fingerprint
@@ -260,7 +258,6 @@ impl TransactionJournal {
                     );
                 }
                 JournalOperationState::Absent => {
-                    cleanup_started = true;
                     ensure!(
                         operation.fingerprint.is_none(),
                         "absent journal operation cannot contain a fingerprint"
