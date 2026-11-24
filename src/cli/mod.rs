@@ -1000,11 +1000,26 @@ mod tests {
             })
         ));
         let start = Cli::try_parse_from(["proxyctl", "tun", "start"]).unwrap();
-        assert!(matches!(start.command, Some(Command::Tun { command: TunCommand::Start { foreground: false } })));
+        assert!(matches!(
+            start.command,
+            Some(Command::Tun {
+                command: TunCommand::Start { foreground: false }
+            })
+        ));
         let foreground = Cli::try_parse_from(["proxyctl", "tun", "start", "--foreground"]).unwrap();
-        assert!(matches!(foreground.command, Some(Command::Tun { command: TunCommand::Start { foreground: true } })));
+        assert!(matches!(
+            foreground.command,
+            Some(Command::Tun {
+                command: TunCommand::Start { foreground: true }
+            })
+        ));
         let stop = Cli::try_parse_from(["proxyctl", "tun", "stop"]).unwrap();
-        assert!(matches!(stop.command, Some(Command::Tun { command: TunCommand::Stop })));
+        assert!(matches!(
+            stop.command,
+            Some(Command::Tun {
+                command: TunCommand::Stop
+            })
+        ));
         assert!(Cli::try_parse_from(["proxyctl", "tun", "on"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "tun", "off"]).is_err());
     }

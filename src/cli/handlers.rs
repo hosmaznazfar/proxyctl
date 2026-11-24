@@ -27,7 +27,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Tun { command } => {
             match command {
                 TunCommand::Start { .. } | TunCommand::Stop => {
-                    anyhow::bail!("TUN session start/stop is not yet implemented; activation remains fail-closed during the supervisor migration");
+                    anyhow::bail!(
+                        "TUN session start/stop is not yet implemented; activation remains fail-closed during the supervisor migration"
+                    );
                 }
                 TunCommand::Status => {}
             }
