@@ -336,6 +336,10 @@ enum Command {
         #[arg(long, conflicts_with = "dry_run")]
         apply: bool,
     },
+    /// Internal privileged TUN supervisor entry point.
+    #[command(hide = true)]
+    __TunSupervisor,
+
     /// Inspect Linux networking state without changing it.
     Tun {
         #[command(subcommand)]
@@ -988,6 +992,14 @@ mod tests {
             Some(Command::Test { node, .. })
                 if node.iter().map(String::as_str).collect::<Vec<_>>() == vec!["1", "2", "3"]
         ));
+    }
+
+    #[test]
+    fn internal_tun_supervisor_command_is_hidden_and_parses() {
+        assert!(Cli::try_parse_from(["proxyctl", "__tun-supervisor"]).is_ok());
+        let mut command = Cli::command();
+        let help = command.render_help().to_string();
+        assert!(!help.contains("__tun-supervisor"));
     }
 
     #[test]
