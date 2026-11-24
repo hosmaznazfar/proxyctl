@@ -17,7 +17,7 @@ const FRA_PRIORITY: u16 = 6;
 const FRA_FWMARK: u16 = 10;
 const FRA_FWMASK: u16 = 16;
 const FRA_TABLE: u16 = 15;
-const FRA_PROTOCOL: u16 = 19;
+const FRA_PROTOCOL: u16 = 21;
 // Locally assigned protocol marker used to distinguish Proxyctl-owned routes/rules.
 const PROXYCTL_ROUTE_PROTOCOL: u8 = 99;
 const RTPROT_PROXYCTL: u8 = PROXYCTL_ROUTE_PROTOCOL;
@@ -245,7 +245,7 @@ mod interface_alias_tests {
         assert_eq!(FRA_FWMARK, 10);
         assert_eq!(FRA_FWMASK, 16);
         assert_eq!(FRA_TABLE, 15);
-        assert_eq!(FRA_PROTOCOL, 19);
+        assert_eq!(FRA_PROTOCOL, 21);
         let mut mask_attribute = Vec::new();
         attr(FRA_FWMASK, &0xffu32.to_ne_bytes(), &mut mask_attribute).unwrap();
         assert_eq!(
