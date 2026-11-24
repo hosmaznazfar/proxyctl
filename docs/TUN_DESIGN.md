@@ -1660,3 +1660,10 @@ The typed default-route encoder follows the Linux `struct rtmsg` byte layout exa
 ### Linux fib-rule protocol attribute number (2026-11-24)
 
 A host activation reached both IPv4 and IPv6 default-route installation, then the kernel rejected the first policy-rule mutation with `EINVAL`. Inspection found that the typed rule encoder used attribute type 19 for `FRA_PROTOCOL`. In the Linux UAPI fib-rule attribute ordering, type 19 is `FRA_L3MDEV`, while `FRA_PROTOCOL` is type 21. The encoder and its regression assertion now use 21, preserving the one-byte Proxyctl protocol marker. This corrects the policy-rule attribute identifier; maintainer-local formatting, Clippy, tests, and another controlled host activation are still required. Any failed attempt must be recovered through the broker before retrying. Xray TUN remains experimental and not production-approved.
+
+
+## Hidden same-executable supervisor entry point (bootstrap slice)
+
+The CLI now reserves a hidden `__tun-supervisor` subcommand in the installed Proxyctl executable. It is omitted from normal help output, parses as an internal role, and refuses execution unless the effective UID is root. Even as root, this bootstrap currently exits with an explicit not-implemented error before performing any networking or accepting launch data. This is a boundary placeholder only: it does not spawn a core, read configuration, create runtime files, mutate routes, or start a background session.
+
+The next implementation must replace the refusal with a bounded, authenticated launch protocol. It must not treat command-line paths or mutable user-owned config files as privileged instructions, must validate the selected core executable and configuration itself, and must isolate privileged runtime/state from the user's writable data directory. This placeholder is not an activation path and must remain fail-closed until those checks and lifecycle ownership are implemented.
