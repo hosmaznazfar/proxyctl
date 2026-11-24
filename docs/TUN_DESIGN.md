@@ -1,6 +1,6 @@
 # Linux TUN design
 
-> Status: offline journal/manifest, route/rule mutation, cleanup, and readiness groundwork exist. The old runtime implementation still uses a separate helper and systemd service and is not the selected final architecture. The top-level managed-session status command is implemented; TUN start/stop, same-executable privileged supervision, and foreground lifecycle are pending. The default TUN activation gate remains closed.
+> Status: offline journal/manifest, route/rule mutation, cleanup, and readiness groundwork exist. The old runtime implementation still uses a separate helper and systemd service and is not the selected final architecture. The top-level managed-session status command and ordinary loopback foreground lifecycle are implemented; TUN start/stop, same-executable privileged supervision, and TUN foreground lifecycle are pending. The default TUN activation gate remains closed.
 > Scope: Linux kernel networking and a portable detached session owner. The legacy systemd/helper backend is migration input only, not the target design.
 > Goal: keep ordinary proxy sessions unprivileged and elevate only TUN sessions, with one installed Proxyctl executable owning the background core and exact recovery lifecycle.
 
