@@ -76,8 +76,7 @@ impl LaunchSpec {
             "listener port must be between 1024 and 65535"
         );
         ensure!(
-            !self.generated_config.is_empty()
-                && self.generated_config.len() <= MAX_CONFIG_BYTES,
+            !self.generated_config.is_empty() && self.generated_config.len() <= MAX_CONFIG_BYTES,
             "generated configuration size is invalid"
         );
         let document: Value = serde_json::from_str(&self.generated_config)
