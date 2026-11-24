@@ -178,7 +178,6 @@ impl TransactionJournal {
         let mut interface_seen = false;
         let mut rules_started = false;
         let mut unresolved_intent_seen = false;
-        let mut cleanup_started = false;
         for (index, operation) in self.operations.iter().enumerate() {
             match operation.kind {
                 JournalOperationKind::CreateInterface
@@ -239,10 +238,6 @@ impl TransactionJournal {
                         "applied operations cannot follow an unresolved intent"
                     );
                     ensure!(
-                        !cleanup_started,
-                        "applied operations cannot follow journal cleanup progress"
-                    );
-                    ensure!(
                         operation.fingerprint.as_ref().is_some_and(|value| !value
                             .trim()
                             .is_empty()
@@ -252,7 +247,6 @@ impl TransactionJournal {
                     );
                 }
                 JournalOperationState::Removed => {
-                    cleanup_started = true;
                     ensure!(
                         operation
                             .fingerprint
@@ -264,7 +258,6 @@ impl TransactionJournal {
                     );
                 }
                 JournalOperationState::Absent => {
-                    cleanup_started = true;
                     ensure!(
                         operation.fingerprint.is_none(),
                         "absent journal operation cannot contain a fingerprint"
@@ -519,9 +512,11 @@ mod validation_tests {
         // route intent disappeared with that interface. Both states must be persistable.
         value.validate().unwrap();
 
+        // An already-applied route may remain recorded as Applied while cleanup
+        // proceeds in the required rule -> interface -> route order.
         value.operations[1].state = JournalOperationState::Applied;
         value.operations[1].fingerprint = Some("route-fingerprint".into());
-        assert!(value.validate().is_err());
+        value.validate().unwrap();
     }
 
     #[test]
