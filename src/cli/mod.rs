@@ -201,7 +201,7 @@ enum Command {
         /// Override the persistent shared HTTP/SOCKS5 listener port for this activation only.
         #[arg(long, value_name = "PORT")]
         port: Option<u16>,
-        /// Request managed Linux TUN activation (currently supported only by the Xray descriptor backend).
+        /// Request TUN mode (temporarily disabled during the single-executable supervisor migration).
         #[arg(long)]
         tun: bool,
         /// Keep the selected core attached to this terminal instead of backgrounding it.
