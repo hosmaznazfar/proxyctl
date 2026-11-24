@@ -40,7 +40,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 }
             );
             println!(
-                "TUN activation: Xray is wired to the broker-owned descriptor, bounded HTTP dataplane probe, and generation-bound stop/recovery path; runtime validation has not been performed. sing-box/Mihomo remain unsupported pending native-device ownership backends."
+                "New TUN activation: temporarily disabled while migrating away from the legacy helper/systemd launcher to the single-executable privileged session owner."
+            );
+            println!(
+                "Existing TUN generations: legacy manifest/journal inspection and safe stop/recovery remain available."
             );
             return Ok(());
         }
