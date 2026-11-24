@@ -224,9 +224,7 @@ impl TransactionJournal {
             match operation.state {
                 JournalOperationState::Intent => {
                     ensure!(
-                        index + 1 == self.operations.len()
-                            && !unresolved_intent_seen
-                            && !cleanup_started,
+                        index + 1 == self.operations.len() && !unresolved_intent_seen,
                         "only the final journal operation may remain an unresolved intent"
                     );
                     unresolved_intent_seen = true;
@@ -494,6 +492,34 @@ mod validation_tests {
         ]);
         complete.validate().unwrap();
     }
+    #[test]
+    fn journal_allows_final_unresolved_intent_after_earlier_cleanup_progress() {
+        let mut value = journal(vec![
+            operation(
+                0,
+                JournalOperationKind::CreateInterface,
+                "interface:tun-proxyctl",
+            ),
+            operation(
+                1,
+                JournalOperationKind::AddRoute,
+                "route:v4:42420:0.0.0.0/0",
+            ),
+        ]);
+        value.operations[0].state = JournalOperationState::Removed;
+        value.operations[0].fingerprint = Some("interface-fingerprint".into());
+        value.operations[1].state = JournalOperationState::Intent;
+        value.operations[1].fingerprint = None;
+
+        // Recovery tears down the exact interface before it verifies that an ambiguous
+        // route intent disappeared with that interface. Both states must be persistable.
+        value.validate().unwrap();
+
+        value.operations[1].state = JournalOperationState::Applied;
+        value.operations[1].fingerprint = Some("route-fingerprint".into());
+        assert!(value.validate().is_err());
+    }
+
     #[test]
     fn journal_states_follow_apply_then_reverse_cleanup_order() {
         let mut valid = journal(vec![
