@@ -203,7 +203,10 @@ mod interface_alias_tests {
         let mut header = [0u8; 12];
         set_proxyctl_route_protocol(&mut header).unwrap();
         assert_eq!(header[5], RTPROT_PROXYCTL);
-        assert_eq!(header[4], 0, "rtm_table uses the extended RTA_TABLE attribute");
+        assert_eq!(
+            header[4], 0,
+            "rtm_table uses the extended RTA_TABLE attribute"
+        );
         assert!(set_proxyctl_route_protocol(&mut header[..4]).is_err());
     }
 
