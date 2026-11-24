@@ -300,6 +300,45 @@ pub fn stop_if_active_core(core: CoreId) -> anyhow::Result<()> {
     }
 }
 
+/// Display the currently tracked Proxyctl session without mutating runtime or host state.
+pub fn status() -> anyhow::Result<()> {
+    let (runtime, state_path) = paths()?;
+    if !state_path.exists() {
+        let manifest_path = runtime.join("tun-manifest.json");
+        let journal_path = runtime.join("tun-transaction-journal.json");
+        if manifest_path.exists() || journal_path.exists() {
+            println!("Proxyctl session: TUN state requires recovery/inspection.");
+            println!(
+                "Manifest: {}; transaction journal: {}",
+                if manifest_path.exists() { "present" } else { "absent" },
+                if journal_path.exists() { "present" } else { "absent" }
+            );
+            println!("Run 'proxyctl tun status' for read-only host-network details.");
+        } else {
+            println!("No active Proxyctl-managed session.");
+        }
+        return Ok(());
+    }
+
+    let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
+        .context("Proxyctl activation state is corrupt; refusing to infer session ownership")?;
+    let mode = if state.tun.is_some() { "TUN" } else { "loopback proxy" };
+    println!("Proxyctl session: {mode}");
+    println!("Node: #{}", state.node_id);
+    println!("Core: {}", state.core);
+    println!("PID: {}", state.pid);
+    println!("Listener: 127.0.0.1:{}", state.port);
+
+    if state.pid == 0 || state.start_ticks == 0 {
+        println!("Process identity: not yet committed (startup/recovery may be incomplete)");
+    } else if matches_process(state.pid, &state.executable, state.start_ticks) {
+        println!("Process identity: verified");
+    } else {
+        println!("Process identity: no longer matches the recorded process");
+    }
+    Ok(())
+}
+
 pub fn stop() -> anyhow::Result<()> {
     #[cfg(not(target_os = "linux"))]
     anyhow::bail!("activation currently requires Linux process-identity support");
