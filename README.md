@@ -243,7 +243,7 @@ proxyctl status
 proxyctl stop
 ~~~
 
-Ordinary loopback sessions are backgrounded by default. `proxyctl use NODE --core CORE --foreground` keeps the selected core attached to the terminal and returns when that core exits. Foreground activation is currently implemented for ordinary loopback mode only; TUN foreground mode remains unavailable until the single-executable supervisor migration is complete. TUN sessions will also be backgrounded by default. `tun start` switches the currently active node/core into TUN mode; it does not select a different node. `tun stop` returns that same node/core to ordinary loopback mode, while `stop` stops the managed session entirely. The `use --tun` flag remains a shortcut for selecting a node and starting it directly in TUN mode.
+Ordinary loopback sessions are backgrounded by default. `proxyctl use NODE --core CORE --foreground` keeps the selected core attached to the terminal and returns when that core exits. Foreground activation is currently implemented for ordinary loopback mode only; TUN foreground mode remains unavailable until the single-executable supervisor migration is complete. TUN sessions will also be backgrounded by default. `tun start` switches the currently active node/core into TUN mode; it does not select a different node. `tun stop` returns that same node/core to ordinary loopback mode, while `stop` stops the managed session entirely. The `use --tun` flag remains the planned shortcut, but new TUN activation is currently fail-closed during the supervisor migration. `proxyctl tun start` and `proxyctl tun stop` are documented target commands and are not yet available.
 
 The target privilege boundary follows the v2rayN-style TUN-only elevation model: ordinary Proxyctl operation and loopback cores remain unprivileged; starting TUN requests root authorization for the TUN session only. The privileged background owner is the same Proxyctl executable, not a separately installed helper package, daemon, launcher, or supervisor binary. No setuid bit or permanent file capabilities are used. This command and privilege model is being implemented incrementally; it does not imply that the current TUN backend is production-ready or that every core/init manager is supported. At this stage Xray remains the only experimental native TUN adapter, and the default activation gate remains closed pending the documented kernel-side-effect assessment and real-host validation.
 
@@ -420,16 +420,9 @@ Quick accepts a useful partial download after one attempt. Accurate retries an i
 **TUN integration status:** The Xray path composes broker-owned descriptor export, a capability-free transient systemd service, the documented `XRAY_TUN_FD` consumer, kernel interface/index verification, and process-identity persistence while the manifest is still Prepared. The broker owns network mutations; the Xray service is currently configured with an empty capability set. The public `use --tun` and `stop` paths now invoke this Xray lifecycle, including a direct unmarked HTTP flow through the TUN route, exact route lookup, interface addressing, marked outbound socket checks, and generation-bound recovery. It has not passed offline fault-injection or real Linux dataplane validation; see docs/TUN_FIRST_DRAFT_PLAN.md.
 
 
-For the Xray TUN path, build and install the complete helper bundle before using `--tun`:
+**TUN migration status:** Do not build or install the legacy `proxyctl-tun-helper`, `proxyctl-tun-core-launcher`, or `proxyctl-tun-supervisor` binaries for new activations. The old helper/systemd backend is retained only as compatibility code for inspecting and safely stopping existing generations. The target package contains one `proxyctl` executable; the privileged TUN session will be an internal role of that same executable, with no setuid bit or permanent file capabilities. New TUN activation remains fail-closed until the replacement supervisor, privilege handoff, and recovery lifecycle are implemented and locally validated.
 
-```bash
-cargo build --release --bin proxyctl --bin proxyctl-tun-helper --bin proxyctl-tun-core-launcher --bin proxyctl-tun-supervisor
-sudo packaging/install-tun-helper.sh
-```
-
-The installer places the privileged mutation helper, core-launch shim, and recovery supervisor in their required locations. The helper alone receives `CAP_NET_ADMIN`; the core-launch shim and supervisor have no file capabilities.
-
-**TUN handoff status:** A generation-bound, nonce-bearing descriptor offer/acknowledgement protocol remains available for adapters that can prove adoption. Xray now has a separate concrete SCM_RIGHTS-to-`XRAY_TUN_FD` launch path; the protocol itself is not treated as proof that sing-box or Mihomo adopted the broker descriptor.
+**TUN handoff groundwork:** The repository retains generation-bound descriptor ownership, journaled route/rule mutations, readiness probes, and Xray descriptor-adoption code as migration building blocks. These pieces do not make the legacy launcher the selected architecture, and they do not authorize new TUN activation during the migration.
 
 
 The native-core attachment inventory is explicit: Xray has a broker-backed `XRAY_TUN_FD` launcher path. sing-box and Mihomo both expose native named-device creation contracts; neither accepts the Xray descriptor path. Their native TUN config generation is separate, but the persistent-device broker ownership backend and core-specific process lifecycle are not implemented yet. Both remain fail-closed.
