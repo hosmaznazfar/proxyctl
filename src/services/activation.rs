@@ -21,9 +21,10 @@ use std::{
     os::fd::AsRawFd,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
+#[cfg(test)]
+use std::{thread, time::Instant};
 #[cfg(target_os = "linux")]
 use tun_runtime::*;
 
