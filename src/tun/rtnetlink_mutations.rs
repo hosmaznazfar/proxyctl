@@ -95,8 +95,8 @@ pub fn set_interface_alias(index: u32, alias: &str) -> Result<()> {
     Ok(())
 }
 
-/// Installs an exact default unicast route into a dedicated table, using an ACK.
-pub fn add_route(route: &PlannedRoute) -> Result<()> {
+/// Builds an exact default unicast route payload for a dedicated table.
+fn route_payload(route: &PlannedRoute) -> Result<Vec<u8>> {
     ensure!(
         route.interface_index > 0 && route.table_id > 0,
         "route identity invalid"
@@ -109,23 +109,30 @@ pub fn add_route(route: &PlannedRoute) -> Result<()> {
         route.route_type == RouteType::Unicast,
         "only unicast routes supported"
     );
-    let mut p = vec![0u8; 12];
-    p[0] = family(route.family);
-    set_proxyctl_route_protocol(&mut p)?;
-    p[6] = RT_SCOPE_UNIVERSE;
-    p[7] = RTN_UNICAST;
+    // Linux struct rtmsg: family, dst_len, src_len, tos, table, protocol,
+    // scope, type, flags. Extended table IDs are carried in RTA_TABLE.
+    let mut payload = vec![0u8; 12];
+    payload[0] = family(route.family);
+    set_proxyctl_route_protocol(&mut payload)?;
+    payload[6] = RT_SCOPE_UNIVERSE;
+    payload[7] = RTN_UNICAST;
     let mut attrs = Vec::new();
     attr(RTA_OIF, &route.interface_index.to_ne_bytes(), &mut attrs)?;
     attr(RTA_TABLE, &route.table_id.to_ne_bytes(), &mut attrs)?;
-    p.extend(attrs);
-    let mut nl = request(
+    payload.extend(attrs);
+    Ok(payload)
+}
+
+/// Installs an exact default unicast route into a dedicated table, using an ACK.
+pub fn add_route(route: &PlannedRoute) -> Result<()> {
+    let payload = route_payload(route)?;
+    let nl = request(
         RTM_NEWROUTE,
         NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
-        &p,
+        &payload,
     );
     let mut sock = RouteNetlink::open().map_err(super::rtnetlink::mark_request_not_sent)?;
     sock.transact(&nl, Duration::from_secs(3))?;
-    nl.clear();
     Ok(())
 }
 fn rule_payload(rule: &PlannedRule) -> Result<Vec<u8>> {
@@ -209,11 +216,7 @@ mod interface_alias_tests {
             interface_index: 7,
             route_type: RouteType::Unicast,
         };
-        let mut payload = vec![0u8; 12];
-        payload[0] = family(route.family);
-        set_proxyctl_route_protocol(&mut payload).unwrap();
-        payload[6] = RT_SCOPE_UNIVERSE;
-        payload[7] = RTN_UNICAST;
+        let payload = route_payload(&route).unwrap();
         assert_eq!(payload[0], libc::AF_INET as u8, "rtm_family");
         assert_eq!(payload[1], 0, "rtm_dst_len for default route");
         assert_eq!(payload[2], 0, "rtm_src_len");
