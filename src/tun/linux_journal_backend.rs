@@ -381,7 +381,15 @@ impl KernelTransactionBackend for LinuxJournalBackend {
             JournalOperationKind::AddRoute,
             &key,
         )?;
-        rtnetlink_mutations::add_route(route)?;
+        if let Err(error) = rtnetlink_mutations::add_route(route) {
+            if super::rtnetlink::is_request_not_sent(&error) {
+                self.store
+                    .mark_intent_absent(id, self.generation, &key)
+                    .context("could not resolve the unsent route intent as absent")?;
+                return Err(error.context(super::kernel_transaction::MutationNotApplied));
+            }
+            return Err(error);
+        }
         let fp = self.fingerprint(&key)?;
         self.store
             .mark_operation_applied(id, self.generation, &key, &fp)?;
@@ -397,7 +405,15 @@ impl KernelTransactionBackend for LinuxJournalBackend {
             JournalOperationKind::AddRule,
             &key,
         )?;
-        rtnetlink_mutations::add_rule(rule)?;
+        if let Err(error) = rtnetlink_mutations::add_rule(rule) {
+            if super::rtnetlink::is_request_not_sent(&error) {
+                self.store
+                    .mark_intent_absent(id, self.generation, &key)
+                    .context("could not resolve the unsent rule intent as absent")?;
+                return Err(error.context(super::kernel_transaction::MutationNotApplied));
+            }
+            return Err(error);
+        }
         let fp = self.fingerprint(&key)?;
         self.store
             .mark_operation_applied(id, self.generation, &key, &fp)?;
