@@ -1,7 +1,7 @@
 //! Xray Linux launcher using a broker-owned TUN descriptor and a capability-free systemd unit.
 //!
-//! The transient service receives only CAP_NET_ADMIN, accepts one authenticated descriptor
-//! handoff, and keeps the Xray child in its control group. This module does not activate routes,
+//! The transient service receives no Linux capabilities, accepts one authenticated
+//! descriptor handoff, and keeps the Xray child in its control group. This module does not activate routes,
 //! commit a lifecycle manifest, or prove traffic readiness.
 #![cfg(target_os = "linux")]
 
