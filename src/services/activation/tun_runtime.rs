@@ -8,12 +8,6 @@ pub(super) struct TunStopContext {
     unit: String,
 }
 
-#[cfg(test)]
-pub(super) fn tun_interfaces_are_safe(interfaces: &[String], active_proxyctl_tun: bool) -> bool {
-    interfaces.is_empty()
-        || (active_proxyctl_tun && interfaces.iter().all(|name| name == "tun-proxyctl"))
-}
-
 pub(super) fn ip_json_snapshot(arguments: &[&str]) -> anyhow::Result<Vec<String>> {
     let ip = find_program("ip")?;
     let output = Command::new(ip)
