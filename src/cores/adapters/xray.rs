@@ -378,9 +378,7 @@ fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'static str {
         || diagnostic.contains("invalid outbound")
     {
         "Xray rejected the proxy outbound configuration; raw diagnostics withheld"
-    } else if diagnostic.contains("failed to build sockopt")
-        || diagnostic.contains("sockopt")
-    {
+    } else if diagnostic.contains("failed to build sockopt") || diagnostic.contains("sockopt") {
         "Xray rejected the proxy outbound socket options; raw diagnostics withheld"
     } else if diagnostic.contains("reality") {
         "Xray rejected the proxy REALITY settings; raw diagnostics withheld"
@@ -422,10 +420,7 @@ mod validation_diagnostic_tests {
                 b"failed to build outbound handler for protocol vless: private-host",
                 "proxy outbound configuration",
             ),
-            (
-                b"failed to build sockopt: private-value",
-                "socket options",
-            ),
+            (b"failed to build sockopt: private-value", "socket options"),
             (
                 b"failed to create server: private-host",
                 "constructing its server",
@@ -461,10 +456,7 @@ mod validation_diagnostic_tests {
             summarize_validation_failure(b"", b"TLS certificate private-host")
                 .contains("TLS or certificate")
         );
-        assert!(
-            summarize_validation_failure(b"", b"REALITY private-value")
-                .contains("REALITY")
-        );
+        assert!(summarize_validation_failure(b"", b"REALITY private-value").contains("REALITY"));
     }
 }
 
