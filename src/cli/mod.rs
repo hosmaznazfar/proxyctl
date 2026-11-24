@@ -219,6 +219,8 @@ enum Command {
         #[command(subcommand)]
         action: Option<ConfigAction>,
     },
+    /// Show the current Proxyctl-managed session and its mode.
+    Status,
     /// Stop only the exact process tracked by Proxyctl.
     Stop,
     /// Install all supported cores, or one selected core.
