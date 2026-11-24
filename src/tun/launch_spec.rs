@@ -2,7 +2,7 @@
 //! This module validates data only; it does not launch cores or mutate networking.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{io::Read, str::FromStr};
 
 pub const VERSION: u16 = 1;
 pub const MAX_SPEC_BYTES: usize = 16 * 1024;
@@ -43,6 +43,21 @@ pub struct LaunchSpec {
     pub core: CoreKind,
     pub listen_port: u16,
 }
+/// Read one launch specification from a stream, rejecting input beyond the protocol limit.
+///
+/// The reader is consumed through EOF so trailing bytes cannot be left for a later parser.
+pub fn read_bounded<R: Read>(reader: R) -> Result<LaunchSpec> {
+    let mut bytes = Vec::with_capacity(MAX_SPEC_BYTES.min(1024));
+    reader
+        .take(MAX_SPEC_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    ensure!(
+        !bytes.is_empty() && bytes.len() <= MAX_SPEC_BYTES,
+        "launch specification size is invalid"
+    );
+    LaunchSpec::decode_bounded(&bytes)
+}
+
 impl LaunchSpec {
     pub fn validate(&self) -> Result<()> {
         ensure!(
@@ -92,6 +107,16 @@ mod tests {
         );
         assert!(LaunchSpec::decode_bounded(&vec![0; MAX_SPEC_BYTES + 1]).is_err());
     }
+    #[test]
+    fn reads_one_bounded_specification_from_a_stream() {
+        use std::io::Cursor;
+
+        let encoded = sample().encode_bounded().unwrap();
+        assert_eq!(read_bounded(Cursor::new(encoded)).unwrap(), sample());
+        assert!(read_bounded(Cursor::new(Vec::<u8>::new())).is_err());
+        assert!(read_bounded(Cursor::new(vec![b' '; MAX_SPEC_BYTES + 1])).is_err());
+    }
+
     #[test]
     fn rejects_invalid_version_and_zero_values() {
         let mut s = sample();
