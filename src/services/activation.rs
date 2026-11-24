@@ -160,7 +160,7 @@ pub fn activate(
     }
     #[cfg(target_os = "linux")]
     {
-        let (foreground_child, state_path, port) = {
+        let (foreground_child, state_path, port, foreground_identity) = {
             let (runtime, state_path) = paths()?;
             let _lock = RuntimeLock::acquire(&runtime)?;
             let db = NodeDatabase::open(default_database_path()?)?;
@@ -234,15 +234,31 @@ pub fn activate(
                 WAIT,
                 foreground,
             )?;
-            (child, state_path, port)
+            let identity = if let Some(child) = &child {
+                let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
+                    .context("foreground activation state disappeared before handoff")?;
+                ensure!(
+                    state.pid == child.id()
+                        && state.start_ticks > 0
+                        && state.tun.is_none()
+                        && state.executable == executable,
+                    "foreground activation state does not match the launched core identity"
+                );
+                Some((state.start_ticks, state.executable))
+            } else {
+                None
+            };
+            (child, state_path, port, identity)
         };
 
         if let Some(mut child) = foreground_child {
             let pid = child.id();
+            let (start_ticks, executable) = foreground_identity
+                .context("foreground process identity was not retained")?;
             let status = child
                 .wait()
                 .context("could not wait for the foreground proxy core")?;
-            finish_foreground(&state_path, pid, status.success())?;
+            finish_foreground(&state_path, pid, start_ticks, &executable, status.success())?;
             if !status.success() {
                 anyhow::bail!("foreground {core} process exited with status {status}");
             }
@@ -908,7 +924,13 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
 }
 /// Clear foreground state only when it still belongs to the exact process we waited for.
 #[cfg(target_os = "linux")]
-fn finish_foreground(state_path: &Path, pid: u32, exit_success: bool) -> anyhow::Result<()> {
+fn finish_foreground(
+    state_path: &Path,
+    pid: u32,
+    start_ticks: u64,
+    executable: &Path,
+    exit_success: bool,
+) -> anyhow::Result<()> {
     let (runtime, expected_state_path) = paths()?;
     ensure!(
         state_path == expected_state_path.as_path(),
@@ -925,8 +947,11 @@ fn finish_foreground(state_path: &Path, pid: u32, exit_success: bool) -> anyhow:
     };
     let state: ActiveProcess = serde_json::from_slice(&bytes)
         .context("foreground activation state is corrupt; refusing cleanup")?;
-    if state.pid != pid {
-        // A newer activation owns the shared state path. Never remove its files.
+    if state.pid != pid
+        || state.start_ticks != start_ticks
+        || state.executable != executable
+    {
+        // A newer activation or a reused PID owns the shared state path.
         return Ok(());
     }
     ensure!(
