@@ -464,6 +464,7 @@ mod tests {
         interface: Option<KernelInterfaceRecord>,
         resources: BTreeMap<String, String>,
         fail_add_at: Option<usize>,
+        fail_add_not_sent_at: Option<usize>,
         fail_add_after_mutation_at: Option<usize>,
         add_count: usize,
         fail_remove: bool,
@@ -517,6 +518,9 @@ mod tests {
         fn add_owned_route(&mut self, _id: &str, route: &PlannedRoute) -> Result<String> {
             self.route_interface_indexes.push(route.interface_index);
             self.add_count += 1;
+            if self.fail_add_not_sent_at == Some(self.add_count) {
+                return Err(anyhow::Error::new(MutationNotApplied));
+            }
             if self.fail_add_at == Some(self.add_count) {
                 anyhow::bail!("injected route failure");
             }
@@ -534,6 +538,9 @@ mod tests {
 
         fn add_owned_rule(&mut self, _id: &str, rule: &PlannedRule) -> Result<String> {
             self.add_count += 1;
+            if self.fail_add_not_sent_at == Some(self.add_count) {
+                return Err(anyhow::Error::new(MutationNotApplied));
+            }
             if self.fail_add_at == Some(self.add_count) {
                 anyhow::bail!("injected rule failure");
             }
@@ -1019,6 +1026,22 @@ mod tests {
             backend.resources.get(&key).map(String::as_str),
             Some("foreign-replacement")
         );
+    }
+
+    #[test]
+    fn known_unsent_route_and_rule_requests_roll_back_without_retaining_ambiguous_journal() {
+        for failed_step in 1..=4 {
+            let mut backend = FakeBackend {
+                fail_add_not_sent_at: Some(failed_step),
+                ..Default::default()
+            };
+            let error = apply(&transaction(), &mut backend).unwrap_err();
+            assert!(format!("{error:#}").contains("before transmission"), "step {failed_step}");
+            assert!(backend.interface.is_none(), "step {failed_step}");
+            assert!(backend.resources.is_empty(), "step {failed_step}");
+            assert!(!backend.journal_retained, "step {failed_step}");
+            assert!(backend.finalized, "step {failed_step}");
+        }
     }
 
     #[test]
