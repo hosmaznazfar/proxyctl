@@ -949,7 +949,7 @@ fn finish_foreground(
         .context("foreground activation state is corrupt; refusing cleanup")?;
     if state.pid != pid
         || state.start_ticks != start_ticks
-        || state.executable != executable
+        || state.executable.as_path() != executable
     {
         // A newer activation or a reused PID owns the shared state path.
         return Ok(());
