@@ -2,10 +2,14 @@
 //! This module validates data only; it does not launch cores or mutate networking.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{io::Read, str::FromStr};
 
-pub const VERSION: u16 = 1;
-pub const MAX_SPEC_BYTES: usize = 16 * 1024;
+pub const VERSION: u16 = 2;
+pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
+/// JSON string escaping can expand the generated document, so the wire limit allows
+/// up to twice the config byte limit plus bounded request metadata.
+pub const MAX_SPEC_BYTES: usize = (MAX_CONFIG_BYTES * 2) + (16 * 1024);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -42,6 +46,8 @@ pub struct LaunchSpec {
     pub node_id: u64,
     pub core: CoreKind,
     pub listen_port: u16,
+    /// Generated native core configuration, transferred as data rather than a filesystem path.
+    pub generated_config: String,
 }
 /// Read one launch specification from a stream, rejecting input beyond the protocol limit.
 ///
@@ -65,7 +71,21 @@ impl LaunchSpec {
             "unsupported launch specification version"
         );
         ensure!(self.node_id > 0, "node ID must be non-zero");
-        ensure!(self.listen_port > 0, "listener port must be non-zero");
+        ensure!(
+            self.listen_port >= 1024,
+            "listener port must be between 1024 and 65535"
+        );
+        ensure!(
+            !self.generated_config.is_empty()
+                && self.generated_config.len() <= MAX_CONFIG_BYTES,
+            "generated configuration size is invalid"
+        );
+        let document: Value = serde_json::from_str(&self.generated_config)
+            .context("generated configuration must be valid JSON")?;
+        ensure!(
+            document.is_object(),
+            "generated configuration must be a JSON object"
+        );
         Ok(())
     }
     pub fn encode_bounded(&self) -> Result<Vec<u8>> {
@@ -96,6 +116,7 @@ mod tests {
             node_id: 5,
             core: CoreKind::Xray,
             listen_port: 1080,
+            generated_config: r#"{"inbounds":[],"outbounds":[]}"#.to_owned(),
         }
     }
     #[test]
@@ -128,20 +149,43 @@ mod tests {
         s.node_id = 5;
         s.listen_port = 0;
         assert!(s.validate().is_err());
+        s.listen_port = 80;
+        assert!(s.validate().is_err());
     }
     #[test]
     fn rejects_unknown_fields_and_invalid_core() {
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":1,"node_id":1,"core":"xray","listen_port":80,"path":"/tmp"}"#
+                br#"{"version":2,"node_id":1,"core":"xray","listen_port":1080,"generated_config":"{}","path":"/tmp"}"#
             )
             .is_err()
         );
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":1,"node_id":1,"core":"root","listen_port":80}"#
+                br#"{"version":2,"node_id":1,"core":"root","listen_port":1080,"generated_config":"{}"}"#
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_empty_oversized_non_json_and_non_object_configs() {
+        let mut spec = sample();
+        spec.generated_config.clear();
+        assert!(spec.validate().is_err());
+        spec.generated_config = "[]".to_owned();
+        assert!(spec.validate().is_err());
+        spec.generated_config = "not-json".to_owned();
+        assert!(spec.validate().is_err());
+        spec.generated_config = " ".repeat(MAX_CONFIG_BYTES + 1);
+        assert!(spec.validate().is_err());
+    }
+
+    #[test]
+    fn request_limit_accounts_for_json_string_escaping() {
+        let mut spec = sample();
+        spec.generated_config = format!(r#"{{"payload":"{}"}}"#, "\\".repeat(4096));
+        assert!(spec.validate().is_ok());
+        assert!(spec.encode_bounded().is_ok());
     }
 }
