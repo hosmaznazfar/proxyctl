@@ -55,9 +55,9 @@ pub(crate) fn mark_request_not_sent(error: anyhow::Error) -> anyhow::Error {
 }
 
 pub(crate) fn is_request_not_sent(error: &anyhow::Error) -> bool {
-    error
-        .chain()
-        .any(|cause| cause.downcast_ref::<NetlinkRequestNotSent>().is_some())
+    // anyhow stores context values for direct downcasting on the outer error;
+    // its source chain contains the wrapped cause, not necessarily the context.
+    error.downcast_ref::<NetlinkRequestNotSent>().is_some()
 }
 
 #[derive(Debug)]
