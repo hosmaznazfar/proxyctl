@@ -57,6 +57,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             id,
             core,
             tun,
+            foreground,
             port,
             tun_probe_url,
             tun_probe_status,
@@ -81,7 +82,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     tun_probe_status,
                 )?;
             } else {
-                crate::services::activation::activate(stable_id, core, false, port)?;
+                crate::services::activation::activate(stable_id, core, false, port, foreground)?;
             }
             return Ok(());
         }
