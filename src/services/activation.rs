@@ -160,7 +160,7 @@ pub fn activate(
     }
     #[cfg(target_os = "linux")]
     {
-        let (foreground_child, state_path) = {
+        let (foreground_child, state_path, port) = {
             let (runtime, state_path) = paths()?;
             let _lock = RuntimeLock::acquire(&runtime)?;
             let db = NodeDatabase::open(default_database_path()?)?;
@@ -234,7 +234,7 @@ pub fn activate(
                 WAIT,
                 foreground,
             )?;
-            (child, state_path)
+            (child, state_path, port)
         };
 
         if let Some(mut child) = foreground_child {
@@ -250,7 +250,6 @@ pub fn activate(
             return Ok(());
         }
         println!("Activated node #{node_id} with {core}.");
-        let port = port_override.unwrap_or(crate::services::listener_config::listen_port()?);
         println!(
             "Shared SOCKS5/HTTP proxy: 127.0.0.1:{port} (loopback only; configure applications manually)."
         );
@@ -912,7 +911,7 @@ fn stop_locked(runtime: &Path, state_path: &Path, managed_root: &Path) -> anyhow
 fn finish_foreground(state_path: &Path, pid: u32, exit_success: bool) -> anyhow::Result<()> {
     let (runtime, expected_state_path) = paths()?;
     ensure!(
-        state_path == expected_state_path,
+        state_path == expected_state_path.as_path(),
         "foreground activation state path changed; refusing cleanup"
     );
     let _lock = RuntimeLock::acquire(&runtime)?;
