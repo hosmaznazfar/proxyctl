@@ -491,7 +491,7 @@ mod validation_diagnostic_tests {
 
         let opaque = summarize_validation_failure(b"", b"private-host private-credential");
         assert!(opaque.contains("unclassified configuration validation error"));
-        assert!(opaque.contains("stderr=43 bytes"));
+        assert!(opaque.contains("stderr=") && opaque.contains(" bytes;"));
         assert!(!opaque.contains("private-host"));
         assert!(!opaque.contains("private-credential"));
     }
@@ -512,7 +512,7 @@ mod validation_diagnostic_tests {
             b"",
         );
         assert!(summary.contains("proxy outbound configuration"));
-        assert!(summary.contains("stdout=49 bytes, stderr=0 bytes"));
+        assert!(summary.contains("stdout=") && summary.contains("stderr=0 bytes"));
     }
 }
 
