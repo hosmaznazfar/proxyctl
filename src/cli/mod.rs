@@ -48,6 +48,14 @@ enum CompletionAction {
 
 #[derive(Debug, Subcommand)]
 enum TunCommand {
+    /// Start TUN mode for the currently active session (not yet implemented).
+    Start {
+        /// Keep the TUN supervisor attached to this terminal.
+        #[arg(long)]
+        foreground: bool,
+    },
+    /// Return the current TUN session to loopback mode (not yet implemented).
+    Stop,
     /// Show interfaces, default routes, DNS, and firewall state (read-only).
     Status,
 }
@@ -983,7 +991,7 @@ mod tests {
     }
 
     #[test]
-    fn tun_status_is_the_only_exposed_tun_operation() {
+    fn tun_cli_accepts_start_stop_and_status_without_legacy_aliases() {
         let cli = Cli::try_parse_from(["proxyctl", "tun", "status"]).unwrap();
         assert!(matches!(
             cli.command,
@@ -991,6 +999,12 @@ mod tests {
                 command: TunCommand::Status
             })
         ));
+        let start = Cli::try_parse_from(["proxyctl", "tun", "start"]).unwrap();
+        assert!(matches!(start.command, Some(Command::Tun { command: TunCommand::Start { foreground: false } })));
+        let foreground = Cli::try_parse_from(["proxyctl", "tun", "start", "--foreground"]).unwrap();
+        assert!(matches!(foreground.command, Some(Command::Tun { command: TunCommand::Start { foreground: true } })));
+        let stop = Cli::try_parse_from(["proxyctl", "tun", "stop"]).unwrap();
+        assert!(matches!(stop.command, Some(Command::Tun { command: TunCommand::Stop })));
         assert!(Cli::try_parse_from(["proxyctl", "tun", "on"]).is_err());
         assert!(Cli::try_parse_from(["proxyctl", "tun", "off"]).is_err());
     }
