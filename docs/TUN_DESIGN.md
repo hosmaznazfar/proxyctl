@@ -1677,3 +1677,8 @@ The supervisor migration now defines a version-1 JSON launch specification conta
 ### Supervisor bootstrap compile-boundary correction (2026-11-24)
 
 The hidden supervisor command is handled explicitly in both CLI dispatch matches, preserving the management-command early-return boundary and preventing accidental fallthrough into database initialization. The help-visibility regression test imports Clap's `CommandFactory` trait so it can construct and render the command tree. These are compile-boundary fixes only; the supervisor remains fail-closed and does not accept launch data or mutate networking.
+
+
+### Hidden supervisor command-name regression correction (2026-11-24)
+
+The internal supervisor subcommand now declares its exact parser token (`__tun-supervisor`) explicitly while remaining hidden from generated help. This avoids relying on Clap's automatic variant-name normalization for a Rust variant with leading underscores. The parser regression test continues to exercise the literal internal token; this change does not alter the fail-closed supervisor behavior.
