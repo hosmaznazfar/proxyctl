@@ -498,6 +498,14 @@ pub fn activate_tun_xray(
     )
 }
 
+/// Keep new TUN generations disabled while the legacy helper/systemd launcher is being
+/// replaced by the single-executable privileged session owner.
+fn ensure_tun_session_backend_ready() -> anyhow::Result<()> {
+    anyhow::bail!(
+        "TUN activation is temporarily disabled during the single-executable supervisor migration; existing generations can still be inspected and safely stopped"
+    )
+}
+
 pub fn activate_tun_core(
     node_id: u64,
     core: CoreId,
@@ -505,6 +513,7 @@ pub fn activate_tun_core(
     probe_url: &str,
     expected_status: u16,
 ) -> anyhow::Result<()> {
+    ensure_tun_session_backend_ready()?;
     use std::net::ToSocketAddrs;
 
     let (runtime, state_path) = paths()?;
