@@ -329,13 +329,18 @@ pub fn status() -> anyhow::Result<()> {
     println!("PID: {}", state.pid);
     println!("Listener: 127.0.0.1:{}", state.port);
 
-    if state.pid == 0 || state.start_ticks == 0 {
-        println!("Process identity: not yet committed (startup/recovery may be incomplete)");
-    } else if matches_process(state.pid, &state.executable, state.start_ticks) {
-        println!("Process identity: verified");
-    } else {
-        println!("Process identity: no longer matches the recorded process");
+    #[cfg(target_os = "linux")]
+    {
+        if state.pid == 0 || state.start_ticks == 0 {
+            println!("Process identity: not yet committed (startup/recovery may be incomplete)");
+        } else if matches_process(state.pid, &state.executable, state.start_ticks) {
+            println!("Process identity: matches the recorded PID, start time, and executable");
+        } else {
+            println!("Process identity: no longer matches the recorded process");
+        }
     }
+    #[cfg(not(target_os = "linux"))]
+    println!("Process identity: verification is available only on Linux");
     Ok(())
 }
 
