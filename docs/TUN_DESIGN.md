@@ -1539,3 +1539,16 @@ The validator reports the narrowest recognizable component stage: JSON parsing, 
 Raw Xray stdout/stderr are deliberately not printed because diagnostics may contain proxy credentials, hostnames, addresses, and private paths. Every validation failure instead includes captured stdout/stderr byte counts and a SHA-256 diagnostic fingerprint. The fingerprint lets maintainers correlate repeated failures without exposing the diagnostic itself. An empty-output failure is reported separately from an unrecognized non-empty diagnostic; the latter is explicitly labelled unclassified rather than guessed.
 
 If a failure is unclassified, use the fingerprint and byte counts when reporting it. Do not infer that a particular generated field is invalid from the exit status alone. Validation still happens before broker-owned TUN resource preparation, and the safety gate must not be bypassed to obtain more verbose core logs.
+
+
+### Opt-in native Xray validation output
+
+The default error remains credential-safe and reports the recognized validation stage, captured byte counts, and diagnostic fingerprint. To see the actual Xray parser/builder message for one local reproduction, set the explicit opt-in environment variable:
+
+```sh
+PROXYCTL_SHOW_CORE_DIAGNOSTICS=1 proxyctl use 3 --core xray --tun
+```
+
+The opt-in prints Xray stdout and stderr separately, with each stream capped at 8 KiB. This output is produced only after the validator exits unsuccessfully. Native diagnostics may include proxy server addresses, private paths, or values copied from the generated configuration; inspect them locally and redact them before sharing. Do not upload the generated configuration or unredacted output. Without the variable, Proxyctl continues to withhold native output and prints the exact rerun instruction.
+
+This flag only increases visibility into the existing `xray run -test` validation step. It does not start Xray, change the generated configuration, prepare broker resources, or bypass any TUN safety gate. If the command still fails, share the complete error block from this opt-in run after redacting sensitive values; the innermost Xray error should now identify the concrete schema field or constructor that rejected the document.
