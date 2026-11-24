@@ -1593,7 +1593,7 @@ These are source-level corrections. They require maintainer-local formatting, Cl
 
 ### Journal state ordering during recovery (2026-11-24)
 
-Journal validation permits a final unresolved intent after earlier cleanup progress. This represents the recovery sequence where an exact interface resource has already been removed and the broker must still inspect an ambiguous later route or rule intent before resolving it. It does not permit a later operation to be marked Applied after any earlier operation is Removed or Absent: once cleanup progress is recorded, the transaction cannot move back into an applied state. The validator enforces this monotonic transition and retains the final-intent recovery exception.
+Journal entries record the state of each resource independently; their sequence numbers describe creation order, not cleanup chronology. Recovery and teardown can remove resources in dependency order rather than simple reverse journal order. In particular, the safe link teardown sequence is rule, interface, then route. A journal may therefore record a removed rule and interface while a later route entry remains Applied until its own cleanup is durably recorded. It may also retain a final unresolved Intent after earlier cleanup progress when the broker still needs to inspect an ambiguous operation. Validation rejects non-final unresolved intents and Applied entries after an unresolved Intent, but does not impose a global Removed/Absent-before-Applied prohibition.
  
 ### Linux route-message header field offsets (2026-11-24)
 
