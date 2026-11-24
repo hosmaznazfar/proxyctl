@@ -538,6 +538,40 @@ mod tests {
     use super::{Cli, Command, TunCommand, display_core_version};
 
     #[test]
+    fn use_foreground_is_available_only_for_loopback_mode() {
+        let parsed = Cli::try_parse_from([
+            "proxyctl",
+            "use",
+            "7",
+            "--core",
+            "xray",
+            "--foreground",
+        ])
+        .expect("ordinary foreground activation arguments should parse");
+        assert!(matches!(
+            parsed.command,
+            Some(Command::Use {
+                foreground: true,
+                tun: false,
+                ..
+            })
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "use",
+                "7",
+                "--core",
+                "xray",
+                "--foreground",
+                "--tun",
+            ])
+            .is_err(),
+            "foreground must not bypass the unfinished TUN supervisor lifecycle"
+        );
+    }
+
+    #[test]
     fn every_supported_shell_completes_subcommand_options() {
         for shell in [
             clap_complete::Shell::Bash,
@@ -558,6 +592,7 @@ mod tests {
                 "yes",
                 "core",
                 "tun",
+                "foreground",
                 "all-cores",
                 "latency-only",
                 "download-only",
@@ -594,6 +629,7 @@ mod tests {
             ("remove", "--yes"),
             ("check", "--core"),
             ("use", "--tun"),
+            ("use", "--foreground"),
             ("test", "--all-cores"),
             ("report", "--history"),
             ("prune", "--unavailable-all"),
