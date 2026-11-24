@@ -360,7 +360,7 @@ fn detailed_validation_output(stdout: &[u8], stderr: &[u8]) -> String {
         let shown = &bytes[..bytes.len().min(MAX_STREAM_BYTES)];
         let mut text = String::from_utf8_lossy(shown).trim().to_owned();
         if bytes.len() > shown.len() {
-            text.push_str(&format!("\\n... truncated {} additional bytes", bytes.len() - shown.len()));
+            text.push_str(&format!("\n... truncated {} additional bytes", bytes.len() - shown.len()));
         }
         if text.is_empty() {
             "(empty)".to_owned()
