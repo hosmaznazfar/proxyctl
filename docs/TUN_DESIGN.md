@@ -21,7 +21,7 @@ proxyctl stop
 - `tun start` transitions the already active node/core to TUN mode; it must not silently choose another node or core.
 - `tun stop` transitions that same session back to ordinary loopback mode. It is not equivalent to the top-level `stop`.
 - `status` reports the Proxyctl-managed session, selected node/core, mode, and verified process identity. `tun status` remains a read-only host-network inspection command.
-- Both modes run in the background by default. `--foreground` is an explicit diagnostic/lifecycle option; it must preserve the same ownership and cleanup guarantees rather than bypassing them.
+- Both modes run in the background by default. The ordinary loopback `use --foreground` path now keeps the core attached to the invoking terminal and conditionally clears only its own state after the core exits. TUN foreground mode remains unavailable until the privileged same-executable supervisor is implemented; do not route it through the legacy helper/systemd backend.
 - Top-level `stop` stops the exact Proxyctl-owned session in either mode.
 
 The privilege boundary is intentionally TUN-only and follows the operational model observed in v2rayN: normal CLI commands and ordinary loopback cores run as the invoking user; a TUN session obtains root authorization and the TUN core runs in that privileged session. This is a deliberate change from the earlier narrow-helper design. It must not grant permanent file capabilities or setuid permissions, and it must not elevate ordinary proxy mode.
@@ -33,7 +33,7 @@ A successful TUN launch must retain exact generation/process identity, durable r
 Implementation sequence and current boundary:
 
 1. The top-level `proxyctl status` command is now present as a read-only view of the tracked activation record. It reports node/core/mode/listener and compares the recorded PID, start time, and executable when a process record exists. If only a TUN manifest or transaction journal remains, it reports that recovery/inspection is needed without attempting cleanup.
-2. The `tun start` and `tun stop` mode transitions, same-executable privileged session owner, and foreground lifecycle are not yet wired. They must be implemented against the selected root-session architecture, not as aliases over the former systemd/helper flow.
+2. Ordinary loopback foreground lifecycle is implemented. The `tun start` and `tun stop` mode transitions, same-executable privileged session owner, and TUN foreground lifecycle are not yet wired. They must be implemented against the selected root-session architecture, not as aliases over the former systemd/helper flow.
 3. Until that migration is complete, the old TUN activation path must remain gated. In particular, do not ask the maintainer to retry activation through the existing separate helper/service path; it has the known procfs identity failure and conflicts with the selected privilege model.
 
 This replaces the former requirement for a separately installed mutation-helper package, Xray launcher binary, and systemd transient service. Those components are legacy implementation details to be retired as the single-executable session architecture is introduced. Do not mix the two privilege models in one activation.
