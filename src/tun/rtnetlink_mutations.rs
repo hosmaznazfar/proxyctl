@@ -90,7 +90,7 @@ pub fn set_interface_alias(index: u32, alias: &str) -> Result<()> {
     value.push(0);
     attr(IFLA_IFALIAS, &value, &mut payload)?;
     let message = request(RTM_NEWLINK, NLM_F_REQUEST | NLM_F_ACK, &payload);
-    let mut socket = RouteNetlink::open()?;
+    let mut socket = RouteNetlink::open().map_err(super::rtnetlink::mark_request_not_sent)?;
     socket.transact(&message, Duration::from_secs(3))?;
     Ok(())
 }
@@ -124,7 +124,7 @@ pub fn add_route(route: &PlannedRoute) -> Result<()> {
         NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
         &p,
     );
-    let mut sock = RouteNetlink::open()?;
+    let mut sock = RouteNetlink::open().map_err(super::rtnetlink::mark_request_not_sent)?;
     sock.transact(&nl, Duration::from_secs(3))?;
     nl.clear();
     Ok(())
@@ -169,7 +169,7 @@ pub fn add_rule(rule: &PlannedRule) -> Result<()> {
         NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL,
         &payload,
     );
-    let mut sock = RouteNetlink::open()?;
+    let mut sock = RouteNetlink::open().map_err(super::rtnetlink::mark_request_not_sent)?;
     sock.transact(&nl, Duration::from_secs(3))?;
     Ok(())
 }
@@ -183,7 +183,7 @@ pub fn add_rule(rule: &PlannedRule) -> Result<()> {
 pub fn delete_rule(rule: &PlannedRule) -> Result<()> {
     let payload = rule_payload(rule)?;
     let nl = request(RTM_DELRULE, NLM_F_REQUEST | NLM_F_ACK, &payload);
-    let mut sock = RouteNetlink::open()?;
+    let mut sock = RouteNetlink::open().map_err(super::rtnetlink::mark_request_not_sent)?;
     sock.transact(&nl, Duration::from_secs(3))?;
     Ok(())
 }
