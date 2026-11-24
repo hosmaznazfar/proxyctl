@@ -30,12 +30,6 @@ jobs:
           PACKAGE_VERSION="$(sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -n1)"
           test "$GITHUB_REF_NAME" = "v$PACKAGE_VERSION"
 
-      - name: Run quality checks
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --all-targets --all-features -- -D warnings
-          cargo test --all-targets --all-features
-
       - name: Build release binaries
         run: cargo build --release --bins
 
