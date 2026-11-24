@@ -310,8 +310,16 @@ pub fn status() -> anyhow::Result<()> {
             println!("Proxyctl session: TUN state requires recovery/inspection.");
             println!(
                 "Manifest: {}; transaction journal: {}",
-                if manifest_path.exists() { "present" } else { "absent" },
-                if journal_path.exists() { "present" } else { "absent" }
+                if manifest_path.exists() {
+                    "present"
+                } else {
+                    "absent"
+                },
+                if journal_path.exists() {
+                    "present"
+                } else {
+                    "absent"
+                }
             );
             println!("Run 'proxyctl tun status' for read-only host-network details.");
         } else {
@@ -322,7 +330,11 @@ pub fn status() -> anyhow::Result<()> {
 
     let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
         .context("Proxyctl activation state is corrupt; refusing to infer session ownership")?;
-    let mode = if state.tun.is_some() { "TUN" } else { "loopback proxy" };
+    let mode = if state.tun.is_some() {
+        "TUN"
+    } else {
+        "loopback proxy"
+    };
     println!("Proxyctl session: {mode}");
     println!("Node: #{}", state.node_id);
     println!("Core: {}", state.core);
