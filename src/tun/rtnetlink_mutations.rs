@@ -214,8 +214,9 @@ mod interface_alias_tests {
     fn default_route_payload_uses_linux_rtmsg_field_offsets() {
         let route = PlannedRoute {
             family: AddressFamily::Ipv4,
-            destination: AddressFamily::Ipv4.default_prefix(),
+            destination: AddressFamily::Ipv4.default_prefix().into(),
             table_id: 10_000,
+            interface_name: "tun-proxyctl".into(),
             interface_index: 7,
             route_type: RouteType::Unicast,
         };
