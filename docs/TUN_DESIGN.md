@@ -4,6 +4,34 @@
 > Scope: Linux kernel networking; automatic recovery is currently implemented only for systemd with a lingering per-user manager.
 > Goal: use one selected managed core's native TUN implementation, with exact Proxyctl-owned routing resources and crash recovery.
 
+## Selected CLI, session, and privilege model
+
+The selected user-facing contract is:
+
+```text
+proxyctl use NODE --core CORE [--foreground] [--tun]
+proxyctl tun start [--foreground]
+proxyctl tun stop
+proxyctl tun status
+proxyctl status
+proxyctl stop
+```
+
+- `use` selects a node and core. It starts an ordinary loopback session unless `--tun` is supplied.
+- `tun start` transitions the already active node/core to TUN mode; it must not silently choose another node or core.
+- `tun stop` transitions that same session back to ordinary loopback mode. It is not equivalent to the top-level `stop`.
+- `status` reports the Proxyctl-managed session, selected node/core, mode, and verified process identity. `tun status` remains a read-only host-network inspection command.
+- Both modes run in the background by default. `--foreground` is an explicit diagnostic/lifecycle option; it must preserve the same ownership and cleanup guarantees rather than bypassing them.
+- Top-level `stop` stops the exact Proxyctl-owned session in either mode.
+
+The privilege boundary is intentionally TUN-only and follows the operational model observed in v2rayN: normal CLI commands and ordinary loopback cores run as the invoking user; a TUN session obtains root authorization and the TUN core runs in that privileged session. This is a deliberate change from the earlier narrow-helper design. It must not grant permanent file capabilities or setuid permissions, and it must not elevate ordinary proxy mode.
+
+There is one installable application package and one installed `proxyctl` executable. The background TUN owner is another invocation/process role of that same executable (an internal, non-user-facing supervisor entry point), not a separately installed helper, launcher, service, or daemon package. The unprivileged front-end must continue to read the user's node database and resolve the selected node before crossing the privilege boundary. Privileged code must receive a validated, bounded launch description and must not follow arbitrary user-controlled executable/config paths. Root-owned state must be separated from user-owned database/configuration files; do not run normal database mutations as root or create root-owned files in the user's private data directory.
+
+A successful TUN launch must retain exact generation/process identity, durable resource ownership, serialized start/stop/switch transitions, and fail-closed cleanup. The supervisor must outlive the invoking terminal, monitor the exact core process, and clean up on core exit. A supervisor crash or reboot must not leave traffic blackholed; this requires explicit kernel behavior analysis and fault-injection/host validation. Do not claim this is solved merely because the supervisor is detached. The design remains experimental and the default activation gate remains closed until the cleanup side effects and host matrix described below are accepted.
+
+This replaces the former requirement for a separately installed mutation-helper package, Xray launcher binary, and systemd transient service. Those components are legacy implementation details to be retired as the single-executable session architecture is introduced. Do not mix the two privilege models in one activation.
+
 ## Safety incident and current decision
 
 A live sing-box TUN run was associated with loss of internet connectivity. Review found that the previous implementation compared post-stop network state with a baseline but did not restore Proxyctl-created routes or rules. A forced core termination or application crash could therefore leave routing state behind.
@@ -23,12 +51,12 @@ Proxyctl targets Linux kernel networking interfaces, not a particular distributi
 The implementation must separate these layers:
 
 1. **Kernel/network backend:** TUN device lifecycle, rtnetlink route/rule operations, interface identity, and exact ownership metadata. It must not depend on systemd, NetworkManager, nftables, or a distribution-specific path.
-2. **Privilege broker:** a narrowly scoped helper with only the privileges needed for TUN and routing operations. Detect supported authorization mechanisms (for example sudo, doas, or polkit where usable); never assume one executable or prompt mechanism. Do not run the whole CLI or proxy core as root.
-3. **Recovery supervisor:** survives the CLI process and the core process long enough to detect core exit and perform idempotent cleanup. Its lifecycle integration is selected through an init/service-manager backend.
+2. **TUN privilege/session:** request root authorization only when entering TUN mode. The privileged TUN session owns TUN creation, routing mutations, the selected core, and exact cleanup. Ordinary loopback activation remains unprivileged. Authorization must be explicit and fail before the current session is interrupted if it cannot be obtained.
+3. **In-process supervisor role:** a detached invocation of the same installed `proxyctl` executable owns the background TUN session, monitors the exact core process, and performs idempotent cleanup. No separate helper/launcher/supervisor binary or package is installed. Its crash/reboot behavior must be proven; detaching alone is not a recovery guarantee.
 4. **Core adapter:** generates native TUN configuration with core-managed automatic route installation disabled. The adapter must not independently install default routes or mutate DNS/firewall state.
 5. **Readiness verifier:** proves local listener readiness, TUN interface identity, physical egress selection, route policy, and end-to-end proxied traffic before declaring TUN active.
 
-The service-manager layer must use capability detection, not distribution-name detection. The design must support systemd, OpenRC, runit, s6, dinit, and SysVinit through focused backends or a portable supervisor mechanism. The absence of systemd must not by itself disable TUN. A manager without a verified recovery backend must fail closed with a clear explanation; it must never silently use systemd commands or fall back to core-managed automatic routes.
+The session supervisor must not require a systemd user service, lingering, or a distribution-specific service manager merely to stay alive after the CLI exits. It must use a portable process/session mechanism and explicit signal/parent-death handling where appropriate. Init-manager integration may be added only where it improves reboot recovery and has a verified backend; it is not a second installed helper. A platform without a proven crash/reboot recovery path must fail closed rather than silently falling back to core-managed automatic routes.
 
 Do not claim universal support merely because a distro is Linux. A distro/init combination is supported only after its backend passes the same offline lifecycle and fault-injection contract. Keep the support matrix explicit in documentation and diagnostics. Unsupported init managers remain safe (TUN refused; normal loopback mode unaffected).
 
@@ -85,9 +113,10 @@ Init/service-manager backends are responsible for starting/stopping the supervis
 
 ## Privilege and distribution rules
 
-- Keep the CLI and core running as the invoking user.
-- Use a small privileged helper or equivalent constrained mechanism; never grant broad root execution to the entire Proxyctl process.
-- Restrict capabilities to the minimum required (normally CAP_NET_ADMIN for the network helper). Do not assume systemd ambient-capability properties exist.
+- Keep ordinary CLI operations and loopback cores running as the invoking user.
+- Request root authorization only for TUN mode. The TUN session and selected TUN core run under that authorized root-owned session, matching the chosen v2rayN-style model.
+- Do not use setuid or permanent file capabilities. The same `proxyctl` executable is used for the internal background-supervisor role; do not install separate helper, launcher, or supervisor binaries.
+- Keep the user's node database and private configuration user-owned. Validate all launch inputs at the privilege boundary, use a narrowly defined runtime/state location for privileged session data, and never let root follow arbitrary paths supplied by an untrusted user process.
 - Do not require NetworkManager, systemd-resolved, nftables, iptables, or a specific DNS manager.
 - Do not hardcode `/usr/bin`, `/usr/sbin`, or distribution package names. Resolve required utilities or use kernel APIs; validate the resolved executable and its behavior.
 - Detect kernel support for TUN, policy routing, required netlink attributes, pidfd/process identity, and capability operations. Report missing prerequisites before changing anything.
@@ -115,21 +144,21 @@ This evidence is deliberately narrower than end-to-end readiness: it does not pr
 - The adapter must expose enough information for Proxyctl's route manager to create the correct routes and bypass rule. If a core cannot operate safely with externally managed routing, that core is unsupported in TUN mode.
 - Keep one active core only; do not introduce tun2socks, a second packet engine, or a permanent always-on daemon.
 
-## Xray descriptor-service capability boundary
+## TUN core privilege and process identity
 
-The Xray transient systemd service runs with an empty capability bounding, effective,
-permitted, inheritable, and ambient set, plus `NoNewPrivileges=yes`. The mutation broker
-alone creates/configures the TUN interface and owns the kernel routes/rules. It passes an
-already-open, caller-owned TUN descriptor to the Xray launcher over the generation-scoped
-Unix socket; the launcher validates the descriptor and Xray only performs packet I/O.
-Neither process needs `CAP_NET_ADMIN` after descriptor creation.
+Under the selected TUN-only root model, the TUN supervisor and selected core execute in
+the same authorized root-owned session. This avoids the former cross-UID/capability
+procfs restriction encountered when an unprivileged controller attempted to inspect
+`/proc/PID/exe` for a separately launched privileged service. It does not weaken identity
+checks: PID, start-time ticks, canonical executable, and pidfd ownership remain mandatory.
+The root session must validate the managed core executable against the expected Proxyctl
+installation and must not accept an arbitrary executable path from the invoking user.
 
-This is also required for reliable process-identity verification. Linux procfs may deny
-an unprivileged same-UID reader access to `/proc/PID/exe` when the target process has
-capabilities absent from the reader. Giving the launcher or Xray `CAP_NET_ADMIN` therefore
-breaks the controller's canonical-executable checks. Do not restore ambient capabilities
-to this service: any future operation that truly requires network administration must be
-performed by the narrowly scoped broker, not by the proxy core.
+The earlier descriptor-service design (unprivileged Xray with an empty capability set,
+a separate mutation broker, and a transient systemd service) is superseded and must not
+be combined with this model. Xray's `SO_MARK`/socket-mark requirements must be evaluated
+under the root session model; do not remove the mark or weaken routing-loop prevention
+merely to make a capability-free service start.
 
 ## Process identity
 
