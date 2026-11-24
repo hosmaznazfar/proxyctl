@@ -29,8 +29,14 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 unsafe { libc::geteuid() } == 0,
                 "internal TUN supervisor entry point must run with root privileges"
             );
+            let stdin = std::io::stdin();
+            anyhow::ensure!(
+                !stdin.is_terminal(),
+                "internal TUN supervisor requires a launch specification on standard input"
+            );
+            let _spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
             anyhow::bail!(
-                "internal TUN supervisor protocol is not implemented; no privileged networking was changed"
+                "launch specification validated; supervisor launch and networking operations are not implemented"
             );
         }
         Command::Tun { command } => {
