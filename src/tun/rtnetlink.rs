@@ -23,6 +23,9 @@ const NLMSG_DONE: u16 = 3;
 const NLM_F_DUMP_INTR: u16 = 0x10;
 const RTM_NEWLINK: u16 = 16;
 const RTM_GETLINK: u16 = 18;
+const RTM_NEWROUTE: u16 = 24;
+const RTM_NEWRULE: u16 = 32;
+const RTM_DELRULE: u16 = 33;
 const IFLA_IFNAME: u16 = 3;
 const IFLA_LINKINFO: u16 = 18;
 const IFLA_INFO_KIND: u16 = 1;
@@ -31,6 +34,9 @@ const IFLA_F_NET_BYTEORDER: u16 = 1 << 14;
 const RTATTR_HEADER_LEN: usize = 4;
 const IFINFO_MESSAGE_LEN: usize = 16;
 const NLM_F_REQUEST: u16 = 0x01;
+const NLM_F_ACK: u16 = 0x04;
+const NLM_F_EXCL: u16 = 0x200;
+const NLM_F_CREATE: u16 = 0x400;
 const NLM_F_DUMP: u16 = 0x300;
 
 #[derive(Debug)]
@@ -228,14 +234,27 @@ impl RouteNetlink {
             );
             ensure!(received > 0, "NETLINK_ROUTE returned an empty datagram");
             buffer.truncate(received as usize);
-            let (batch, terminal) = parse_datagram(&buffer, sequence, self.port_id)?;
-            ensure!(
-                batch.iter().all(|message| {
-                    message.len() >= NETLINK_HEADER_LEN
-                        && u16::from_ne_bytes([message[4], message[5]]) == RTM_NEWLINK
-                }),
-                "NETLINK_ROUTE link dump returned an unexpected message type"
-            );
+            let (batch, terminal) = parse_datagram(
+                &buffer,
+                sequence,
+                self.port_id,
+                &request[..NETLINK_HEADER_LEN],
+            )?;
+            let request_kind = u16::from_ne_bytes(request[4..6].try_into()?);
+            if request_kind == RTM_GETLINK {
+                ensure!(
+                    batch.iter().all(|message| {
+                        message.len() >= NETLINK_HEADER_LEN
+                            && u16::from_ne_bytes([message[4], message[5]]) == RTM_NEWLINK
+                    }),
+                    "NETLINK_ROUTE link dump returned an unexpected message type"
+                );
+            } else {
+                ensure!(
+                    batch.is_empty(),
+                    "NETLINK_ROUTE mutation returned unexpected data before its acknowledgement"
+                );
+            }
             validate_response_budget(&messages, &batch)?;
             messages
                 .try_reserve(batch.len())
@@ -609,41 +628,48 @@ fn validate_kernel_sender(sender: &libc::sockaddr_nl, sender_len: libc::socklen_
     Ok(())
 }
 
+fn validate_attribute_stream(bytes: &[u8]) -> Result<()> {
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        ensure!(bytes.len() - offset >= RTATTR_HEADER_LEN, "truncated NETLINK_ROUTE attribute header");
+        let length = u16::from_ne_bytes(bytes[offset..offset + 2].try_into()?) as usize;
+        ensure!(length >= RTATTR_HEADER_LEN && length <= bytes.len() - offset, "invalid NETLINK_ROUTE attribute length");
+        let aligned = length.checked_add(3).map(|value| value & !3).context("NETLINK_ROUTE attribute alignment overflow")?;
+        let remaining = bytes.len() - offset;
+        ensure!(aligned <= remaining || length == remaining, "truncated NETLINK_ROUTE attribute padding");
+        if aligned <= remaining {
+            ensure!(bytes[offset + length..offset + aligned].iter().all(|byte| *byte == 0), "non-zero NETLINK_ROUTE attribute padding");
+        }
+        offset = offset.checked_add(if aligned <= remaining { aligned } else { length }).context("NETLINK_ROUTE attribute offset overflow")?;
+    }
+    Ok(())
+}
+
 fn validate_request(bytes: &[u8]) -> Result<()> {
-    ensure!(
-        bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM,
-        "invalid netlink request length"
-    );
+    ensure!(bytes.len() >= NETLINK_HEADER_LEN && bytes.len() <= MAX_NETLINK_DATAGRAM, "invalid netlink request length");
     let declared = u32::from_ne_bytes(bytes[0..4].try_into()?);
-    ensure!(
-        declared as usize == bytes.len(),
-        "netlink request length does not match its header"
-    );
-    ensure!(
-        bytes.len() == NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN,
-        "RTM_GETLINK request has an unexpected payload size"
-    );
+    ensure!(declared as usize == bytes.len(), "netlink request length does not match its header");
     let kind = u16::from_ne_bytes(bytes[4..6].try_into()?);
-    ensure!(
-        kind == RTM_GETLINK,
-        "NETLINK_ROUTE transport accepts only read-only RTM_GETLINK requests"
-    );
     let flags = u16::from_ne_bytes(bytes[6..8].try_into()?);
     let sequence = u32::from_ne_bytes(bytes[8..12].try_into()?);
     let port_id = u32::from_ne_bytes(bytes[12..16].try_into()?);
-    ensure!(
-        bytes[NETLINK_HEADER_LEN..].iter().all(|byte| *byte == 0),
-        "RTM_GETLINK inspection request must not contain interface filters"
-    );
     ensure!(kind != 0, "netlink request has an unspecified message type");
-    ensure!(
-        flags == (NLM_F_REQUEST | NLM_F_DUMP),
-        "NETLINK_ROUTE link inspection requires exact request and dump flags"
-    );
-    ensure!(
-        sequence == 0 && port_id == 0,
-        "netlink request must not supply sequence or port identity"
-    );
+    ensure!(sequence == 0 && port_id == 0, "netlink request must not supply sequence or port identity");
+    let (fixed_payload_len, expected_flags) = match kind {
+        RTM_GETLINK => (IFINFO_MESSAGE_LEN, NLM_F_REQUEST | NLM_F_DUMP),
+        RTM_NEWLINK => (IFINFO_MESSAGE_LEN, NLM_F_REQUEST | NLM_F_ACK),
+        RTM_NEWROUTE | RTM_NEWRULE => (12, NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL),
+        RTM_DELRULE => (12, NLM_F_REQUEST | NLM_F_ACK),
+        _ => anyhow::bail!("NETLINK_ROUTE request type is not permitted"),
+    };
+    ensure!(flags == expected_flags, "NETLINK_ROUTE request uses an unsupported flag combination");
+    let payload = &bytes[NETLINK_HEADER_LEN..];
+    if kind == RTM_GETLINK {
+        ensure!(payload.len() == fixed_payload_len && payload.iter().all(|byte| *byte == 0), "RTM_GETLINK inspection request must be the canonical unfiltered dump");
+    } else {
+        ensure!(payload.len() >= fixed_payload_len, "NETLINK_ROUTE mutation payload is shorter than its message header");
+        validate_attribute_stream(&payload[fixed_payload_len..])?;
+    }
     Ok(())
 }
 
@@ -651,6 +677,7 @@ fn parse_datagram(
     bytes: &[u8],
     expected_sequence: u32,
     expected_port_id: u32,
+    expected_request_header: &[u8],
 ) -> Result<(Vec<Vec<u8>>, bool)> {
     ensure!(!bytes.is_empty(), "empty NETLINK_ROUTE response datagram");
     let mut offset = 0usize;
@@ -698,13 +725,8 @@ fn parse_datagram(
             let original =
                 &message[NETLINK_HEADER_LEN + 4..NETLINK_HEADER_LEN + 4 + NETLINK_HEADER_LEN];
             ensure!(
-                u32::from_ne_bytes(original[0..4].try_into()?) as usize
-                    == NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN
-                    && u16::from_ne_bytes(original[4..6].try_into()?) == RTM_GETLINK
-                    && u16::from_ne_bytes(original[6..8].try_into()?)
-                        == (NLM_F_REQUEST | NLM_F_DUMP)
-                    && u32::from_ne_bytes(original[8..12].try_into()?) == expected_sequence
-                    && u32::from_ne_bytes(original[12..16].try_into()?) == 0,
+                expected_request_header.len() == NETLINK_HEADER_LEN
+                    && original == expected_request_header,
                 "NETLINK_ROUTE acknowledgement does not match the outstanding request"
             );
             if error != 0 {
@@ -719,6 +741,10 @@ fn parse_datagram(
             }
             terminal = true;
         } else if kind == NLMSG_DONE {
+            ensure!(
+                u16::from_ne_bytes(expected_request_header[4..6].try_into()?) == RTM_GETLINK,
+                "NLMSG_DONE is only valid for a NETLINK_ROUTE dump"
+            );
             let payload = &message[NETLINK_HEADER_LEN..];
             if !payload.is_empty() {
                 ensure!(
@@ -792,6 +818,20 @@ mod tests {
         let mut bytes = message(kind, sequence, payload);
         bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
         bytes
+    }
+
+    fn canonical_dump_header(sequence: u32) -> Vec<u8> {
+        let mut header = vec![0u8; NETLINK_HEADER_LEN];
+        header[0..4].copy_from_slice(&((NETLINK_HEADER_LEN + IFINFO_MESSAGE_LEN) as u32).to_ne_bytes());
+        header[4..6].copy_from_slice(&RTM_GETLINK.to_ne_bytes());
+        header[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
+        header[8..12].copy_from_slice(&sequence.to_ne_bytes());
+        header
+    }
+
+    fn parse_test_datagram(bytes: &[u8], sequence: u32, port_id: u32) -> Result<(Vec<Vec<u8>>, bool)> {
+        let header = canonical_dump_header(sequence);
+        parse_datagram(bytes, sequence, port_id, &header)
     }
 
     fn rtattr(kind: u16, value: &[u8]) -> Vec<u8> {
@@ -909,10 +949,10 @@ mod tests {
 
     #[test]
     fn rejects_empty_datagrams_and_wrong_destination_port_ids() {
-        assert!(parse_datagram(&[], 7, 42).is_err());
+        assert!(parse_test_datagram(&[], 7, 42).is_err());
         let mut foreign = response(NLMSG_DONE, 7, &[]);
         foreign[12..16].copy_from_slice(&43u32.to_ne_bytes());
-        assert!(parse_datagram(&foreign, 7, 42).is_err());
+        assert!(parse_test_datagram(&foreign, 7, 42).is_err());
     }
 
     #[test]
@@ -926,7 +966,7 @@ mod tests {
         original[8..12].copy_from_slice(&7u32.to_ne_bytes());
         ack_payload.extend(original);
         let bytes = response(NLMSG_ERROR, 7, &ack_payload);
-        let (messages, terminal) = parse_datagram(&bytes, 7, 42).unwrap();
+        let (messages, terminal) = parse_test_datagram(&bytes, 7, 42).unwrap();
         assert!(messages.is_empty());
         assert!(terminal);
     }
@@ -941,14 +981,14 @@ mod tests {
         original[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
         original[8..12].copy_from_slice(&8u32.to_ne_bytes());
         payload.extend(original);
-        assert!(parse_datagram(&response(NLMSG_ERROR, 7, &payload), 7, 42).is_err());
+        assert!(parse_test_datagram(&response(NLMSG_ERROR, 7, &payload), 7, 42).is_err());
     }
 
     #[test]
     fn rejects_unrepresentable_netlink_error_code_without_panicking() {
         for error in [i32::MIN, 1] {
             let bytes = response(NLMSG_ERROR, 7, &error.to_ne_bytes());
-            assert!(parse_datagram(&bytes, 7, 42).is_err());
+            assert!(parse_test_datagram(&bytes, 7, 42).is_err());
         }
     }
 
@@ -956,17 +996,17 @@ mod tests {
     fn rejects_interrupted_dump_and_done_error_status() {
         let mut interrupted = response(NLMSG_DONE, 7, &[]);
         interrupted[6..8].copy_from_slice(&NLM_F_DUMP_INTR.to_ne_bytes());
-        assert!(parse_datagram(&interrupted, 7, 42).is_err());
+        assert!(parse_test_datagram(&interrupted, 7, 42).is_err());
 
         let failed = response(NLMSG_DONE, 7, &(-libc::EINTR).to_ne_bytes());
-        assert!(parse_datagram(&failed, 7, 42).is_err());
+        assert!(parse_test_datagram(&failed, 7, 42).is_err());
 
         for invalid in [1i32, i32::MIN] {
             let bytes = response(NLMSG_DONE, 7, &invalid.to_ne_bytes());
-            assert!(parse_datagram(&bytes, 7, 42).is_err());
+            assert!(parse_test_datagram(&bytes, 7, 42).is_err());
         }
         let truncated = response(NLMSG_DONE, 7, &[0, 0, 0]);
-        assert!(parse_datagram(&truncated, 7, 42).is_err());
+        assert!(parse_test_datagram(&truncated, 7, 42).is_err());
     }
 
     #[test]
@@ -974,20 +1014,20 @@ mod tests {
         let mut payload = (-libc::EPERM).to_ne_bytes().to_vec();
         payload.extend([0u8; NETLINK_HEADER_LEN]);
         let bytes = response(NLMSG_ERROR, 7, &payload);
-        assert!(parse_datagram(&bytes, 7, 42).is_err());
+        assert!(parse_test_datagram(&bytes, 7, 42).is_err());
     }
 
     #[test]
     fn rejects_messages_after_terminal_acknowledgement() {
         let mut bytes = response(NLMSG_DONE, 7, &[]);
         bytes.extend(response(99, 7, &[1]));
-        assert!(parse_datagram(&bytes, 7, 42).is_err());
+        assert!(parse_test_datagram(&bytes, 7, 42).is_err());
     }
 
     #[test]
     fn rejects_wrong_sequence_and_truncated_headers() {
-        assert!(parse_datagram(&response(NLMSG_DONE, 8, &[]), 7, 42).is_err());
-        assert!(parse_datagram(&[1, 2, 3], 7, 42).is_err());
+        assert!(parse_test_datagram(&response(NLMSG_DONE, 8, &[]), 7, 42).is_err());
+        assert!(parse_test_datagram(&[1, 2, 3], 7, 42).is_err());
     }
 
     #[test]
@@ -1063,7 +1103,7 @@ mod tests {
     fn rejects_non_read_only_netlink_request_types() {
         let mut request = message(RTM_GETLINK, 0, &[0; IFINFO_MESSAGE_LEN]);
         request[6..8].copy_from_slice(&(NLM_F_REQUEST | NLM_F_DUMP).to_ne_bytes());
-        request[4..6].copy_from_slice(&RTM_NEWLINK.to_ne_bytes());
+        request[4..6].copy_from_slice(&99u16.to_ne_bytes());
         assert!(validate_request(&request).is_err());
     }
 
@@ -1093,7 +1133,7 @@ mod tests {
         let mut bytes = response(99, 7, &[1]);
         bytes.truncate(NETLINK_HEADER_LEN + 1);
         bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
-        assert_eq!(parse_datagram(&bytes, 7, 42).unwrap(), (vec![bytes], false));
+        assert_eq!(parse_test_datagram(&bytes, 7, 42).unwrap(), (vec![bytes], false));
     }
 
     #[test]
@@ -1101,17 +1141,17 @@ mod tests {
         let mut bytes = response(NLMSG_DONE, 7, &[]);
         bytes.truncate(NETLINK_HEADER_LEN);
         bytes[12..16].copy_from_slice(&42u32.to_ne_bytes());
-        assert_eq!(parse_datagram(&bytes, 7, 42).unwrap(), (Vec::new(), true));
+        assert_eq!(parse_test_datagram(&bytes, 7, 42).unwrap(), (Vec::new(), true));
     }
 
     #[test]
     fn rejects_nonzero_alignment_padding_and_truncated_padding() {
         let mut padded = response(NLMSG_DONE, 7, &[1]);
         *padded.last_mut().unwrap() = 0x7f;
-        assert!(parse_datagram(&padded, 7, 42).is_err());
+        assert!(parse_test_datagram(&padded, 7, 42).is_err());
         let mut truncated = response(NLMSG_DONE, 7, &[1]);
         truncated.pop();
-        assert!(parse_datagram(&truncated, 7, 42).is_err());
+        assert!(parse_test_datagram(&truncated, 7, 42).is_err());
     }
 
     #[test]
