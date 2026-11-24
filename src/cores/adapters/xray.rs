@@ -1,7 +1,8 @@
 use std::{path::Path, process::Command};
 
 use anyhow::ensure;
-use serde_json::json;\nuse sha2::{Digest, Sha256};
+use serde_json::json;
+use sha2::{Digest, Sha256};
 
 use crate::{
     cores::CoreId,
@@ -405,7 +406,6 @@ fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> String {
         "Xray returned an unclassified configuration validation error"
     };
 
-    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(stdout);
     hasher.update([0]);
