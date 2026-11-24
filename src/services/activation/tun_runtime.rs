@@ -8,8 +8,7 @@ pub(super) struct TunStopContext {
     unit: String,
 }
 
-#[cfg(target_os = "linux")]
-#[allow(dead_code)]
+#[cfg(test)]
 pub(super) fn tun_interfaces_are_safe(interfaces: &[String], active_proxyctl_tun: bool) -> bool {
     interfaces.is_empty()
         || (active_proxyctl_tun && interfaces.iter().all(|name| name == "tun-proxyctl"))
