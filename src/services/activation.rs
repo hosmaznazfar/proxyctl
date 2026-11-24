@@ -106,16 +106,6 @@ impl TunBaseline {
         differences
     }
 }
-#[cfg(target_os = "linux")]
-struct TunLaunchContext {
-    sudo: PathBuf,
-    systemd_run: PathBuf,
-    systemctl: PathBuf,
-    unit: String,
-    uid: u32,
-    gid: u32,
-    baseline: TunBaseline,
-}
 struct RuntimeLock(File);
 impl RuntimeLock {
     fn acquire(dir: &Path) -> anyhow::Result<Self> {
@@ -253,8 +243,8 @@ pub fn activate(
 
         if let Some(mut child) = foreground_child {
             let pid = child.id();
-            let (start_ticks, executable) = foreground_identity
-                .context("foreground process identity was not retained")?;
+            let (start_ticks, executable) =
+                foreground_identity.context("foreground process identity was not retained")?;
             let status = child
                 .wait()
                 .context("could not wait for the foreground proxy core")?;
@@ -440,11 +430,19 @@ fn launch_managed(
         return Err(error);
     }
     configure_process_identity(&mut command);
-    let output = if foreground { Stdio::inherit() } else { Stdio::null() };
+    let output = if foreground {
+        Stdio::inherit()
+    } else {
+        Stdio::null()
+    };
     let mut child = match command
         .stdin(Stdio::null())
         .stdout(output)
-        .stderr(if foreground { Stdio::inherit() } else { Stdio::null() })
+        .stderr(if foreground {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        })
         .spawn()
     {
         Ok(child) => child,
@@ -960,7 +958,10 @@ fn finish_foreground(
     );
     ensure!(
         state.config.parent() == Some(runtime.as_path())
-            && state.config.file_name().is_some_and(|name| name.to_string_lossy().starts_with("active-")),
+            && state
+                .config
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("active-")),
         "foreground config path is outside the private runtime directory; refusing cleanup"
     );
     ensure!(
@@ -1343,6 +1344,7 @@ mod tests {
                 port,
                 command,
                 Duration::from_secs(2),
+                false,
             )
             .unwrap();
             let state: ActiveProcess =
@@ -1413,6 +1415,7 @@ mod tests {
                 port,
                 command,
                 Duration::from_millis(150),
+                false,
             )
             .is_err()
         );
@@ -1447,6 +1450,7 @@ mod tests {
                 12347,
                 command,
                 Duration::from_millis(100),
+                false,
             )
             .is_err()
         );
@@ -1483,6 +1487,7 @@ mod tests {
                 12345,
                 command,
                 Duration::from_millis(100),
+                false,
             )
             .is_err()
         );
