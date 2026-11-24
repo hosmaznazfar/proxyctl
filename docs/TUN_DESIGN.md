@@ -1682,3 +1682,10 @@ The hidden supervisor command is handled explicitly in both CLI dispatch matches
 ### Hidden supervisor command-name regression correction (2026-11-24)
 
 The internal supervisor subcommand now declares its exact parser token (`__tun-supervisor`) explicitly while remaining hidden from generated help. This avoids relying on Clap's automatic variant-name normalization for a Rust variant with leading underscores. The parser regression test continues to exercise the literal internal token; this change does not alter the fail-closed supervisor behavior.
+
+
+### Bounded supervisor input transport
+
+The version-1 launch specification now has a stream reader for the hidden same-executable supervisor entry point. It reads at most 16 KiB plus one detection byte, rejects empty or oversized input, and passes the complete bounded payload through the existing strict JSON decoder. The decoder continues to reject unknown fields, unsupported versions, zero node IDs, and zero listener ports. Reading through EOF ensures the protocol does not leave trailing bytes for another parser.
+
+This transport is not yet a launch protocol: the supervisor does not resolve node data, open the database, trust caller-supplied paths, launch a core, create runtime state, or mutate networking. The next dispatch integration may validate the received document and then stop explicitly. Root-side configuration generation, executable trust checks, process ownership, and lifecycle handling remain separate security gates.
