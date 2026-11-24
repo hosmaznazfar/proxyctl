@@ -344,6 +344,11 @@ impl CoreAdapter for XrayAdapter {
 }
 
 fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'static str {
+    // Xray's "run -test" command calls startXray(): it loads and builds the
+    // configuration, but deliberately does not start the server. Classify the
+    // innermost known failure stage before the generic "failed to load config
+    // files" wrapper. Never include the original diagnostic: it can contain
+    // proxy credentials, hostnames, paths, or other user configuration.
     let diagnostic = format!(
         "{} {}",
         String::from_utf8_lossy(stdout),
@@ -351,16 +356,32 @@ fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'static str {
     )
     .to_ascii_lowercase();
 
-    if diagnostic.contains("unknown field") || diagnostic.contains("unknown config field") {
+    if diagnostic.contains("unknown field")
+        || diagnostic.contains("unknown config field")
+        || diagnostic.contains("unknown configuration field")
+    {
         "Xray rejected an unrecognized configuration field; raw diagnostics withheld"
-    } else if diagnostic.contains("failed to build inbound")
+    } else if diagnostic.contains("failed to load inbound detour config for protocol tun")
+        || diagnostic.contains("failed to build inbound handler for protocol tun")
+        || diagnostic.contains("protocol tun")
+    {
+        "Xray failed while loading or building the TUN inbound configuration; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to load inbound detour config for protocol mixed")
+        || diagnostic.contains("failed to build inbound handler for protocol mixed")
+        || diagnostic.contains("protocol mixed")
+        || diagnostic.contains("failed to build inbound")
         || diagnostic.contains("invalid inbound")
     {
-        "Xray rejected the loopback HTTP inbound; raw diagnostics withheld"
+        "Xray rejected the loopback mixed HTTP/SOCKS inbound; raw diagnostics withheld"
     } else if diagnostic.contains("failed to build outbound")
+        || diagnostic.contains("failed to load outbound detour config")
         || diagnostic.contains("invalid outbound")
     {
-        "Xray rejected the proxy outbound settings; raw diagnostics withheld"
+        "Xray rejected the proxy outbound configuration; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to build sockopt")
+        || diagnostic.contains("sockopt")
+    {
+        "Xray rejected the proxy outbound socket options; raw diagnostics withheld"
     } else if diagnostic.contains("reality") {
         "Xray rejected the proxy REALITY settings; raw diagnostics withheld"
     } else if diagnostic.contains("tls") || diagnostic.contains("certificate") {
@@ -368,12 +389,82 @@ fn summarize_validation_failure(stdout: &[u8], stderr: &[u8]) -> &'static str {
     } else if diagnostic.contains("failed to parse")
         || diagnostic.contains("invalid character")
         || diagnostic.contains("unexpected end of json")
+        || diagnostic.contains("invalid json")
     {
         "Xray could not parse the generated JSON configuration; raw diagnostics withheld"
-    } else if diagnostic.contains("failed to load config") {
-        "Xray could not load the generated configuration; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to create server") {
+        "Xray parsed the configuration but failed while constructing its server; raw diagnostics withheld"
+    } else if diagnostic.contains("failed to load config files")
+        || diagnostic.contains("failed to load config")
+    {
+        "Xray failed while loading or building the generated configuration; raw diagnostics withheld"
     } else {
-        "Xray returned a validation error; raw diagnostics withheld"
+        "Xray returned a configuration validation error; raw diagnostics withheld"
+    }
+}
+
+#[cfg(test)]
+mod validation_diagnostic_tests {
+    use super::summarize_validation_failure;
+
+    #[test]
+    fn validation_diagnostics_identify_the_specific_xray_failure_stage() {
+        let cases: &[(&[u8], &str)] = &[
+            (
+                b"failed to load inbound detour config for protocol tun: private-host",
+                "TUN inbound configuration",
+            ),
+            (
+                b"failed to build inbound handler for protocol mixed: private-host",
+                "loopback mixed HTTP/SOCKS inbound",
+            ),
+            (
+                b"failed to build outbound handler for protocol vless: private-host",
+                "proxy outbound configuration",
+            ),
+            (
+                b"failed to build sockopt: private-value",
+                "socket options",
+            ),
+            (
+                b"failed to create server: private-host",
+                "constructing its server",
+            ),
+            (
+                b"failed to load config files: invalid character",
+                "parse the generated JSON",
+            ),
+            (
+                b"failed to load config files: opaque wrapped error",
+                "loading or building the generated configuration",
+            ),
+        ];
+
+        for (diagnostic, expected) in cases {
+            let summary = summarize_validation_failure(b"", diagnostic);
+            assert!(
+                summary.contains(expected),
+                "diagnostic {diagnostic:?} produced {summary:?}"
+            );
+            assert!(!summary.contains("private-host"));
+            assert!(!summary.contains("private-value"));
+        }
+    }
+
+    #[test]
+    fn validation_diagnostics_keep_unknown_tls_and_reality_categories() {
+        assert!(
+            summarize_validation_failure(b"", b"unknown field private-value")
+                .contains("unrecognized configuration field")
+        );
+        assert!(
+            summarize_validation_failure(b"", b"TLS certificate private-host")
+                .contains("TLS or certificate")
+        );
+        assert!(
+            summarize_validation_failure(b"", b"REALITY private-value")
+                .contains("REALITY")
+        );
     }
 }
 
