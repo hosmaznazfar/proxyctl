@@ -357,9 +357,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 TunCommand::Stop => {
                     #[cfg(target_os = "linux")]
                     {
-                        crate::services::activation::synchronize_tun_handoff()?;
+                        let stop_guard =
+                            crate::services::activation::acquire_tun_stop_guard()?;
                         crate::services::tun_handoff::request_supervisor_recovery()?;
-                        crate::services::activation::clear_tun_session_marker()?;
+                        crate::services::activation::clear_tun_session_marker_with_guard(
+                            &stop_guard,
+                        )?;
+                        drop(stop_guard);
                         if crate::services::activation::restore_previous_loopback_if_any()? {
                             println!("Restored the previous loopback proxy session.");
                         }
@@ -568,20 +572,21 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             return Ok(());
         }
         Command::Stop => {
-            let mut tun_pending = crate::services::activation::has_pending_tun_session()?
-                || crate::services::activation::has_pending_previous_loopback()?;
             crate::services::activation::stop()?;
-            tun_pending |= crate::services::activation::has_pending_tun_session()?
-                || crate::services::activation::has_pending_previous_loopback()?;
-            if tun_pending {
-                #[cfg(target_os = "linux")]
-                {
+            #[cfg(target_os = "linux")]
+            {
+                let stop_guard = crate::services::activation::acquire_tun_stop_guard()?;
+                let tun_pending = crate::services::activation::has_pending_tun_session()?
+                    || crate::services::activation::has_pending_previous_loopback()?;
+                if tun_pending {
                     crate::services::tun_handoff::request_supervisor_recovery()?;
-                    crate::services::activation::clear_tun_session_marker()?;
-                    crate::services::activation::discard_previous_loopback_marker()?;
+                    crate::services::activation::clear_tun_session_marker_with_guard(
+                        &stop_guard,
+                    )?;
+                    crate::services::activation::discard_previous_loopback_marker_with_guard(
+                        &stop_guard,
+                    )?;
                 }
-                #[cfg(not(target_os = "linux"))]
-                anyhow::bail!("managed TUN recovery is supported only on Linux");
             }
             return Ok(());
         }
