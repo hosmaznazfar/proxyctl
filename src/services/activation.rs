@@ -1205,10 +1205,15 @@ pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
 /// Require a clean unprivileged activation slot before handing a new TUN request to sudo.
 #[cfg(target_os = "linux")]
 pub fn ensure_tun_start_available(port: u16) -> anyhow::Result<()> {
-    let (_, state_path) = paths()?;
+    let (runtime, state_path) = paths()?;
+    let _lock = RuntimeLock::acquire(&runtime)?;
     ensure!(
         !state_path.exists(),
         "a Proxyctl-managed core is already active; stop it before starting a separate TUN session"
+    );
+    ensure!(
+        !runtime.join("tun-session.json").exists(),
+        "a privileged TUN session or handoff is already pending"
     );
     ensure_port_available(port)
 }
