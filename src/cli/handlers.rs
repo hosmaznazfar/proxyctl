@@ -29,53 +29,67 @@ fn write_final_supervisor_reply(
 /// on stdout. Human-readable errors continue through the normal stderr path.
 #[cfg(target_os = "linux")]
 fn run_tun_supervisor() -> anyhow::Result<()> {
-    let result = (|| -> anyhow::Result<()> {
-        anyhow::ensure!(
-            unsafe { libc::geteuid() } == 0,
-            "internal TUN supervisor entry point must run with root privileges"
-        );
-        let stdin = std::io::stdin();
-        anyhow::ensure!(
-            !stdin.is_terminal(),
-            "internal TUN supervisor requires a launch specification on standard input"
-        );
-        let _spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
-        #[cfg(target_os = "linux")]
-        {
-            let invoking_uid = crate::tun::runtime::invoking_uid()?;
-            let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
-            let _executable = crate::tun::core_paths::resolve_managed_core(
-                &_spec.managed_core_root,
-                invoking_uid,
-                _spec.core,
-            )?;
-            let _staged = crate::tun::config_staging::stage_config(
-                &runtime,
-                _spec.generated_config.as_bytes(),
-            )?;
-        }
-        Ok(())
-    })();
+    anyhow::ensure!(
+        unsafe { libc::geteuid() } == 0 && unsafe { libc::getuid() } == 0,
+        "internal TUN supervisor entry point must run with real and effective root privileges"
+    );
+    let stdin = std::io::stdin();
+    anyhow::ensure!(
+        !stdin.is_terminal(),
+        "internal TUN supervisor requires a launch specification on standard input"
+    );
+    let spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
+    let invoking_uid = crate::tun::runtime::invoking_uid()?;
+    let invoking_gid = crate::tun::runtime::invoking_gid(invoking_uid)?;
+    let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
 
-    match result {
-        Ok(()) => {
-            write_final_supervisor_reply(
-                &crate::tun::supervisor_protocol::SupervisorReply::not_started(
-                    "request validated; core launch and networking are not implemented",
-                ),
-            )?;
-            anyhow::bail!(
-                "TUN request validated but no session was started; activation remains disabled"
-            );
-        }
+    let session = match crate::tun::native_supervisor::start(
+        &spec,
+        invoking_uid,
+        invoking_gid,
+        runtime,
+    ) {
+        Ok(session) => session,
         Err(error) => {
-            let reply =
-                crate::tun::supervisor_protocol::SupervisorReply::failed(format!("{error:#}"));
+            let reply = crate::tun::supervisor_protocol::SupervisorReply::failed(format!(
+                "{error:#}"
+            ));
             write_final_supervisor_reply(&reply)
-                .context("cannot send structured supervisor failure acknowledgement")?;
-            Err(error)
+                .context("cannot send structured supervisor startup failure")?;
+            return Err(error);
         }
+    };
+
+    let reply = match crate::tun::supervisor_protocol::SupervisorReply::started(
+        session.record.clone(),
+    ) {
+        Ok(reply) => reply,
+        Err(error) => {
+            let cleanup = session.abort_and_recover();
+            return match cleanup {
+                Ok(()) => Err(error).context(
+                    "cannot encode started acknowledgement; the session was terminated and recovered",
+                ),
+                Err(cleanup_error) => Err(error).context(format!(
+                    "cannot encode started acknowledgement; session cleanup also failed ({cleanup_error:#})"
+                )),
+            };
+        }
+    };
+    if let Err(error) = write_final_supervisor_reply(&reply) {
+        let cleanup = session.abort_and_recover();
+        return match cleanup {
+            Ok(()) => Err(error).context(
+                "cannot deliver started acknowledgement; the session was terminated and recovered",
+            ),
+            Err(cleanup_error) => Err(error).context(format!(
+                "cannot deliver started acknowledgement; session cleanup also failed ({cleanup_error:#})"
+            )),
+        };
     }
+
+    session.wait_and_recover()?;
+    Ok(())
 }
 
 #[cfg(not(target_os = "linux"))]
