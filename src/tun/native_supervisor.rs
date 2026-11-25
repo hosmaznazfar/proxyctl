@@ -124,6 +124,7 @@ impl RunningNativeSession {
         .context("cannot reopen the exact TUN journal after core exit")?;
         self.coordinator
             .recover_session(&self.token, &self.sessions, &mut backend)
+            .map(|_| ())
             .context("cannot recover the completed native TUN session")
     }
 }
