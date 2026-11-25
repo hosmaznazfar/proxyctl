@@ -4,9 +4,6 @@ mod mihomo;
 mod shared;
 mod sing_box;
 mod xray;
-#[cfg(target_os = "linux")]
-pub mod xray_tun_fd;
-
 pub mod validation;
 
 use anyhow::Context;
@@ -18,9 +15,6 @@ use crate::{cores::CoreId, domain::ProxyNode};
 pub use benchmark_batch::BenchmarkTarget;
 /// Linux interface name shared by Xray's native TUN config and supervisor attachment checks.
 pub const XRAY_TUN_INTERFACE_NAME: &str = "tun-proxyctl";
-/// Retained for compatibility with the isolated descriptor-transfer primitive; the supervised
-/// Xray path uses its native named-device mode and never sets this environment variable.
-pub const XRAY_TUN_FD_ENV: &str = "XRAY_TUN_FD";
 pub use shared::{Compatibility, CompatibilityStatus, GeneratedConfig};
 
 /// Socket mark used only by a core's proxy outbound during TUN operation.
