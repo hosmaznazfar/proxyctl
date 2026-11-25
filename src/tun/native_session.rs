@@ -86,6 +86,7 @@ where
         &spec.managed_core_root,
         staged_config,
         invoking_uid,
+        spec.foreground,
         None,
     )
     .context("cannot launch selected native TUN core")?;
