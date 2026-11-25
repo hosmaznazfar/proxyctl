@@ -52,7 +52,7 @@ pub fn core_arguments(core: CoreKind, config: &Path) -> Result<Vec<String>> {
 /// must not receive an inherited descriptor.
 pub fn spawn_core(
     core: CoreKind,
-    executable: &Path,
+    managed_core_root: &Path,
     config: &Path,
     invoking_uid: u32,
     xray_descriptor: Option<BorrowedFd<'_>>,
@@ -63,7 +63,13 @@ pub fn spawn_core(
     );
     ensure!(invoking_uid != 0, "invoking user UID must be non-zero");
 
-    let executable_metadata = fs::symlink_metadata(executable)
+    let executable = super::core_paths::resolve_managed_core(
+        managed_core_root,
+        invoking_uid,
+        domain_core(core),
+    )
+    .context("cannot revalidate the selected managed core immediately before launch")?;
+    let executable_metadata = fs::symlink_metadata(&executable)
         .context("cannot inspect selected managed core executable before launch")?;
     ensure!(
         executable_metadata.file_type().is_file()
@@ -84,7 +90,7 @@ pub fn spawn_core(
         "core configuration must be a root-owned, single-link 0600 regular file"
     );
 
-    let executable = fs::canonicalize(executable)
+    let executable = fs::canonicalize(&executable)
         .context("cannot canonicalize selected managed core executable")?;
     let config = fs::canonicalize(config)
         .context("cannot canonicalize staged TUN configuration")?;
@@ -141,16 +147,24 @@ pub fn spawn_core(
         }
     };
 
-    let process = ProcessHandle::open(identity.clone())
-        .context("cannot pin spawned core process identity with pidfd")?;
-    ensure!(
-        read_process_owner_uid(&process)? == 0,
-        "managed TUN core did not retain root credentials"
-    );
-    ensure!(
-        !process.is_exited()?,
-        "managed TUN core exited immediately after launch"
-    );
+    let verification = (|| -> Result<()> {
+        let process = ProcessHandle::open(identity.clone())
+            .context("cannot pin spawned core process identity with pidfd")?;
+        ensure!(
+            read_process_owner_uid(&process)? == 0,
+            "managed TUN core did not retain root credentials"
+        );
+        ensure!(
+            !process.is_exited()?,
+            "managed TUN core exited immediately after launch"
+        );
+        Ok(())
+    })();
+    if let Err(error) = verification {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error).context("spawned core failed privileged process verification");
+    }
 
     Ok(SupervisedCore { child, identity })
 }
