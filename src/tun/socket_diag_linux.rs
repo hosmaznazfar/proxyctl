@@ -1,9 +1,9 @@
 //! Read-only Linux NETLINK_SOCK_DIAG transport.
 //!
 //! This opens a dedicated netlink socket and never changes routes, links, firewall,
-//! DNS, or proxy settings. The caller is responsible for running this operation inside
-//! the narrowly scoped diagnostic broker when INET_DIAG_MARK requires CAP_NET_ADMIN.
-//! The ordinary Proxyctl process must not gain broad privileges.
+//! DNS, or proxy settings. It is intended to run only inside the already privileged
+//! single-executable TUN supervisor, where INET_DIAG_MARK is available without granting
+//! the ordinary Proxyctl process additional capabilities.
 
 use std::{
     mem::{size_of, zeroed},
