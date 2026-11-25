@@ -39,21 +39,20 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
             !stdin.is_terminal(),
             "internal TUN supervisor requires a launch specification on standard input"
         );
-        let spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
+        let _spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
         #[cfg(target_os = "linux")]
         {
             let invoking_uid = crate::tun::runtime::invoking_uid()?;
             let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
-            let executable = crate::tun::core_paths::resolve_managed_core(
-                &spec.managed_core_root,
+            let _executable = crate::tun::core_paths::resolve_managed_core(
+                &_spec.managed_core_root,
                 invoking_uid,
-                spec.core,
+                _spec.core,
             )?;
             let _staged = crate::tun::config_staging::stage_config(
                 &runtime,
-                spec.generated_config.as_bytes(),
+                _spec.generated_config.as_bytes(),
             )?;
-            let _ = executable;
         }
         #[cfg(not(target_os = "linux"))]
         anyhow::bail!("the privileged TUN supervisor is supported only on Linux");
