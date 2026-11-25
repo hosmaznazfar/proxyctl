@@ -725,8 +725,6 @@ pub fn collect_managed_preflight_with_response(
             continue;
         }
         match super::socket_mark_probe::observe_proxy_outbound_mark(
-            runtime_directory,
-            activation_id,
             process.clone(),
             *peer,
             transport,
