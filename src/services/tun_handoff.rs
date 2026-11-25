@@ -137,4 +137,17 @@ mod tests {
         let metadata = fs::metadata(&executable).unwrap();
         assert!(validate_sudo_metadata(&metadata, unsafe { libc::getuid() }).is_err());
     }
+
+    #[test]
+    fn abort_child_terminates_and_reaps_the_handoff_process() {
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let _cleanup = abort_child(&mut child);
+        assert!(child.try_wait().unwrap().is_some());
+    }
 }
