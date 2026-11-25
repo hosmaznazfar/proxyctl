@@ -1229,7 +1229,7 @@ mod tests {
         let current = coordinator.load_current().unwrap().unwrap();
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
         assert_eq!(current.snapshot.core_process, Some(identity));
-        assert_eq!(sessions.load().unwrap(), Some(record));
+        assert_eq!(sessions.load().unwrap(), Some(record.clone()));
         assert!(
             coordinator
                 .finalize_session_cleanup(&token, &sessions)
