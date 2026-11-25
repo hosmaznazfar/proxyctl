@@ -93,6 +93,10 @@ pub fn read_reply<R: Read>(reader: R) -> Result<SupervisorReply> {
     if bytes.last() == Some(&b'\n') {
         bytes.pop();
     }
+    ensure!(
+        !bytes.contains(&b'\n') && !bytes.contains(&b'\r'),
+        "supervisor reply contains more than one frame"
+    );
     ensure!(!bytes.is_empty(), "supervisor reply is empty");
     let reply: SupervisorReply =
         serde_json::from_slice(&bytes).context("supervisor reply is malformed")?;
@@ -176,6 +180,7 @@ mod tests {
         assert!(read_reply([].as_slice()).is_err());
         assert!(read_reply(vec![b'x'; MAX_REPLY_BYTES + 1].as_slice()).is_err());
         assert!(read_reply(b"{} trailing".as_slice()).is_err());
+        assert!(read_reply(b"{\"version\":1,\"outcome\":\"failed\",\"reason\":\"no\"}\n\n".as_slice()).is_err());
     }
 
     #[test]
