@@ -981,9 +981,9 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
 }
 
-/// Hold the user activation lock until the privileged supervisor acknowledges startup.
-#[must_use = "keep the handoff guard until the supervisor acknowledges startup"]
-pub struct TunHandoffGuard {
+/// Exclusive activation-runtime reservation for TUN startup and stop operations.
+#[must_use = "hold the activation runtime reservation until the protected TUN operation completes"]
+pub struct ActivationRuntimeGuard {
     _lock: RuntimeLock,
 }
 
@@ -1063,6 +1063,20 @@ pub fn synchronize_tun_handoff() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Acquire the activation reservation for a TUN stop/recovery transaction.
+#[cfg(target_os = "linux")]
+pub fn acquire_tun_stop_guard() -> anyhow::Result<ActivationRuntimeGuard> {
+    let (runtime, _) = paths()?;
+    Ok(ActivationRuntimeGuard {
+        _lock: RuntimeLock::acquire(&runtime)?,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn acquire_tun_stop_guard() -> anyhow::Result<ActivationRuntimeGuard> {
+    anyhow::bail!("managed TUN recovery is supported only on Linux")
+}
+
 /// Whether a TUN handoff or session is pending in the current user's runtime.
 #[cfg(target_os = "linux")]
 pub fn has_pending_tun_session() -> anyhow::Result<bool> {
@@ -1078,8 +1092,15 @@ pub fn has_pending_tun_session() -> anyhow::Result<bool> {
 /// Remove the user-owned TUN hint only after privileged recovery or session completion.
 #[cfg(target_os = "linux")]
 pub fn clear_tun_session_marker() -> anyhow::Result<bool> {
+    let guard = acquire_tun_stop_guard()?;
+    clear_tun_session_marker_with_guard(&guard)
+}
+
+#[cfg(target_os = "linux")]
+pub fn clear_tun_session_marker_with_guard(
+    _guard: &ActivationRuntimeGuard,
+) -> anyhow::Result<bool> {
     let (runtime, _) = paths()?;
-    let _lock = RuntimeLock::acquire(&runtime)?;
     let marker_path = runtime.join("tun-session.json");
     if !marker_path.exists() {
         return Ok(false);
@@ -1117,6 +1138,13 @@ pub fn clear_tun_session_marker() -> anyhow::Result<bool> {
     Ok(false)
 }
 
+#[cfg(not(target_os = "linux"))]
+pub fn clear_tun_session_marker_with_guard(
+    _guard: &ActivationRuntimeGuard,
+) -> anyhow::Result<bool> {
+    Ok(false)
+}
+
 /// Report whether a prior loopback session is awaiting restoration after TUN mode.
 #[cfg(target_os = "linux")]
 pub fn has_pending_previous_loopback() -> anyhow::Result<bool> {
@@ -1132,8 +1160,15 @@ pub fn has_pending_previous_loopback() -> anyhow::Result<bool> {
 /// Discard a saved loopback restoration marker when the user requests a full stop.
 #[cfg(target_os = "linux")]
 pub fn discard_previous_loopback_marker() -> anyhow::Result<bool> {
+    let guard = acquire_tun_stop_guard()?;
+    discard_previous_loopback_marker_with_guard(&guard)
+}
+
+#[cfg(target_os = "linux")]
+pub fn discard_previous_loopback_marker_with_guard(
+    _guard: &ActivationRuntimeGuard,
+) -> anyhow::Result<bool> {
     let (runtime, _) = paths()?;
-    let _lock = RuntimeLock::acquire(&runtime)?;
     let previous_path = runtime.join("tun-previous.json");
     if !previous_path.exists() {
         return Ok(false);
@@ -1162,6 +1197,13 @@ pub fn discard_previous_loopback_marker() -> anyhow::Result<bool> {
 
 #[cfg(not(target_os = "linux"))]
 pub fn discard_previous_loopback_marker() -> anyhow::Result<bool> {
+    Ok(false)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn discard_previous_loopback_marker_with_guard(
+    _guard: &ActivationRuntimeGuard,
+) -> anyhow::Result<bool> {
     Ok(false)
 }
 
