@@ -2,6 +2,7 @@
 use super::*;
 #[cfg(target_os = "linux")]
 use anyhow::Context;
+#[cfg(target_os = "linux")]
 use std::io::IsTerminal;
 
 
