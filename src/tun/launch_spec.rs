@@ -204,6 +204,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_managed_core_root_hints() {
+        let mut spec = sample();
+        spec.managed_core_root = PathBuf::from("relative/proxyctl/cores");
+        assert!(spec.validate().is_err());
+        spec.managed_core_root = PathBuf::from("/home/user/proxyctl/other");
+        assert!(spec.validate().is_err());
+        spec.managed_core_root = PathBuf::from("/home/user/../other/proxyctl/cores");
+        assert!(spec.validate().is_ok(), "lexical traversal is rejected by the privileged path validator");
+    }
+
+    #[test]
     fn rejects_empty_oversized_non_json_and_non_object_configs() {
         let mut spec = sample();
         spec.generated_config.clear();
