@@ -74,8 +74,12 @@ impl SignalForwardingGuard {
         }
         let mut previous = Vec::with_capacity(signals.len());
         for signal in signals {
-            let old =
-                unsafe { libc::signal(signal, forward_supervisor_signal as *const () as libc::sighandler_t) };
+            let old = unsafe {
+                libc::signal(
+                    signal,
+                    forward_supervisor_signal as *const () as libc::sighandler_t,
+                )
+            };
             if old == libc::SIG_ERR {
                 let error = std::io::Error::last_os_error();
                 for (installed, handler) in previous.iter().rev() {

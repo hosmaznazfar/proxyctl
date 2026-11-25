@@ -180,7 +180,8 @@ pub fn spawn_core(
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(error).context("cannot install TUN core signal forwarding immediately after spawn");
+            return Err(error)
+                .context("cannot install TUN core signal forwarding immediately after spawn");
         }
     };
 
@@ -203,7 +204,11 @@ pub fn spawn_core(
         return Err(error).context("spawned core failed privileged process verification");
     }
 
-    Ok(SupervisedCore { child, identity, _signal_guard: signal_guard })
+    Ok(SupervisedCore {
+        child,
+        identity,
+        _signal_guard: signal_guard,
+    })
 }
 
 /// Convert the closed launch-protocol enum to the domain core enum.
