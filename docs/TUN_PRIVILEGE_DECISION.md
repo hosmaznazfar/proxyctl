@@ -118,3 +118,18 @@ database state, validate through a core executable, spawn processes, create runt
 files, or change host networking. The constructor is a narrow building block for the
 unprivileged front-end preparation path; it does not connect that path to sudo or open
 the supervisor gate.
+
+
+## Unprivileged preparation service
+
+`services::tun_preparation::prepare_launch_spec` now provides a preparation path that
+resolves the requested node from the user database, rejects deleted/incompatible nodes,
+checks the selected managed-core path, derives a fresh outbound mark, generates the
+adapter-specific native TUN configuration, validates it using the selected core's native
+config-check command, and returns a validated version-2 launch request.
+
+This service performs only the unprivileged preparation and temporary config validation
+steps. It does not launch sudo/supervisor/core, allocate or persist a TUN generation,
+create privileged runtime files, or mutate host networking. The activation gate remains
+closed. This API is not yet wired to `tun start`; port-availability checks and supervisor
+handoff/startup acknowledgement belong to subsequent slices.
