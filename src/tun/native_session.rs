@@ -63,6 +63,7 @@ pub fn launch_and_commit_native_session<F>(
     token: &ActivationToken,
     sessions: &SessionStore,
     readiness: F,
+    signal_guard: &mut super::native_supervisor::SignalForwardingGuard,
 ) -> Result<(SupervisedCore, SessionRecord)>
 where
     F: FnOnce(&super::process::ProcessIdentity, &ActivationToken) -> Result<()>,
@@ -84,6 +85,7 @@ where
         staged_config,
         invoking_uid,
         spec.foreground,
+        signal_guard,
     )
     .context("cannot launch selected native TUN core")?;
 
