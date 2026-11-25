@@ -304,4 +304,4 @@ Final record cleanup is separate and fail-closed. It requires the recorded core 
 The coordinator now has a generic recovery orchestration method that can invoke the existing compare-before-delete journal recovery executor through a caller-supplied privileged backend, then finalize the root-owned receipt and manifest. It retains the completed journal until the `Cleaned` phase is durable. This method is not wired to CLI stop or the hidden supervisor, and no recovery backend has been invoked by this implementation. The hidden supervisor still does not launch a core, and TUN remains disabled.
 
 
-Launch protocol version 4 carries the kernel-generated activation UUID used to derive the core socket mark. The privileged supervisor must reuse that exact UUID for the manifest, transaction journal, and session receipt; it must not generate a second activation identity.
+Launch protocol version 5 carries the kernel-generated activation UUID used to derive the core socket mark. The privileged supervisor must reuse that exact UUID for the manifest, transaction journal, and session receipt; it must not generate a second activation identity.
