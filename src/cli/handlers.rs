@@ -160,14 +160,23 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
         Ok(session) => {
             if foreground {
                 crate::services::activation::clear_tun_session_marker()?;
-                crate::services::activation::restore_previous_loopback_if_any()
+                let restored = crate::services::activation::restore_previous_loopback_if_any()
                     .context("foreground TUN session ended but the original loopback session could not be restored")?;
-                println!(
-                    "Foreground TUN session for node #{} with {} has exited (activation {}); loopback mode was restored.",
-                    active.node_id,
-                    active.core,
-                    session.activation_id
-                );
+                if restored {
+                    println!(
+                        "Foreground TUN session for node #{} with {} has exited (activation {}); loopback mode was restored.",
+                        active.node_id,
+                        active.core,
+                        session.activation_id
+                    );
+                } else {
+                    println!(
+                        "Foreground TUN session for node #{} with {} has exited (activation {}); no previous loopback session was restored.",
+                        active.node_id,
+                        active.core,
+                        session.activation_id
+                    );
+                }
             } else {
                 println!(
                     "Started the active node #{} with {} in TUN mode.",
