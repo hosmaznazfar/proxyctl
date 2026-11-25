@@ -10,7 +10,7 @@ use std::{
     net::SocketAddr,
     os::unix::process::ExitStatusExt,
     process::ExitStatus,
-    sync::atomic::{AtomicI32, Ordering},
+    sync::atomic::{AtomicBool, AtomicI32, Ordering},
     time::Duration,
 };
 
@@ -19,8 +19,16 @@ use std::{
 /// already reset the core's signal dispositions to their normal defaults; the supervisor
 /// then survives long enough to observe the core exit and run generation-scoped recovery.
 static FORWARDED_CORE_PIDFD: AtomicI32 = AtomicI32::new(-1);
+static FOREGROUND_SIGNAL_GROUP: AtomicBool = AtomicBool::new(false);
 
 extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
+    // Foreground cores share the terminal process group, so the terminal already delivers
+    // INT/QUIT/HUP directly to the core. Forwarding those again would double-signal it.
+    if FOREGROUND_SIGNAL_GROUP.load(Ordering::Relaxed)
+        && matches!(signal, libc::SIGINT | libc::SIGQUIT | libc::SIGHUP)
+    {
+        return;
+    }
     let pidfd = FORWARDED_CORE_PIDFD.load(Ordering::Relaxed);
     if pidfd >= 0 {
         // A pidfd continues to identify the original child after wait() reaps it; it can
@@ -58,9 +66,10 @@ impl SignalForwardingGuard {
             .compare_exchange(-1, process.as_raw_fd(), Ordering::SeqCst, Ordering::SeqCst)
             .map_err(|_| anyhow::anyhow!("a core signal-forwarding guard is already active"))?;
 
+        FOREGROUND_SIGNAL_GROUP.store(foreground, Ordering::SeqCst);
         let mut signals = vec![libc::SIGTERM, libc::SIGINT];
         if foreground {
-            signals.push(libc::SIGHUP);
+            signals.extend([libc::SIGQUIT, libc::SIGHUP]);
         }
         let mut previous = Vec::with_capacity(signals.len());
         for signal in signals {
