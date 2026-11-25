@@ -13,7 +13,7 @@ Proxyctl will follow v2rayN's **TUN-only elevation model** rather than the forme
 - The selected TUN-capable core runs in the root-authorized session and creates/opens its native TUN device using its own native configuration.
 - Proxyctl remains one application package with one installed `proxyctl` executable. The hidden `__tun-supervisor` role is another invocation of that executable, not a separately installed helper, launcher, daemon binary, or systemd service.
 - No setuid bit or permanent file capabilities are installed.
-- TUN remains fail-closed until the launch, process-identity, resource-ownership, cleanup, and recovery gates are implemented and validated.
+- TUN start remains fail-closed until the launch, process-identity, resource-ownership, readiness, monitoring, and recovery gates are implemented and validated. Explicit `tun stop` is available to recover an existing durable activation.
 
 This deliberately matches v2rayN's operational privilege boundary. It does not copy v2rayN's shell-script construction or assume its process tracking is sufficient for Proxyctl's stronger journal/recovery requirements.
 
