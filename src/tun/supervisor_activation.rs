@@ -10,8 +10,8 @@ use anyhow::{Context, Result, ensure};
 
 use super::{
     activation_plan,
-    launch_spec::CoreKind,
     kernel_transaction::{self, AppliedKernelTransaction},
+    launch_spec::CoreKind,
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     linux_journal_backend::LinuxJournalBackend,
     manifest_store::ManifestStore,
@@ -71,7 +71,6 @@ pub fn apply_native_kernel_plan(
     Ok((token, applied))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +116,4 @@ mod tests {
         assert!(store.load_transaction_journal().unwrap().is_none());
         assert!(store.load().unwrap().is_none());
     }
-
 }

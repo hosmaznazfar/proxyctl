@@ -41,11 +41,11 @@ pub mod manifest_store;
 #[cfg(target_os = "linux")]
 pub mod mutation_broker;
 #[cfg(target_os = "linux")]
-pub mod native_session;
-#[cfg(target_os = "linux")]
 pub mod mutation_helper_launcher;
 #[cfg(target_os = "linux")]
 pub mod native_core_launcher;
+#[cfg(target_os = "linux")]
+pub mod native_session;
 pub mod ownership;
 #[cfg(target_os = "linux")]
 pub mod persistent_tun_owner;
@@ -82,9 +82,9 @@ pub mod socket_peer;
 #[cfg(target_os = "linux")]
 pub mod supervisor;
 #[cfg(target_os = "linux")]
-pub mod supervisor_protocol;
-#[cfg(target_os = "linux")]
 pub mod supervisor_activation;
+#[cfg(target_os = "linux")]
+pub mod supervisor_protocol;
 #[cfg(target_os = "linux")]
 pub mod systemd_recovery;
 #[cfg(target_os = "linux")]

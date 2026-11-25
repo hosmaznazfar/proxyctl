@@ -103,11 +103,9 @@ mod tests {
         assert_eq!(transaction.policy.routes.len(), 2);
         assert_eq!(transaction.policy.rules.len(), 4);
         assert!(
-            transaction
-                .policy
-                .routes
-                .iter()
-                .any(|route| route.family == AddressFamily::Ipv4 && route.destination == "0.0.0.0/0")
+            transaction.policy.routes.iter().any(
+                |route| route.family == AddressFamily::Ipv4 && route.destination == "0.0.0.0/0"
+            )
         );
         assert!(
             transaction
@@ -118,7 +116,9 @@ mod tests {
         );
         assert_eq!(
             transaction.policy.core_mark,
-            route_policy::mark_for_activation_id(activation_id).unwrap().0
+            route_policy::mark_for_activation_id(activation_id)
+                .unwrap()
+                .0
         );
     }
 
@@ -134,13 +134,9 @@ mod tests {
         ]);
         let mut current = snapshot();
         current.inventory = inventory;
-        let transaction = build_from_snapshot(
-            "12345678-1234-4234-8234-123456789abc",
-            &current,
-            1000,
-            1000,
-        )
-        .unwrap();
+        let transaction =
+            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000)
+                .unwrap();
         assert_eq!(transaction.policy.table_id, RT_TABLE_MIN_PROXYCTL + 1);
         assert_eq!(transaction.policy.bypass_priority, 10_002);
         assert_eq!(transaction.policy.proxy_priority, 10_003);
@@ -155,22 +151,11 @@ mod tests {
             is_tun: true,
         });
         assert!(
-            build_from_snapshot(
-                "12345678-1234-4234-8234-123456789abc",
-                &current,
-                1000,
-                1000
-            )
-            .is_err()
+            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000)
+                .is_err()
         );
         assert!(
-            build_from_snapshot(
-                "12345678-1234-4234-8234-123456789abc",
-                &snapshot(),
-                0,
-                0
-            )
-            .is_err()
+            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &snapshot(), 0, 0).is_err()
         );
     }
 }
