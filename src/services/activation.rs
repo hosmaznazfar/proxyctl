@@ -180,6 +180,11 @@ fn activate_with_policy(
                     !state_path.exists(),
                     "another Proxyctl-managed session became active before loopback restoration"
                 );
+            } else {
+                ensure!(
+                    !runtime.join("tun-previous.json").exists(),
+                    "a previous loopback session is awaiting TUN recovery/restoration; run 'proxyctl tun stop' first"
+                );
             }
             let db = NodeDatabase::open(default_database_path()?)?;
             let record = db
