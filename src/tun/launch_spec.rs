@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{io::Read, path::PathBuf, str::FromStr};
 
-pub const VERSION: u16 = 4;
+pub const VERSION: u16 = 5;
 pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 /// JSON string escaping can expand the generated document, so the wire limit allows
 /// up to twice the config byte limit plus bounded request metadata.
@@ -52,6 +52,12 @@ pub struct LaunchSpec {
     pub managed_core_root: PathBuf,
     /// Generated native core configuration, transferred as data rather than a filesystem path.
     pub generated_config: String,
+    /// Generation identifier created before privilege escalation and bound to every durable record.
+    pub generation: u64,
+    /// Resolved selected-node endpoints used to prove the core's marked outbound socket bypass.
+    pub expected_peers: Vec<std::net::SocketAddr>,
+    /// Bounded numeric IPv4 and IPv6 HTTP destinations used for end-to-end TUN readiness.
+    pub traffic_targets: Vec<super::readiness::HttpProbeTarget>,
 }
 /// Read one launch specification from a stream, rejecting input beyond the protocol limit.
 ///
@@ -79,6 +85,9 @@ pub fn from_generated_config(
     activation_id: String,
     managed_core_root: PathBuf,
     generated_config: &[u8],
+    generation: u64,
+    expected_peers: Vec<std::net::SocketAddr>,
+    traffic_targets: Vec<super::readiness::HttpProbeTarget>,
 ) -> Result<LaunchSpec> {
     let generated_config = std::str::from_utf8(generated_config)
         .context("generated configuration must be UTF-8 JSON")?
@@ -91,6 +100,9 @@ pub fn from_generated_config(
         activation_id,
         managed_core_root,
         generated_config,
+        generation,
+        expected_peers,
+        traffic_targets,
     };
     spec.validate()?;
     Ok(spec)
@@ -103,6 +115,19 @@ impl LaunchSpec {
             "unsupported launch specification version"
         );
         ensure!(self.node_id > 0, "node ID must be non-zero");
+        ensure!(self.generation > 0, "TUN generation must be non-zero");
+        ensure!(
+            !self.expected_peers.is_empty()
+                && self.expected_peers.len() <= 8
+                && self.expected_peers.iter().all(|peer| {
+                    !peer.ip().is_unspecified()
+                        && !peer.ip().is_multicast()
+                        && peer.port() != 0
+                }),
+            "expected proxy peers must contain one to eight usable unicast endpoints"
+        );
+        super::readiness::validate_dual_stack_probe_targets(&self.traffic_targets)
+            .context("invalid dual-stack TUN readiness targets")?;
         ensure!(
             self.activation_id.len() == 36
                 && self.activation_id.bytes().enumerate().all(|(index, byte)| {
@@ -182,6 +207,22 @@ mod tests {
             activation_id: "12345678-1234-4234-8234-123456789abc".to_owned(),
             managed_core_root: PathBuf::from("/home/user/.local/share/proxyctl/cores"),
             generated_config: r#"{"inbounds":[],"outbounds":[]}"#.to_owned(),
+            generation: 1,
+            expected_peers: vec!["198.51.100.10:443".parse().unwrap()],
+            traffic_targets: vec![
+                super::readiness::HttpProbeTarget {
+                    destination: "192.0.2.10:80".parse().unwrap(),
+                    host_header: "connectivity.example.test".into(),
+                    path: "/generate_204".into(),
+                    expected_status: 204,
+                },
+                super::readiness::HttpProbeTarget {
+                    destination: "[2001:db8::10]:80".parse().unwrap(),
+                    host_header: "connectivity.example.test".into(),
+                    path: "/generate_204".into(),
+                    expected_status: 204,
+                },
+            ],
         }
     }
     #[test]
@@ -221,7 +262,7 @@ mod tests {
     fn rejects_unknown_fields_and_invalid_core() {
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":4,"node_id":1,"core":"xray","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}","path":"/tmp"}"#
+                br#"{"version":5,"node_id":1,"core":"xray","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}","path":"/tmp"}"#
             )
             .is_err()
         );
