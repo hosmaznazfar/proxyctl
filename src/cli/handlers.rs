@@ -721,7 +721,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         | Command::Status
         | Command::Stop
         | Command::Tun { .. }
-        | Command::__TunSupervisor => {
+        | Command::__TunSupervisor
+        | Command::__TunRecover => {
             unreachable!("management commands are dispatched before database access")
         }
     }
