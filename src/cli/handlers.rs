@@ -381,10 +381,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 }
             );
             println!(
-                "Native TUN activation: available for sing-box and Mihomo via 'proxyctl use <number> --core <core> --tun' or 'proxyctl tun start' from an active loopback session."
+                "Native TUN activation: available for sing-box, Mihomo, and Xray via 'proxyctl use <number> --core <core> --tun' or 'proxyctl tun start' from an active loopback session."
             );
             println!(
-                "Xray TUN activation: not yet enabled in the native persistent-device supervisor; its descriptor-backed lifecycle remains separate."
+                "New TUN sessions use the single-executable privileged supervisor; the systemd/helper backend is retained only for legacy-session recovery."
             );
             println!(
                 "TUN sessions: read-only network inspection, exact-process stop, journaled cleanup, and saved loopback restoration are available."
