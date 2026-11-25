@@ -10,7 +10,7 @@ The unprivileged front end sends the bounded versioned launch request to:
 sudo -- <current-proxyctl-executable> __tun-supervisor
 ```
 
-The request remains on stdin so sudo's password prompt stays terminal-driven. The supervisor's stdout is reserved for one bounded JSON acknowledgement; diagnostics remain on stderr. The pipe is a per-invocation kernel object inherited across sudo, not a pathname that an unprivileged process must access below the root-owned mode-0700 runtime directory.
+The request remains on stdin so sudo's password prompt stays terminal-driven. Launch protocol version 4 includes the kernel-generated activation UUID used by the unprivileged preparation step to derive the core socket mark. The supervisor must use this exact UUID for the manifest, transaction journal, and session receipt; it must not generate a replacement UUID. The supervisor's stdout is reserved for one bounded JSON acknowledgement; diagnostics remain on stderr. The pipe is a per-invocation kernel object inherited across sudo, not a pathname that an unprivileged process must access below the root-owned mode-0700 runtime directory.
 
 The reply schema is versioned and strict:
 
