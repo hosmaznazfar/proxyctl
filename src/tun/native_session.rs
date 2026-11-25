@@ -46,6 +46,14 @@ pub fn validate_prepared_native_activation(
     Ok(())
 }
 
+/// Shared privileged lifecycle state for one native core launch.
+pub struct NativeSessionContext<'a> {
+    pub coordinator: &'a LifecycleCoordinator,
+    pub token: &'a ActivationToken,
+    pub sessions: &'a SessionStore,
+    pub signal_guard: &'a mut super::native_supervisor::SignalForwardingGuard,
+}
+
 /// Launch a native-device core and commit its exact process identity as a durable session.
 ///
 /// `readiness` is mandatory: callers must supply the complete end-to-end readiness check,
@@ -59,15 +67,18 @@ pub fn launch_and_commit_native_session<F>(
     spec: &LaunchSpec,
     staged_config: &Path,
     invoking_uid: u32,
-    coordinator: &LifecycleCoordinator,
-    token: &ActivationToken,
-    sessions: &SessionStore,
+    context: NativeSessionContext<'_>,
     readiness: F,
-    signal_guard: &mut super::native_supervisor::SignalForwardingGuard,
 ) -> Result<(SupervisedCore, SessionRecord)>
 where
     F: FnOnce(&super::process::ProcessIdentity, &ActivationToken) -> Result<()>,
 {
+    let NativeSessionContext {
+        coordinator,
+        token,
+        sessions,
+        signal_guard,
+    } = context;
     ensure!(invoking_uid != 0, "invoking TUN user UID must be non-zero");
     let runtime_directory = coordinator.runtime_directory()?;
     ensure!(
