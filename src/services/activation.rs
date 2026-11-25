@@ -842,6 +842,51 @@ pub fn ensure_port_available(port: u16) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Identity of the currently tracked unprivileged loopback session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActiveLoopbackSession {
+    pub node_id: u64,
+    pub core: CoreId,
+    pub port: u16,
+}
+
+/// Read the active loopback session without changing it, for the explicit TUN transition.
+#[cfg(target_os = "linux")]
+pub fn active_loopback_session() -> anyhow::Result<ActiveLoopbackSession> {
+    let (_, state_path) = paths()?;
+    let state: ActiveProcess = serde_json::from_slice(
+        &fs::read(&state_path).context("no Proxyctl-managed loopback session is active")?,
+    )
+    .context("Proxyctl activation state is corrupt; refusing to transition it to TUN")?;
+    ensure!(
+        state.tun.is_none(),
+        "the tracked session is already a legacy TUN session; use 'proxyctl tun stop' to recover it"
+    );
+    ensure!(
+        state.node_id != 0
+            && state.port >= 1024
+            && state.start_ticks > 0
+            && matches_process(state.pid, &state.executable, state.start_ticks),
+        "active loopback process identity does not match its recorded session"
+    );
+    let core = match state.core.as_str() {
+        "sing-box" => CoreId::SingBox,
+        "xray" => CoreId::Xray,
+        "mihomo" => CoreId::Mihomo,
+        _ => anyhow::bail!("active loopback state names an unsupported core"),
+    };
+    Ok(ActiveLoopbackSession {
+        node_id: state.node_id,
+        core,
+        port: state.port,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn active_loopback_session() -> anyhow::Result<ActiveLoopbackSession> {
+    anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
 /// Require a clean unprivileged activation slot before handing a new TUN request to sudo.
 #[cfg(target_os = "linux")]
 pub fn ensure_tun_start_available(port: u16) -> anyhow::Result<()> {
