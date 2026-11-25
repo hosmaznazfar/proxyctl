@@ -291,7 +291,7 @@ mod tests {
     fn creates_loads_and_removes_only_the_matching_record() {
         let directory = tempfile::tempdir().unwrap();
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
-        let store = SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }).unwrap();
+        let store = SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }, unsafe { libc::getuid() }).unwrap();
         let mut expected = record();
         expected.invoking_uid = unsafe { libc::getuid() };
         store.create(&expected).unwrap();
@@ -308,7 +308,7 @@ mod tests {
     fn refuses_to_replace_an_existing_session_record() {
         let directory = tempfile::tempdir().unwrap();
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
-        let store = SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }).unwrap();
+        let store = SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }, unsafe { libc::getuid() }).unwrap();
         let mut expected = record();
         expected.invoking_uid = unsafe { libc::getuid() };
         store.create(&expected).unwrap();
