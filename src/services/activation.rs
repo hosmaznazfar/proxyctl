@@ -877,6 +877,14 @@ pub struct ActiveLoopbackSession {
     pub port: u16,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreviousLoopbackSession {
+    node_id: u64,
+    core: String,
+    port: u16,
+}
+
 /// Read the active loopback session without changing it, for the explicit TUN transition.
 #[cfg(target_os = "linux")]
 pub fn active_loopback_session() -> anyhow::Result<ActiveLoopbackSession> {
@@ -950,12 +958,94 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
         core,
         port: state.port,
     };
-    stop_locked(&runtime, &state_path, &managed_cores_path()?)?;
+    let previous_path = runtime.join("tun-previous.json");
+    ensure!(
+        !previous_path.exists(),
+        "a previous loopback restoration is already pending; recover or restore it before another TUN transition"
+    );
+    let previous = PreviousLoopbackSession {
+        node_id: active.node_id,
+        core: active.core.as_str().to_owned(),
+        port: active.port,
+    };
+    write_atomic(&previous_path, &serde_json::to_vec(&previous)?)?;
+    stop_locked(&runtime, &state_path, &managed_cores_path()?)
+        .context("loopback stop failed; previous-session restoration metadata was retained")?;
     Ok(active)
 }
 
 #[cfg(not(target_os = "linux"))]
 pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
+    anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
+/// Restore the saved loopback session after a TUN session has been stopped or failed.
+///
+/// The marker is user-owned and is used only to re-resolve the node through the ordinary
+/// activation path. The activation lock enforces an idle-only start so this cannot replace
+/// a session created concurrently by another Proxyctl process.
+#[cfg(target_os = "linux")]
+pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
+    let (runtime, state_path) = paths()?;
+    let previous_path = runtime.join("tun-previous.json");
+    let previous = {
+        let _lock = RuntimeLock::acquire(&runtime)?;
+        if !previous_path.exists() {
+            return Ok(false);
+        }
+        ensure!(
+            !state_path.exists(),
+            "another Proxyctl-managed session is active; preserving the pending loopback restoration marker"
+        );
+        let metadata = fs::symlink_metadata(&previous_path)
+            .context("cannot inspect pending loopback restoration metadata")?;
+        ensure!(
+            metadata.file_type().is_file()
+                && metadata.uid() == unsafe { libc::getuid() }
+                && metadata.permissions().mode() & 0o7777 == 0o600
+                && metadata.nlink() == 1,
+            "pending loopback restoration metadata has an unsafe identity or mode"
+        );
+        let previous: PreviousLoopbackSession =
+            serde_json::from_slice(&fs::read(&previous_path)?)
+                .context("pending loopback restoration metadata is corrupt")?;
+        ensure!(
+            previous.node_id != 0 && previous.port >= 1024,
+            "pending loopback restoration metadata contains invalid values"
+        );
+        ensure!(
+            matches!(previous.core.as_str(), "sing-box" | "mihomo"),
+            "pending loopback restoration metadata names an unsupported core"
+        );
+        previous
+    };
+
+    let core = match previous.core.as_str() {
+        "sing-box" => CoreId::SingBox,
+        "mihomo" => CoreId::Mihomo,
+        _ => anyhow::bail!("pending loopback restoration core is unsupported"),
+    };
+    activate_if_idle(previous.node_id, core, Some(previous.port), false)
+        .context("cannot restore the previous loopback session")?;
+
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
+        .context("restored loopback session state disappeared before marker cleanup")?;
+    ensure!(
+        state.node_id == previous.node_id
+            && state.core == previous.core
+            && state.port == previous.port
+            && state.tun.is_none()
+            && matches_process(state.pid, &state.executable, state.start_ticks),
+        "restored loopback process does not match the saved session; preserving restoration marker"
+    );
+    fs::remove_file(&previous_path)
+        .context("cannot remove completed loopback restoration metadata")?;
+    Ok(true)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
 }
 
