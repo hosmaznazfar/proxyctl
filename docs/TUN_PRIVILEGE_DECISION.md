@@ -40,7 +40,7 @@ The intended sequence is:
 5. The supervisor derives the core selection from the closed `CoreKind` enum. It does not accept an executable path, config path, working directory, arbitrary environment map, or shell command from the request.
 6. The supervisor creates private root-owned runtime/configuration state under a per-invoking-UID directory below `/run/proxyctl`, validates the staged configuration, and launches the selected managed core with the core-specific native arguments.
 7. The supervisor records the exact core PID, process start identity, and executable identity, owns the TUN transaction/manifest lifecycle, monitors the core, and performs exact idempotent cleanup when the core exits.
-8. `tun stop` and top-level `stop` request a privileged stop through the same executable and verify the exact recorded process/session identity before signaling or cleaning anything.
+8. `tun stop` requests privileged recovery through the same executable; the supervisor verifies the exact recorded process/session identity before signaling and removes only journal-owned resources whose fresh fingerprints still match. Top-level `stop` remains on the existing loopback activation path until the TUN stop contract is integrated there.
 
 The request is a one-way launch handoff, not a remote command language. The supervisor must not accept arbitrary paths, arbitrary arguments, arbitrary environment variables, or caller-selected network operations.
 
@@ -91,13 +91,14 @@ Proxyctl intentionally improves the handoff and lifecycle boundaries:
 The repository currently has:
 
 - a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-3 launch specification, verifies the invoking UID and root-owned runtime, stages the generated config as a root-owned mode-0600 file, and then deliberately exits as not implemented;
+- a hidden `__tun-recover` command used by `tun stop`, which opens only the invoking user's root-owned runtime, reconciles the durable session records, stops the exact recorded core process, performs journaled compare-before-delete cleanup, and finalizes records only after cleanup is durable;
 - a version-3 request containing node ID, core enum, listener port, a validated-later managed-core directory hint, and the generated native configuration as bounded JSON data;
 - user-owned managed core binaries under the private data directory;
 - TUN adapters with different native device-attachment contracts;
 - offline manifest/journal, route/rule mutation, cleanup, and readiness groundwork;
 - a closed TUN activation gate.
 
-The current version-3 launch specification carries the generated configuration as JSON data plus an untrusted managed-core-root hint. The hint is not an executable path: the supervisor validates the complete directory tree against the invoking UID, enforces the fixed `proxyctl/cores/<core>/<core>` layout, and derives the executable from the closed CoreKind enum. The request still rejects unknown fields and non-object/invalid JSON, caps the config at 1 MiB, and bounds the complete wire envelope. The privileged process does not open redb or reconstruct the node from its ID. The hidden supervisor verifies caller provenance and the root-owned runtime, validates the managed core, stages the config, and exits as not implemented. It does not launch a core or change host networking.
+The current version-3 launch specification carries the generated configuration as JSON data plus an untrusted managed-core-root hint. The hint is not an executable path: the supervisor validates the complete directory tree against the invoking UID, enforces the fixed `proxyctl/cores/<core>/<core>` layout, and derives the executable from the closed CoreKind enum. The request still rejects unknown fields and non-object/invalid JSON, caps the config at 1 MiB, and bounds the complete wire envelope. The privileged process does not open redb or reconstruct the node from its ID. The hidden start supervisor verifies caller provenance and the root-owned runtime, validates the managed core, stages the config, and exits as not implemented. The separate hidden recovery role is invoked only by `tun stop`; it uses the durable root-owned manifest/journal/session receipt and the typed Linux recovery backend. It does not read the user database or launch a core.
 
 ## Non-goals
 
