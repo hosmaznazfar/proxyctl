@@ -1,63 +1,47 @@
-//! Controller-side launch and collection of outbound socket-mark evidence.
+//! In-process, read-only collection of outbound socket-mark evidence.
 //!
-//! The helper executable is pinned to the root-owned installation path, invoked with a
-//! minimal environment and one socket path, and must authenticate the current UID over
-//! SO_PEERCRED. This module never changes kernel networking; it only obtains diagnostics.
+//! The privileged Proxyctl supervisor collects NETLINK_SOCK_DIAG records directly. No
+//! installed helper executable, socket pathname, IPC listener, or additional package is used.
 
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]
-use std::{
-    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt},
-    path::Path,
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant},
-};
+use std::{path::Path, time::Duration};
 
 #[cfg(target_os = "linux")]
 use super::{
-    broker_transport::request_socket_mark_diagnostics,
     privilege_broker::{
         BROKER_REQUEST_VERSION, BrokerSocketTransport, SocketMarkBrokerRequest,
-        SocketMarkBrokerResponse,
+        SocketMarkBrokerResponse, build_socket_mark_broker_response,
     },
-    process::ProcessIdentity,
+    process::{ProcessHandle, ProcessIdentity},
+    socket_diag_collector::{self, SocketDiagnosticIo},
+    socket_diag_linux::LinuxSocketDiagnosticIo,
+    socket_diag_netlink::{SocketDiagnosticRequest, SocketTransport},
+    socket_ownership,
 };
 
-#[cfg(target_os = "linux")]
-pub const INSTALLED_HELPER_PATH: &str = "/usr/libexec/proxyctl-tun-helper";
-#[cfg(target_os = "linux")]
-const HELPER_START_TIMEOUT: Duration = Duration::from_secs(2);
-#[cfg(target_os = "linux")]
-const HELPER_EXIT_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// Launch the fixed installed helper and collect one exact-peer socket-mark observation.
+/// Collect one exact-peer socket-mark observation inside the already privileged supervisor.
+///
+/// The runtime and activation arguments remain in this internal signature for compatibility
+/// with the readiness pipeline, but diagnostics are process-local and create no runtime files.
 #[cfg(target_os = "linux")]
 pub fn observe_proxy_outbound_mark(
-    runtime_directory: &Path,
-    activation_id: &str,
+    _runtime_directory: &Path,
+    _activation_id: &str,
     process: ProcessIdentity,
     expected_peer: std::net::SocketAddr,
     transport: BrokerSocketTransport,
     expected_mark: u32,
     mark_mask: u32,
 ) -> Result<SocketMarkBrokerResponse> {
-    validate_activation_id(activation_id)?;
-    validate_runtime_directory(runtime_directory)?;
-    validate_helper(Path::new(INSTALLED_HELPER_PATH))?;
-
-    let socket_path = runtime_directory.join(format!("broker-{activation_id}.sock"));
     ensure!(
-        matches!(
-            std::fs::symlink_metadata(&socket_path),
-            Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
-        ),
-        "broker socket path already exists or cannot be safely inspected"
+        unsafe { libc::getuid() } == 0 && unsafe { libc::geteuid() } == 0,
+        "direct socket-mark diagnostics must run inside the privileged TUN supervisor"
     );
     let request = SocketMarkBrokerRequest {
         version: BROKER_REQUEST_VERSION,
-        process,
+        process: process.clone(),
         expected_peer,
         transport,
         expected_mark,
@@ -65,84 +49,69 @@ pub fn observe_proxy_outbound_mark(
     };
     request.validate()?;
 
-    let mut child = Command::new(INSTALLED_HELPER_PATH)
-        .arg("--socket")
-        .arg(&socket_path)
-        .env_clear()
-        .current_dir("/")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("cannot launch the dedicated TUN diagnostic helper")?;
+    let handle = ProcessHandle::open(process)
+        .context("cannot pin the exact managed core for socket diagnostics")?;
+    let before = socket_ownership::inspect_process_sockets(&handle)
+        .context("cannot snapshot managed core socket ownership before diagnostics")?;
 
-    let result = (|| {
-        let deadline = Instant::now() + HELPER_START_TIMEOUT;
-        loop {
-            if let Some(status) = child.try_wait()? {
-                anyhow::bail!("diagnostic helper exited before accepting a request: {status}");
-            }
-            match std::fs::symlink_metadata(&socket_path) {
-                Ok(metadata) => {
-                    ensure!(
-                        metadata.file_type().is_socket()
-                            && metadata.uid() == unsafe { libc::geteuid() }
-                            && metadata.permissions().mode() & 0o777 == 0o600
-                            && metadata.nlink() == 1,
-                        "diagnostic helper socket identity or permissions are unsafe"
-                    );
-                    break;
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
-            }
-            ensure!(
-                Instant::now() < deadline,
-                "diagnostic helper did not create its socket before the startup deadline"
-            );
-            thread::sleep(Duration::from_millis(10));
-        }
+    let socket_transport = match transport {
+        BrokerSocketTransport::Tcp => SocketTransport::Tcp,
+        BrokerSocketTransport::Udp => SocketTransport::Udp,
+    };
+    let request = SocketDiagnosticRequest {
+        family: if expected_peer.is_ipv4() {
+            libc::AF_INET as u8
+        } else {
+            libc::AF_INET6 as u8
+        },
+        transport: socket_transport,
+        // Every observation uses a fresh netlink socket and one request, so sequence 1
+        // cannot collide with an outstanding dump.
+        sequence: 1,
+    };
+    let mut io = LinuxSocketDiagnosticIo::open()
+        .context("cannot open the in-process NETLINK_SOCK_DIAG transport")?;
+    let dump = socket_diag_collector::collect_dump(&mut io, request, Duration::from_secs(3))
+        .context("cannot collect bounded kernel socket-mark diagnostics")?;
 
-        let response = request_socket_mark_diagnostics(
-            &socket_path,
-            &request,
-            unsafe { libc::geteuid() },
-            Duration::from_secs(10),
-        )?;
-        let exit_deadline = Instant::now() + HELPER_EXIT_TIMEOUT;
-        loop {
-            if let Some(status) = child.try_wait()? {
-                ensure!(status.success(), "diagnostic helper exited unsuccessfully");
-                ensure!(
-                    matches!(
-                        std::fs::symlink_metadata(&socket_path),
-                        Err(ref error) if error.kind() == std::io::ErrorKind::NotFound
-                    ),
-                    "diagnostic helper did not remove its private socket"
-                );
-                return Ok(response);
-            }
-            ensure!(
-                Instant::now() < exit_deadline,
-                "diagnostic helper did not exit after its single request"
-            );
-            thread::sleep(Duration::from_millis(10));
-        }
-    })();
+    let after = socket_ownership::inspect_process_sockets(&handle)
+        .context("cannot snapshot managed core socket ownership after diagnostics")?;
+    let response = build_socket_mark_broker_response(&request_for_response(
+        &process_identity_from_snapshot(&before)?,
+        expected_peer,
+        transport,
+        expected_mark,
+        mark_mask,
+    ), &before, &after, &dump.records)
+    .context("kernel socket diagnostics did not prove an exact marked proxy-peer socket")?;
+    response.validate()?;
+    Ok(response)
+}
 
-    if result.is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
-        if let Ok(metadata) = std::fs::symlink_metadata(&socket_path)
-            && metadata.file_type().is_socket()
-            && metadata.uid() == unsafe { libc::geteuid() }
-            && metadata.permissions().mode() & 0o777 == 0o600
-            && metadata.nlink() == 1
-        {
-            let _ = std::fs::remove_file(&socket_path);
-        }
+#[cfg(target_os = "linux")]
+fn process_identity_from_snapshot(
+    snapshot: &socket_ownership::ProcessSocketSnapshot,
+) -> Result<ProcessIdentity> {
+    snapshot.process.validate()?;
+    Ok(snapshot.process.clone())
+}
+
+#[cfg(target_os = "linux")]
+fn request_for_response(
+    process: &ProcessIdentity,
+    expected_peer: std::net::SocketAddr,
+    transport: BrokerSocketTransport,
+    expected_mark: u32,
+    mark_mask: u32,
+) -> SocketMarkBrokerRequest {
+    SocketMarkBrokerRequest {
+        version: BROKER_REQUEST_VERSION,
+        process: process.clone(),
+        expected_peer,
+        transport,
+        expected_mark,
+        mark_mask,
     }
-    result
 }
 
 #[cfg(target_os = "linux")]
@@ -185,68 +154,6 @@ pub fn observed_proxy_outbound_mark(
     observed.context("socket-mark response did not contain a mark")
 }
 
-#[cfg(target_os = "linux")]
-fn validate_activation_id(value: &str) -> Result<()> {
-    ensure!(
-        value.len() == 36
-            && value.bytes().enumerate().all(|(index, byte)| {
-                if [8, 13, 18, 23].contains(&index) {
-                    byte == b'-'
-                } else {
-                    byte.is_ascii_hexdigit()
-                }
-            }),
-        "invalid activation identifier for diagnostic socket"
-    );
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn validate_runtime_directory(path: &Path) -> Result<()> {
-    let metadata =
-        std::fs::symlink_metadata(path).context("cannot inspect private TUN runtime directory")?;
-    let canonical =
-        std::fs::canonicalize(path).context("cannot resolve private TUN runtime directory")?;
-    ensure!(
-        metadata.file_type().is_dir()
-            && canonical.as_path() == path
-            && metadata.uid() == unsafe { libc::geteuid() }
-            && metadata.permissions().mode() & 0o077 == 0,
-        "TUN runtime directory must be a real caller-owned private directory without symlink aliases"
-    );
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn validate_helper(path: &Path) -> Result<()> {
-    ensure!(
-        path == Path::new(INSTALLED_HELPER_PATH),
-        "diagnostic helper path is not the fixed installed path"
-    );
-    let metadata =
-        std::fs::symlink_metadata(path).context("dedicated diagnostic helper is not installed")?;
-    let parent = path
-        .parent()
-        .context("diagnostic helper has no parent directory")?;
-    let parent_metadata =
-        std::fs::symlink_metadata(parent).context("cannot inspect diagnostic helper directory")?;
-    ensure!(
-        parent_metadata.file_type().is_dir()
-            && parent_metadata.uid() == 0
-            && parent_metadata.permissions().mode() & 0o022 == 0,
-        "diagnostic helper directory must be a root-owned, non-writable real directory"
-    );
-    ensure!(
-        metadata.file_type().is_file()
-            && metadata.uid() == 0
-            && metadata.permissions().mode() & 0o022 == 0
-            && metadata.permissions().mode() & 0o6000 == 0
-            && metadata.permissions().mode() & 0o111 != 0,
-        "diagnostic helper must be a root-owned, non-writable, non-setuid executable"
-    );
-    Ok(())
-}
-
 #[cfg(not(target_os = "linux"))]
 pub fn observe_proxy_outbound_mark(
     _runtime_directory: &std::path::Path,
@@ -264,15 +171,6 @@ pub fn observe_proxy_outbound_mark(
 mod tests {
     #[cfg(target_os = "linux")]
     use super::*;
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn validates_only_uuid_activation_names() {
-        assert!(validate_activation_id("12345678-1234-4234-8234-123456789abc").is_ok());
-        for invalid in ["", "../helper", "12345678-1234-1234-1234-123456789abc;id"] {
-            assert!(validate_activation_id(invalid).is_err());
-        }
-    }
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -312,9 +210,4 @@ mod tests {
         assert!(observed_proxy_outbound_mark(&empty, 0x42, 0xff).is_err());
     }
 
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn helper_path_cannot_be_overridden() {
-        assert!(validate_helper(Path::new("/tmp/fake-helper")).is_err());
-    }
 }
