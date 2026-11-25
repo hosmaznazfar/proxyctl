@@ -16,7 +16,6 @@ use super::{
     manifest_store::ManifestStore,
     native_session,
     privilege_broker::BrokerSocketTransport,
-    recovery::SupervisorPhase,
     route_policy::RoutingPolicyPlan,
     session_record::{SessionRecord, SessionStore},
     supervisor_activation,
@@ -43,14 +42,22 @@ impl RunningNativeSession {
     pub fn wait_and_recover(mut self) -> Result<ExitStatus> {
         let status = self.core.child.wait();
         let recovery = self.recover_if_current();
-        let status = status.context("cannot wait for the managed native TUN core")?;
-        recovery?;
-        ensure!(
-            status.success(),
-            "managed {} TUN core exited with {status}",
-            self.record.core.as_str()
-        );
-        Ok(status)
+        match (status, recovery) {
+            (Ok(status), Ok(())) => {
+                ensure!(
+                    status.success(),
+                    "managed {} TUN core exited with {status}",
+                    self.record.core.as_str()
+                );
+                Ok(status)
+            }
+            (Err(wait_error), Ok(())) => Err(wait_error)
+                .context("native TUN core wait failed; session recovery completed"),
+            (Ok(_), Err(recovery_error)) => Err(recovery_error),
+            (Err(wait_error), Err(recovery_error)) => Err(wait_error).context(format!(
+                "native TUN core wait failed; session recovery also failed ({recovery_error:#})"
+            )),
+        }
     }
 
     fn recover_if_current(&self) -> Result<()> {
