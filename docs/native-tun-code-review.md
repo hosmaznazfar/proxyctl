@@ -369,3 +369,11 @@ After the Rust checks pass, the maintainer should select one known-good VMess no
 The maintainer reports that formatting, Clippy, and the complete all-targets/all-features Rust test suite passed after the Xray CLI readiness service was switched to the dual-stack orchestrator and the native-core activation arm was corrected to pass both family targets. The formatted changes were pushed to `main`. This validates compilation and automated tests for the current source state; it does not validate the installed helper bundle, systemd service behavior, or live VMess/VLESS traffic.
 
 The next acceptance step is host preparation followed by one local VMess Xray TUN test and, only after verified stop/cleanup, one VLESS test. Credentials and generated configurations must remain local and must not appear in logs shared to chat or committed. Xray TUN remains experimental; sing-box/Mihomo remain disabled.
+
+## 2026-11-25 native supervisor startup-signal hardening
+
+- The native supervisor now installs its signal guard before staging configuration or performing privileged network mutation. Startup signals are latched until the exact core pidfd is attached; a signal during the kernel transaction triggers generation-scoped recovery, and a signal during the spawn boundary cancels the new child before readiness.
+- The handler uses atomic state and `pidfd_send_signal` only. A duplicated pidfd is retained after handler teardown so an in-flight handler cannot observe a closed or reused descriptor. The guard is process-global and rejects overlapping sessions.
+- Regression coverage now exercises pre-mutation cancellation, startup cancellation at core attachment, foreground terminal-signal ownership, and supervisor-only signal forwarding.
+- The maintainer reports `cargo fmt --all`, Clippy with `-D warnings`, and `cargo test --all-targets --all-features` passed on the current 2026-11-25 main revision (713 tests passed; one managed-core fixture test remains intentionally ignored unless all three managed core binaries are installed).
+- This verifies local Rust checks only. The tiny process-entry window before signal handlers are installed, uncatchable `SIGKILL`, and actual host-level cleanup/dataplane behavior remain explicit limitations; TUN remains experimental.
