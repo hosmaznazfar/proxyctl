@@ -6,7 +6,7 @@
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]
-use std::{path::Path, time::Duration};
+use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 use super::{
@@ -22,13 +22,8 @@ use super::{
 };
 
 /// Collect one exact-peer socket-mark observation inside the already privileged supervisor.
-///
-/// The runtime and activation arguments remain in this internal signature for compatibility
-/// with the readiness pipeline, but diagnostics are process-local and create no runtime files.
 #[cfg(target_os = "linux")]
 pub fn observe_proxy_outbound_mark(
-    _runtime_directory: &Path,
-    _activation_id: &str,
     process: ProcessIdentity,
     expected_peer: std::net::SocketAddr,
     transport: BrokerSocketTransport,
@@ -129,8 +124,6 @@ pub fn observed_proxy_outbound_mark(
 
 #[cfg(not(target_os = "linux"))]
 pub fn observe_proxy_outbound_mark(
-    _runtime_directory: &std::path::Path,
-    _activation_id: &str,
     _process: (),
     _expected_peer: std::net::SocketAddr,
     _transport: (),
