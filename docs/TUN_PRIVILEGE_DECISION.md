@@ -113,7 +113,7 @@ The current version-3 launch specification carries the generated configuration a
 
 The launch-spec module now exposes a pure `from_generated_config` constructor. It accepts
 node/core/port metadata and the already-generated configuration bytes, requires UTF-8,
-constructs the version-2 request, and validates it before returning. It does not resolve
+constructs the version-3 request, and validates it before returning. It does not resolve
 database state, validate through a core executable, spawn processes, create runtime
 files, or change host networking. The constructor is a narrow building block for the
 unprivileged front-end preparation path; it does not connect that path to sudo or open
@@ -126,7 +126,7 @@ the supervisor gate.
 resolves the requested node from the user database, rejects deleted/incompatible nodes,
 checks the selected managed-core path, derives a fresh outbound mark, generates the
 adapter-specific native TUN configuration, validates it using the selected core's native
-config-check command, and returns a validated version-2 launch request.
+config-check command, and returns a validated version-3 launch request.
 
 This service performs only the unprivileged preparation and temporary config validation
 steps. It does not launch sudo/supervisor/core, allocate or persist a TUN generation,
