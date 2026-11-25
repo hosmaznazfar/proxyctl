@@ -47,7 +47,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         return Err("HTTP/2 transport is only mapped for VLESS and VMess".into());
     }
 
-    let path = if matches!(&kind, TransportKind::Grpc) && node.protocol != Protocol::Vmess {
+    let mut path = if matches!(&kind, TransportKind::Grpc) && node.protocol != Protocol::Vmess {
         None
     } else {
         option_string(node, "path").map(str::to_owned)
@@ -151,13 +151,50 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         .or_else(|| option_string(node, "maxEarlyData"))
         .or_else(|| option_string(node, "max_early_data"))
         .or_else(|| option_string(node, "max-early-data"));
-    let max_early_data = early_data_raw
+    let mut max_early_data = early_data_raw
         .map(|value| {
             value.parse::<u32>().map_err(|_| {
                 "WebSocket early-data size must be a valid unsigned integer".to_owned()
             })
         })
         .transpose()?;
+
+    // Xray-compatible links may put WebSocket early data in the path query.
+    // sing-box requires it as max_early_data plus the Xray-compatible header.
+    // Normalize once here; the Xray adapter reconstructs its native ?ed=N path.
+    if matches!(&kind, TransportKind::WebSocket)
+        && let Some(value) = path.as_mut()
+        && let Some((base_path, query)) = value.split_once('?')
+    {
+        let mut retained = Vec::new();
+        let mut path_early_data = None;
+        for parameter in query.split('&') {
+            let (key, raw_value) = parameter.split_once('=').unwrap_or((parameter, ""));
+            if key == "ed" {
+                if path_early_data.is_some() {
+                    return Err("WebSocket path contains duplicate early-data parameters".into());
+                }
+                path_early_data = Some(raw_value.parse::<u32>().map_err(|_| {
+                    "WebSocket path early-data size must be a valid unsigned integer".to_owned()
+                })?);
+            } else if !parameter.is_empty() {
+                retained.push(parameter);
+            }
+        }
+        if let Some(path_early_data) = path_early_data {
+            if let Some(explicit) = max_early_data
+                && explicit != path_early_data
+            {
+                return Err("WebSocket path and explicit early-data sizes conflict".into());
+            }
+            max_early_data = Some(path_early_data);
+            *value = if retained.is_empty() {
+                base_path.to_owned()
+            } else {
+                format!("{base_path}?{}", retained.join("&"))
+            };
+        }
+    }
     let early_data_header_name = option_string(node, "eh")
         .or_else(|| option_string(node, "earlyDataHeaderName"))
         .or_else(|| option_string(node, "early_data_header_name"))
