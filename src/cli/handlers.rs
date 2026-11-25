@@ -396,12 +396,22 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 let session = match crate::services::tun_handoff::request_supervisor_session(&spec) {
                     Ok(session) => session,
                     Err(error) => {
-                        return match crate::services::tun_handoff::request_supervisor_recovery() {
-                            Ok(()) => Err(error).context(
+                        if let Err(recovery_error) =
+                            crate::services::tun_handoff::request_supervisor_recovery()
+                        {
+                            return Err(error).context(format!(
+                                "TUN startup failed and privileged recovery also failed ({recovery_error:#}); durable evidence may require manual recovery"
+                            ));
+                        }
+                        return match crate::services::activation::restore_previous_loopback_if_any() {
+                            Ok(true) => Err(error).context(
+                                "TUN startup failed; privileged recovery completed and the previous loopback session was restored",
+                            ),
+                            Ok(false) => Err(error).context(
                                 "TUN startup failed; privileged recovery was requested for any partial activation",
                             ),
-                            Err(recovery_error) => Err(error).context(format!(
-                                "TUN startup failed and privileged recovery also failed ({recovery_error:#}); durable evidence may require manual recovery"
+                            Err(restore_error) => Err(error).context(format!(
+                                "TUN startup failed; privileged recovery completed but previous loopback restoration failed ({restore_error:#})"
                             )),
                         };
                     }
