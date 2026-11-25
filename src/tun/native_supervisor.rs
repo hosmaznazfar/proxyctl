@@ -10,7 +10,11 @@ use std::{
     net::SocketAddr,
     os::unix::process::ExitStatusExt,
     process::ExitStatus,
-    sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
+    os::fd::{FromRawFd, OwnedFd},
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
+    },
     time::Duration,
 };
 
@@ -19,6 +23,11 @@ use std::{
 static FORWARDED_CORE_PIDFD: AtomicI32 = AtomicI32::new(-1);
 static FOREGROUND_SIGNAL_GROUP: AtomicBool = AtomicBool::new(false);
 static PENDING_STARTUP_SIGNALS: AtomicU64 = AtomicU64::new(0);
+static SIGNAL_GUARD_ACTIVE: AtomicBool = AtomicBool::new(false);
+// A handler may have loaded the pidfd immediately before Drop restores the dispositions.
+// Retain retired duplicate descriptors until process exit so that in-flight handlers can
+// never observe a closed/reused descriptor.
+static RETIRED_SIGNAL_PIDFDS: OnceLock<Mutex<Vec<OwnedFd>>> = OnceLock::new();
 
 fn signal_bit(signal: libc::c_int) -> Option<u64> {
     (1..=64)
@@ -71,13 +80,17 @@ extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
 pub struct SignalForwardingGuard {
     previous: Vec<(libc::c_int, libc::sighandler_t)>,
     process: Option<super::process::ProcessHandle>,
+    signal_pidfd: Option<OwnedFd>,
 }
 
 impl SignalForwardingGuard {
     pub fn install(foreground: bool) -> Result<Self> {
+        SIGNAL_GUARD_ACTIVE
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| anyhow::anyhow!("a TUN signal-forwarding guard is already active"))?;
         ensure!(
             FORWARDED_CORE_PIDFD.load(Ordering::Acquire) == -1,
-            "a core signal-forwarding guard is already active"
+            "a core signal-forwarding pidfd is unexpectedly still active"
         );
         PENDING_STARTUP_SIGNALS.store(0, Ordering::Release);
         FOREGROUND_SIGNAL_GROUP.store(foreground, Ordering::Release);
@@ -103,6 +116,7 @@ impl SignalForwardingGuard {
                 }
                 FOREGROUND_SIGNAL_GROUP.store(false, Ordering::Release);
                 PENDING_STARTUP_SIGNALS.store(0, Ordering::Release);
+                SIGNAL_GUARD_ACTIVE.store(false, Ordering::Release);
                 return Err(error).context("cannot install TUN supervisor signal forwarding");
             }
             previous.push((signal, old));
@@ -110,6 +124,7 @@ impl SignalForwardingGuard {
         Ok(Self {
             previous,
             process: None,
+            signal_pidfd: None,
         })
     }
 
@@ -132,10 +147,26 @@ impl SignalForwardingGuard {
             !process.is_exited()?,
             "cannot install signal forwarding for an exited TUN core"
         );
-        FORWARDED_CORE_PIDFD
-            .compare_exchange(-1, process.as_raw_fd(), Ordering::AcqRel, Ordering::Acquire)
-            .map_err(|_| anyhow::anyhow!("a core signal-forwarding pidfd is already active"))?;
+        // Give the async signal handler a descriptor whose lifetime is independent from
+        // ProcessHandle. Drop retires this duplicate until process exit to close the
+        // handler-load-versus-close race without locking inside the signal handler.
+        let duplicated = unsafe { libc::fcntl(process.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 3) };
+        ensure!(
+            duplicated >= 0,
+            "cannot duplicate the pinned TUN core pidfd for signal handling: {}",
+            std::io::Error::last_os_error()
+        );
+        let signal_pidfd = unsafe { OwnedFd::from_raw_fd(duplicated) };
         self.process = Some(process);
+        self.signal_pidfd = Some(signal_pidfd);
+        FORWARDED_CORE_PIDFD
+            .compare_exchange(
+                -1,
+                self.signal_pidfd.as_ref().expect("pidfd was just stored").as_raw_fd(),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .map_err(|_| anyhow::anyhow!("a core signal-forwarding pidfd is already active"))?;
 
         let pending = PENDING_STARTUP_SIGNALS.swap(0, Ordering::AcqRel);
         if pending != 0 {
@@ -160,6 +191,14 @@ impl Drop for SignalForwardingGuard {
                 libc::signal(*signal, *handler);
             }
         }
+        if let Some(pidfd) = self.signal_pidfd.take() {
+            RETIRED_SIGNAL_PIDFDS
+                .get_or_init(|| Mutex::new(Vec::new()))
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(pidfd);
+        }
+        SIGNAL_GUARD_ACTIVE.store(false, Ordering::Release);
     }
 }
 
