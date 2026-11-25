@@ -972,8 +972,14 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
         port: active.port,
     };
     write_atomic(&previous_path, &serde_json::to_vec(&previous)?)?;
-    stop_locked(&runtime, &state_path, &managed_cores_path()?)
-        .context("loopback stop failed; previous-session restoration metadata was retained")?;
+    if let Err(error) = stop_locked(&runtime, &state_path, &managed_cores_path()?) {
+        // If the active state remains, the loopback process was not fully transitioned and
+        // must not be restored over itself. If it disappeared, retain the marker for recovery.
+        if state_path.exists() {
+            let _ = fs::remove_file(&previous_path);
+        }
+        return Err(error).context("cannot stop the active loopback process for TUN transition");
+    }
     Ok(active)
 }
 
