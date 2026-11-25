@@ -18,6 +18,7 @@ pub fn prepare_launch_spec(
     port: u16,
     probe_url: &str,
     expected_status: u16,
+    foreground: bool,
 ) -> anyhow::Result<LaunchSpec> {
     ensure!(node_id != 0, "node ID must be non-zero");
     ensure!(port >= 1024, "listener port must be between 1024 and 65535");
@@ -136,6 +137,7 @@ pub fn prepare_launch_spec(
         activation_id,
         managed_root,
         &generated.content,
+        foreground,
         generation,
         expected_peers,
         traffic_targets,
