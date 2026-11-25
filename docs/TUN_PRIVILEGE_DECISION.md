@@ -68,7 +68,7 @@ Proxyctl owns route and policy-rule creation through its journal. Core-managed a
 - The write-ahead journal is committed before kernel mutation. Recovery compares fresh resource fingerprints and removes only resources still matching the journal. Ambiguous or inconsistent evidence is preserved; cleanup never guesses.
 - The supervisor keeps the staged config alive for the core's lifetime. It acknowledges startup only after attachment, readiness, durable receipt/manifest commit, and establishment of the monitor.
 - An abrupt supervisor death can leave journaled kernel state after the core receives its parent-death signal. Run `proxyctl tun stop` or `proxyctl stop` to perform explicit recovery. Reboot recovery is not implemented; the runtime is under volatile `/run`, and Linux removes the session's TUN link, routes, and policy rules during reboot.
-- Foreground mode uses the same supervisor and privilege boundary. It keeps the lifecycle attached for diagnostics rather than introducing a second activation path. The supervisor forwards terminal termination signals to the exact core child and remains alive to perform journaled cleanup after the core exits.
+- Foreground mode uses the same supervisor and privilege boundary. It keeps the lifecycle attached for diagnostics rather than introducing a second activation path. The supervisor forwards terminal termination signals through a pinned pidfd to the exact core child and remains alive to perform journaled cleanup after the core exits; a late signal cannot target a process that reused the PID.
 
 ## Current implementation boundary
 
