@@ -1002,6 +1002,9 @@ pub struct ActivationRuntimeGuard {
     _lock: RuntimeLock,
 }
 
+/// Guard held from the user-owned TUN marker through supervisor startup acknowledgement.
+pub type TunHandoffGuard = ActivationRuntimeGuard;
+
 /// Atomically persist the user-owned TUN hint and reserve the activation slot for handoff.
 ///
 /// `require_previous_loopback` is true for `tun start`, which must retain the saved
