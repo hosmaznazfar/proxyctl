@@ -150,11 +150,13 @@ executable and requires a root-owned regular file with execute permission and no
 write permission. The current Proxyctl executable is resolved from the running process. If
 request delivery fails, the transport closes stdin, best-effort kills the sudo child, and
 waits to reap it rather than leaving a potentially blocked validation process behind. It
-does not pass arbitrary core paths or arguments. This transport is deliberately not
-connected to the TUN CLI yet:
-the supervisor remains validation-only and networking stays fail-closed until the
-root-runtime ownership, lifecycle handshake, process identity, journaled mutation,
-readiness and recovery path are completed and locally verified.
+does not pass arbitrary core paths or arguments. The transport is connected to both `proxyctl use --tun` and `proxyctl tun start`.
+For the native persistent-device path, the supervisor stages the generated config,
+applies the journaled interface/routes/rules transaction, launches the selected
+sing-box or Mihomo core directly, verifies full dual-stack readiness, commits the
+root-owned session receipt and Running manifest, then remains alive to monitor the
+child and recover its generation on exit. Xray remains excluded from this native
+path until its descriptor-backed lifecycle is integrated.
 
 
 
@@ -168,9 +170,9 @@ or mismatched identity data fails closed; the launch JSON cannot nominate a UID.
 After request validation, the supervisor creates or verifies `/run/proxyctl`
 (root-owned, mode 0755) and `/run/proxyctl/<uid>` (root-owned, mode 0700). Existing
 symlinks, non-directories, unexpected owners, or unexpected permission modes are
-rejected. This runtime bootstrap is the only privileged filesystem side effect in
-the current supervisor path. It does not stage the config, launch a core, create a
-TUN device, alter routes/rules/DNS/firewall state, or enable the CLI activation path.
+rejected. The same runtime contains the staged 0600 config, root-owned manifest,
+write-ahead journal, and session receipt. All privileged state is generation-bound
+and confined to this per-UID directory.
 
 The audit-login-UID cross-check intentionally fails closed in environments where
 Linux does not provide a valid login UID. Supporting such environments requires a
@@ -187,24 +189,24 @@ from the request, syncs it, and verifies that the resulting file is regular, roo
 and mode 0600. The runtime directory is rechecked as a real root-owned mode-0700
 directory before staging.
 
-The staged-file guard removes the temporary config on normal scope exit and explicit
-close. If writing or metadata verification fails, the partial file is removed. This
-stage is intentionally ephemeral in the current validation-only supervisor: no core
-consumes it, no process/session manifest is created, and no host networking is changed.
-Durable config retention and cleanup will be tied to the supervisor-owned session
-manifest only when process lifecycle and crash recovery are implemented.
+The staged-file guard remains alive for the entire supervised core lifetime and removes
+the config after the core exits and generation cleanup completes. If writing or metadata
+verification fails, the partial file is removed. Startup failures terminate the direct
+child where possible and immediately attempt journal-based recovery; unresolved or
+ambiguous resources retain their durable evidence for explicit `proxyctl tun stop`
+recovery.
 
-## Core process launch contract (design gate)
+## Core process launch contract (native persistent-device path)
 
 The first supervisor process-launch implementation must reuse the established core argv contract from ordinary activation, while keeping the executable selection entirely supervisor-derived:
 
 | Core | Executable selected from the fixed catalog | Fixed native argv after argv[0] |
 |---|---|---|
 | sing-box | `sing-box` | `run -c <root-staged-config>` |
-| Xray | `xray` | `run -c <root-staged-config>` |
 | Mihomo | `mihomo` | `-f <root-staged-config>` |
+| Xray | Not enabled in this native-device path | Requires its separate generation-bound descriptor lifecycle |
 
-Only the staged config pathname is dynamic, and it is generated inside the verified root-owned runtime. The request cannot supply argv, environment variables, a working directory, or any filesystem path. The child receives null stdin; supervisor diagnostics remain separate from the generated-config transport. No shell is involved.
+Only the staged config pathname is dynamic, and it is generated inside the verified root-owned runtime. The request cannot supply argv, environment variables, a working directory, or an executable path. The child receives null stdin, a minimal fixed environment, and fixed core-specific argv; no shell is involved. A parent-death signal ties the root core's lifetime to its supervisor. Foreground core stdout is redirected to stderr so it cannot corrupt the supervisor's one-shot stdout acknowledgement.
 
 ### Managed-core path resolution
 
@@ -212,19 +214,19 @@ This prerequisite is implemented by the version-3 launch request and Linux `tun:
 
 The hint is not an executable path. The supervisor validates the absolute `proxyctl/cores` suffix, rejects lexical traversal and symlinked components, checks ownership and write permissions through the full path, requires the Proxyctl and core directories to be invoking-user-owned mode 0700, and derives the executable name from the closed CoreKind enum. The executable must be a regular file owned by the invoking UID, executable, not group/world writable, and resolve beneath the canonical managed root.
 
-The validator is deliberately not described as race-free or as making a user-owned binary immutable. The invoking user owns the binary and explicitly authorizes its root execution through sudo. The eventual process-launch path must repeat the validation immediately before spawning and retain the canonical executable identity in its session record. No executable is launched by the current validation-only supervisor.
+The validator is deliberately not described as race-free or as making a user-owned binary immutable. The invoking user owns the binary and explicitly authorizes its root execution through sudo. The privileged supervisor repeats validation immediately before spawning and retains the canonical executable identity in the root-owned session receipt. The same-UID trust boundary remains explicit; path validation does not make the user-owned binary immutable.
 
 ### Process identity and startup handshake
 
 The supervisor must persist a session record before reporting success. At minimum it binds the invoking UID, session nonce, core kind, PID, `/proc/<pid>/stat` start-time ticks, and canonical executable identity. PID reuse must be rejected; signaling must use a pidfd when available or repeat full identity verification immediately before the signal. The supervisor, not the front-end CLI, owns the child and its lifecycle.
 
-A background start must use a private, root-owned control/handshake channel under `/run/proxyctl/<uid>`. The front end may report success only after the supervisor has spawned the core, verified its executable/start identity, completed the core-specific readiness check, and durably committed the session record. An early child exit, timeout, failed write, or failed handshake must cause bounded rollback and a failure response. The front end must not treat successful sudo process creation as successful TUN activation.
+A background start uses the per-invocation stdout pipe as its one-shot acknowledgement channel; no filesystem control socket or extra helper is installed. The front end reports success only after the supervisor has spawned the core, verified its executable and process identity, completed the dual-stack end-to-end readiness gate, and durably committed the session receipt plus Running manifest. An early child exit, timeout, failed write, or failed handshake causes bounded termination and journal recovery. Successful sudo process creation alone is never treated as successful TUN activation.
 
-Foreground mode must execute this same supervisor lifecycle synchronously with inherited diagnostics. It must not create a second launch path or weaken the same validation and cleanup gates.
+Foreground mode executes this same supervisor lifecycle synchronously. Core diagnostics are attached to the terminal's stderr while stdout remains reserved for the acknowledgement; it does not create a second launch path or weaken validation and cleanup gates.
 
 ### Deliberately excluded from this slice
 
-Core spawning alone does not enable TUN. Do not connect `tun start`, `use --tun`, or the legacy TUN orchestrator to this process-launch code until process ownership, supervisor survival, stop protocol, manifest/WAL transaction ownership, readiness, exact cleanup, crash recovery, and reboot recovery are complete. In particular, do not create a TUN device or mutate routes, policy rules, DNS, firewall, or forwarding state in the process-launch slice.
+The native persistent-device path is now connected to `proxyctl use --tun` and `proxyctl tun start` for sing-box and Mihomo. It creates the owned TUN device and journaled routes/rules, verifies the complete readiness evidence, and supports explicit stop/recovery. Xray's descriptor-backed path and automatic reboot-time recovery remain separate unfinished work; no systemd service or additional helper executable is introduced for new sessions.
 
 
 ## Invoking user's managed-core path verification
@@ -240,7 +242,7 @@ The privileged supervisor validates the hint after deriving the invoking UID:
 - The fixed executable name comes from the closed core catalog. It must be a regular, invoking-user-owned executable and not group/world writable.
 - The resolved executable must remain below the canonical managed-core root.
 
-This intentionally accepts a validated user-selected XDG data root while refusing unchecked paths. It does not make the user-owned binary immutable against the same user; sudo authorization remains the explicit trust boundary. The supervisor currently performs validation only: it does not execute the returned path.
+This intentionally accepts a validated user-selected XDG data root while refusing unchecked paths. It does not make the user-owned binary immutable against the same user; sudo authorization remains the explicit trust boundary. The native supervisor executes only the validated sing-box or Mihomo path selected by the closed core enum. Xray remains excluded from this path.
 
 
 ## Privilege handoff hardening
@@ -254,8 +256,10 @@ being selected as the privilege broker.
 If writing the bounded launch request to sudo's stdin fails, the handoff closes the
 pipe, sends a termination request to the sudo child, and waits for the child to be
 reaped. The request pipe remains separate from sudo's terminal-driven password prompt;
-`sudo -S` is not used. These checks harden transport setup only: the supervisor remains
-validation-only, and no core or host networking operation is enabled.
+`sudo -S` is not used. These checks harden the shell-free handoff. New native TUN sessions use the same
+Proxyctl executable as the privileged supervisor; socket-mark readiness now uses
+in-process NETLINK_SOCK_DIAG collection and does not launch
+`/usr/libexec/proxyctl-tun-helper` or any separate diagnostic binary.
 
 
 ## Root-owned privileged session record
@@ -288,7 +292,7 @@ rollback/recovery behavior.
 
 ## Supervisor acknowledgement and coordinated session commit
 
-The implementation now has a bounded, versioned JSON acknowledgement on the dedicated stdout pipe. Human-readable diagnostics remain on stderr. The current validation-only supervisor emits `not_started`; the front end accepts only a future `started` reply carrying a valid privileged session receipt. This pipe is a per-invocation kernel channel rather than a filesystem socket below the root-only runtime directory.
+The implementation has a bounded, versioned JSON acknowledgement on the dedicated stdout pipe. Human-readable diagnostics remain on stderr. The supervisor emits `started` only after the native core passes readiness and the root-owned session receipt and Running manifest are committed; the front end also verifies that the supervisor remains alive to own the session. The pipe is a per-invocation kernel channel rather than a filesystem socket below the root-only runtime directory.
 
 The Linux lifecycle coordinator also has a root-side `bind_core_session` operation. Under the lifecycle lock it verifies the pinned process and its credentials against the privileged supervisor's effective UID (root in production), writes the root-owned session receipt first, then persists the matching `Running` lifecycle manifest with the same process identity. The receipt separately binds the invoking non-root UID. If the manifest write fails, the receipt is deliberately retained as recovery evidence.
 
@@ -304,4 +308,4 @@ Final record cleanup is separate and fail-closed. It requires the recorded core 
 The coordinator now has a generic recovery orchestration method that can invoke the existing compare-before-delete journal recovery executor through a caller-supplied privileged backend, then finalize the root-owned receipt and manifest. It retains the completed journal until the `Cleaned` phase is durable. This method is not wired to CLI stop or the hidden supervisor, and no recovery backend has been invoked by this implementation. The hidden supervisor still does not launch a core, and TUN remains disabled.
 
 
-Launch protocol version 5 carries the kernel-generated activation UUID used to derive the core socket mark. The privileged supervisor must reuse that exact UUID for the manifest, transaction journal, and session receipt; it must not generate a second activation identity.
+Launch protocol version 5 carries the kernel-generated activation UUID, non-zero generation, foreground preference, resolved proxy peer candidates, and exactly one IPv4 plus one IPv6 numeric HTTP readiness target. The supervisor validates those bounded inputs and reuses the exact activation UUID/generation for the manifest, transaction journal, and session receipt; it does not generate replacement identities. The pre-activation DNS/firewall baseline is captured independently by the privileged supervisor and is never accepted from the request.
