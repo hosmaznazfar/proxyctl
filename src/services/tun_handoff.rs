@@ -125,9 +125,8 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
         Ok(Err(error)) => {
             let cleanup = abort_child(&mut child);
             let _ = reader.join();
-            return Err(error).context(format!(
-                "cannot read supervisor acknowledgement; {cleanup}"
-            ));
+            return Err(error)
+                .context(format!("cannot read supervisor acknowledgement; {cleanup}"));
         }
         Err(mpsc::RecvTimeoutError::Timeout) => {
             let cleanup = abort_child(&mut child);

@@ -1,11 +1,11 @@
 #[cfg(target_os = "linux")]
 use super::process::{ProcessHandle, ProcessIdentity, read_process_owner_uid};
+#[cfg(target_os = "linux")]
+use super::session_record::{SessionRecord, SessionStore};
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
-#[cfg(target_os = "linux")]
-use super::session_record::{SessionRecord, SessionStore};
 use anyhow::{Context, Result, ensure};
 use std::{fs::File, path::PathBuf, time::Duration};
 #[cfg(unix)]
@@ -50,7 +50,10 @@ pub struct CoordinatedSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionReconciliation {
     Idle,
-    PreparedWithoutReceipt { activation_id: String, generation: u64 },
+    PreparedWithoutReceipt {
+        activation_id: String,
+        generation: u64,
+    },
     ReceiptCommittedBeforeManifest(SessionRecord),
     Running(SessionRecord),
     CleanupPending(Option<SessionRecord>),
@@ -226,8 +229,7 @@ impl LifecycleCoordinator {
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
         record.validate()?;
         ensure!(
-            record.activation_id == token.activation_id
-                && record.generation == token.generation,
+            record.activation_id == token.activation_id && record.generation == token.generation,
             "privileged session receipt does not match the activation token"
         );
         ensure!(
@@ -347,12 +349,10 @@ pub fn reconcile_session_records(
     }
 
     match snapshot.phase {
-        SupervisorPhase::Prepared if snapshot.core_process.is_none() => {
-            Ok(SessionReconciliation::ReceiptCommittedBeforeManifest(record.clone()))
-        }
-        SupervisorPhase::Running
-            if snapshot.core_process.as_ref() == Some(&record.process) =>
-        {
+        SupervisorPhase::Prepared if snapshot.core_process.is_none() => Ok(
+            SessionReconciliation::ReceiptCommittedBeforeManifest(record.clone()),
+        ),
+        SupervisorPhase::Running if snapshot.core_process.as_ref() == Some(&record.process) => {
             Ok(SessionReconciliation::Running(record.clone()))
         }
         SupervisorPhase::CleanupPending
@@ -360,13 +360,9 @@ pub fn reconcile_session_records(
         {
             Ok(SessionReconciliation::CleanupPending(Some(record.clone())))
         }
-        SupervisorPhase::Cleaned
-            if snapshot.core_process.as_ref() == Some(&record.process) =>
-        {
-            Ok(SessionReconciliation::CleanedAwaitingReceiptRemoval(
-                record.clone(),
-            ))
-        }
+        SupervisorPhase::Cleaned if snapshot.core_process.as_ref() == Some(&record.process) => Ok(
+            SessionReconciliation::CleanedAwaitingReceiptRemoval(record.clone()),
+        ),
         _ => Ok(SessionReconciliation::Inconsistent(
             "manifest phase or process identity conflicts with the session receipt".into(),
         )),
@@ -559,9 +555,7 @@ mod tests {
             process: ProcessIdentity {
                 pid: 4242,
                 start_ticks: 991,
-                executable: PathBuf::from(
-                    "/home/user/.local/share/proxyctl/cores/xray/xray",
-                ),
+                executable: PathBuf::from("/home/user/.local/share/proxyctl/cores/xray/xray"),
             },
         }
     }
@@ -616,10 +610,8 @@ mod tests {
             SessionReconciliation::CleanedAwaitingReceiptRemoval(receipt)
         );
 
-        let mismatched = fixture_session(
-            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-            prepared.generation,
-        );
+        let mismatched =
+            fixture_session("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", prepared.generation);
         assert!(matches!(
             reconcile_session_records(Some(&prepared), Some(&mismatched)).unwrap(),
             SessionReconciliation::Inconsistent(_)
@@ -787,11 +779,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let runtime = directory.path().join("runtime");
         let store = ManifestStore::open(&runtime).unwrap();
-        let sessions = SessionStore::open_for_owner(
-            runtime,
-            unsafe { libc::geteuid() },
-            unsafe { libc::getuid() },
-        )
+        let sessions = SessionStore::open_for_owner(runtime, unsafe { libc::geteuid() }, unsafe {
+            libc::getuid()
+        })
         .unwrap();
         let coordinator = LifecycleCoordinator::new(store).unwrap();
         let token = coordinator

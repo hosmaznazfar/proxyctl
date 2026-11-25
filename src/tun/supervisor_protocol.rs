@@ -60,7 +60,10 @@ impl SupervisorReply {
     }
 
     pub fn validate(&self) -> Result<()> {
-        ensure!(self.version == REPLY_VERSION, "unsupported supervisor reply version");
+        ensure!(
+            self.version == REPLY_VERSION,
+            "unsupported supervisor reply version"
+        );
         match &self.outcome {
             SupervisorOutcome::NotStarted { reason } | SupervisorOutcome::Failed { reason } => {
                 validate_reason(reason)?;
@@ -76,9 +79,14 @@ impl SupervisorReply {
 pub fn write_reply<W: Write>(mut writer: W, reply: &SupervisorReply) -> Result<()> {
     reply.validate()?;
     let mut bytes = serde_json::to_vec(reply).context("cannot encode supervisor reply")?;
-    ensure!(bytes.len() < MAX_REPLY_BYTES, "supervisor reply exceeds size limit");
+    ensure!(
+        bytes.len() < MAX_REPLY_BYTES,
+        "supervisor reply exceeds size limit"
+    );
     bytes.push(b'\n');
-    writer.write_all(&bytes).context("cannot write supervisor reply")?;
+    writer
+        .write_all(&bytes)
+        .context("cannot write supervisor reply")?;
     writer.flush().context("cannot flush supervisor reply")
 }
 
@@ -89,7 +97,10 @@ pub fn read_reply<R: Read>(reader: R) -> Result<SupervisorReply> {
         .take(MAX_REPLY_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .context("cannot read supervisor acknowledgement")?;
-    ensure!(!bytes.is_empty() && bytes.len() <= MAX_REPLY_BYTES, "supervisor reply size is invalid");
+    ensure!(
+        !bytes.is_empty() && bytes.len() <= MAX_REPLY_BYTES,
+        "supervisor reply size is invalid"
+    );
     if bytes.last() == Some(&b'\n') {
         bytes.pop();
     }
@@ -113,8 +124,14 @@ fn bounded_reason(reason: &str) -> String {
 }
 
 fn validate_reason(reason: &str) -> Result<()> {
-    ensure!(!reason.is_empty(), "supervisor reply reason must not be empty");
-    ensure!(reason.len() <= 4096, "supervisor reply reason exceeds size limit");
+    ensure!(
+        !reason.is_empty(),
+        "supervisor reply reason must not be empty"
+    );
+    ensure!(
+        reason.len() <= 4096,
+        "supervisor reply reason exceeds size limit"
+    );
     ensure!(
         !reason.chars().any(char::is_control),
         "supervisor reply reason contains control characters"
@@ -138,9 +155,7 @@ mod tests {
     #[test]
     fn started_acknowledgement_carries_the_validated_session_identity() {
         use crate::tun::{
-            launch_spec::CoreKind,
-            process::ProcessIdentity,
-            session_record::SessionRecord,
+            launch_spec::CoreKind, process::ProcessIdentity, session_record::SessionRecord,
         };
         use std::path::PathBuf;
 
@@ -180,7 +195,10 @@ mod tests {
         assert!(read_reply([].as_slice()).is_err());
         assert!(read_reply(vec![b'x'; MAX_REPLY_BYTES + 1].as_slice()).is_err());
         assert!(read_reply(b"{} trailing".as_slice()).is_err());
-        assert!(read_reply(b"{\"version\":1,\"outcome\":\"failed\",\"reason\":\"no\"}\n\n".as_slice()).is_err());
+        assert!(
+            read_reply(b"{\"version\":1,\"outcome\":\"failed\",\"reason\":\"no\"}\n\n".as_slice())
+                .is_err()
+        );
     }
 
     #[test]

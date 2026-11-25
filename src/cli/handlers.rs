@@ -5,18 +5,14 @@ use anyhow::Context;
 #[cfg(target_os = "linux")]
 use std::io::IsTerminal;
 
-
-
 /// Write the one-shot acknowledgement, then close stdout so a future detached supervisor can
 /// keep monitoring without keeping the front end's acknowledgement pipe open.
 #[cfg(target_os = "linux")]
 fn write_final_supervisor_reply(
     reply: &crate::tun::supervisor_protocol::SupervisorReply,
 ) -> anyhow::Result<()> {
-    let write_result = crate::tun::supervisor_protocol::write_reply(
-        std::io::stdout().lock(),
-        reply,
-    );
+    let write_result =
+        crate::tun::supervisor_protocol::write_reply(std::io::stdout().lock(), reply);
     // SAFETY: this hidden supervisor owns its stdout descriptor and never writes human output
     // there; closing it delimits the one-shot protocol frame for the waiting front end.
     let close_result = unsafe { libc::close(1) };
@@ -73,9 +69,8 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
             );
         }
         Err(error) => {
-            let reply = crate::tun::supervisor_protocol::SupervisorReply::failed(format!(
-                "{error:#}"
-            ));
+            let reply =
+                crate::tun::supervisor_protocol::SupervisorReply::failed(format!("{error:#}"));
             write_final_supervisor_reply(&reply)
                 .context("cannot send structured supervisor failure acknowledgement")?;
             Err(error)
