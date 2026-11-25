@@ -63,7 +63,7 @@ pub struct LaunchSpec {
     /// Resolved selected-node endpoints used to prove the core's marked outbound socket bypass.
     pub expected_peers: Vec<std::net::SocketAddr>,
     /// Bounded numeric IPv4 and IPv6 HTTP destinations used for end-to-end TUN readiness.
-    pub traffic_targets: Vec<super::readiness::HttpProbeTarget>,
+    pub traffic_targets: Vec<crate::tun::readiness::HttpProbeTarget>,
 }
 /// Read one launch specification from a stream, rejecting input beyond the protocol limit.
 ///
@@ -95,7 +95,7 @@ pub fn from_generated_config(
     generated_config: &[u8],
     generation: u64,
     expected_peers: Vec<std::net::SocketAddr>,
-    traffic_targets: Vec<super::readiness::HttpProbeTarget>,
+    traffic_targets: Vec<crate::tun::readiness::HttpProbeTarget>,
 ) -> Result<LaunchSpec> {
     let generated_config = std::str::from_utf8(generated_config)
         .context("generated configuration must be UTF-8 JSON")?
@@ -227,13 +227,13 @@ mod tests {
             generation: 1,
             expected_peers: vec!["198.51.100.10:443".parse().unwrap()],
             traffic_targets: vec![
-                super::readiness::HttpProbeTarget {
+                crate::tun::readiness::HttpProbeTarget {
                     destination: "192.0.2.10:80".parse().unwrap(),
                     host_header: "connectivity.example.test".into(),
                     path: "/generate_204".into(),
                     expected_status: 204,
                 },
-                super::readiness::HttpProbeTarget {
+                crate::tun::readiness::HttpProbeTarget {
                     destination: "[2001:db8::10]:80".parse().unwrap(),
                     host_header: "connectivity.example.test".into(),
                     path: "/generate_204".into(),
