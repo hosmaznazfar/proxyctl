@@ -102,6 +102,99 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
 /// The supervisor never reads the user's node database or accepts resource paths from stdin.
 /// All cleanup decisions come from the root-owned manifest, journal, and session receipt.
 #[cfg(target_os = "linux")]
+fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
+    const DEFAULT_PROBE_URL: &str = "http://connectivitycheck.gstatic.com/generate_204";
+    const DEFAULT_PROBE_STATUS: u16 = 204;
+
+    let active = crate::services::activation::active_loopback_session()?;
+    anyhow::ensure!(
+        matches!(active.core, crate::cores::CoreId::SingBox | crate::cores::CoreId::Mihomo),
+        "the active Xray session uses a descriptor-backed TUN contract that is not yet wired into the single-executable native supervisor"
+    );
+
+    // Stop only the exact verified loopback process before reusing its listener port.
+    crate::services::activation::stop()
+        .context("cannot stop the verified active loopback session before TUN transition")?;
+
+    let spec = match crate::services::tun_preparation::prepare_launch_spec(
+        active.node_id,
+        active.core,
+        active.port,
+        DEFAULT_PROBE_URL,
+        DEFAULT_PROBE_STATUS,
+        foreground,
+    ) {
+        Ok(spec) => spec,
+        Err(error) => {
+            return match crate::services::activation::activate(
+                active.node_id,
+                active.core,
+                false,
+                Some(active.port),
+                false,
+            ) {
+                Ok(()) => Err(error).context(
+                    "TUN preparation failed; the original loopback session was restored",
+                ),
+                Err(restore_error) => Err(error).context(format!(
+                    "TUN preparation failed and the original loopback session could not be restored ({restore_error:#})"
+                )),
+            };
+        }
+    };
+
+    match crate::services::tun_handoff::request_supervisor_session(&spec) {
+        Ok(session) => {
+            if foreground {
+                println!(
+                    "Foreground TUN session for node #{} with {} has exited (activation {}).",
+                    active.node_id,
+                    active.core,
+                    session.activation_id
+                );
+            } else {
+                println!(
+                    "Started the active node #{} with {} in TUN mode.",
+                    active.node_id,
+                    active.core
+                );
+                println!("Local HTTP/SOCKS proxy listener: 127.0.0.1:{}", active.port);
+                println!("Stop TUN mode with 'proxyctl tun stop'.");
+            }
+            Ok(())
+        }
+        Err(error) => {
+            if let Err(recovery_error) =
+                crate::services::tun_handoff::request_supervisor_recovery()
+            {
+                return Err(error).context(format!(
+                    "TUN transition failed and privileged recovery also failed ({recovery_error:#}); the original loopback session was not restarted to avoid conflicting network state"
+                ));
+            }
+            match crate::services::activation::activate(
+                active.node_id,
+                active.core,
+                false,
+                Some(active.port),
+                false,
+            ) {
+                Ok(()) => Err(error).context(
+                    "TUN transition failed; privileged recovery completed and the original loopback session was restored",
+                ),
+                Err(restore_error) => Err(error).context(format!(
+                    "TUN transition failed; privileged recovery completed but the original loopback session could not be restored ({restore_error:#})"
+                )),
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn start_tun_from_active(_foreground: bool) -> anyhow::Result<()> {
+    anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
+#[cfg(target_os = "linux")]
 fn run_tun_recovery() -> anyhow::Result<()> {
     anyhow::ensure!(
         unsafe { libc::geteuid() } == 0 && unsafe { libc::getuid() } == 0,
@@ -215,10 +308,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::__TunRecover => return run_tun_recovery(),
         Command::Tun { command } => {
             match command {
-                TunCommand::Start { .. } => {
-                    anyhow::bail!(
-                        "TUN session start is not yet implemented; activation remains fail-closed during the supervisor migration"
-                    );
+                TunCommand::Start { foreground } => {
+                    start_tun_from_active(foreground)?;
+                    return Ok(());
                 }
                 TunCommand::Stop => {
                     #[cfg(target_os = "linux")]
