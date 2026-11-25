@@ -1,7 +1,8 @@
 #[cfg(target_os = "linux")]
-use super::process::{ProcessHandle, ProcessIdentity};
+use super::process::{ProcessHandle, ProcessIdentity, read_process_owner_uid};
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
+    session_record::{SessionRecord, SessionStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
@@ -177,6 +178,69 @@ impl LifecycleCoordinator {
         snapshot.core_process = Some(process);
         snapshot.phase = SupervisorPhase::Running;
         self.store.write(&snapshot)
+    }
+
+    /// Persist the root-owned process receipt before binding the same identity to the
+    /// lifecycle manifest. If the second durable write fails, the receipt is deliberately
+    /// retained as recovery evidence; callers must not delete it as a rollback shortcut.
+    #[cfg(target_os = "linux")]
+    pub fn bind_core_session(
+        &self,
+        token: &ActivationToken,
+        sessions: &SessionStore,
+        record: &SessionRecord,
+    ) -> Result<()> {
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        record.validate()?;
+        ensure!(
+            record.activation_id == token.activation_id
+                && record.generation == token.generation,
+            "privileged session receipt does not match the activation token"
+        );
+        ensure!(
+            sessions.path().parent() == self.store.path().parent(),
+            "privileged session receipt and lifecycle manifest must share one runtime directory"
+        );
+
+        let process_handle = ProcessHandle::open(record.process.clone())?;
+        ensure!(
+            !process_handle.is_exited()?,
+            "managed core exited before its session receipt could be committed"
+        );
+        ensure!(
+            read_process_owner_uid(&process_handle)? == record.invoking_uid,
+            "managed core process credentials do not match the invoking user"
+        );
+
+        let mut snapshot = self
+            .store
+            .load()?
+            .context("no TUN recovery manifest exists")?;
+        ensure!(
+            snapshot.manifest.activation_id == token.activation_id
+                && snapshot.generation == token.generation,
+            "stale TUN lifecycle token does not match the active activation"
+        );
+        ensure!(
+            snapshot.phase == SupervisorPhase::Prepared && snapshot.core_process.is_none(),
+            "core session can only be committed once to a prepared TUN activation"
+        );
+
+        // This is the first commit point. A crash after it leaves a root-owned session
+        // receipt plus a Prepared manifest, which recovery can reconcile without trusting
+        // the user's database or a user-owned manifest.
+        sessions.create(record)?;
+
+        ensure!(
+            !process_handle.is_exited()?,
+            "managed core exited before its lifecycle manifest could be committed"
+        );
+        snapshot.core_process = Some(record.process.clone());
+        snapshot.phase = SupervisorPhase::Running;
+        self.store.write(&snapshot).context(
+            "session receipt is durable but lifecycle manifest commit failed; preserve the receipt for recovery",
+        )?;
+        Ok(())
     }
 
     pub fn apply_event(
