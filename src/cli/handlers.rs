@@ -533,15 +533,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             return Ok(());
         }
         Command::Stop => {
+            let tun_pending = crate::services::activation::has_pending_tun_session()?
+                || crate::services::activation::has_pending_previous_loopback()?;
             crate::services::activation::stop()?;
-            if crate::services::activation::has_pending_tun_session()?
-                || crate::services::activation::has_pending_previous_loopback()?
-            {
+            if tun_pending {
                 crate::services::tun_handoff::request_supervisor_recovery()?;
                 crate::services::activation::clear_tun_session_marker()?;
-                if crate::services::activation::restore_previous_loopback_if_any()? {
-                    println!("Restored the previous loopback proxy session.");
-                }
+                crate::services::activation::discard_previous_loopback_marker()?;
             }
             return Ok(());
         }
