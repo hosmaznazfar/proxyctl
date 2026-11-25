@@ -70,8 +70,9 @@ where
     F: FnOnce(&super::process::ProcessIdentity, &ActivationToken) -> Result<()>,
 {
     ensure!(invoking_uid != 0, "invoking TUN user UID must be non-zero");
+    let runtime_directory = coordinator.runtime_directory()?;
     ensure!(
-        sessions.path().parent() == Some(coordinator.runtime_directory()?.as_path()),
+        sessions.path().parent() == Some(runtime_directory.as_path()),
         "session receipt and lifecycle manifest must share one runtime directory"
     );
     let current = coordinator
@@ -119,14 +120,14 @@ where
         Err(error) => {
             // The Child is still our unreaped direct child, so its PID cannot be reused
             // between spawn and this kill/wait pair. Durable recovery evidence is retained.
-            let kill_result = core.child.kill();
-            let wait_result = core.child.wait();
-            if let Err(kill_error) = kill_result {
-                if let Err(wait_error) = wait_result {
-                    return Err(error).context(format!(
-                        "startup failed ({error:#}); child termination failed ({kill_error:#}) and reaping failed ({wait_error:#}); durable recovery evidence was retained"
-                    ));
-                }
+            let kill_error = core.child.kill().err();
+            let wait_error = core.child.wait().err();
+            if kill_error.is_some() || wait_error.is_some() {
+                return Err(error).context(format!(
+                    "startup failed ({error:#}); child termination error: {}; child reaping error: {}; durable recovery evidence was retained",
+                    kill_error.map_or_else(|| "none".to_owned(), |value| value.to_string()),
+                    wait_error.map_or_else(|| "none".to_owned(), |value| value.to_string())
+                ));
             }
             Err(error).context(
                 "native TUN startup failed; the direct child was terminated where possible and durable recovery evidence was retained",
