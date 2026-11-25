@@ -47,9 +47,9 @@ impl SignalForwardingGuard {
             .compare_exchange(0, pid, Ordering::SeqCst, Ordering::SeqCst)
             .map_err(|_| anyhow::anyhow!("a core signal-forwarding guard is already active"))?;
 
-        let mut signals = vec![libc::SIGTERM];
+        let mut signals = vec![libc::SIGTERM, libc::SIGINT];
         if foreground {
-            signals.extend([libc::SIGINT, libc::SIGHUP]);
+            signals.push(libc::SIGHUP);
         }
         let mut previous = Vec::with_capacity(signals.len());
         for signal in signals {
