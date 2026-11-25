@@ -1,6 +1,6 @@
 # TUN supervisor acknowledgement and session commit protocol
 
-This document defines the single-executable, sudo-only TUN migration boundary. The start path remains disabled and does not launch a core or create network state. The explicit `tun stop` path is connected to privileged, journal-verified cleanup and may remove only resources owned by its durable activation journal.
+This document defines the single-executable, sudo-only TUN lifecycle. Native persistent-device startup is connected for sing-box and Mihomo through `proxyctl use --tun` and `proxyctl tun start`; the explicit `tun stop` path performs privileged, journal-verified cleanup. Xray's descriptor-backed path and automatic reboot-time recovery remain separate unfinished work.
 
 ## One-way acknowledgement channel
 
@@ -10,7 +10,7 @@ The unprivileged front end sends the bounded versioned launch request to:
 sudo -- <current-proxyctl-executable> __tun-supervisor
 ```
 
-The request remains on stdin so sudo's password prompt stays terminal-driven. Launch protocol version 5 includes the kernel-generated activation UUID used by the unprivileged preparation step to derive the core socket mark. The supervisor must use this exact UUID for the manifest, transaction journal, and session receipt; it must not generate a replacement UUID. The supervisor's stdout is reserved for one bounded JSON acknowledgement; diagnostics remain on stderr. The pipe is a per-invocation kernel object inherited across sudo, not a pathname that an unprivileged process must access below the root-owned mode-0700 runtime directory.
+The request remains on stdin so sudo's password prompt stays terminal-driven. Launch protocol version 5 includes the activation UUID, generation, foreground preference, resolved selected-node peer candidates, and bounded dual-stack HTTP readiness targets. The supervisor validates the request again and reuses the exact UUID/generation for the manifest, transaction journal, and session receipt; it does not generate replacement identities. The supervisor's stdout is reserved for one bounded JSON acknowledgement; diagnostics remain on stderr. The pipe is a per-invocation kernel object inherited across sudo, not a pathname that an unprivileged process must access below the root-owned mode-0700 runtime directory.
 
 The reply schema is versioned and strict:
 
@@ -20,7 +20,7 @@ The reply schema is versioned and strict:
 
 Unknown fields, unsupported versions, empty/trailing data and replies beyond 16 KiB are rejected. The front end must accept success only for `started`, and only after validating the embedded session record. A zero sudo exit status or successful process creation is not a startup acknowledgement.
 
-The current implementation deliberately emits `not_started` after request validation. The front-end transport parses the reply and rejects it as a non-start. It bounds the wait to 30 seconds, requires the supervisor to close stdout after the one-shot reply, and accepts a future `started` reply only while the supervisor process remains alive. The supervisor does not launch a core, daemonize, or keep a background lifecycle alive yet. The pipe framing and timeout are groundwork for the later startup handshake, not evidence that the handshake is operational end-to-end.
+The supervisor emits `started` only after it has applied the journaled native-device transaction, launched the selected core, verified exact TUN attachment, passed the full dual-stack end-to-end readiness gate, and durably committed the session receipt plus Running manifest. It closes stdout after the one-shot reply and remains alive as the session monitor. The front-end waits up to 60 seconds for this acknowledgement and accepts it only while the supervisor is still alive. Foreground requests remain attached until the supervisor completes cleanup.
 
 ## Durable commit ordering
 
@@ -53,7 +53,7 @@ The table is a recovery contract implemented by the lifecycle coordinator and jo
 
 ## Readiness and background lifecycle gates
 
-A future `started` reply is permitted only after all of the following are true:
+A `started` reply is emitted only after all of the following are true:
 
 - the selected core was spawned with the fixed argv and root-staged config;
 - the supervisor captured and pidfd-pinned the exact child identity;
@@ -62,9 +62,9 @@ A future `started` reply is permitted only after all of the following are true:
 - the core-specific readiness check succeeded;
 - the supervisor has established a terminal-independent monitoring lifecycle and stop/recovery ownership.
 
-The foreground path must use this same sequence. Background mode must not return merely because sudo spawned; it returns only after the supervisor sends the `started` reply, closes the acknowledgement pipe, and remains alive as the session owner. The front end's 30-second acknowledgement timeout is implemented; supervisor detachment, ongoing child-exit monitoring, stop requests and reboot recovery remain separate gates.
+The foreground path uses this same sequence and redirects core stdout to supervisor stderr so the protocol pipe remains unambiguous. Background mode returns only after the supervisor sends the `started` reply, closes the acknowledgement pipe, and remains alive as the session owner. The supervisor monitors the child, retains the staged config for its lifetime, and invokes generation-scoped journal recovery when the core exits. Explicit stop is supported; automatic reboot recovery remains out of scope.
 
-## Direct core-launch primitive (not yet wired)
+## Direct core-launch primitive (wired for native persistent devices)
 
 A new Linux-only direct launcher now provides the process-creation primitive for the single-executable supervisor. It launches the selected managed binary directly from the privileged Proxyctl process; it does not invoke systemd, install or execute a helper, construct a shell command, or accept arbitrary argv/environment data.
 
@@ -76,14 +76,14 @@ The launcher re-resolves the executable from the closed `CoreKind` enum and invo
 
 The child receives a cleared environment with a minimal fixed `PATH`, `HOME` and locale, no stdin, and no inherited output streams. Xray's descriptor is duplicated CLOEXEC and made inheritable only in the forked child immediately before exec. The parent captures the exact executable/PID/start-time identity, pins it with pidfd, and verifies that all process UID credentials remain root. Any post-spawn verification failure kills and reaps that exact child.
 
-This is deliberately only a launch primitive. It is not called by `__tun-supervisor` yet, does not create a kernel transaction, and does not make `tun start` available. The supervisor must still coordinate journaled interface/routing setup, core-specific readiness, durable session/manifest commit, acknowledgement, and ongoing child monitoring before startup can be enabled.
+The direct launcher is called by the native supervisor after the write-ahead kernel transaction is committed. It verifies the executable again immediately before spawn, pins the exact process identity, and installs a parent-death signal so the privileged core cannot outlive a crashed supervisor. The native supervisor then performs attachment/readiness checks, durable session commit, acknowledgement, monitoring, and recovery.
 
 ## Current safety boundary
 
-- `tun stop` is connected to explicit privileged recovery; `tun start` and `use --tun` remain fail-closed.
-- No managed core is launched by the hidden start supervisor.
-- No TUN device, route, policy rule, DNS, firewall or forwarding state is created during startup; explicit stop may remove only journal-owned resources after fresh fingerprint comparison.
-- The start acknowledgement protocol and coordinated durable commit method are not yet wired into a real launch.
+- `tun start` transitions the verified active loopback session to native TUN mode; `use --tun` starts a new native TUN session directly. Both currently support sing-box and Mihomo.
+- The supervisor creates the persistent TUN interface and policy routes/rules through the generation-bound write-ahead journal. It does not modify DNS or firewall state.
+- The selected managed core runs as root only for the lifetime of the explicitly requested TUN session; ordinary loopback activation remains unprivileged.
+- `tun stop` and unexpected core exit use the same pidfd-safe process termination and compare-before-delete journal recovery. No separate helper executable, systemd service, or file capability is installed for new sessions.
 
 ## Exact core termination and final record cleanup
 
@@ -97,7 +97,7 @@ This order is restartable: a crash after the `Cleaned` write can resume from the
 
 The coordinator now also exposes a generic `recover_session` orchestration method. It classifies the durable state, claims an orphaned Prepared activation, stops a matching recorded core, invokes the existing compare-before-delete journal recovery executor under the lifecycle lock, and then finalizes the session records. The executor can retain its completed journal so the coordinator writes `Cleaned` before removing the journal and receipt. Orphan receipts, inconsistent records, missing journals for resource-bearing manifests, and fingerprint mismatches remain fail-closed.
 
-`tun stop` now invokes `sudo -- <current-proxyctl-executable> __tun-recover` without a shell or caller-supplied paths. The privileged entry point derives the invoking UID from sudo/login credentials, opens only `/run/proxyctl/<uid>`, and runs the coordinator against the root-owned manifest, journal and session receipt. When a journal exists it supplies the concrete Linux compare-before-delete backend; when no journal exists it supplies a backend that fails if called, allowing only resource-free finalization. An orphan session receipt is preserved and reported as an error. A transaction journal without a manifest is recoverable only when no session receipt exists: this is the crash window after write-ahead journal creation and before the initial Prepared manifest is committed. The privileged stop path opens the journal's exact activation/generation and runs the existing fresh-inventory, compare-before-delete executor; it never infers a process identity or trusts a user path. A resource-bearing manifest without its journal remains a fail-closed error. This explicit stop path may remove only resources proven to match the durable journal fingerprints. It does not launch a core or start TUN; `tun start` and `use --tun` remain disabled.
+`tun stop` now invokes `sudo -- <current-proxyctl-executable> __tun-recover` without a shell or caller-supplied paths. The privileged entry point derives the invoking UID from sudo/login credentials, opens only `/run/proxyctl/<uid>`, and runs the coordinator against the root-owned manifest, journal and session receipt. When a journal exists it supplies the concrete Linux compare-before-delete backend; when no journal exists it supplies a backend that fails if called, allowing only resource-free finalization. An orphan session receipt is preserved and reported as an error. A transaction journal without a manifest is recoverable only when no session receipt exists: this is the crash window after write-ahead journal creation and before the initial Prepared manifest is committed. The privileged stop path opens the journal's exact activation/generation and runs the existing fresh-inventory, compare-before-delete executor; it never infers a process identity or trusts a user path. A resource-bearing manifest without its journal remains a fail-closed error. This explicit stop path may remove only resources proven to match the durable journal fingerprints. New native TUN startup is handled by the single-executable supervisor described below.
 
 
 ## Read-only kernel transaction preflight
@@ -118,7 +118,7 @@ A Linux-only `supervisor_activation` boundary now composes the read-only activat
 5. Apply the persistent named TUN interface, routes and policy rules through the typed journal backend. The executor binds the actual kernel-assigned ifindex and either completes rollback or preserves the journal on ambiguous/incomplete cleanup.
 6. Adopt the exact committed `Prepared` manifest into the lifecycle coordinator.
 
-A successful call means only that the native TUN resources and `Prepared` manifest are durably recorded. It does not launch a core, prove readiness, create a session receipt, bind `Running`, or send a `started` acknowledgement. The hidden supervisor does not call this boundary yet, and `tun start` remains fail-closed. The caller is responsible for authenticating the invoking UID and selecting the intended non-root UID/GID for the TUN device.
+A successful call means only that the native TUN resources and `Prepared` manifest are durably recorded. The production `native_supervisor` calls this boundary, then passes the exact manifest/token into `native_session` for core attachment, end-to-end readiness, receipt commit, and Running transition. The supervisor authenticates the invoking UID and resolves its primary GID from the system account database before assigning TUN device ownership.
 
 
 ## Core-specific TUN attachment boundary
@@ -127,7 +127,7 @@ The journaled `supervisor_activation::apply_native_kernel_plan` API now requires
 
 Xray is rejected before the journal backend is opened. Its current adapter contract is `XRAY_TUN_FD` and its launcher requires a generation-bound broker descriptor; it must use the descriptor-backed transaction/attachment path rather than accidentally combining an externally supplied descriptor with a separately created persistent named device. The three core strategies must not be treated as interchangeable.
 
-This guard is a migration safety boundary, not an Xray implementation. The hidden single-executable supervisor still does not launch any core, and `tun start` remains disabled.
+This guard is a migration safety boundary, not an Xray implementation. The hidden single-executable supervisor currently launches only sing-box and Mihomo through the native persistent-device path. Xray remains disabled until its generation-bound descriptor lifecycle is integrated.
 
 
 ## Native core startup and session commit boundary
@@ -143,14 +143,14 @@ The startup sequence is fixed:
 5. Construct a kernel-nonce session receipt binding the invoking UID, activation, generation, core kind, and exact process identity.
 6. Commit the receipt first, then atomically bind the same process identity to the manifest's Running phase.
 
-If any post-spawn step fails, the direct child is killed and reaped where possible. The Prepared manifest, journal, and any receipt already committed are retained as recovery evidence; this path never attempts ad-hoc kernel cleanup. The caller must invoke the existing explicit recovery path. The caller must also retain the staged config for the complete core lifetime.
+If any post-spawn step fails, the direct child is killed and reaped where possible. The Prepared manifest, journal, and any receipt already committed are retained as recovery evidence; the supervisor immediately invokes the existing journaled recovery path and preserves evidence if recovery cannot prove safe cleanup. The production supervisor retains the staged config for the complete core lifetime.
 
-This is a startup/commit primitive, not yet the production supervisor loop. It does not send the `started` acknowledgement, own the staged config beyond the caller's scope, monitor the child after commit, handle supervisor signals, or enable `tun start`. Those remain mandatory integration gates.
+The `native_session` primitive is now composed by `native_supervisor`, which owns the staged config and child for the full session, sends the `started` acknowledgement only after commit, monitors child exit, and performs generation-scoped recovery. A parent-death signal terminates the core if the supervisor crashes; explicit `tun stop` remains the recovery path for any kernel resources left by an abrupt supervisor death.
 
 
 ## Launch specification version 5: readiness inputs
 
-Version 5 binds the activation generation and full dual-stack readiness inputs to the unprivileged launch request. The request carries one to eight resolved selected-node peer endpoints and exactly one numeric IPv4 plus one numeric IPv6 HTTP probe target. Targets retain the original HTTP Host header and path, and each expected response status must be a successful 2xx code. The privileged supervisor validates all fields again before use.
+Version 5 binds the activation generation, foreground preference, and full dual-stack readiness inputs to the unprivileged launch request. The request carries one to eight resolved selected-node peer endpoints and exactly one numeric IPv4 plus one numeric IPv6 HTTP probe target. Targets retain the original HTTP Host header and path, and each expected response status must be a successful 2xx code. The privileged supervisor validates all fields again before use.
 
 The supervisor captures its own pre-activation host-network baseline after authenticating the invoking UID; it never accepts a caller-supplied DNS or firewall baseline. Supplied numeric destinations are bounded data, not executable paths or commands. The generation, activation UUID, generated core configuration, peer candidates, and traffic targets are validated together before any privileged network mutation.
 
