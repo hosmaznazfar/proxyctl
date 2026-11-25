@@ -40,9 +40,12 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             {
                 let invoking_uid = crate::tun::runtime::invoking_uid()?;
                 let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
+                let _staged = crate::tun::config_staging::stage_config(
+                    &runtime,
+                    _spec.generated_config.as_bytes(),
+                )?;
                 println!(
-                    "TUN supervisor request validated for invoking UID {invoking_uid}; private runtime prepared at {}",
-                    runtime.display()
+                    "TUN supervisor request validated for invoking UID {invoking_uid}; private runtime and temporary root-owned config staging succeeded"
                 );
             }
             #[cfg(not(target_os = "linux"))]
