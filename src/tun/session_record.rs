@@ -63,8 +63,9 @@ impl SessionStore {
     ) -> Result<Self> {
         let directory = directory.into();
         ensure!(invoking_uid != 0, "TUN session owner UID must be non-zero");
+        let uid_component = invoking_uid.to_string();
         ensure!(
-            directory.file_name().is_some_and(|name| name == invoking_uid.to_string()),
+            directory.file_name().and_then(|name| name.to_str()) == Some(uid_component.as_str()),
             "privileged runtime directory does not match the invoking UID"
         );
         Self::open_for_owner(directory, 0, invoking_uid)
