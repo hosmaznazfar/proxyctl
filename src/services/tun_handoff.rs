@@ -66,13 +66,13 @@ fn abort_child(child: &mut Child) -> String {
 ///
 /// No shell is involved; sudo's password prompt is handled via its terminal, not stdin.
 /// A failed request write always triggers a best-effort kill and reap of the sudo child.
-const STARTUP_ACK_TIMEOUT: Duration = Duration::from_secs(30);
+const STARTUP_ACK_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Request a privileged TUN session and return only after its one-shot startup acknowledgement.
 ///
-/// The supervisor closes stdout after its reply; a future detached supervisor can then continue
-/// monitoring independently. A Started reply is accepted only while the supervisor is still
-/// alive. This function does not itself enable TUN or start a core.
+/// The supervisor closes stdout after its reply and remains alive to monitor the core and
+/// recover its generation on exit. A Started reply is accepted only while the supervisor is
+/// still alive. Foreground requests wait for that supervisor to finish.
 /// Ask the single Proxyctl executable to recover and stop the current privileged TUN session.
 ///
 /// Sudo keeps its terminal attached for authentication. The request carries no caller-controlled
@@ -185,9 +185,15 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
     match reply.outcome {
         SupervisorOutcome::Started { session } => {
             if spec.foreground {
-                let status = child
-                    .wait()
-                    .context("cannot wait for the foreground TUN supervisor")?;
+                let status = match child.wait() {
+                    Ok(status) => status,
+                    Err(error) => {
+                        let cleanup = abort_child(&mut child);
+                        return Err(error).context(format!(
+                            "cannot wait for the foreground TUN supervisor; {cleanup}"
+                        ));
+                    }
+                };
                 ensure!(
                     status.success(),
                     "foreground TUN supervisor exited with {status}"
