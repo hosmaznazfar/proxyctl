@@ -130,6 +130,39 @@ mod tests {
         assert_eq!(read_reply(bytes.as_slice()).unwrap(), reply);
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn started_acknowledgement_carries_the_validated_session_identity() {
+        use crate::tun::{
+            launch_spec::CoreKind,
+            process::ProcessIdentity,
+            session_record::SessionRecord,
+        };
+        use std::path::PathBuf;
+
+        let session = SessionRecord {
+            schema_version: 1,
+            invoking_uid: 1000,
+            session_nonce: "12345678-1234-4234-8234-123456789abc".into(),
+            activation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
+            generation: 4,
+            core: CoreKind::Xray,
+            process: ProcessIdentity {
+                pid: 42,
+                start_ticks: 99,
+                executable: PathBuf::from("/home/user/.local/share/proxyctl/cores/xray/xray"),
+            },
+        };
+        let reply = SupervisorReply::started(session.clone()).unwrap();
+        let mut bytes = Vec::new();
+        write_reply(&mut bytes, &reply).unwrap();
+        assert_eq!(read_reply(bytes.as_slice()).unwrap(), reply);
+        assert!(matches!(
+            reply.outcome,
+            SupervisorOutcome::Started { session: returned } if returned == session
+        ));
+    }
+
     #[test]
     fn rejects_unknown_fields_and_versions() {
         let unknown = br#"{"version":1,"outcome":"failed","reason":"no","extra":true}"#;
