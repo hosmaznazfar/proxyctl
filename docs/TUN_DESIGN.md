@@ -1,8 +1,8 @@
 # Linux TUN design
 
-> Status: offline journal/manifest, route/rule mutation, cleanup, and readiness groundwork exist. The old runtime implementation still uses a separate helper and systemd service and is not the selected final architecture. The top-level managed-session status command and ordinary loopback foreground lifecycle are implemented; TUN start/stop, same-executable privileged supervision, and TUN foreground lifecycle are pending. The default TUN activation gate remains closed.
-> Scope: Linux kernel networking and a portable detached session owner. The legacy systemd/helper backend is migration input only, not the target design.
-> Goal: keep ordinary proxy sessions unprivileged and elevate only TUN sessions, with one installed Proxyctl executable owning the background core and exact recovery lifecycle.
+> **Current status (2026-11-25):** The single-executable privileged supervisor is implemented for native persistent-device TUN sessions using sing-box, Mihomo, and Xray. `proxyctl tun start/stop`, `proxyctl use --tun`, foreground TUN mode, journaled cleanup, exact-process monitoring, and explicit recovery are wired. The maintainer reports local formatting, Clippy, and Rust tests pass. TUN remains experimental pending real-host dataplane, cleanup-side-effect, and failure/recovery validation; automatic reboot-time recovery is not implemented.
+> Scope: Linux kernel networking and a detached session owner. The old systemd/helper backend is retained only for exact recovery of pre-existing legacy generations, not for new TUN sessions.
+> Goal: keep ordinary proxy sessions unprivileged and elevate only explicitly requested TUN sessions, with one installed Proxyctl executable owning the privileged supervisor and selected core.
 
 ## Selected CLI, session, and privilege model
 
@@ -21,34 +21,28 @@ proxyctl stop
 - `tun start` transitions the already active node/core to TUN mode; it must not silently choose another node or core.
 - `tun stop` transitions that same session back to ordinary loopback mode. It is not equivalent to the top-level `stop`.
 - `status` reports the Proxyctl-managed session, selected node/core, mode, and verified process identity. `tun status` remains a read-only host-network inspection command.
-- Both modes run in the background by default. The ordinary loopback `use --foreground` path now keeps the core attached to the invoking terminal and conditionally clears only its own state after the core exits. TUN foreground mode remains unavailable until the privileged same-executable supervisor is implemented; do not route it through the legacy helper/systemd backend.
+- Both modes run in the background by default. The ordinary loopback `use --foreground` path keeps the core attached to the invoking terminal; TUN foreground mode uses the same privileged supervisor and lifecycle as background mode. The legacy helper/systemd backend is not used for new sessions.
 - Top-level `stop` stops the exact Proxyctl-owned session in either mode.
 
 The privilege boundary is intentionally TUN-only and follows the operational model observed in v2rayN: normal CLI commands and ordinary loopback cores run as the invoking user; a TUN session obtains root authorization and the TUN core runs in that privileged session. This is a deliberate change from the earlier narrow-helper design. It must not grant permanent file capabilities or setuid permissions, and it must not elevate ordinary proxy mode.
 
 There is one installable application package and one installed `proxyctl` executable. The background TUN owner is another invocation/process role of that same executable (an internal, non-user-facing supervisor entry point), not a separately installed helper, launcher, service, or daemon package. The unprivileged front-end must continue to read the user's node database and resolve the selected node before crossing the privilege boundary. Privileged code must receive a validated, bounded launch description and must not follow arbitrary user-controlled executable/config paths. Root-owned state must be separated from user-owned database/configuration files; do not run normal database mutations as root or create root-owned files in the user's private data directory.
 
-A successful TUN launch must retain exact generation/process identity, durable resource ownership, serialized start/stop/switch transitions, and fail-closed cleanup. The supervisor must outlive the invoking terminal, monitor the exact core process, and clean up on core exit. A supervisor crash or reboot must not leave traffic blackholed; this requires explicit kernel behavior analysis and fault-injection/host validation. Do not claim this is solved merely because the supervisor is detached. The design remains experimental and the default activation gate remains closed until the cleanup side effects and host matrix described below are accepted.
+A successful TUN launch retains exact generation/process identity, durable resource ownership, serialized start/stop transitions, and fail-closed cleanup. The supervisor outlives the invoking terminal, monitors the exact core process, and performs generation-scoped cleanup on core exit. An abrupt supervisor crash leaves durable evidence for explicit recovery; reboot clears volatile runtime/kernel state, but automatic reboot-time reconciliation is not implemented. The design remains experimental until cleanup side effects and the real-host dataplane/failure matrix are accepted.
 
-Implementation sequence and current boundary:
+## Implementation status and historical design record
 
-1. The top-level `proxyctl status` command is now present as a read-only view of the tracked activation record. It reports node/core/mode/listener and compares the recorded PID, start time, and executable when a process record exists. If only a TUN manifest or transaction journal remains, it reports that recovery/inspection is needed without attempting cleanup.
-2. Ordinary loopback foreground lifecycle is implemented. The `tun start` and `tun stop` CLI verbs and `tun start --foreground` parsing are now exposed, but handlers deliberately fail closed. The mode transitions, same-executable privileged session owner, and TUN foreground lifecycle are not yet wired. They must be implemented against the selected root-session architecture, not as aliases over the former systemd/helper flow.
-3. Until that migration is complete, the old TUN activation path must remain gated. In particular, do not ask the maintainer to retry activation through the existing separate helper/service path; it has the known procfs identity failure and conflicts with the selected privilege model.
+The current lifecycle is the single-executable privileged supervisor described in the README and `docs/TUN_PRIVILEGE_DECISION.md`. It supports native persistent-device TUN sessions for sing-box, Mihomo, and Xray. The same `proxyctl` executable is invoked through sudo only for explicit TUN operations; ordinary loopback mode remains unprivileged. New sessions do not install or launch a separate helper, daemon, launcher binary, or systemd service.
 
-This replaces the former requirement for a separately installed mutation-helper package, Xray launcher binary, and systemd transient service. Those components are legacy implementation details to be retired as the single-executable session architecture is introduced. Do not mix the two privilege models in one activation.
+The supervisor journals interface, route, and policy-rule ownership; launches the selected core directly; verifies exact process attachment and dual-stack readiness; commits a root-owned session receipt and Running manifest; monitors the core; and performs generation-scoped recovery. Explicit `proxyctl tun stop` is the recovery path after an abrupt supervisor exit. Automatic reboot-time recovery is not implemented.
 
-**Historical implementation note:** Sections below may describe the former helper, file-capability, Xray-launcher, or systemd-service implementation as it existed during earlier experiments. Those descriptions are retained as engineering history and migration evidence, not as current installation or activation instructions. Do not install or start the legacy helper bundle for a new session. The current executable gate rejects new TUN activation; only exact stop/recovery of an already-existing legacy generation may use the compatibility backend.
+TUN remains experimental. Passing local Rust checks does not establish real-host dataplane correctness, DNS behavior, safe cleanup side effects, or crash/reboot behavior. The maintainer must validate those separately before production claims.
+
+The selected CLI and privilege model remain as documented below. The remainder of this file is an engineering history of the design and intermediate implementations. Statements in historical entries about activation being disabled, helper/systemd startup being current, or Xray requiring an external descriptor describe earlier repository states and are not current implementation instructions. Legacy helper/systemd code is retained only for exact recovery of pre-existing legacy generations.
 
 ## Safety incident and current decision
 
-A live sing-box TUN run was associated with loss of internet connectivity. Review found that the previous implementation compared post-stop network state with a baseline but did not restore Proxyctl-created routes or rules. A forced core termination or application crash could therefore leave routing state behind.
-
-TUN activation remains rejected before process start, privilege escalation, or network mutation. `proxyctl tun status` remains read-only. Ordinary loopback activation, setup, updates, and benchmarks must not change interfaces, routes, policy rules, DNS, resolver configuration, or firewall state.
-
-## Legacy launcher retirement during supervisor migration
-
-The obsolete TUN start/preflight implementation for the former helper plus transient-systemd launch model has been removed from the active runtime module. The compatibility code now contains only the inspection and exact-stop/recovery operations needed by already-persisted legacy generations. This does not enable new TUN activation, alter existing network resources, or change the selected single-executable root-session architecture. New TUN activation remains fail-closed until that architecture is implemented and validated.
+A live sing-box TUN run was associated with loss of internet connectivity. Review found that the previous implementation compared post-stop network state with a baseline but did not restore Proxyctl-created routes or rules. The current journaled lifecycle addresses ownership and cleanup, but the historical incident remains a reason to require host-level validation before production use.
 
 ## Legacy activation-state recovery
 
