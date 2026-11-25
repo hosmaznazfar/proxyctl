@@ -11,7 +11,7 @@ use std::{net::SocketAddr, os::unix::process::ExitStatusExt, process::ExitStatus
 use super::{
     config_staging::{self, StagedConfig},
     direct_core_launcher::SupervisedCore,
-    launch_spec::{CoreKind, LaunchSpec},
+    launch_spec::LaunchSpec,
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     linux_journal_backend::LinuxJournalBackend,
     manifest_store::ManifestStore,

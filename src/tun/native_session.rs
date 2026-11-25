@@ -11,7 +11,7 @@ use std::{path::Path, time::Duration};
 
 use super::{
     direct_core_launcher::{self, SupervisedCore},
-    launch_spec::{CoreKind, LaunchSpec},
+    launch_spec::LaunchSpec,
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     manifest_store::ManifestSnapshot,
     recovery::SupervisorPhase,
