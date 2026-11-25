@@ -586,6 +586,78 @@ mod tests {
         child.wait().unwrap();
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn commits_session_receipt_before_running_manifest_identity() {
+        use std::{
+            os::unix::fs::PermissionsExt,
+            process::{Command, Stdio},
+        };
+
+        let directory = tempfile::tempdir().unwrap();
+        let runtime = directory.path().join("runtime");
+        let store = ManifestStore::open(&runtime).unwrap();
+        let sessions = SessionStore::open_for_owner(
+            runtime,
+            unsafe { libc::geteuid() },
+            unsafe { libc::getuid() },
+        )
+        .unwrap();
+        let coordinator = LifecycleCoordinator::new(store).unwrap();
+        let token = coordinator
+            .create_prepared(&snapshot("12345678-1234-4234-8234-123456789abc"))
+            .unwrap();
+
+        let source = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+            .map(|directory| directory.join("sleep"))
+            .find(|path| path.is_file())
+            .expect("sleep utility is required for lifecycle session tests");
+        let executable = directory.path().join("xray");
+        std::fs::copy(source, &executable).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut child = Command::new(&executable)
+            .arg("3600")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let identity = loop {
+            assert!(
+                Instant::now() < deadline,
+                "fake xray process did not reach its expected executable identity"
+            );
+            if let Ok(identity) = ProcessIdentity::capture(child.id())
+                && identity.executable == executable
+                && identity.verify().unwrap_or(false)
+            {
+                break identity;
+            }
+            thread::sleep(Duration::from_millis(5));
+        };
+        let record = SessionRecord::new(
+            unsafe { libc::getuid() },
+            token.activation_id().to_owned(),
+            token.generation(),
+            super::super::launch_spec::CoreKind::Xray,
+            identity.clone(),
+        )
+        .unwrap();
+
+        coordinator
+            .bind_core_session(&token, &sessions, &record)
+            .unwrap();
+        let committed = coordinator.load_current().unwrap().unwrap();
+        assert_eq!(committed.snapshot.phase, SupervisorPhase::Running);
+        assert_eq!(committed.snapshot.core_process, Some(identity));
+        assert_eq!(sessions.load().unwrap(), Some(record));
+
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
     #[test]
     fn coordinator_serializes_manifest_creation_and_event_transitions() {
         let directory = tempfile::tempdir().unwrap();
