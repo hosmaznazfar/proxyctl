@@ -8,7 +8,9 @@ use std::{
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    sync::mpsc,
     thread,
+    time::Duration,
 };
 
 use crate::tun::{
@@ -64,6 +66,13 @@ fn abort_child(child: &mut Child) -> String {
 ///
 /// No shell is involved; sudo's password prompt is handled via its terminal, not stdin.
 /// A failed request write always triggers a best-effort kill and reap of the sudo child.
+const STARTUP_ACK_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Request a privileged TUN session and return only after its one-shot startup acknowledgement.
+///
+/// The supervisor closes stdout after its reply; a future detached supervisor can then continue
+/// monitoring independently. A Started reply is accepted only while the supervisor is still
+/// alive. This function does not itself enable TUN or start a core.
 pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
     let encoded = spec
         .encode_bounded()
@@ -81,25 +90,25 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
         .spawn()
         .context("cannot launch privileged Proxyctl supervisor via sudo")?;
 
-    // Drain only the bounded protocol channel. Dropping the read end after the limit prevents
-    // an unexpectedly noisy or compromised child from growing the parent's memory without bound.
     let stdout = child
         .stdout
         .take()
         .context("supervisor acknowledgement pipe was not created")?;
+    let (sender, receiver) = mpsc::sync_channel(1);
     let reader = thread::spawn(move || {
         let mut bytes = Vec::new();
-        stdout
+        let result = stdout
             .take(supervisor_protocol::MAX_REPLY_BYTES as u64 + 1)
             .read_to_end(&mut bytes)
-            .map(|_| bytes)
+            .map(|_| bytes);
+        let _ = sender.send(result);
     });
 
     let write_result = match child.stdin.take() {
         Some(mut stdin) => stdin.write_all(&encoded),
         None => Err(std::io::Error::other("sudo request stdin was not created")),
     };
-    // Closing the pipe delimits the complete bounded request for the supervisor.
+    // Dropping the request pipe delimits the complete bounded request.
     if let Err(error) = write_result {
         let cleanup = abort_child(&mut child);
         let _ = reader.join();
@@ -108,35 +117,71 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
         ));
     }
 
-    let status = match child.wait() {
-        Ok(status) => status,
-        Err(error) => {
+    let response = match receiver.recv_timeout(STARTUP_ACK_TIMEOUT) {
+        Ok(Ok(response)) => response,
+        Ok(Err(error)) => {
             let cleanup = abort_child(&mut child);
             let _ = reader.join();
             return Err(error).context(format!(
-                "cannot wait for privileged supervisor; {cleanup}"
+                "cannot read supervisor acknowledgement; {cleanup}"
+            ));
+        }
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            let cleanup = abort_child(&mut child);
+            let _ = reader.join();
+            anyhow::bail!(
+                "privileged TUN supervisor did not acknowledge startup within {} seconds; {cleanup}",
+                STARTUP_ACK_TIMEOUT.as_secs()
+            );
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            let cleanup = abort_child(&mut child);
+            let _ = reader.join();
+            anyhow::bail!("supervisor acknowledgement channel closed unexpectedly; {cleanup}");
+        }
+    };
+    reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("supervisor acknowledgement reader panicked"))?;
+
+    let reply = match supervisor_protocol::read_reply(response.as_slice()) {
+        Ok(reply) => reply,
+        Err(error) => {
+            let cleanup = abort_child(&mut child);
+            return Err(error).context(format!(
+                "invalid privileged supervisor acknowledgement; {cleanup}"
             ));
         }
     };
-    let response = reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("supervisor acknowledgement reader panicked"))??;
-    let reply = supervisor_protocol::read_reply(response.as_slice())?;
 
     match reply.outcome {
         SupervisorOutcome::Started { session } => {
-            ensure!(
-                status.success(),
-                "supervisor reported a started session but exited with {status}"
-            );
             session.validate()?;
-            Ok(session)
+            match child.try_wait() {
+                Ok(None) => {
+                    // The supervisor has closed the acknowledgement channel and remains alive
+                    // to own the session. Dropping Child deliberately does not kill it.
+                    drop(child);
+                    Ok(session)
+                }
+                Ok(Some(status)) => anyhow::bail!(
+                    "supervisor exited with {status} immediately after reporting a started session"
+                ),
+                Err(error) => {
+                    let cleanup = abort_child(&mut child);
+                    Err(error).context(format!(
+                        "cannot verify supervisor survived its startup acknowledgement; {cleanup}"
+                    ))
+                }
+            }
         }
         SupervisorOutcome::NotStarted { reason } => {
-            anyhow::bail!("supervisor did not start a TUN session: {reason}")
+            let cleanup = abort_child(&mut child);
+            anyhow::bail!("supervisor did not start a TUN session: {reason}; {cleanup}")
         }
         SupervisorOutcome::Failed { reason } => {
-            anyhow::bail!("privileged TUN supervisor rejected the request: {reason}")
+            let cleanup = abort_child(&mut child);
+            anyhow::bail!("privileged TUN supervisor rejected the request: {reason}; {cleanup}")
         }
     }
 }
