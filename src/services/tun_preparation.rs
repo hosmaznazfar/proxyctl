@@ -22,6 +22,7 @@ pub fn prepare_launch_spec(
 ) -> anyhow::Result<LaunchSpec> {
     ensure!(node_id != 0, "node ID must be non-zero");
     ensure!(port >= 1024, "listener port must be between 1024 and 65535");
+    crate::services::activation::ensure_tun_start_available(port)?;
 
     let db = NodeDatabase::open(default_database_path()?)?;
     let record = db
