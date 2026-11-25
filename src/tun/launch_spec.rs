@@ -80,39 +80,46 @@ pub fn read_bounded<R: Read>(reader: R) -> Result<LaunchSpec> {
     LaunchSpec::decode_bounded(&bytes)
 }
 
+/// Inputs already resolved by the unprivileged launch-preparation path.
+///
+/// Keeping these values together makes the trust boundary explicit: this request
+/// contains generated data and resolved readiness inputs, not database handles
+/// or executable/command paths.
+pub struct GeneratedLaunchSpec {
+    pub node_id: u64,
+    pub core: CoreKind,
+    pub listen_port: u16,
+    pub foreground: bool,
+    pub peer_transport: BrokerSocketTransport,
+    pub activation_id: String,
+    pub managed_core_root: PathBuf,
+    pub generated_config: Vec<u8>,
+    pub generation: u64,
+    pub expected_peers: Vec<std::net::SocketAddr>,
+    pub traffic_targets: Vec<crate::tun::readiness::HttpProbeTarget>,
+}
+
 /// Build a supervisor request from the already generated native config.
 ///
 /// This is a pure handoff constructor: it neither resolves user state nor starts
 /// a process, creates runtime files, or mutates host networking.
-pub fn from_generated_config(
-    node_id: u64,
-    core: CoreKind,
-    listen_port: u16,
-    foreground: bool,
-    peer_transport: BrokerSocketTransport,
-    activation_id: String,
-    managed_core_root: PathBuf,
-    generated_config: &[u8],
-    generation: u64,
-    expected_peers: Vec<std::net::SocketAddr>,
-    traffic_targets: Vec<crate::tun::readiness::HttpProbeTarget>,
-) -> Result<LaunchSpec> {
-    let generated_config = std::str::from_utf8(generated_config)
+pub fn from_generated_config(input: GeneratedLaunchSpec) -> Result<LaunchSpec> {
+    let generated_config = std::str::from_utf8(&input.generated_config)
         .context("generated configuration must be UTF-8 JSON")?
         .to_owned();
     let spec = LaunchSpec {
         version: VERSION,
-        node_id,
-        core,
-        listen_port,
-        foreground,
-        peer_transport,
-        activation_id,
-        managed_core_root,
+        node_id: input.node_id,
+        core: input.core,
+        listen_port: input.listen_port,
+        foreground: input.foreground,
+        peer_transport: input.peer_transport,
+        activation_id: input.activation_id,
+        managed_core_root: input.managed_core_root,
         generated_config,
-        generation,
-        expected_peers,
-        traffic_targets,
+        generation: input.generation,
+        expected_peers: input.expected_peers,
+        traffic_targets: input.traffic_targets,
     };
     spec.validate()?;
     Ok(spec)
