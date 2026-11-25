@@ -273,8 +273,10 @@ The record store is rooted only in the root-owned per-UID runtime directory. It 
 a real mode-0700 directory, writes a mode-0600 root-owned regular file through an
 exclusive temporary-file plus no-clobber atomic persistence, syncs the file and directory,
 and rejects symlinks, hard links, unexpected ownership/modes, oversized or changing
-records, unknown schema fields, and malformed identities. Removal requires a full
-record equality match, so a stale cleanup request cannot delete a newer session record.
+records, unknown schema fields, and malformed identities. The store also requires the runtime directory name and the
+record's invoking UID to match, preventing a valid record from being replayed under a
+different user's runtime. Removal requires a full record equality match, so a stale
+cleanup request cannot delete a newer session record.
 
 This is storage groundwork only. The current hidden supervisor does not create or consume
 the record, no core is spawned, and the TUN CLI remains fail-closed. The next integration
