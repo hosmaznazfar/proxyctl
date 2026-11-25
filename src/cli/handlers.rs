@@ -97,7 +97,8 @@ fn run_tun_recovery() -> anyhow::Result<()> {
     let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
     let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
     let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store.clone())?;
-    let sessions = crate::tun::session_record::SessionStore::open_root_owned(runtime, invoking_uid)?;
+    let sessions =
+        crate::tun::session_record::SessionStore::open_root_owned(runtime, invoking_uid)?;
 
     let Some(current) = coordinator.load_current()? else {
         anyhow::ensure!(
@@ -109,11 +110,12 @@ fn run_tun_recovery() -> anyhow::Result<()> {
     };
     let token = current.token;
     if store.load_transaction_journal()?.is_some() {
-        let mut backend = crate::tun::linux_journal_backend::LinuxJournalBackend::open_for_recovery(
-            store,
-            token.activation_id(),
-            token.generation(),
-        )?;
+        let mut backend =
+            crate::tun::linux_journal_backend::LinuxJournalBackend::open_for_recovery(
+                store,
+                token.activation_id(),
+                token.generation(),
+            )?;
         coordinator.recover_session(&token, &sessions, &mut backend)?;
     } else {
         // A resource-free activation can be finalized without touching the kernel. If the

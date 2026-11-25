@@ -91,7 +91,10 @@ pub fn request_supervisor_recovery() -> Result<()> {
         .stderr(Stdio::inherit())
         .status()
         .context("cannot launch privileged Proxyctl TUN recovery via sudo")?;
-    ensure!(status.success(), "privileged TUN recovery exited with {status}");
+    ensure!(
+        status.success(),
+        "privileged TUN recovery exited with {status}"
+    );
     Ok(())
 }
 
