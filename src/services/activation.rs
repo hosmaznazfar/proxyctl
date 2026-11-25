@@ -564,7 +564,7 @@ fn launch_managed(
     }
 }
 
-/// Activate one managed Xray node through the generation-bound broker TUN lifecycle.
+/// Legacy broker-backed Xray entry point. New TUN sessions must use the native supervisor CLI.
 #[cfg(target_os = "linux")]
 pub fn activate_tun_xray(
     node_id: u64,
@@ -581,14 +581,17 @@ pub fn activate_tun_xray(
     )
 }
 
-/// Keep new TUN generations disabled while the legacy helper/systemd launcher is being
-/// replaced by the single-executable privileged session owner.
+/// Fail closed for the retired helper-managed activation API.
+///
+/// The current CLI starts new sessions through the single-executable native supervisor.
+/// This compatibility entry point must never revive the old helper/systemd startup path.
 fn ensure_tun_session_backend_ready() -> anyhow::Result<()> {
     anyhow::bail!(
-        "TUN activation is temporarily disabled during the single-executable supervisor migration; existing generations can still be inspected and safely stopped"
+        "the legacy helper-managed TUN activation API is disabled; use 'proxyctl use --tun' or 'proxyctl tun start' for native supervisor activation"
     )
 }
 
+/// Legacy helper-managed activation API; retained only as a fail-closed compatibility symbol.
 pub fn activate_tun_core(
     node_id: u64,
     core: CoreId,
