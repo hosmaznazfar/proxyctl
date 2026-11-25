@@ -58,6 +58,8 @@ pub mod rtnetlink;
 pub mod rtnetlink_mutations;
 #[cfg(target_os = "linux")]
 pub mod runtime;
+#[cfg(target_os = "linux")]
+pub mod session_record;
 pub mod service_manager;
 #[cfg(target_os = "linux")]
 pub mod socket_diag_collector;
