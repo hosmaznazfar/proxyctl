@@ -88,7 +88,7 @@ impl SignalForwardingGuard {
 
 impl Drop for SignalForwardingGuard {
     fn drop(&mut self) {
-        FORWARDED_CORE_PID.store(0, Ordering::SeqCst);
+        FORWARDED_CORE_PIDFD.store(-1, Ordering::SeqCst);
         for (signal, handler) in self.previous.iter().rev() {
             unsafe {
                 libc::signal(*signal, *handler);
