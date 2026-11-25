@@ -320,10 +320,19 @@ pub fn reconcile_session_records(
                 SupervisorPhase::Running => SessionReconciliation::Inconsistent(
                     "Running manifest has no privileged session receipt".into(),
                 ),
-                SupervisorPhase::CleanupPending => {
+                SupervisorPhase::CleanupPending if snapshot.core_process.is_none() => {
                     SessionReconciliation::CleanupPending(None)
                 }
-                SupervisorPhase::Cleaned => SessionReconciliation::CleanedWithoutReceipt,
+                SupervisorPhase::CleanupPending => SessionReconciliation::Inconsistent(
+                    "cleanup-pending manifest still binds a core process but has no session receipt"
+                        .into(),
+                ),
+                SupervisorPhase::Cleaned if snapshot.core_process.is_none() => {
+                    SessionReconciliation::CleanedWithoutReceipt
+                }
+                SupervisorPhase::Cleaned => SessionReconciliation::Inconsistent(
+                    "cleaned manifest still binds a core process but has no session receipt".into(),
+                ),
             },
             (Some(_), Some(_)) => unreachable!("both records were handled above"),
         });
