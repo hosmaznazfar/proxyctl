@@ -90,14 +90,14 @@ Proxyctl intentionally improves the handoff and lifecycle boundaries:
 
 The repository currently has:
 
-- a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-2 launch specification, verifies the invoking UID and root-owned runtime, stages the generated config as a root-owned mode-0600 file, and then deliberately exits as not implemented;
-- a version-2 request containing node ID, core enum, listener port, and the generated native configuration as bounded JSON data;
+- a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-3 launch specification, verifies the invoking UID and root-owned runtime, stages the generated config as a root-owned mode-0600 file, and then deliberately exits as not implemented;
+- a version-3 request containing node ID, core enum, listener port, and the generated native configuration as bounded JSON data;
 - user-owned managed core binaries under the private data directory;
 - TUN adapters with different native device-attachment contracts;
 - offline manifest/journal, route/rule mutation, cleanup, and readiness groundwork;
 - a closed TUN activation gate.
 
-The current version-2 launch specification carries the already-generated configuration as a JSON string, rejects non-object or invalid JSON documents, enforces a 1 MiB configuration limit, and allows a bounded wire envelope sized for JSON string escaping. The privileged process does not open redb or reconstruct the node from its ID. The hidden supervisor currently validates the request, verifies caller provenance and the root-owned runtime, stages the config, and exits as not implemented. It does not launch a core or change host networking.
+The current version-3 launch specification carries the generated configuration as JSON data plus an untrusted managed-core-root hint. The hint is not an executable path: the supervisor validates the complete directory tree against the invoking UID, enforces the fixed `proxyctl/cores/<core>/<core>` layout, and derives the executable from the closed CoreKind enum. The request still rejects unknown fields and non-object/invalid JSON, caps the config at 1 MiB, and bounds the complete wire envelope. The privileged process does not open redb or reconstruct the node from its ID. The hidden supervisor verifies caller provenance and the root-owned runtime, validates the managed core, stages the config, and exits as not implemented. It does not launch a core or change host networking.
 
 ## Non-goals
 
@@ -223,3 +223,19 @@ Foreground mode must execute this same supervisor lifecycle synchronously with i
 ### Deliberately excluded from this slice
 
 Core spawning alone does not enable TUN. Do not connect `tun start`, `use --tun`, or the legacy TUN orchestrator to this process-launch code until process ownership, supervisor survival, stop protocol, manifest/WAL transaction ownership, readiness, exact cleanup, crash recovery, and reboot recovery are complete. In particular, do not create a TUN device or mutate routes, policy rules, DNS, firewall, or forwarding state in the process-launch slice.
+
+
+## Invoking user's managed-core path verification
+
+The version-3 request carries the effective `managed_cores_path()` value from the unprivileged preparation process. This preserves the user's configured `XDG_DATA_HOME` rather than assuming root's home or silently selecting a default installation. The field is only a directory hint; it is not an executable path and cannot select the core or its arguments.
+
+The privileged supervisor validates the hint after deriving the invoking UID:
+
+- The path must be absolute and end exactly in `proxyctl/cores`.
+- Every path component is inspected with `symlink_metadata`; symlinked and non-directory components are rejected.
+- Shared ancestors must be root-owned or invoking-user-owned and not group/world writable. A root-owned sticky ancestor (for example, `/tmp`) is permitted for traversal.
+- The `proxyctl`, `cores`, and selected core directory must be invoking-user-owned and mode 0700.
+- The fixed executable name comes from the closed core catalog. It must be a regular, invoking-user-owned executable and not group/world writable.
+- The resolved executable must remain below the canonical managed-core root.
+
+This intentionally accepts a validated user-selected XDG data root while refusing unchecked paths. It does not make the user-owned binary immutable against the same user; sudo authorization remains the explicit trust boundary. The supervisor currently performs validation only: it does not execute the returned path.
