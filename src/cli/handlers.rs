@@ -39,6 +39,19 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
         "internal TUN supervisor requires a launch specification on standard input"
     );
     let spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
+    if !spec.foreground {
+        // The default background session must survive the invoking terminal closing.
+        // Core stdout/stderr are separately redirected to /dev/null by the launcher.
+        let previous = unsafe { libc::signal(libc::SIGHUP, libc::SIG_IGN) };
+        anyhow::ensure!(
+            previous != libc::SIG_ERR,
+            "cannot detach the background TUN supervisor from terminal hangup"
+        );
+        // No post-ack diagnostics are sent to the invoking terminal.
+        unsafe {
+            libc::close(libc::STDERR_FILENO);
+        }
+    }
     let invoking_uid = crate::tun::runtime::invoking_uid()?;
     let invoking_gid = crate::tun::runtime::invoking_gid(invoking_uid)?;
     let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
