@@ -86,10 +86,15 @@ pub fn prepare_launch_spec(
     adapters::validation::validate_generated_config(core, &generated, &executable)
         .with_context(|| format!("{core} rejected the prepared TUN configuration"))?;
 
+    let mut unique_peers = std::collections::BTreeSet::new();
     let expected_peers = (node.server.as_str(), node.port)
         .to_socket_addrs()
         .context("cannot resolve the selected proxy node endpoint before privilege escalation")?
-        .filter(|peer| !peer.ip().is_unspecified() && !peer.ip().is_multicast())
+        .filter(|peer| {
+            !peer.ip().is_unspecified()
+                && !peer.ip().is_multicast()
+                && unique_peers.insert(*peer)
+        })
         .take(8)
         .collect::<Vec<_>>();
     ensure!(
