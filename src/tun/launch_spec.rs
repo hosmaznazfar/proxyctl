@@ -1,5 +1,5 @@
-//! Bounded, versioned data contract for the future privileged TUN supervisor.
-//! This module validates data only; it does not launch cores or mutate networking.
+//! Bounded, versioned data contract for the privileged TUN supervisor.
+//! This module validates and transports data only; it does not launch cores or mutate networking.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
