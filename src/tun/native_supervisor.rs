@@ -60,6 +60,31 @@ impl RunningNativeSession {
         }
     }
 
+    /// Abort a session if the startup acknowledgement cannot be delivered, then recover it.
+    pub fn abort_and_recover(mut self) -> Result<()> {
+        let termination = match self.core.child.try_wait() {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => self.core.child.kill(),
+            Err(error) => Err(error),
+        };
+        let reaping = self.core.child.wait();
+        let recovery = self.recover_if_current();
+        if let Err(error) = termination {
+            return Err(error).context(format!(
+                "could not terminate the core after supervisor handoff failure; reap result: {:?}; recovery result: {:?}",
+                reaping.as_ref().map(|_| ()),
+                recovery.as_ref().map(|_| ())
+            ));
+        }
+        if let Err(error) = reaping {
+            return Err(error).context(format!(
+                "could not reap the core after supervisor handoff failure; recovery result: {:?}",
+                recovery.as_ref().map(|_| ())
+            ));
+        }
+        recovery
+    }
+
     fn recover_if_current(&self) -> Result<()> {
         let Some(current) = self.coordinator.load_current()? else {
             return Ok(());
