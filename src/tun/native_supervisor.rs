@@ -18,14 +18,21 @@ use std::{
 /// signals therefore reach both processes. Install forwarding only after spawn so exec has
 /// already reset the core's signal dispositions to their normal defaults; the supervisor
 /// then survives long enough to observe the core exit and run generation-scoped recovery.
-static FORWARDED_CORE_PID: AtomicI32 = AtomicI32::new(0);
+static FORWARDED_CORE_PIDFD: AtomicI32 = AtomicI32::new(-1);
 
 extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
-    let pid = FORWARDED_CORE_PID.load(Ordering::Relaxed);
-    if pid > 0 {
-        // The child remains unreaped while the supervisor waits, so this PID cannot be reused.
+    let pidfd = FORWARDED_CORE_PIDFD.load(Ordering::Relaxed);
+    if pidfd >= 0 {
+        // A pidfd continues to identify the original child after wait() reaps it; it can
+        // never redirect a late signal to a process that reused the numeric PID.
         unsafe {
-            libc::kill(pid, signal);
+            libc::syscall(
+                libc::SYS_pidfd_send_signal,
+                pidfd,
+                signal,
+                std::ptr::null::<libc::siginfo_t>(),
+                0u32,
+            );
         }
     }
 }
@@ -36,15 +43,22 @@ extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
 /// leaving the supervisor alive to clean up its journaled network state.
 pub struct SignalForwardingGuard {
     previous: Vec<(libc::c_int, libc::sighandler_t)>,
+    _process: super::process::ProcessHandle,
 }
 
 impl SignalForwardingGuard {
-    pub fn install(core_pid: u32, foreground: bool) -> Result<Self> {
-        let pid = libc::pid_t::try_from(core_pid)
-            .context("managed core PID is outside the Linux pid_t range")?;
-        ensure!(pid > 0, "managed core PID must be non-zero");
-        FORWARDED_CORE_PID
-            .compare_exchange(0, pid, Ordering::SeqCst, Ordering::SeqCst)
+    pub fn install(
+        core: super::process::ProcessIdentity,
+        foreground: bool,
+    ) -> Result<Self> {
+        let process = super::process::ProcessHandle::open(core)
+            .context("cannot pin the exact TUN core for signal forwarding")?;
+        ensure!(
+            !process.is_exited()?,
+            "cannot install signal forwarding for an exited TUN core"
+        );
+        FORWARDED_CORE_PIDFD
+            .compare_exchange(-1, process.as_raw_fd(), Ordering::SeqCst, Ordering::SeqCst)
             .map_err(|_| anyhow::anyhow!("a core signal-forwarding guard is already active"))?;
 
         let mut signals = vec![libc::SIGTERM, libc::SIGINT];
@@ -63,12 +77,12 @@ impl SignalForwardingGuard {
                         libc::signal(*installed, *handler);
                     }
                 }
-                FORWARDED_CORE_PID.store(0, Ordering::SeqCst);
+                FORWARDED_CORE_PIDFD.store(-1, Ordering::SeqCst);
                 return Err(error).context("cannot install TUN supervisor signal forwarding");
             }
             previous.push((signal, old));
         }
-        Ok(Self { previous })
+        Ok(Self { previous, _process: process })
     }
 }
 
