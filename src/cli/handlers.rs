@@ -134,29 +134,33 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
         }
     };
 
-    if let Err(error) = crate::services::activation::write_tun_session_marker(
+    let handoff_guard = match crate::services::activation::begin_tun_session_handoff(
         &spec.activation_id,
         spec.generation,
+        true,
     ) {
-        if crate::services::activation::has_pending_tun_session()? {
-            return Err(error).context(
-                "another TUN handoff won the session marker; preserving the previous loopback marker for explicit recovery",
-            );
+        Ok(guard) => guard,
+        Err(error) => {
+            if crate::services::activation::has_pending_tun_session()? {
+                return Err(error).context(
+                    "another TUN handoff won the session marker; preserving the previous loopback marker for explicit recovery",
+                );
+            }
+            return match crate::services::activation::restore_previous_loopback_if_any() {
+                Ok(true) => Err(error).context(
+                    "could not reserve the TUN handoff; the original loopback session was restored",
+                ),
+                Ok(false) => Err(error).context(
+                    "could not reserve the TUN handoff and no previous loopback session was available",
+                ),
+                Err(restore_error) => Err(error).context(format!(
+                    "could not reserve the TUN handoff and loopback restoration failed ({restore_error:#})"
+                )),
+            };
         }
-        return match crate::services::activation::restore_previous_loopback_if_any() {
-            Ok(true) => Err(error).context(
-                "could not persist TUN handoff marker; the original loopback session was restored",
-            ),
-            Ok(false) => Err(error).context(
-                "could not persist TUN handoff marker and no previous loopback session was available",
-            ),
-            Err(restore_error) => Err(error).context(format!(
-                "could not persist TUN handoff marker and loopback restoration failed ({restore_error:#})"
-            )),
-        };
-    }
+    };
 
-    match crate::services::tun_handoff::request_supervisor_session(&spec) {
+    match crate::services::tun_handoff::request_supervisor_session(&spec, handoff_guard) {
         Ok(session) => {
             if foreground {
                 crate::services::activation::clear_tun_session_marker()?;
@@ -428,11 +432,16 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         tun_probe_status,
                         foreground,
                     )?;
-                    crate::services::activation::write_tun_session_marker(
-                        &spec.activation_id,
-                        spec.generation,
-                    )?;
-                    let session = match crate::services::tun_handoff::request_supervisor_session(&spec) {
+                    let handoff_guard =
+                        crate::services::activation::begin_tun_session_handoff(
+                            &spec.activation_id,
+                            spec.generation,
+                            false,
+                        )?;
+                    let session = match crate::services::tun_handoff::request_supervisor_session(
+                        &spec,
+                        handoff_guard,
+                    ) {
                         Ok(session) => session,
                         Err(error) => {
                             if let Err(recovery_error) =
