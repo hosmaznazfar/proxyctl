@@ -19,6 +19,8 @@ pub mod config_staging;
 pub mod core_paths;
 #[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
+#[cfg(target_os = "linux")]
+pub mod direct_core_launcher;
 pub mod egress_probe;
 pub mod journal;
 pub mod journal_recovery_executor;
