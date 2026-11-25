@@ -715,48 +715,23 @@ pub fn collect_managed_preflight_with_response(
         "marked physical-egress evidence is bound to a different mark policy"
     );
 
-    let mut matched = None;
-    let mut last_error = None;
-    for peer in expected_peers {
-        if peer.ip().is_unspecified() || peer.ip().is_multicast() || peer.port() == 0 {
-            last_error = Some(anyhow::anyhow!(
-                "Xray outbound peer candidate is not a valid unicast endpoint"
-            ));
-            continue;
-        }
-        match super::socket_mark_probe::observe_proxy_outbound_mark(
-            process.clone(),
-            *peer,
-            transport,
-            plan.core_mark,
-            plan.core_mark_mask,
-        ) {
-            Ok(response) if response.expected_peer == *peer && response.transport == transport => {
-                match super::socket_mark_probe::observed_proxy_outbound_mark(
-                    &response,
-                    plan.core_mark,
-                    plan.core_mark_mask,
-                ) {
-                    Ok(mark) => {
-                        matched = Some((response, mark));
-                        break;
-                    }
-                    Err(error) => last_error = Some(error),
-                }
-            }
-            Ok(_) => {
-                last_error = Some(anyhow::anyhow!(
-                    "socket-mark diagnostic response did not match the requested proxy peer and transport"
-                ))
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
-    let (response, mark) = matched.ok_or_else(|| {
-        last_error.unwrap_or_else(|| {
-            anyhow::anyhow!("no proxy outbound socket matched any resolved node address")
-        })
-    })?;
+    let response = super::socket_mark_probe::observe_proxy_outbound_mark(
+        process.clone(),
+        expected_peers,
+        transport,
+        plan.core_mark,
+        plan.core_mark_mask,
+    )
+    .context("no exact marked proxy-peer socket matched the resolved node endpoints")?;
+    ensure!(
+        expected_peers.contains(&response.expected_peer) && response.transport == transport,
+        "socket-mark diagnostic response did not match a requested proxy peer and transport"
+    );
+    let mark = super::socket_mark_probe::observed_proxy_outbound_mark(
+        &response,
+        plan.core_mark,
+        plan.core_mark_mask,
+    )?;
     verify_host_network_unchanged(baseline_host, current_host)?;
     ensure!(
         process.verify()?,
