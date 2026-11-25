@@ -275,7 +275,7 @@ impl LifecycleCoordinator {
         }
         let process = match ProcessHandle::open(record.process.clone()) {
             Ok(process) => process,
-            Err(error) if !record.process.verify()? => return Ok(true),
+            Err(_error) if !record.process.verify()? => return Ok(true),
             Err(error) => return Err(error).context("cannot pin recorded TUN core process"),
         };
         if process.is_exited()? {
@@ -360,6 +360,18 @@ impl LifecycleCoordinator {
                 )),
                 "refusing to finalize while kernel resource journal contains unresolved operations"
             );
+            for resource in &snapshot.manifest.resources {
+                let operation = journal
+                    .operations
+                    .iter()
+                    .find(|operation| operation.resource_key == resource.key)
+                    .context("owned resource is missing from the transaction journal")?;
+                ensure!(
+                    operation.state == JournalOperationState::Removed
+                        && operation.fingerprint.as_deref() == Some(resource.fingerprint.as_str()),
+                    "owned resource does not have a matching durable removal record"
+                );
+            }
         } else {
             ensure!(
                 snapshot.manifest.resources.is_empty(),
@@ -525,7 +537,8 @@ pub fn reconcile_session_records(
             Ok(SessionReconciliation::Running(record.clone()))
         }
         SupervisorPhase::CleanupPending
-            if snapshot.core_process.as_ref() == Some(&record.process) =>
+            if snapshot.core_process.is_none()
+                || snapshot.core_process.as_ref() == Some(&record.process) =>
         {
             Ok(SessionReconciliation::CleanupPending(Some(record.clone())))
         }
