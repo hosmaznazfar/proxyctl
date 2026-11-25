@@ -260,7 +260,8 @@ pub struct ProxyTrafficObservation {
 }
 
 /// An explicit, numeric-address HTTP target for a bounded application probe through the host TUN route.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct HttpProbeTarget {
     pub destination: SocketAddr,
     pub host_header: String,
