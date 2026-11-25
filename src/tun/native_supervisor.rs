@@ -456,8 +456,11 @@ mod signal_tests {
     use super::*;
     use std::{
         process::{Command, Stdio},
+        sync::Mutex,
         time::Instant,
     };
+
+    static SIGNAL_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn live_child() -> (std::process::Child, super::super::process::ProcessIdentity) {
         let child = Command::new("sleep")
@@ -484,6 +487,7 @@ mod signal_tests {
 
     #[test]
     fn foreground_terminal_signal_is_not_forwarded_twice() {
+        let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
         let (mut child, identity) = live_child();
         let guard = SignalForwardingGuard::install(identity.clone(), true).unwrap();
         forward_supervisor_signal(libc::SIGINT);
@@ -496,6 +500,7 @@ mod signal_tests {
 
     #[test]
     fn supervisor_only_termination_is_forwarded_to_the_pinned_child() {
+        let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
         let (mut child, identity) = live_child();
         let guard = SignalForwardingGuard::install(identity.clone(), false).unwrap();
         forward_supervisor_signal(libc::SIGTERM);
