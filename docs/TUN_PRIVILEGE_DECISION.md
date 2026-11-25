@@ -90,14 +90,14 @@ Proxyctl intentionally improves the handoff and lifecycle boundaries:
 
 The repository currently has:
 
-- a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-1 launch specification, and then deliberately exits as not implemented;
+- a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-2 launch specification, verifies the invoking UID and root-owned runtime, stages the generated config as a root-owned mode-0600 file, and then deliberately exits as not implemented;
 - a version-2 request containing node ID, core enum, listener port, and the generated native configuration as bounded JSON data;
 - user-owned managed core binaries under the private data directory;
 - TUN adapters with different native device-attachment contracts;
 - offline manifest/journal, route/rule mutation, cleanup, and readiness groundwork;
 - a closed TUN activation gate.
 
-The current version-2 launch specification now carries the already-generated configuration as a JSON string, rejects non-object or invalid JSON documents, enforces a 1 MiB configuration limit, and allows a bounded wire envelope sized for JSON string escaping. This removes any need for the privileged process to open redb or reconstruct the node from its ID. The hidden supervisor still only validates the request and exits as not implemented. The next implementation slice must connect the unprivileged activation path to this request, then add the invoking-UID and root-runtime boundaries. No core launch, root runtime creation, or host network mutation is part of this contract change.
+The current version-2 launch specification carries the already-generated configuration as a JSON string, rejects non-object or invalid JSON documents, enforces a 1 MiB configuration limit, and allows a bounded wire envelope sized for JSON string escaping. The privileged process does not open redb or reconstruct the node from its ID. The hidden supervisor currently validates the request, verifies caller provenance and the root-owned runtime, stages the config, and exits as not implemented. It does not launch a core or change host networking.
 
 ## Non-goals
 
@@ -187,3 +187,39 @@ stage is intentionally ephemeral in the current validation-only supervisor: no c
 consumes it, no process/session manifest is created, and no host networking is changed.
 Durable config retention and cleanup will be tied to the supervisor-owned session
 manifest only when process lifecycle and crash recovery are implemented.
+
+## Core process launch contract (design gate)
+
+The first supervisor process-launch implementation must reuse the established core argv contract from ordinary activation, while keeping the executable selection entirely supervisor-derived:
+
+| Core | Executable selected from the fixed catalog | Fixed native argv after argv[0] |
+|---|---|---|
+| sing-box | `sing-box` | `run -c <root-staged-config>` |
+| Xray | `xray` | `run -c <root-staged-config>` |
+| Mihomo | `mihomo` | `-f <root-staged-config>` |
+
+Only the staged config pathname is dynamic, and it is generated inside the verified root-owned runtime. The request cannot supply argv, environment variables, a working directory, or any filesystem path. The child receives null stdin; supervisor diagnostics remain separate from the generated-config transport. No shell is involved.
+
+### Managed-core path resolution is a prerequisite
+
+The unprivileged installer currently honors `XDG_DATA_HOME` (or `$HOME/.local/share`) and places cores below `proxyctl/cores/<core>/<executable>`. The root supervisor cannot safely reuse its own environment, trust an arbitrary path from the request, or read the user's redb database to discover that path. Before core spawning is implemented, the project must settle a trusted way to resolve the invoking user's effective data root while preserving XDG behavior. The path resolver must:
+
+- derive the home directory from the invoking UID's system account record, not from root's `HOME`;
+- define and validate how a non-default `XDG_DATA_HOME` is obtained without accepting an unchecked request path;
+- walk each path component without following symlinks, verify ownership and non-group/world-writable permissions, and enforce the fixed `proxyctl/cores/<core>` suffix;
+- require a regular executable owned by the invoking UID and reject unexpected mode/ownership states;
+- canonicalize and re-check the final executable immediately before spawn.
+
+If a secure, compatible XDG resolution cannot be established, the supervisor must fail closed with a clear diagnostic; it must not silently launch a different core from the default data directory. These checks document the trust boundary, not immutability: the invoking user owns the managed binary and explicitly authorizes its execution as root through sudo.
+
+### Process identity and startup handshake
+
+The supervisor must persist a session record before reporting success. At minimum it binds the invoking UID, session nonce, core kind, PID, `/proc/<pid>/stat` start-time ticks, and canonical executable identity. PID reuse must be rejected; signaling must use a pidfd when available or repeat full identity verification immediately before the signal. The supervisor, not the front-end CLI, owns the child and its lifecycle.
+
+A background start must use a private, root-owned control/handshake channel under `/run/proxyctl/<uid>`. The front end may report success only after the supervisor has spawned the core, verified its executable/start identity, completed the core-specific readiness check, and durably committed the session record. An early child exit, timeout, failed write, or failed handshake must cause bounded rollback and a failure response. The front end must not treat successful sudo process creation as successful TUN activation.
+
+Foreground mode must execute this same supervisor lifecycle synchronously with inherited diagnostics. It must not create a second launch path or weaken the same validation and cleanup gates.
+
+### Deliberately excluded from this slice
+
+Core spawning alone does not enable TUN. Do not connect `tun start`, `use --tun`, or the legacy TUN orchestrator to this process-launch code until process ownership, supervisor survival, stop protocol, manifest/WAL transaction ownership, readiness, exact cleanup, crash recovery, and reboot recovery are complete. In particular, do not create a TUN device or mutate routes, policy rules, DNS, firewall, or forwarding state in the process-launch slice.
