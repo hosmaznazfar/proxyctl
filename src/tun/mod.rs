@@ -23,6 +23,8 @@ pub mod kernel_backend;
 pub mod kernel_inventory;
 pub mod kernel_transaction;
 pub mod launch_spec;
+#[cfg(target_os = "linux")]
+pub mod config_staging;
 pub mod lifecycle_coordinator;
 #[cfg(target_os = "linux")]
 pub mod linux_journal_backend;
