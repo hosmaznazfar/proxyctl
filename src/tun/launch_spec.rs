@@ -268,7 +268,7 @@ mod tests {
         );
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":4,"node_id":1,"core":"root","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}"}"#
+                br#"{"version":5,"node_id":1,"core":"root","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}"}"#
             )
             .is_err()
         );
@@ -312,6 +312,29 @@ mod tests {
         spec.generated_config = "not-json".to_owned();
         assert!(spec.validate().is_err());
         spec.generated_config = " ".repeat(MAX_CONFIG_BYTES + 1);
+        assert!(spec.validate().is_err());
+    }
+
+    #[test]
+    fn readiness_inputs_are_generation_bound_and_dual_stack() {
+        let mut spec = sample();
+        spec.generation = 0;
+        assert!(spec.validate().is_err());
+
+        spec = sample();
+        spec.expected_peers.clear();
+        assert!(spec.validate().is_err());
+
+        spec = sample();
+        spec.expected_peers = vec!["198.51.100.1:443".parse().unwrap(); 9];
+        assert!(spec.validate().is_err());
+
+        spec = sample();
+        spec.traffic_targets.pop();
+        assert!(spec.validate().is_err());
+
+        spec = sample();
+        spec.traffic_targets[1].destination = "192.0.2.11:80".parse().unwrap();
         assert!(spec.validate().is_err());
     }
 
