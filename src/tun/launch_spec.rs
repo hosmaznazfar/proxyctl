@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{io::Read, path::PathBuf, str::FromStr};
 
-pub const VERSION: u16 = 3;
+pub const VERSION: u16 = 4;
 pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 /// JSON string escaping can expand the generated document, so the wire limit allows
 /// up to twice the config byte limit plus bounded request metadata.
@@ -46,6 +46,8 @@ pub struct LaunchSpec {
     pub node_id: u64,
     pub core: CoreKind,
     pub listen_port: u16,
+    /// Kernel-generated activation identity; also binds the generated socket mark to recovery.
+    pub activation_id: String,
     /// Untrusted hint; the supervisor validates this tree and derives the executable from CoreKind.
     pub managed_core_root: PathBuf,
     /// Generated native core configuration, transferred as data rather than a filesystem path.
@@ -74,6 +76,7 @@ pub fn from_generated_config(
     node_id: u64,
     core: CoreKind,
     listen_port: u16,
+    activation_id: String,
     managed_core_root: PathBuf,
     generated_config: &[u8],
 ) -> Result<LaunchSpec> {
@@ -85,6 +88,7 @@ pub fn from_generated_config(
         node_id,
         core,
         listen_port,
+        activation_id,
         managed_core_root,
         generated_config,
     };
@@ -99,6 +103,17 @@ impl LaunchSpec {
             "unsupported launch specification version"
         );
         ensure!(self.node_id > 0, "node ID must be non-zero");
+        ensure!(
+            self.activation_id.len() == 36
+                && self.activation_id.bytes().enumerate().all(|(index, byte)| {
+                    if [8, 13, 18, 23].contains(&index) {
+                        byte == b'-'
+                    } else {
+                        byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                    }
+                }),
+            "activation ID must be a canonical lowercase UUID"
+        );
         ensure!(
             self.managed_core_root.is_absolute()
                 && self.managed_core_root.as_os_str().len() <= 4096
@@ -164,6 +179,7 @@ mod tests {
             node_id: 5,
             core: CoreKind::Xray,
             listen_port: 1080,
+            activation_id: "12345678-1234-4234-8234-123456789abc".to_owned(),
             managed_core_root: PathBuf::from("/home/user/.local/share/proxyctl/cores"),
             generated_config: r#"{"inbounds":[],"outbounds":[]}"#.to_owned(),
         }
@@ -205,7 +221,7 @@ mod tests {
     fn rejects_unknown_fields_and_invalid_core() {
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":3,"node_id":1,"core":"xray","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}","path":"/tmp"}"#
+                br#"{"version":4,"node_id":1,"core":"xray","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}","path":"/tmp"}"#
             )
             .is_err()
         );
