@@ -136,6 +136,11 @@ impl LaunchSpec {
                 }),
             "expected proxy peers must contain one to eight usable unicast endpoints"
         );
+        let unique_peers = self.expected_peers.iter().copied().collect::<std::collections::BTreeSet<_>>();
+        ensure!(
+            unique_peers.len() == self.expected_peers.len(),
+            "expected proxy peers must not contain duplicates"
+        );
         super::readiness::validate_dual_stack_probe_targets(&self.traffic_targets)
             .context("invalid dual-stack TUN readiness targets")?;
         ensure!(
