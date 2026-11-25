@@ -46,6 +46,7 @@ impl SessionRecord {
 #[derive(Debug, Clone)]
 pub struct SessionStore {
     directory: PathBuf,
+    owner_uid: u32,
 }
 
 impl SessionStore {
@@ -59,6 +60,7 @@ impl SessionStore {
         Ok(Self {
             directory: fs::canonicalize(&directory)
                 .context("cannot canonicalize privileged TUN session directory")?,
+            owner_uid: expected_uid,
         })
     }
 
@@ -75,7 +77,7 @@ impl SessionStore {
         let mut temporary = tempfile::NamedTempFile::new_in(&self.directory)
             .context("cannot create temporary privileged TUN session record")?;
         set_private_file(temporary.as_file())?;
-        verify_file(&temporary.as_file().metadata()?, 0)?;
+        verify_file(&temporary.as_file().metadata()?, self.owner_uid)?;
         serde_json::to_writer(&mut temporary, record)
             .context("cannot serialize privileged TUN session record")?;
         ensure!(
@@ -98,7 +100,7 @@ impl SessionStore {
             Err(error) => return Err(error).context("cannot securely open privileged TUN session record"),
         };
         let before = file.metadata()?;
-        verify_file(&before, 0)?;
+        verify_file(&before, self.owner_uid)?;
         ensure!(before.len() <= MAX_SESSION_BYTES, "privileged TUN session record exceeds its size limit");
 
         let mut bytes = Vec::new();
