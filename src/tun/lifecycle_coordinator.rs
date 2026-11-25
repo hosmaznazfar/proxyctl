@@ -45,6 +45,21 @@ pub struct CoordinatedSnapshot {
     pub token: ActivationToken,
 }
 
+/// Read-only classification of the two root-owned durable startup records.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionReconciliation {
+    Idle,
+    PreparedWithoutReceipt { activation_id: String, generation: u64 },
+    ReceiptCommittedBeforeManifest(SessionRecord),
+    Running(SessionRecord),
+    CleanupPending(Option<SessionRecord>),
+    CleanedAwaitingReceiptRemoval(SessionRecord),
+    CleanedWithoutReceipt,
+    OrphanReceipt(SessionRecord),
+    Inconsistent(String),
+}
+
 #[derive(Debug, Clone)]
 pub struct LifecycleCoordinator {
     store: ManifestStore,
@@ -181,6 +196,23 @@ impl LifecycleCoordinator {
         self.store.write(&snapshot)
     }
 
+    /// Inspect the root-owned manifest and session receipt under one lifecycle lock.
+    /// This is deliberately read-only: classification never signals a process or removes evidence.
+    #[cfg(target_os = "linux")]
+    pub fn reconcile_session_records(
+        &self,
+        sessions: &SessionStore,
+    ) -> Result<SessionReconciliation> {
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        ensure!(
+            sessions.path().parent() == self.store.path().parent(),
+            "privileged session receipt and lifecycle manifest must share one runtime directory"
+        );
+        let manifest = self.store.load()?;
+        let receipt = sessions.load()?;
+        reconcile_session_records(manifest.as_ref(), receipt.as_ref())
+    }
+
     /// Persist the root-owned process receipt before binding the same identity to the
     /// lifecycle manifest. If the second durable write fails, the receipt is deliberately
     /// retained as recovery evidence; callers must not delete it as a rollback shortcut.
@@ -260,6 +292,75 @@ impl LifecycleCoordinator {
             "stale TUN lifecycle token does not match the active activation"
         );
         self.store.apply_event(event, token.generation)
+    }
+}
+
+/// Classify partial durable commits without taking any destructive recovery action.
+#[cfg(target_os = "linux")]
+pub fn reconcile_session_records(
+    manifest: Option<&ManifestSnapshot>,
+    receipt: Option<&SessionRecord>,
+) -> Result<SessionReconciliation> {
+    if let Some(snapshot) = manifest {
+        snapshot.validate()?;
+    }
+    if let Some(record) = receipt {
+        record.validate()?;
+    }
+
+    let (Some(snapshot), Some(record)) = (manifest, receipt) else {
+        return Ok(match (manifest, receipt) {
+            (None, None) => SessionReconciliation::Idle,
+            (None, Some(record)) => SessionReconciliation::OrphanReceipt(record.clone()),
+            (Some(snapshot), None) => match snapshot.phase {
+                SupervisorPhase::Prepared => SessionReconciliation::PreparedWithoutReceipt {
+                    activation_id: snapshot.manifest.activation_id.clone(),
+                    generation: snapshot.generation,
+                },
+                SupervisorPhase::Running => SessionReconciliation::Inconsistent(
+                    "Running manifest has no privileged session receipt".into(),
+                ),
+                SupervisorPhase::CleanupPending => {
+                    SessionReconciliation::CleanupPending(None)
+                }
+                SupervisorPhase::Cleaned => SessionReconciliation::CleanedWithoutReceipt,
+            },
+            (Some(_), Some(_)) => unreachable!("both records were handled above"),
+        });
+    };
+
+    if snapshot.manifest.activation_id != record.activation_id
+        || snapshot.generation != record.generation
+    {
+        return Ok(SessionReconciliation::Inconsistent(
+            "manifest and session receipt refer to different activation generations".into(),
+        ));
+    }
+
+    match snapshot.phase {
+        SupervisorPhase::Prepared if snapshot.core_process.is_none() => {
+            Ok(SessionReconciliation::ReceiptCommittedBeforeManifest(record.clone()))
+        }
+        SupervisorPhase::Running
+            if snapshot.core_process.as_ref() == Some(&record.process) =>
+        {
+            Ok(SessionReconciliation::Running(record.clone()))
+        }
+        SupervisorPhase::CleanupPending
+            if snapshot.core_process.as_ref() == Some(&record.process) =>
+        {
+            Ok(SessionReconciliation::CleanupPending(Some(record.clone())))
+        }
+        SupervisorPhase::Cleaned
+            if snapshot.core_process.as_ref() == Some(&record.process) =>
+        {
+            Ok(SessionReconciliation::CleanedAwaitingReceiptRemoval(
+                record.clone(),
+            ))
+        }
+        _ => Ok(SessionReconciliation::Inconsistent(
+            "manifest phase or process identity conflicts with the session receipt".into(),
+        )),
     }
 }
 
