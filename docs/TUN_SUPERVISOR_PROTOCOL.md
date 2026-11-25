@@ -158,3 +158,8 @@ The supervisor captures its own pre-activation host-network baseline after authe
 ## In-process socket-mark readiness
 
 The native persistent-device readiness path collects `INET_DIAG_MARK` data directly through the bounded `NETLINK_SOCK_DIAG` transport inside the already privileged Proxyctl supervisor. It snapshots the exact core process's socket inodes before and after collection, then joins those stable inodes to kernel-origin socket records and classifies the expected peer/transport. This path does not execute `/usr/libexec/proxyctl-tun-helper`, create a diagnostic Unix socket, or require a separately installed helper package. Missing mark attributes, incomplete netlink dumps, process identity changes, and ambiguous socket ownership remain hard failures.
+
+
+## Loopback restoration around TUN mode
+
+When `proxyctl tun start` transitions an active loopback session, the unprivileged activation runtime records a private 0600 restoration marker containing only the prior node ID, core kind, and listener port before stopping the exact verified loopback process. If TUN preparation/start fails, the foreground TUN session ends, or `proxyctl tun stop` completes journal recovery, Proxyctl restores that prior loopback session through the ordinary unprivileged activation path. Restoration is idle-only under the activation lock; it refuses to replace a concurrently started session. Direct `proxyctl use --tun` starts do not create a restoration marker. A pending marker is visible through `proxyctl status`, and another TUN start is refused until the previous transition is recovered/restored.
