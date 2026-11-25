@@ -105,3 +105,17 @@ The coordinator now also exposes a generic `recover_session` orchestration metho
 The single-executable migration now has a pure Linux activation-plan builder. It consumes one consistent read-only kernel snapshot, rejects an already-present `tun-proxyctl` interface, allocates a private routing table and consecutive dual-stack policy priorities, and derives the core outbound socket mark from the launch request's activation UUID. It returns the typed `KernelTransaction` with the invoking user's UID/GID.
 
 This is preflight only, not a reservation and not a host mutation. The privileged journal backend must still re-check conflicts while applying each operation, persist write-ahead intents, and retain recovery evidence on ambiguity. The interface index in the plan is explicitly a placeholder; the transaction executor replaces it with the actual kernel-assigned index before installing routes.
+
+
+## Journaled native kernel activation boundary
+
+A Linux-only `supervisor_activation` boundary now composes the read-only activation planner with the existing `LinuxJournalBackend` and `KernelTransaction` executor. Its operation order is:
+
+1. Require a non-zero generation and non-root interface owner, and verify that the journal store and lifecycle coordinator refer to the same runtime directory.
+2. Refuse to proceed while a current activation manifest exists.
+3. Capture a fresh read-only kernel snapshot and build the dual-stack native-device transaction.
+4. Create the generation-bound write-ahead journal before any kernel mutation.
+5. Apply the persistent named TUN interface, routes and policy rules through the typed journal backend. The executor binds the actual kernel-assigned ifindex and either completes rollback or preserves the journal on ambiguous/incomplete cleanup.
+6. Adopt the exact committed `Prepared` manifest into the lifecycle coordinator.
+
+A successful call means only that the native TUN resources and `Prepared` manifest are durably recorded. It does not launch a core, prove readiness, create a session receipt, bind `Running`, or send a `started` acknowledgement. The hidden supervisor does not call this boundary yet, and `tun start` remains fail-closed. The caller is responsible for authenticating the invoking UID and selecting the intended non-root UID/GID for the TUN device.
