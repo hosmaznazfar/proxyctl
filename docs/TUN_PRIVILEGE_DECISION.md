@@ -35,7 +35,7 @@ The intended sequence is:
 
 1. The ordinary, unprivileged CLI acquires Proxyctl's activation lock and resolves the active node from the user's database.
 2. It checks adapter compatibility, generates the native TUN configuration, and performs the ordinary preflight validation before asking for elevation.
-3. It constructs a bounded, versioned request containing only typed launch metadata and the generated configuration payload. It must not ask the privileged process to open the user's redb database or resolve a node ID against user-owned state.
+3. It constructs a bounded, versioned request containing typed launch metadata, the managed-core directory hint, and the generated configuration payload. It must not ask the privileged process to open the user's redb database or resolve a node ID against user-owned state.
 4. The CLI invokes `sudo` directly (no shell script) for the installed Proxyctl executable's hidden `__tun-supervisor` role. The request is sent over standard input; the privileged process rejects a terminal as request input and applies strict size/schema validation.
 5. The supervisor derives the core selection from the closed `CoreKind` enum. It does not accept an executable path, config path, working directory, arbitrary environment map, or shell command from the request.
 6. The supervisor creates private root-owned runtime/configuration state under a per-invoking-UID directory below `/run/proxyctl`, validates the staged configuration, and launches the selected managed core with the core-specific native arguments.
@@ -91,7 +91,7 @@ Proxyctl intentionally improves the handoff and lifecycle boundaries:
 The repository currently has:
 
 - a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-3 launch specification, verifies the invoking UID and root-owned runtime, stages the generated config as a root-owned mode-0600 file, and then deliberately exits as not implemented;
-- a version-3 request containing node ID, core enum, listener port, and the generated native configuration as bounded JSON data;
+- a version-3 request containing node ID, core enum, listener port, a validated-later managed-core directory hint, and the generated native configuration as bounded JSON data;
 - user-owned managed core binaries under the private data directory;
 - TUN adapters with different native device-attachment contracts;
 - offline manifest/journal, route/rule mutation, cleanup, and readiness groundwork;
