@@ -41,12 +41,10 @@ impl RunningNativeSession {
     /// the absent manifest is treated as an already-finished session, never as permission to
     /// touch a newer generation.
     pub fn wait_and_recover(mut self) -> Result<ExitStatus> {
-        let status = self
-            .core
-            .child
-            .wait()
-            .context("cannot wait for the managed native TUN core")?;
-        self.recover_if_current()?;
+        let status = self.core.child.wait();
+        let recovery = self.recover_if_current();
+        let status = status.context("cannot wait for the managed native TUN core")?;
+        recovery?;
         ensure!(
             status.success(),
             "managed {} TUN core exited with {status}",
@@ -60,9 +58,8 @@ impl RunningNativeSession {
             return Ok(());
         };
         ensure!(
-            current.token == self.token
-                && current.snapshot.phase == SupervisorPhase::Running,
-            "TUN session changed before supervisor cleanup; preserving the newer or inconsistent generation"
+            current.token == self.token,
+            "TUN session changed before supervisor cleanup; preserving the newer generation"
         );
         let mut backend = LinuxJournalBackend::open_for_recovery(
             self.store.clone(),
@@ -137,35 +134,51 @@ pub fn start(
     ) {
         Ok(value) => value,
         Err(error) => {
-            let recovery = recover_unmanifested_start(&store);
-            return Err(error).context(match recovery {
-                Ok(()) => "native TUN kernel setup failed; any recoverable partial transaction was cleaned",
-                Err(ref recovery_error) => {
-                    return Err(error).context(format!(
-                        "native TUN kernel setup failed; automatic recovery also failed ({recovery_error:#}); durable evidence was retained"
-                    ));
-                }
-            });
+            let recovery = recover_after_apply_failure(&store, &coordinator, &sessions);
+            return match recovery {
+                Ok(()) => Err(error).context(
+                    "native TUN kernel setup failed; any recoverable partial transaction was cleaned",
+                ),
+                Err(recovery_error) => Err(error).context(format!(
+                    "native TUN kernel setup failed; automatic recovery also failed ({recovery_error:#}); durable evidence was retained"
+                )),
+            };
         }
     };
 
-    let (core_mark, core_mark_mask) =
-        super::route_policy::mark_for_activation_id(&spec.activation_id)?;
-    let bypass_priority = applied
-        .manifest
-        .rule_priority
-        .checked_sub(1)
-        .context("journaled TUN proxy priority has no preceding core-bypass priority")?;
-    let plan = RoutingPolicyPlan::new(
-        applied.manifest.table_id,
-        bypass_priority,
-        applied.manifest.rule_priority,
-        core_mark,
-        core_mark_mask,
-        applied.manifest.interface_name.clone(),
-        applied.manifest.interface_index,
-    );
-    plan.validate()?;
+    let (core_mark, core_mark_mask, plan) = match (|| -> Result<_> {
+        let (core_mark, core_mark_mask) =
+            super::route_policy::mark_for_activation_id(&spec.activation_id)?;
+        let bypass_priority = applied
+            .manifest
+            .rule_priority
+            .checked_sub(1)
+            .context("journaled TUN proxy priority has no preceding core-bypass priority")?;
+        let plan = RoutingPolicyPlan::new(
+            applied.manifest.table_id,
+            bypass_priority,
+            applied.manifest.rule_priority,
+            core_mark,
+            core_mark_mask,
+            applied.manifest.interface_name.clone(),
+            applied.manifest.interface_index,
+        );
+        plan.validate()?;
+        Ok((core_mark, core_mark_mask, plan))
+    })() {
+        Ok(value) => value,
+        Err(error) => {
+            let recovery = recover_committed_start(&store, &coordinator, &sessions, &token);
+            return match recovery {
+                Ok(()) => Err(error).context(
+                    "native TUN activation plan validation failed; journaled resources were recovered",
+                ),
+                Err(recovery_error) => Err(error).context(format!(
+                    "native TUN activation plan validation failed; recovery also failed ({recovery_error:#}); durable evidence was retained"
+                )),
+            };
+        }
+    };
 
     let listener = SocketAddr::from(([127, 0, 0, 1], spec.listen_port));
     let readiness = |process: &super::process::ProcessIdentity,
@@ -230,7 +243,14 @@ pub fn start(
     })
 }
 
-fn recover_unmanifested_start(store: &ManifestStore) -> Result<()> {
+fn recover_after_apply_failure(
+    store: &ManifestStore,
+    coordinator: &LifecycleCoordinator,
+    sessions: &SessionStore,
+) -> Result<()> {
+    if let Some(current) = coordinator.load_current()? {
+        return recover_committed_start(store, coordinator, sessions, &current.token);
+    }
     let Some(journal) = store.load_transaction_journal()? else {
         return Ok(());
     };
