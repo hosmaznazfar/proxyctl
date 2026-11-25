@@ -37,15 +37,16 @@ pub fn prepare_launch_spec(node_id: u64, core: CoreId, port: u16) -> anyhow::Res
             .unwrap_or("unsupported configuration")
     );
 
+    let managed_root = managed_cores_path()?;
     let executable = core_binary_path(core)?;
     ensure!(
         executable.is_file(),
         "selected core is not installed by Proxyctl; run setup for the selected core"
     );
     let executable = std::fs::canonicalize(executable)?;
-    let managed_root = std::fs::canonicalize(managed_cores_path()?)?;
+    let canonical_managed_root = std::fs::canonicalize(&managed_root)?;
     ensure!(
-        executable.starts_with(managed_root),
+        executable.starts_with(canonical_managed_root),
         "refusing to validate a core outside Proxyctl's managed-core directory"
     );
 
@@ -70,5 +71,5 @@ pub fn prepare_launch_spec(node_id: u64, core: CoreId, port: u16) -> anyhow::Res
         CoreId::Xray => CoreKind::Xray,
         CoreId::Mihomo => CoreKind::Mihomo,
     };
-    from_generated_config(node_id, kind, port, &generated.content)
+    from_generated_config(node_id, kind, port, managed_root, &generated.content)
 }
