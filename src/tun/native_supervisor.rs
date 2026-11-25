@@ -472,10 +472,10 @@ mod signal_tests {
             .expect("sleep must be available for signal-forwarding tests");
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
-            if let Ok(identity) = super::super::process::ProcessIdentity::capture(child.id()) {
-                if identity.verify().unwrap_or(false) {
-                    return (child, identity);
-                }
+            if let Ok(identity) = super::super::process::ProcessIdentity::capture(child.id())
+                && identity.verify().unwrap_or(false)
+            {
+                return (child, identity);
             }
             assert!(
                 Instant::now() < deadline,
