@@ -36,8 +36,19 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 "internal TUN supervisor requires a launch specification on standard input"
             );
             let _spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
+            #[cfg(target_os = "linux")]
+            {
+                let invoking_uid = crate::tun::runtime::invoking_uid()?;
+                let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
+                println!(
+                    "TUN supervisor request validated for invoking UID {invoking_uid}; private runtime prepared at {}",
+                    runtime.display()
+                );
+            }
+            #[cfg(not(target_os = "linux"))]
+            anyhow::bail!("the privileged TUN supervisor is supported only on Linux");
             anyhow::bail!(
-                "launch specification validated; supervisor launch and networking operations are not implemented"
+                "launch specification and root runtime validated; core launch and networking operations are not implemented"
             );
         }
         Command::Tun { command } => {
