@@ -1148,7 +1148,7 @@ mod tests {
         let committed = coordinator.load_current().unwrap().unwrap();
         assert_eq!(committed.snapshot.phase, SupervisorPhase::Running);
         assert_eq!(committed.snapshot.core_process, Some(identity));
-        assert_eq!(sessions.load().unwrap(), Some(record));
+        assert_eq!(sessions.load().unwrap(), Some(record.clone()));
 
         child.kill().unwrap();
         child.wait().unwrap();
