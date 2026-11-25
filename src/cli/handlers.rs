@@ -342,6 +342,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 TunCommand::Stop => {
                     #[cfg(target_os = "linux")]
                     {
+                        crate::services::activation::synchronize_tun_handoff()?;
                         crate::services::tun_handoff::request_supervisor_recovery()?;
                         crate::services::activation::clear_tun_session_marker()?;
                         if crate::services::activation::restore_previous_loopback_if_any()? {
