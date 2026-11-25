@@ -133,17 +133,21 @@ pub fn spawn_core(
         .with_context(|| format!("cannot spawn managed {} TUN core", core.as_str()))?;
     drop(descriptor_guard);
 
-    let identity = match ProcessIdentity::capture(child.id()) {
-        Ok(identity) if identity.executable == executable && identity.verify()? => identity,
-        Ok(_) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            anyhow::bail!("spawned core executable identity does not match the selected managed binary");
-        }
+    let identity_result = (|| -> Result<ProcessIdentity> {
+        let identity = ProcessIdentity::capture(child.id())
+            .context("cannot capture exact managed core process identity")?;
+        ensure!(
+            identity.executable == executable && identity.verify()?,
+            "spawned core executable identity does not match the selected managed binary"
+        );
+        Ok(identity)
+    })();
+    let identity = match identity_result {
+        Ok(identity) => identity,
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(error).context("cannot capture exact managed core process identity");
+            return Err(error).context("spawned core failed executable identity verification");
         }
     };
 
