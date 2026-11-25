@@ -90,10 +90,13 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
         .spawn()
         .context("cannot launch privileged Proxyctl supervisor via sudo")?;
 
-    let stdout = child
-        .stdout
-        .take()
-        .context("supervisor acknowledgement pipe was not created")?;
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            let cleanup = abort_child(&mut child);
+            anyhow::bail!("supervisor acknowledgement pipe was not created; {cleanup}");
+        }
+    };
     let (sender, receiver) = mpsc::sync_channel(1);
     let reader = thread::spawn(move || {
         let mut bytes = Vec::new();
@@ -140,9 +143,10 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
             anyhow::bail!("supervisor acknowledgement channel closed unexpectedly; {cleanup}");
         }
     };
-    reader
-        .join()
-        .map_err(|_| anyhow::anyhow!("supervisor acknowledgement reader panicked"))?;
+    if reader.join().is_err() {
+        let cleanup = abort_child(&mut child);
+        anyhow::bail!("supervisor acknowledgement reader panicked; {cleanup}");
+    }
 
     let reply = match supervisor_protocol::read_reply(response.as_slice()) {
         Ok(reply) => reply,
@@ -156,7 +160,6 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
 
     match reply.outcome {
         SupervisorOutcome::Started { session } => {
-            session.validate()?;
             match child.try_wait() {
                 Ok(None) => {
                     // The supervisor has closed the acknowledgement channel and remains alive
