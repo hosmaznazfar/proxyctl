@@ -64,6 +64,20 @@ A future `started` reply is permitted only after all of the following are true:
 
 The foreground path must use this same sequence. Background mode must not return merely because sudo spawned; it returns only after the supervisor sends the `started` reply, closes the acknowledgement pipe, and remains alive as the session owner. The front end's 30-second acknowledgement timeout is implemented; supervisor detachment, ongoing child-exit monitoring, stop requests and reboot recovery remain separate gates.
 
+## Direct core-launch primitive (not yet wired)
+
+A new Linux-only direct launcher now provides the process-creation primitive for the single-executable supervisor. It launches the selected managed binary directly from the privileged Proxyctl process; it does not invoke systemd, install or execute a helper, construct a shell command, or accept arbitrary argv/environment data.
+
+The launcher re-resolves the executable from the closed `CoreKind` enum and invoking user's private managed-core tree immediately before spawn. It rechecks ownership, executable permissions and link count, requires the staged config to be a root-owned single-link 0600 regular file, and uses only fixed core-specific arguments:
+
+- sing-box: `run -c <staged-config>`
+- Xray: `run -c <staged-config>`, with the generation-bound descriptor supplied through `XRAY_TUN_FD`;
+- Mihomo: `-f <staged-config>`.
+
+The child receives a cleared environment with a minimal fixed `PATH`, `HOME` and locale, no stdin, and no inherited output streams. Xray's descriptor is duplicated CLOEXEC and made inheritable only in the forked child immediately before exec. The parent captures the exact executable/PID/start-time identity, pins it with pidfd, and verifies that all process UID credentials remain root. Any post-spawn verification failure kills and reaps that exact child.
+
+This is deliberately only a launch primitive. It is not called by `__tun-supervisor` yet, does not create a kernel transaction, and does not make `tun start` available. The supervisor must still coordinate journaled interface/routing setup, core-specific readiness, durable session/manifest commit, acknowledgement, and ongoing child monitoring before startup can be enabled.
+
 ## Current safety boundary
 
 - `tun stop` is connected to explicit privileged recovery; `tun start` and `use --tun` remain fail-closed.
