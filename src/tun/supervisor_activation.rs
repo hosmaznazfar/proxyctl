@@ -64,3 +64,29 @@ pub fn apply_native_kernel_plan(
 
     Ok((token, applied))
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refuses_a_journal_store_outside_the_lifecycle_runtime() {
+        let manifest_dir = tempfile::tempdir().unwrap();
+        let journal_dir = tempfile::tempdir().unwrap();
+        let manifest_store = ManifestStore::open(manifest_dir.path().to_path_buf()).unwrap();
+        let journal_store = ManifestStore::open(journal_dir.path().to_path_buf()).unwrap();
+        let coordinator = LifecycleCoordinator::new(manifest_store).unwrap();
+
+        let result = apply_native_kernel_plan(
+            journal_store,
+            &coordinator,
+            "12345678-1234-4234-8234-123456789abc",
+            1,
+            1000,
+            1000,
+        );
+
+        assert!(result.is_err());
+    }
+}
