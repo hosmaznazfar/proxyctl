@@ -188,6 +188,10 @@ fn activate_with_policy(
                 );
             } else {
                 ensure!(
+                    !runtime.join("tun-session.json").exists(),
+                    "a privileged TUN session or handoff is active; run 'proxyctl tun stop' first"
+                );
+                ensure!(
                     !runtime.join("tun-previous.json").exists(),
                     "a previous loopback session is awaiting TUN recovery/restoration; run 'proxyctl tun stop' first"
                 );
