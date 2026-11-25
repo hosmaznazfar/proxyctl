@@ -15,7 +15,7 @@ use super::{
         SocketMarkBrokerResponse, build_socket_mark_broker_response,
     },
     process::{ProcessHandle, ProcessIdentity},
-    socket_diag_collector::{self, SocketDiagnosticIo},
+    socket_diag_collector,
     socket_diag_linux::LinuxSocketDiagnosticIo,
     socket_diag_netlink::{SocketDiagnosticRequest, SocketTransport},
     socket_ownership,
@@ -39,7 +39,7 @@ pub fn observe_proxy_outbound_mark(
         unsafe { libc::getuid() } == 0 && unsafe { libc::geteuid() } == 0,
         "direct socket-mark diagnostics must run inside the privileged TUN supervisor"
     );
-    let request = SocketMarkBrokerRequest {
+    let broker_request = SocketMarkBrokerRequest {
         version: BROKER_REQUEST_VERSION,
         process: process.clone(),
         expected_peer,
@@ -47,7 +47,7 @@ pub fn observe_proxy_outbound_mark(
         expected_mark,
         mark_mask,
     };
-    request.validate()?;
+    broker_request.validate()?;
 
     let handle = ProcessHandle::open(process)
         .context("cannot pin the exact managed core for socket diagnostics")?;
@@ -58,7 +58,7 @@ pub fn observe_proxy_outbound_mark(
         BrokerSocketTransport::Tcp => SocketTransport::Tcp,
         BrokerSocketTransport::Udp => SocketTransport::Udp,
     };
-    let request = SocketDiagnosticRequest {
+    let diagnostic_request = SocketDiagnosticRequest {
         family: if expected_peer.is_ipv4() {
             libc::AF_INET as u8
         } else {
@@ -71,47 +71,20 @@ pub fn observe_proxy_outbound_mark(
     };
     let mut io = LinuxSocketDiagnosticIo::open()
         .context("cannot open the in-process NETLINK_SOCK_DIAG transport")?;
-    let dump = socket_diag_collector::collect_dump(&mut io, request, Duration::from_secs(3))
+    let dump = socket_diag_collector::collect_dump(&mut io, diagnostic_request, Duration::from_secs(3))
         .context("cannot collect bounded kernel socket-mark diagnostics")?;
 
     let after = socket_ownership::inspect_process_sockets(&handle)
         .context("cannot snapshot managed core socket ownership after diagnostics")?;
-    let response = build_socket_mark_broker_response(&request_for_response(
-        &process_identity_from_snapshot(&before)?,
-        expected_peer,
-        transport,
-        expected_mark,
-        mark_mask,
-    ), &before, &after, &dump.records)
+    let response = build_socket_mark_broker_response(
+        &broker_request,
+        &before,
+        &after,
+        &dump.records,
+    )
     .context("kernel socket diagnostics did not prove an exact marked proxy-peer socket")?;
     response.validate()?;
     Ok(response)
-}
-
-#[cfg(target_os = "linux")]
-fn process_identity_from_snapshot(
-    snapshot: &socket_ownership::ProcessSocketSnapshot,
-) -> Result<ProcessIdentity> {
-    snapshot.process.validate()?;
-    Ok(snapshot.process.clone())
-}
-
-#[cfg(target_os = "linux")]
-fn request_for_response(
-    process: &ProcessIdentity,
-    expected_peer: std::net::SocketAddr,
-    transport: BrokerSocketTransport,
-    expected_mark: u32,
-    mark_mask: u32,
-) -> SocketMarkBrokerRequest {
-    SocketMarkBrokerRequest {
-        version: BROKER_REQUEST_VERSION,
-        process: process.clone(),
-        expected_peer,
-        transport,
-        expected_mark,
-        mark_mask,
-    }
 }
 
 #[cfg(target_os = "linux")]
