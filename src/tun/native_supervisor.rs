@@ -485,11 +485,13 @@ pub fn start(
         spec,
         staged_config.path(),
         invoking_uid,
-        &coordinator,
-        &token,
-        &sessions,
+        native_session::NativeSessionContext {
+            coordinator: &coordinator,
+            token: &token,
+            sessions: &sessions,
+            signal_guard: &mut signal_guard,
+        },
         readiness,
-        &mut signal_guard,
     ) {
         Ok(value) => value,
         Err(error) => {
