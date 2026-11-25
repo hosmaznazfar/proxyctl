@@ -116,6 +116,30 @@ pub fn observe_proxy_outbound_mark(
     )))
 }
 
+/// Validate a direct socket-mark observation against the expected routing policy.
+#[cfg(target_os = "linux")]
+pub fn observed_proxy_outbound_mark(
+    response: &SocketMarkBrokerResponse,
+    expected_mark: u32,
+    mark_mask: u32,
+) -> Result<u32> {
+    response.validate()?;
+    ensure!(
+        response.expected_mark == expected_mark && response.mark_mask == mark_mask,
+        "socket-mark observation does not match the requested mark policy"
+    );
+    let observed = response
+        .records
+        .first()
+        .map(|record| record.mark)
+        .context("socket-mark observation contains no matching records")?;
+    ensure!(
+        observed & mark_mask == expected_mark,
+        "observed proxy outbound socket mark does not match the requested policy"
+    );
+    Ok(observed)
+}
+
 #[cfg(not(target_os = "linux"))]
 pub fn observe_proxy_outbound_mark(
     _process: (),
