@@ -70,28 +70,6 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
             }
         };
 
-    let _signal_guard = match crate::tun::native_supervisor::SignalForwardingGuard::install(
-        session.record.process.clone(),
-        spec.foreground,
-    ) {
-        Ok(guard) => guard,
-        Err(error) => {
-            let cleanup = session.abort_and_recover();
-            let reply =
-                crate::tun::supervisor_protocol::SupervisorReply::failed(format!("{error:#}"));
-            write_final_supervisor_reply(&reply)
-                .context("cannot send signal-forwarding setup failure")?;
-            return match cleanup {
-                Ok(()) => Err(error).context(
-                    "cannot install supervisor signal forwarding; the core was terminated and recovered",
-                ),
-                Err(cleanup_error) => Err(error).context(format!(
-                    "cannot install supervisor signal forwarding; cleanup also failed ({cleanup_error:#})"
-                )),
-            };
-        }
-    };
-
     let reply = match crate::tun::supervisor_protocol::SupervisorReply::started(
         session.record.clone(),
     ) {
