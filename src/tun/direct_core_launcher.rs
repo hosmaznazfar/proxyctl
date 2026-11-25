@@ -8,8 +8,8 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    os::unix::fs::{MetadataExt, PermissionsExt},
     os::fd::BorrowedFd,
+    os::unix::fs::{MetadataExt, PermissionsExt},
     path::Path,
     process::{Child, Command, Stdio},
 };
@@ -63,12 +63,9 @@ pub fn spawn_core(
     );
     ensure!(invoking_uid != 0, "invoking user UID must be non-zero");
 
-    let executable = super::core_paths::resolve_managed_core(
-        managed_core_root,
-        invoking_uid,
-        domain_core(core),
-    )
-    .context("cannot revalidate the selected managed core immediately before launch")?;
+    let executable =
+        super::core_paths::resolve_managed_core(managed_core_root, invoking_uid, domain_core(core))
+            .context("cannot revalidate the selected managed core immediately before launch")?;
     let executable_metadata = fs::symlink_metadata(&executable)
         .context("cannot inspect selected managed core executable before launch")?;
     ensure!(
@@ -92,8 +89,8 @@ pub fn spawn_core(
 
     let executable = fs::canonicalize(&executable)
         .context("cannot canonicalize selected managed core executable")?;
-    let config = fs::canonicalize(config)
-        .context("cannot canonicalize staged TUN configuration")?;
+    let config =
+        fs::canonicalize(config).context("cannot canonicalize staged TUN configuration")?;
     let arguments = core_arguments(core, &config)?;
 
     match (core, xray_descriptor) {
