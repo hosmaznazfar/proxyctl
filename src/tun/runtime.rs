@@ -45,6 +45,38 @@ pub fn invoking_uid() -> anyhow::Result<u32> {
     Ok(sudo_uid)
 }
 
+/// Resolve the authenticated invoking user's primary GID from the system account database.
+///
+/// The root supervisor must not use its own getgid() result, which is the root group, or
+/// trust a GID copied from the unprivileged launch specification.
+pub fn invoking_gid(uid: u32) -> anyhow::Result<u32> {
+    ensure!(uid != 0, "invoking user UID must be non-zero");
+    let mut entry = std::mem::MaybeUninit::<libc::passwd>::zeroed();
+    let mut result = std::ptr::null_mut();
+    let mut buffer = vec![0u8; 64 * 1024];
+    // SAFETY: entry, result, and buffer remain valid for the duration of getpwuid_r.
+    let status = unsafe {
+        libc::getpwuid_r(
+            uid,
+            entry.as_mut_ptr(),
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut result,
+        )
+    };
+    ensure!(
+        status == 0 && !result.is_null(),
+        "cannot resolve the invoking user's primary group from the system account database"
+    );
+    // SAFETY: getpwuid_r returned a non-null result pointing to the initialized entry.
+    let entry = unsafe { entry.assume_init() };
+    ensure!(
+        entry.pw_uid == uid,
+        "system account lookup returned a different user than the authenticated sudo UID"
+    );
+    Ok(entry.pw_gid)
+}
+
 /// Create and verify /run/proxyctl/<uid> as a root-owned, private runtime directory.
 pub fn prepare_user_runtime(uid: u32) -> anyhow::Result<PathBuf> {
     ensure!(uid != 0, "runtime owner UID must be non-zero");
