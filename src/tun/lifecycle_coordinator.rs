@@ -3,7 +3,7 @@ use super::process::{ProcessHandle, ProcessIdentity, read_process_owner_uid};
 #[cfg(target_os = "linux")]
 use super::session_record::{SessionRecord, SessionStore};
 use super::{
-    manifest_store::{ManifestSnapshot, ManifestStore},
+    manifest_store::{JournalOperationState, ManifestSnapshot, ManifestStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
@@ -216,6 +216,175 @@ impl LifecycleCoordinator {
         reconcile_session_records(manifest.as_ref(), receipt.as_ref())
     }
 
+    /// Stop only the exact root-owned core process recorded for this activation.
+    ///
+    /// The manifest is durably moved to CleanupPending before any signal is sent. pidfd
+    /// operations pin the process instance, so PID reuse cannot redirect TERM or KILL.
+    #[cfg(target_os = "linux")]
+    pub fn stop_session_core(
+        &self,
+        token: &ActivationToken,
+        sessions: &SessionStore,
+        term_grace: Duration,
+        kill_grace: Duration,
+    ) -> Result<bool> {
+        ensure!(
+            !term_grace.is_zero()
+                && term_grace <= Duration::from_secs(30)
+                && !kill_grace.is_zero()
+                && kill_grace <= Duration::from_secs(30),
+            "TUN process stop grace periods must be between 1ms and 30s"
+        );
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        ensure!(
+            sessions.path().parent() == self.store.path().parent(),
+            "privileged session receipt and lifecycle manifest must share one runtime directory"
+        );
+        let mut snapshot = self.store.load()?.context("no TUN recovery manifest exists")?;
+        let record = sessions.load()?.context("no privileged TUN session receipt exists")?;
+        ensure!(
+            snapshot.manifest.activation_id == token.activation_id
+                && snapshot.generation == token.generation
+                && record.activation_id == token.activation_id
+                && record.generation == token.generation,
+            "TUN stop request does not match the active session generation"
+        );
+        ensure!(
+            matches!(
+                reconcile_session_records(Some(&snapshot), Some(&record))?,
+                SessionReconciliation::Running(_)
+                    | SessionReconciliation::ReceiptCommittedBeforeManifest(_)
+                    | SessionReconciliation::CleanupPending(Some(_))
+            ),
+            "refusing to stop a process from inconsistent TUN session records"
+        );
+
+        if snapshot.phase != SupervisorPhase::CleanupPending {
+            ensure!(
+                matches!(snapshot.phase, SupervisorPhase::Prepared | SupervisorPhase::Running),
+                "TUN session is not in a stoppable lifecycle phase"
+            );
+            snapshot.phase = SupervisorPhase::CleanupPending;
+            self.store.write(&snapshot)?;
+        }
+
+        // If the recorded instance has exited or its PID has been reused, the original
+        // process is already gone. Never signal a replacement process.
+        if !record.process.verify()? {
+            return Ok(true);
+        }
+        let process = match ProcessHandle::open(record.process.clone()) {
+            Ok(process) => process,
+            Err(error) if !record.process.verify()? => return Ok(true),
+            Err(error) => return Err(error).context("cannot pin recorded TUN core process"),
+        };
+        if process.is_exited()? {
+            return Ok(true);
+        }
+        ensure!(
+            read_process_owner_uid(&process)? == unsafe { libc::geteuid() },
+            "recorded TUN core process credentials do not match the privileged supervisor"
+        );
+
+        process.signal(libc::SIGTERM)?;
+        if process.wait_exit(term_grace)? {
+            return Ok(true);
+        }
+        process.signal(libc::SIGKILL)?;
+        ensure!(
+            process.wait_exit(kill_grace)?,
+            "recorded TUN core did not exit after SIGKILL; preserving cleanup state"
+        );
+        Ok(true)
+    }
+
+    /// Finish durable record cleanup after the caller has removed and journaled every
+    /// kernel resource. This method performs no kernel networking operation.
+    #[cfg(target_os = "linux")]
+    pub fn finalize_session_cleanup(
+        &self,
+        token: &ActivationToken,
+        sessions: &SessionStore,
+    ) -> Result<()> {
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        ensure!(
+            sessions.path().parent() == self.store.path().parent(),
+            "privileged session receipt and lifecycle manifest must share one runtime directory"
+        );
+        let mut snapshot = self.store.load()?.context("no TUN recovery manifest exists")?;
+        ensure!(
+            snapshot.manifest.activation_id == token.activation_id
+                && snapshot.generation == token.generation,
+            "stale TUN lifecycle token does not match the active activation"
+        );
+        ensure!(
+            matches!(
+                snapshot.phase,
+                SupervisorPhase::CleanupPending | SupervisorPhase::Cleaned
+            ),
+            "TUN activation must be cleanup-pending or already cleaned"
+        );
+
+        let receipt = sessions.load()?;
+        if let Some(record) = receipt.as_ref() {
+            ensure!(
+                record.activation_id == token.activation_id
+                    && record.generation == token.generation,
+                "privileged session receipt belongs to another activation"
+            );
+            ensure!(
+                !record.process.verify()?,
+                "refusing to finalize TUN cleanup while the recorded core is still alive"
+            );
+            ensure!(
+                snapshot.core_process.as_ref().is_none_or(|identity| identity == &record.process),
+                "manifest process identity conflicts with the privileged session receipt"
+            );
+        } else {
+            ensure!(
+                snapshot.core_process.is_none(),
+                "refusing to finalize without the receipt for a manifest-bound core process"
+            );
+        }
+
+        if let Some(journal) = self.store.load_transaction_journal()? {
+            ensure!(
+                journal.activation_id == token.activation_id
+                    && journal.generation == token.generation,
+                "TUN transaction journal belongs to another activation"
+            );
+            ensure!(
+                journal.operations.iter().all(|operation| matches!(
+                    operation.state,
+                    JournalOperationState::Removed | JournalOperationState::Absent
+                )),
+                "refusing to finalize while kernel resource journal contains unresolved operations"
+            );
+        } else {
+            ensure!(
+                snapshot.manifest.resources.is_empty(),
+                "TUN resource manifest exists but its transaction journal is missing"
+            );
+        }
+
+        // Persist the terminal phase before removing either durable identity. If the
+        // process crashes after this write, recovery can safely finish receipt/journal removal.
+        if snapshot.phase != SupervisorPhase::Cleaned || snapshot.core_process.is_some() {
+            snapshot.phase = SupervisorPhase::Cleaned;
+            snapshot.core_process = None;
+            self.store.write(&snapshot)?;
+        }
+        self.store.remove_completed_transaction_journal(
+            &token.activation_id,
+            token.generation,
+        )?;
+        if let Some(record) = receipt {
+            sessions.remove(&record)?;
+        }
+        self.store
+            .remove_cleaned(&token.activation_id, token.generation)
+    }
+
     /// Persist the root-owned process receipt before binding the same identity to the
     /// lifecycle manifest. If the second durable write fails, the receipt is deliberately
     /// retained as recovery evidence; callers must not delete it as a rollback shortcut.
@@ -360,9 +529,12 @@ pub fn reconcile_session_records(
         {
             Ok(SessionReconciliation::CleanupPending(Some(record.clone())))
         }
-        SupervisorPhase::Cleaned if snapshot.core_process.as_ref() == Some(&record.process) => Ok(
-            SessionReconciliation::CleanedAwaitingReceiptRemoval(record.clone()),
-        ),
+        SupervisorPhase::Cleaned
+            if snapshot.core_process.is_none()
+                || snapshot.core_process.as_ref() == Some(&record.process) =>
+        {
+            Ok(SessionReconciliation::CleanedAwaitingReceiptRemoval(record.clone()))
+        },
         _ => Ok(SessionReconciliation::Inconsistent(
             "manifest phase or process identity conflicts with the session receipt".into(),
         )),
