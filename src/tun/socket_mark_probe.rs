@@ -25,7 +25,7 @@ use super::{
 #[cfg(target_os = "linux")]
 pub fn observe_proxy_outbound_mark(
     process: ProcessIdentity,
-    expected_peer: std::net::SocketAddr,
+    expected_peers: &[std::net::SocketAddr],
     transport: BrokerSocketTransport,
     expected_mark: u32,
     mark_mask: u32,
@@ -34,98 +34,92 @@ pub fn observe_proxy_outbound_mark(
         unsafe { libc::getuid() } == 0 && unsafe { libc::geteuid() } == 0,
         "direct socket-mark diagnostics must run inside the privileged TUN supervisor"
     );
-    let broker_request = SocketMarkBrokerRequest {
-        version: BROKER_REQUEST_VERSION,
-        process: process.clone(),
-        expected_peer,
-        transport,
-        expected_mark,
-        mark_mask,
-    };
-    broker_request.validate()?;
+    ensure!(
+        !expected_peers.is_empty() && expected_peers.len() <= 8,
+        "socket-mark diagnostics require one to eight expected proxy peers"
+    );
+    let mut unique_peers = std::collections::BTreeSet::new();
+    for peer in expected_peers {
+        ensure!(unique_peers.insert(*peer), "duplicate expected proxy peer");
+        SocketMarkBrokerRequest {
+            version: BROKER_REQUEST_VERSION,
+            process: process.clone(),
+            expected_peer: *peer,
+            transport,
+            expected_mark,
+            mark_mask,
+        }
+        .validate()?;
+    }
 
-    let handle = ProcessHandle::open(process)
+    let handle = ProcessHandle::open(process.clone())
         .context("cannot pin the exact managed core for socket diagnostics")?;
     let before = socket_ownership::inspect_process_sockets(&handle)
         .context("cannot snapshot managed core socket ownership before diagnostics")?;
 
-    let socket_transport = match transport {
-        BrokerSocketTransport::Tcp => SocketTransport::Tcp,
-        BrokerSocketTransport::Udp => SocketTransport::Udp,
-    };
-    let diagnostic_request = SocketDiagnosticRequest {
-        family: if expected_peer.is_ipv4() {
-            libc::AF_INET as u8
+    // One bounded dump per address family covers every resolved peer in that family.
+    // This avoids repeating the same kernel query for each DNS candidate.
+    let mut ipv4_records = None;
+    let mut ipv6_records = None;
+    for (family, peers) in [
+        (libc::AF_INET as u8, expected_peers.iter().filter(|peer| peer.is_ipv4()).count()),
+        (libc::AF_INET6 as u8, expected_peers.iter().filter(|peer| peer.is_ipv6()).count()),
+    ] {
+        if peers == 0 {
+            continue;
+        }
+        let request = SocketDiagnosticRequest {
+            family,
+            transport: match transport {
+                BrokerSocketTransport::Tcp => SocketTransport::Tcp,
+                BrokerSocketTransport::Udp => SocketTransport::Udp,
+            },
+            sequence: 1,
+        };
+        let mut io = LinuxSocketDiagnosticIo::open()
+            .context("cannot open the in-process NETLINK_SOCK_DIAG transport")?;
+        let dump = socket_diag_collector::collect_dump(&mut io, request, Duration::from_secs(3))
+            .context("cannot collect bounded kernel socket-mark diagnostics")?;
+        if family == libc::AF_INET as u8 {
+            ipv4_records = Some(dump.records);
         } else {
-            libc::AF_INET6 as u8
-        },
-        transport: socket_transport,
-        // Every observation uses a fresh netlink socket and one request, so sequence 1
-        // cannot collide with an outstanding dump.
-        sequence: 1,
-    };
-    let mut io = LinuxSocketDiagnosticIo::open()
-        .context("cannot open the in-process NETLINK_SOCK_DIAG transport")?;
-    let dump = socket_diag_collector::collect_dump(&mut io, diagnostic_request, Duration::from_secs(3))
-        .context("cannot collect bounded kernel socket-mark diagnostics")?;
+            ipv6_records = Some(dump.records);
+        }
+    }
 
     let after = socket_ownership::inspect_process_sockets(&handle)
         .context("cannot snapshot managed core socket ownership after diagnostics")?;
-    let response = build_socket_mark_broker_response(
-        &broker_request,
-        &before,
-        &after,
-        &dump.records,
-    )
-    .context("kernel socket diagnostics did not prove an exact marked proxy-peer socket")?;
-    response.validate()?;
-    Ok(response)
-}
 
-#[cfg(target_os = "linux")]
-pub fn observed_proxy_outbound_mark(
-    response: &SocketMarkBrokerResponse,
-    expected_mark: u32,
-    mark_mask: u32,
-) -> Result<u32> {
-    ensure!(
-        expected_mark != 0
-            && expected_mark <= i32::MAX as u32
-            && mark_mask != 0
-            && expected_mark & !mark_mask == 0,
-        "expected proxy outbound mark policy is invalid"
-    );
-    response.validate()?;
-    ensure!(
-        response.expected_mark == expected_mark && response.mark_mask == mark_mask,
-        "socket-mark response policy does not match the requested readiness policy"
-    );
-    ensure!(
-        !response.records.is_empty(),
-        "no process-owned proxy outbound socket with the expected peer and mark was observed"
-    );
-    let mut observed = None;
-    for record in &response.records {
-        ensure!(
-            record.mark & mark_mask == expected_mark,
-            "observed proxy outbound socket mark does not match the configured policy"
-        );
-        if let Some(previous) = observed {
-            ensure!(
-                previous == record.mark,
-                "proxy outbound sockets have inconsistent observed marks"
-            );
+    let mut last_error = None;
+    for peer in expected_peers {
+        let records = if peer.is_ipv4() {
+            ipv4_records.as_deref()
         } else {
-            observed = Some(record.mark);
+            ipv6_records.as_deref()
+        }
+        .context("socket diagnostics did not collect the peer address family")?;
+        let request = SocketMarkBrokerRequest {
+            version: BROKER_REQUEST_VERSION,
+            process: process.clone(),
+            expected_peer: *peer,
+            transport,
+            expected_mark,
+            mark_mask,
+        };
+        match build_socket_mark_broker_response(&request, &before, &after, records) {
+            Ok(response) => return Ok(response),
+            Err(error) => last_error = Some(error),
         }
     }
-    observed.context("socket-mark response did not contain a mark")
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!(
+        "no exact marked proxy-peer socket was found in the kernel diagnostic records"
+    )))
 }
 
 #[cfg(not(target_os = "linux"))]
 pub fn observe_proxy_outbound_mark(
     _process: (),
-    _expected_peer: std::net::SocketAddr,
+    _expected_peers: &[std::net::SocketAddr],
     _transport: (),
     _expected_mark: u32,
     _mark_mask: u32,
