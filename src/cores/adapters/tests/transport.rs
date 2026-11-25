@@ -615,3 +615,79 @@ fn http_transport_alias_normalizes_to_http2_for_vless_and_vmess() {
         );
     }
 }
+
+
+#[test]
+fn websocket_early_data_embedded_in_encoded_path_is_normalized_for_each_core() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fws%3Fed%3D2048",
+    )
+    .unwrap();
+
+    let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+    let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+    assert_eq!(sing_box_doc["outbounds"][0]["transport"]["path"], "/ws");
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["transport"]["max_early_data"],
+        2048
+    );
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["transport"]["early_data_header_name"],
+        "Sec-WebSocket-Protocol"
+    );
+
+    let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(
+        xray_doc["outbounds"][0]["streamSettings"]["wsSettings"]["path"],
+        "/ws?ed=2048"
+    );
+
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let mihomo_doc: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(mihomo_doc["proxies"][0]["ws-opts"]["path"], "/ws");
+    assert_eq!(mihomo_doc["proxies"][0]["ws-opts"]["max-early-data"], 2048);
+    assert_eq!(
+        mihomo_doc["proxies"][0]["ws-opts"]["early-data-header-name"],
+        "Sec-WebSocket-Protocol"
+    );
+}
+
+#[test]
+fn websocket_path_early_data_preserves_other_query_parameters() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fws%3Ftoken%3Dabc%26ed%3D2048",
+    )
+    .unwrap();
+
+    let sing_box = adapter(CoreId::SingBox).generate_config(&node).unwrap();
+    let sing_box_doc: Value = serde_json::from_slice(&sing_box.content).unwrap();
+    assert_eq!(
+        sing_box_doc["outbounds"][0]["transport"]["path"],
+        "/ws?token=abc"
+    );
+
+    let xray = adapter(CoreId::Xray).generate_config(&node).unwrap();
+    let xray_doc: Value = serde_json::from_slice(&xray.content).unwrap();
+    assert_eq!(
+        xray_doc["outbounds"][0]["streamSettings"]["wsSettings"]["path"],
+        "/ws?token=abc&ed=2048"
+    );
+}
+
+#[test]
+fn websocket_path_and_explicit_early_data_must_not_conflict() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&path=%2Fws%3Fed%3D2048&ed=1024",
+    )
+    .unwrap();
+
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        assert_eq!(
+            adapter(core).compatibility(&node).status,
+            CompatibilityStatus::Invalid,
+            "{core}"
+        );
+        assert!(adapter(core).generate_config(&node).is_err(), "{core}");
+    }
+}
