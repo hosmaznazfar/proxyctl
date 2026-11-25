@@ -111,7 +111,7 @@ impl SessionStore {
         Self::open_for_owner(directory, 0, invoking_uid)
     }
 
-    fn open_for_owner(
+    pub(crate) fn open_for_owner(
         directory: PathBuf,
         expected_owner_uid: u32,
         invoking_uid: u32,
