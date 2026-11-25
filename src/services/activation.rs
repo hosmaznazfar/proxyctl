@@ -949,6 +949,10 @@ pub fn active_loopback_session() -> anyhow::Result<ActiveLoopbackSession> {
 pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
     let (runtime, state_path) = paths()?;
     let _lock = RuntimeLock::acquire(&runtime)?;
+    ensure!(
+        !runtime.join("tun-session.json").exists(),
+        "a privileged TUN session or handoff is already pending"
+    );
     let state: ActiveProcess = serde_json::from_slice(
         &fs::read(&state_path).context("no Proxyctl-managed loopback session is active")?,
     )
