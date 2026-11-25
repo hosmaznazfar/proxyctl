@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    os::fd::BorrowedFd,
+    os::fd::{BorrowedFd, FromRawFd, OwnedFd},
     os::unix::process::CommandExt,
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::Path,
@@ -56,6 +56,7 @@ pub fn spawn_core(
     managed_core_root: &Path,
     config: &Path,
     invoking_uid: u32,
+    foreground: bool,
     xray_descriptor: Option<BorrowedFd<'_>>,
 ) -> Result<SupervisedCore> {
     ensure!(
@@ -112,8 +113,24 @@ pub fn spawn_core(
         .env("LANG", "C")
         .current_dir("/")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(if foreground {
+            // The supervisor reserves its stdout for the one-shot JSON acknowledgement.
+            // Duplicate stderr so foreground core logs remain visible without corrupting it.
+            // SAFETY: dup returns a new descriptor owned by the resulting OwnedFd.
+            let duplicated = unsafe { libc::dup(libc::STDERR_FILENO) };
+            ensure!(
+                duplicated >= 0,
+                "cannot duplicate supervisor stderr for foreground core output"
+            );
+            Stdio::from(unsafe { OwnedFd::from_raw_fd(duplicated) })
+        } else {
+            Stdio::null()
+        })
+        .stderr(if foreground {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        });
 
     // The supervisor is the core's direct parent. If it is killed or crashes, the kernel
     // terminates this child so an unmonitored root core cannot outlive its session owner.
