@@ -30,9 +30,11 @@ static SIGNAL_GUARD_ACTIVE: AtomicBool = AtomicBool::new(false);
 static RETIRED_SIGNAL_PIDFDS: OnceLock<Mutex<Vec<OwnedFd>>> = OnceLock::new();
 
 fn signal_bit(signal: libc::c_int) -> Option<u64> {
-    (1..=64)
-        .contains(&signal)
-        .then(|| 1u64 << (signal - 1))
+    if (1..=64).contains(&signal) {
+        Some(1u64 << (signal - 1))
+    } else {
+        None
+    }
 }
 
 fn send_pidfd_signal(pidfd: libc::c_int, signal: libc::c_int) {
@@ -626,6 +628,15 @@ mod signal_tests {
         assert!(!process.is_exited().unwrap());
         drop(guard);
         drop(child);
+    }
+
+    #[test]
+    fn startup_termination_is_observed_before_kernel_mutation() {
+        let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
+        let guard = SignalForwardingGuard::install(false).unwrap();
+        forward_supervisor_signal(libc::SIGTERM);
+        assert!(guard.check_startup().is_err());
+        drop(guard);
     }
 
     #[test]
