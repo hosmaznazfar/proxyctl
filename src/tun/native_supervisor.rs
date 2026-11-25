@@ -6,7 +6,78 @@
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::{net::SocketAddr, os::unix::process::ExitStatusExt, process::ExitStatus, time::Duration};
+
+
+/// The foreground supervisor shares the terminal process group with its core. Terminal
+/// signals therefore reach both processes. Install forwarding only after spawn so exec has
+/// already reset the core's signal dispositions to their normal defaults; the supervisor
+/// then survives long enough to observe the core exit and run generation-scoped recovery.
+static FORWARDED_CORE_PID: AtomicI32 = AtomicI32::new(0);
+
+extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
+    let pid = FORWARDED_CORE_PID.load(Ordering::Relaxed);
+    if pid > 0 {
+        // The child remains unreaped while the supervisor waits, so this PID cannot be reused.
+        unsafe {
+            libc::kill(pid, signal);
+        }
+    }
+}
+
+/// Forwards supervisor-directed termination signals to the exact direct core child.
+///
+/// In foreground mode this also lets Ctrl-C and terminal hangup terminate the core while
+/// leaving the supervisor alive to clean up its journaled network state.
+pub struct SignalForwardingGuard {
+    previous: Vec<(libc::c_int, libc::sighandler_t)>,
+}
+
+impl SignalForwardingGuard {
+    pub fn install(core_pid: u32, foreground: bool) -> Result<Self> {
+        let pid = libc::pid_t::try_from(core_pid)
+            .context("managed core PID is outside the Linux pid_t range")?;
+        ensure!(pid > 0, "managed core PID must be non-zero");
+        FORWARDED_CORE_PID
+            .compare_exchange(0, pid, Ordering::SeqCst, Ordering::SeqCst)
+            .map_err(|_| anyhow::anyhow!("a core signal-forwarding guard is already active"))?;
+
+        let mut signals = vec![libc::SIGTERM];
+        if foreground {
+            signals.extend([libc::SIGINT, libc::SIGHUP]);
+        }
+        let mut previous = Vec::with_capacity(signals.len());
+        for signal in signals {
+            let old = unsafe {
+                libc::signal(signal, forward_supervisor_signal as libc::sighandler_t)
+            };
+            if old == libc::SIG_ERR {
+                let error = std::io::Error::last_os_error();
+                for (installed, handler) in previous.iter().rev() {
+                    unsafe {
+                        libc::signal(*installed, *handler);
+                    }
+                }
+                FORWARDED_CORE_PID.store(0, Ordering::SeqCst);
+                return Err(error).context("cannot install TUN supervisor signal forwarding");
+            }
+            previous.push((signal, old));
+        }
+        Ok(Self { previous })
+    }
+}
+
+impl Drop for SignalForwardingGuard {
+    fn drop(&mut self) {
+        FORWARDED_CORE_PID.store(0, Ordering::SeqCst);
+        for (signal, handler) in self.previous.iter().rev() {
+            unsafe {
+                libc::signal(*signal, *handler);
+            }
+        }
+    }
+}
 
 use super::{
     config_staging::{self, StagedConfig},
