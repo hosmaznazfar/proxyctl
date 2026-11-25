@@ -64,6 +64,31 @@ pub fn read_bounded<R: Read>(reader: R) -> Result<LaunchSpec> {
     LaunchSpec::decode_bounded(&bytes)
 }
 
+
+/// Build a supervisor request from the already generated native config.
+///
+/// This is a pure handoff constructor: it neither resolves user state nor starts
+/// a process, creates runtime files, or mutates host networking.
+pub fn from_generated_config(
+    node_id: u64,
+    core: CoreKind,
+    listen_port: u16,
+    generated_config: &[u8],
+) -> Result<LaunchSpec> {
+    let generated_config = std::str::from_utf8(generated_config)
+        .context("generated configuration must be UTF-8 JSON")?
+        .to_owned();
+    let spec = LaunchSpec {
+        version: VERSION,
+        node_id,
+        core,
+        listen_port,
+        generated_config,
+    };
+    spec.validate()?;
+    Ok(spec)
+}
+
 impl LaunchSpec {
     pub fn validate(&self) -> Result<()> {
         ensure!(
