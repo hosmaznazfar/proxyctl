@@ -344,7 +344,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 }
             );
             println!(
-                "New TUN activation: temporarily disabled while migrating away from the legacy helper/systemd launcher to the single-executable privileged session owner."
+                "Native TUN activation: available for sing-box and Mihomo via 'proxyctl use <number> --core <core> --tun' or 'proxyctl tun start' from an active loopback session."
+            );
+            println!(
+                "Xray TUN activation: not yet enabled in the native persistent-device supervisor; its descriptor-backed lifecycle remains separate."
             );
             println!(
                 "Existing TUN generations: legacy manifest/journal inspection and safe stop/recovery remain available."
