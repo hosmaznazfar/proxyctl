@@ -106,15 +106,9 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
     const DEFAULT_PROBE_URL: &str = "http://connectivitycheck.gstatic.com/generate_204";
     const DEFAULT_PROBE_STATUS: u16 = 204;
 
-    let active = crate::services::activation::active_loopback_session()?;
-    anyhow::ensure!(
-        matches!(active.core, crate::cores::CoreId::SingBox | crate::cores::CoreId::Mihomo),
-        "the active Xray session uses a descriptor-backed TUN contract that is not yet wired into the single-executable native supervisor"
-    );
-
-    // Stop only the exact verified loopback process before reusing its listener port.
-    crate::services::activation::stop()
-        .context("cannot stop the verified active loopback session before TUN transition")?;
+    // Atomically verify and stop only the active loopback process before reusing its port.
+    let active = crate::services::activation::stop_active_loopback_for_tun()
+        .context("cannot transition the active loopback session to TUN mode")?;
 
     let spec = match crate::services::tun_preparation::prepare_launch_spec(
         active.node_id,
