@@ -7,8 +7,9 @@ use std::net::ToSocketAddrs;
 
 use crate::{
     cores::{CoreId, adapters, core_binary_path, managed_cores_path},
+    domain::Protocol,
     database::{NodeDatabase, default_database_path},
-    tun::launch_spec::{CoreKind, LaunchSpec, from_generated_config},
+    tun::{launch_spec::{CoreKind, LaunchSpec, from_generated_config}, privilege_broker::BrokerSocketTransport},
 };
 
 /// Resolve a stored node and construct a bounded supervisor request, without launching it.
@@ -34,6 +35,12 @@ pub fn prepare_launch_spec(
     );
     let node = record.node;
     drop(db);
+    let peer_transport = match node.protocol {
+        Protocol::Hysteria2 => BrokerSocketTransport::Udp,
+        Protocol::Vless | Protocol::Vmess | Protocol::Trojan | Protocol::Shadowsocks => {
+            BrokerSocketTransport::Tcp
+        }
+    };
 
     ensure!(
         matches!(core, CoreId::SingBox | CoreId::Mihomo),
@@ -136,6 +143,7 @@ pub fn prepare_launch_spec(
         kind,
         port,
         foreground,
+        peer_transport,
         activation_id,
         managed_root,
         &generated.content,
