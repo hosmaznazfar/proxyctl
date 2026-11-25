@@ -347,7 +347,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 "Xray TUN activation: not yet enabled in the native persistent-device supervisor; its descriptor-backed lifecycle remains separate."
             );
             println!(
-                "Existing TUN generations: legacy manifest/journal inspection and safe stop/recovery remain available."
+                "TUN sessions: read-only network inspection, exact-process stop, journaled cleanup, and saved loopback restoration are available."
             );
             return Ok(());
         }
