@@ -309,3 +309,8 @@ The coordinator's generic recovery orchestration is wired into both explicit `tu
 
 
 Launch protocol version 5 carries the kernel-generated activation UUID, non-zero generation, foreground preference, resolved proxy peer candidates with protocol-correct TCP/UDP transport, and exactly one IPv4 plus one IPv6 numeric HTTP readiness target. The supervisor validates those bounded inputs and reuses the exact activation UUID/generation for the manifest, transaction journal, and session receipt; it does not generate replacement identities. The pre-activation DNS/firewall baseline is captured independently by the privileged supervisor and is never accepted from the request.
+
+
+## Loopback restoration around TUN mode
+
+When `proxyctl tun start` transitions an active loopback session, the unprivileged activation runtime records a private 0600 restoration marker containing only the prior node ID, core kind, and listener port before stopping the exact verified loopback process. If TUN preparation/start fails, the foreground TUN session ends, or `proxyctl tun stop` completes journal recovery, Proxyctl restores that prior loopback session through the ordinary unprivileged activation path. Restoration is idle-only under the activation lock; it refuses to replace a concurrently started session. Direct `proxyctl use --tun` starts do not create a restoration marker. A pending marker is visible through `proxyctl status`, and another TUN start is refused until the previous transition is recovered/restored.
