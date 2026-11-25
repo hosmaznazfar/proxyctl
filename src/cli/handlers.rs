@@ -370,8 +370,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
             if tun {
                 anyhow::ensure!(
-                    !crate::services::activation::has_pending_previous_loopback()?,
-                    "a previous loopback session is awaiting restoration; run 'proxyctl tun stop' before starting another TUN session"
+                    !crate::services::activation::has_pending_previous_loopback()?
+                        && !crate::services::activation::has_pending_tun_session()?,
+                    "a previous TUN session or loopback restoration is pending; run 'proxyctl tun stop' before starting another TUN session"
                 );
                 let listen_port = match port {
                     Some(port) => port,
@@ -385,6 +386,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     tun_probe_status,
                     foreground,
                 )?;
+                crate::services::activation::write_tun_session_marker(
+                    &spec.activation_id,
+                    spec.generation,
+                )?;
                 let session = match crate::services::tun_handoff::request_supervisor_session(&spec) {
                     Ok(session) => session,
                     Err(error) => {
@@ -395,6 +400,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                                 "TUN startup failed and privileged recovery also failed ({recovery_error:#}); durable evidence may require manual recovery"
                             ));
                         }
+                        crate::services::activation::clear_tun_session_marker()?;
                         return match crate::services::activation::restore_previous_loopback_if_any() {
                             Ok(true) => Err(error).context(
                                 "TUN startup failed; privileged recovery completed and the previous loopback session was restored",
@@ -409,6 +415,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     }
                 };
                 if foreground {
+                    crate::services::activation::clear_tun_session_marker()?;
                     println!(
                         "Foreground TUN session for node #{} with {} has exited (activation {}).",
                         stable_id,
