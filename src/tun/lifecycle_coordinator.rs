@@ -538,6 +538,85 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    fn fixture_session(activation_id: &str, generation: u64) -> SessionRecord {
+        SessionRecord {
+            schema_version: 1,
+            invoking_uid: 1000,
+            session_nonce: "12345678-1234-4234-8234-123456789abc".into(),
+            activation_id: activation_id.into(),
+            generation,
+            core: super::super::launch_spec::CoreKind::Xray,
+            process: ProcessIdentity {
+                pid: 4242,
+                start_ticks: 991,
+                executable: PathBuf::from(
+                    "/home/user/.local/share/proxyctl/cores/xray/xray",
+                ),
+            },
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn classifies_session_receipt_and_manifest_crash_states() {
+        let activation_id = "12345678-1234-4234-8234-123456789abc";
+        let prepared = snapshot(activation_id);
+        let receipt = fixture_session(activation_id, prepared.generation);
+
+        assert_eq!(
+            reconcile_session_records(None, None).unwrap(),
+            SessionReconciliation::Idle
+        );
+        assert!(matches!(
+            reconcile_session_records(Some(&prepared), None).unwrap(),
+            SessionReconciliation::PreparedWithoutReceipt { .. }
+        ));
+        assert_eq!(
+            reconcile_session_records(Some(&prepared), Some(&receipt)).unwrap(),
+            SessionReconciliation::ReceiptCommittedBeforeManifest(receipt.clone())
+        );
+        assert_eq!(
+            reconcile_session_records(None, Some(&receipt)).unwrap(),
+            SessionReconciliation::OrphanReceipt(receipt.clone())
+        );
+
+        let mut running = prepared.clone();
+        running.phase = SupervisorPhase::Running;
+        running.core_process = Some(receipt.process.clone());
+        assert_eq!(
+            reconcile_session_records(Some(&running), Some(&receipt)).unwrap(),
+            SessionReconciliation::Running(receipt.clone())
+        );
+        assert!(matches!(
+            reconcile_session_records(Some(&running), None).unwrap(),
+            SessionReconciliation::Inconsistent(_)
+        ));
+
+        let mut cleanup = running.clone();
+        cleanup.phase = SupervisorPhase::CleanupPending;
+        assert_eq!(
+            reconcile_session_records(Some(&cleanup), Some(&receipt)).unwrap(),
+            SessionReconciliation::CleanupPending(Some(receipt.clone()))
+        );
+
+        let mut cleaned = running.clone();
+        cleaned.phase = SupervisorPhase::Cleaned;
+        assert_eq!(
+            reconcile_session_records(Some(&cleaned), Some(&receipt)).unwrap(),
+            SessionReconciliation::CleanedAwaitingReceiptRemoval(receipt)
+        );
+
+        let mismatched = fixture_session(
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            prepared.generation,
+        );
+        assert!(matches!(
+            reconcile_session_records(Some(&prepared), Some(&mismatched)).unwrap(),
+            SessionReconciliation::Inconsistent(_)
+        ));
+    }
+
     #[cfg(unix)]
     #[test]
     fn lock_excludes_another_open_file_description_and_releases_on_drop() {
