@@ -572,13 +572,15 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             return Ok(());
         }
         Command::Stop => {
-            crate::services::activation::stop()?;
             #[cfg(target_os = "linux")]
             {
                 let stop_guard = crate::services::activation::acquire_tun_stop_guard()?;
                 let tun_pending = crate::services::activation::has_pending_tun_session()?
                     || crate::services::activation::has_pending_previous_loopback()?;
                 if tun_pending {
+                    // Native TUN manifests are owned by the single-executable supervisor.
+                    // Do not route this path through activation::stop(), whose compatibility
+                    // branch is reserved for legacy helper-managed generations.
                     crate::services::tun_handoff::request_supervisor_recovery()?;
                     crate::services::activation::clear_tun_session_marker_with_guard(
                         &stop_guard,
@@ -586,8 +588,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     crate::services::activation::discard_previous_loopback_marker_with_guard(
                         &stop_guard,
                     )?;
+                    return Ok(());
                 }
+                drop(stop_guard);
             }
+            crate::services::activation::stop()?;
             return Ok(());
         }
         Command::Setup { core } => {
