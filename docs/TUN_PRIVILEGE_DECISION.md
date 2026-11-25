@@ -289,6 +289,15 @@ rollback/recovery behavior.
 
 The implementation now has a bounded, versioned JSON acknowledgement on the dedicated stdout pipe. Human-readable diagnostics remain on stderr. The current validation-only supervisor emits `not_started`; the front end accepts only a future `started` reply carrying a valid privileged session receipt. This pipe is a per-invocation kernel channel rather than a filesystem socket below the root-only runtime directory.
 
-The Linux lifecycle coordinator also has a root-side `bind_core_session` operation. Under the lifecycle lock it verifies the pinned process and invoking UID, writes the root-owned session receipt first, then persists the matching `Running` lifecycle manifest with the same process identity. If the manifest write fails, the receipt is deliberately retained as recovery evidence.
+The Linux lifecycle coordinator also has a root-side `bind_core_session` operation. Under the lifecycle lock it verifies the pinned process and its credentials against the privileged supervisor's effective UID (root in production), writes the root-owned session receipt first, then persists the matching `Running` lifecycle manifest with the same process identity. The receipt separately binds the invoking non-root UID. If the manifest write fails, the receipt is deliberately retained as recovery evidence.
 
 The exact crash-state matrix and remaining gates are documented in [TUN_SUPERVISOR_PROTOCOL.md](TUN_SUPERVISOR_PROTOCOL.md). This is still groundwork only: the acknowledgement transport and durable commit method are not connected to core spawning, readiness, supervisor detachment, stop, or recovery. The TUN activation gate remains closed, and no host networking changes are made.
+
+
+## Pidfd-safe stop and durable cleanup finalization
+
+The lifecycle coordinator can now move a matching activation to `CleanupPending` before sending SIGTERM to the exact pidfd-pinned core. It waits for a bounded grace period and escalates to SIGKILL only against that same process instance. A vanished or reused PID is never signaled. The stop primitive retains the manifest and root-owned receipt as recovery evidence.
+
+Final record cleanup is separate and fail-closed. It requires the recorded core to be gone, a matching transaction journal with all operations durably `Removed` or `Absent`, and an exact removed fingerprint for every owned manifest resource. It then persists `Cleaned`, removes the completed journal and matching session receipt, and finally removes the manifest. The operation is restartable across crashes at each durable boundary.
+
+These primitives are not connected to CLI stop or the kernel resource recovery executor. They do not themselves remove routes, rules or interfaces. The hidden supervisor still does not launch a core, and TUN remains disabled.
