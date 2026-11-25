@@ -3,8 +3,8 @@ mod benchmark_batch;
 mod mihomo;
 mod shared;
 mod sing_box;
-mod xray;
 pub mod validation;
+mod xray;
 
 use anyhow::Context;
 use serde_json::Value;

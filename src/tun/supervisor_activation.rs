@@ -8,7 +8,10 @@
 
 use anyhow::{Context, Result, ensure};
 
-use crate::cores::{CoreId, adapters::{self, TunAttachmentMode}};
+use crate::cores::{
+    CoreId,
+    adapters::{self, TunAttachmentMode},
+};
 
 use super::{
     activation_plan,
@@ -30,7 +33,8 @@ pub fn validate_native_device_core(core: CoreKind) -> Result<()> {
         CoreKind::Mihomo => CoreId::Mihomo,
     };
     ensure!(
-        adapters::adapter(domain_core).tun_attachment_mode() == TunAttachmentMode::NativeDeviceCreation,
+        adapters::adapter(domain_core).tun_attachment_mode()
+            == TunAttachmentMode::NativeDeviceCreation,
         "selected core does not use the supervisor's native named-device TUN contract"
     );
     Ok(())
