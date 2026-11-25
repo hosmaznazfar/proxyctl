@@ -134,9 +134,27 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
         }
     };
 
+    if let Err(error) = crate::services::activation::write_tun_session_marker(
+        &spec.activation_id,
+        spec.generation,
+    ) {
+        return match crate::services::activation::restore_previous_loopback_if_any() {
+            Ok(true) => Err(error).context(
+                "could not persist TUN handoff marker; the original loopback session was restored",
+            ),
+            Ok(false) => Err(error).context(
+                "could not persist TUN handoff marker and no previous loopback session was available",
+            ),
+            Err(restore_error) => Err(error).context(format!(
+                "could not persist TUN handoff marker and loopback restoration failed ({restore_error:#})"
+            )),
+        };
+    }
+
     match crate::services::tun_handoff::request_supervisor_session(&spec) {
         Ok(session) => {
             if foreground {
+                crate::services::activation::clear_tun_session_marker()?;
                 crate::services::activation::restore_previous_loopback_if_any()
                     .context("foreground TUN session ended but the original loopback session could not be restored")?;
                 println!(
@@ -164,6 +182,7 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
                     "TUN transition failed and privileged recovery also failed ({recovery_error:#}); the original loopback session was not restarted to avoid conflicting network state"
                 ));
             }
+            crate::services::activation::clear_tun_session_marker()?;
             match crate::services::activation::restore_previous_loopback_if_any() {
                 Ok(true) => Err(error).context(
                     "TUN transition failed; privileged recovery completed and the original loopback session was restored",
