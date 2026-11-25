@@ -138,6 +138,11 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
         &spec.activation_id,
         spec.generation,
     ) {
+        if crate::services::activation::has_pending_tun_session()? {
+            return Err(error).context(
+                "another TUN handoff won the session marker; preserving the previous loopback marker for explicit recovery",
+            );
+        }
         return match crate::services::activation::restore_previous_loopback_if_any() {
             Ok(true) => Err(error).context(
                 "could not persist TUN handoff marker; the original loopback session was restored",
