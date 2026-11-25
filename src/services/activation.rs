@@ -842,6 +842,22 @@ pub fn ensure_port_available(port: u16) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Require a clean unprivileged activation slot before handing a new TUN request to sudo.
+#[cfg(target_os = "linux")]
+pub fn ensure_tun_start_available(port: u16) -> anyhow::Result<()> {
+    let (_, state_path) = paths()?;
+    ensure!(
+        !state_path.exists(),
+        "a Proxyctl-managed core is already active; stop it before starting a separate TUN session"
+    );
+    ensure_port_available(port)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn ensure_tun_start_available(_port: u16) -> anyhow::Result<()> {
+    anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
 fn write_atomic(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     let parent = path.parent().context("runtime file has no parent")?;
     fs::create_dir_all(parent)?;
