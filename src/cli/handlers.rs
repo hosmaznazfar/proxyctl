@@ -7,6 +7,7 @@ use std::io::IsTerminal;
 
 /// Write the one-shot acknowledgement, then close stdout so a future detached supervisor can
 /// keep monitoring without keeping the front end's acknowledgement pipe open.
+#[cfg(target_os = "linux")]
 fn write_final_supervisor_reply(
     reply: &crate::tun::supervisor_protocol::SupervisorReply,
 ) -> anyhow::Result<()> {
@@ -28,6 +29,7 @@ fn write_final_supervisor_reply(
 
 /// Execute the validation-only supervisor and always return a machine-readable acknowledgement
 /// on stdout. Human-readable errors continue through the normal stderr path.
+#[cfg(target_os = "linux")]
 fn run_tun_supervisor() -> anyhow::Result<()> {
     let result = (|| -> anyhow::Result<()> {
         anyhow::ensure!(
@@ -54,8 +56,6 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
                 _spec.generated_config.as_bytes(),
             )?;
         }
-        #[cfg(not(target_os = "linux"))]
-        anyhow::bail!("the privileged TUN supervisor is supported only on Linux");
         Ok(())
     })();
 
@@ -79,6 +79,11 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
             Err(error)
         }
     }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn run_tun_supervisor() -> anyhow::Result<()> {
+    anyhow::bail!("the privileged TUN supervisor is supported only on Linux")
 }
 
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
