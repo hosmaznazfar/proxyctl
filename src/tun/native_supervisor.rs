@@ -47,8 +47,9 @@ extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
 
 /// Forwards supervisor-directed termination signals to the exact direct core child.
 ///
-/// In foreground mode this also lets Ctrl-C and terminal hangup terminate the core while
-/// leaving the supervisor alive to clean up its journaled network state.
+/// In foreground mode the core receives terminal-generated signals directly from the shared
+/// terminal process group; the supervisor ignores its duplicate delivery and retains cleanup
+/// ownership. Signals sent only to the supervisor are forwarded through the pinned pidfd.
 pub struct SignalForwardingGuard {
     previous: Vec<(libc::c_int, libc::sighandler_t)>,
     _process: super::process::ProcessHandle,
@@ -83,6 +84,7 @@ impl SignalForwardingGuard {
                     }
                 }
                 FORWARDED_CORE_PIDFD.store(-1, Ordering::SeqCst);
+                FOREGROUND_SIGNAL_GROUP.store(false, Ordering::SeqCst);
                 return Err(error).context("cannot install TUN supervisor signal forwarding");
             }
             previous.push((signal, old));
@@ -97,6 +99,7 @@ impl SignalForwardingGuard {
 impl Drop for SignalForwardingGuard {
     fn drop(&mut self) {
         FORWARDED_CORE_PIDFD.store(-1, Ordering::SeqCst);
+        FOREGROUND_SIGNAL_GROUP.store(false, Ordering::SeqCst);
         for (signal, handler) in self.previous.iter().rev() {
             unsafe {
                 libc::signal(*signal, *handler);
