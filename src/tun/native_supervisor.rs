@@ -10,7 +10,7 @@ use std::{
     net::SocketAddr,
     os::unix::process::ExitStatusExt,
     process::ExitStatus,
-    os::fd::{FromRawFd, OwnedFd},
+    os::fd::{AsRawFd, FromRawFd, OwnedFd},
     sync::{
         Mutex, OnceLock,
         atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
@@ -88,10 +88,10 @@ impl SignalForwardingGuard {
         SIGNAL_GUARD_ACTIVE
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .map_err(|_| anyhow::anyhow!("a TUN signal-forwarding guard is already active"))?;
-        ensure!(
-            FORWARDED_CORE_PIDFD.load(Ordering::Acquire) == -1,
-            "a core signal-forwarding pidfd is unexpectedly still active"
-        );
+        if FORWARDED_CORE_PIDFD.load(Ordering::Acquire) != -1 {
+            SIGNAL_GUARD_ACTIVE.store(false, Ordering::Release);
+            anyhow::bail!("a core signal-forwarding pidfd is unexpectedly still active");
+        }
         PENDING_STARTUP_SIGNALS.store(0, Ordering::Release);
         FOREGROUND_SIGNAL_GROUP.store(foreground, Ordering::Release);
 
@@ -157,16 +157,17 @@ impl SignalForwardingGuard {
             std::io::Error::last_os_error()
         );
         let signal_pidfd = unsafe { OwnedFd::from_raw_fd(duplicated) };
-        self.process = Some(process);
-        self.signal_pidfd = Some(signal_pidfd);
         FORWARDED_CORE_PIDFD
             .compare_exchange(
                 -1,
-                self.signal_pidfd.as_ref().expect("pidfd was just stored").as_raw_fd(),
+                signal_pidfd.as_raw_fd(),
                 Ordering::AcqRel,
                 Ordering::Acquire,
             )
             .map_err(|_| anyhow::anyhow!("a core signal-forwarding pidfd is already active"))?;
+        // The local OwnedFd remains alive from publication until ownership is transferred.
+        self.process = Some(process);
+        self.signal_pidfd = Some(signal_pidfd);
 
         let pending = PENDING_STARTUP_SIGNALS.swap(0, Ordering::AcqRel);
         if pending != 0 {
