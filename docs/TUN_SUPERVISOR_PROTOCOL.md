@@ -49,7 +49,7 @@ The coordinator also exposes a read-only reconciliation classifier for the manif
 | Session receipt without a matching manifest | Orphan receipt. Preserve it for explicit reconciliation; do not infer which kernel resources may be removed. |
 | Both records disagree | Treat as corruption or stale-generation conflict. Preserve both records and avoid signaling or deleting resources based on a partial match. |
 
-The table is a recovery contract implemented by the lifecycle coordinator and journal recovery executor. The read-only classifier identifies the durable states; the recovery orchestrator pins and stops the exact recorded process, reconciles the matching resource journal through a typed backend, and finalizes records only after cleanup is durable. The orchestration is not yet connected to CLI commands or the hidden supervisor.
+The table is a recovery contract implemented by the lifecycle coordinator and journal recovery executor. The read-only classifier identifies the durable states; the recovery orchestrator pins and stops the exact recorded process, reconciles the matching resource journal through a typed backend, and finalizes records only after cleanup is durable. The orchestration is connected to the explicit `tun stop` recovery command through the hidden `__tun-recover` role.
 
 ## Readiness and background lifecycle gates
 
@@ -66,10 +66,10 @@ The foreground path must use this same sequence. Background mode must not return
 
 ## Current safety boundary
 
-- TUN start/stop CLI remains fail-closed.
-- No managed core is launched by the hidden supervisor.
-- No TUN device, route, policy rule, DNS, firewall or forwarding state is created or changed.
-- The acknowledgement protocol and coordinated durable commit method are not yet wired into a real launch.
+- `tun stop` is connected to explicit privileged recovery; `tun start` and `use --tun` remain fail-closed.
+- No managed core is launched by the hidden start supervisor.
+- No TUN device, route, policy rule, DNS, firewall or forwarding state is created during startup; explicit stop may remove only journal-owned resources after fresh fingerprint comparison.
+- The start acknowledgement protocol and coordinated durable commit method are not yet wired into a real launch.
 
 ## Exact core termination and final record cleanup
 
@@ -83,4 +83,4 @@ This order is restartable: a crash after the `Cleaned` write can resume from the
 
 The coordinator now also exposes a generic `recover_session` orchestration method. It classifies the durable state, claims an orphaned Prepared activation, stops a matching recorded core, invokes the existing compare-before-delete journal recovery executor under the lifecycle lock, and then finalizes the session records. The executor can retain its completed journal so the coordinator writes `Cleaned` before removing the journal and receipt. Orphan receipts, inconsistent records, missing journals for resource-bearing manifests, and fingerprint mismatches remain fail-closed.
 
-This orchestration method is not connected to a CLI stop path or the hidden supervisor yet. It requires a caller-supplied privileged recovery backend and does not launch a core. Network cleanup can occur only if a future caller deliberately invokes it with the concrete Linux backend; no network cleanup has been run as part of this implementation.
+`tun stop` now invokes `sudo -- <current-proxyctl-executable> __tun-recover` without a shell or caller-supplied paths. The privileged entry point derives the invoking UID from sudo/login credentials, opens only `/run/proxyctl/<uid>`, and runs the coordinator against the root-owned manifest, journal and session receipt. When a journal exists it supplies the concrete Linux compare-before-delete backend; when no journal exists it supplies a backend that fails if called, allowing only resource-free finalization. An orphan receipt or a resource-bearing manifest without its journal is preserved and reported as an error. This explicit stop path may remove only resources proven to match the durable journal fingerprints. It does not launch a core or start TUN; `tun start` and `use --tun` remain disabled.
