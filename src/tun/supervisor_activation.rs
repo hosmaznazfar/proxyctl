@@ -10,6 +10,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::{
     activation_plan,
+    launch_spec::CoreKind,
     kernel_transaction::{self, AppliedKernelTransaction},
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
     linux_journal_backend::LinuxJournalBackend,
@@ -28,6 +29,7 @@ use super::{
 /// The caller must already have authenticated the invoking user and validated that
 /// `owner_uid`/`owner_gid` are the intended unprivileged TUN device owner.
 pub fn apply_native_kernel_plan(
+    core: CoreKind,
     store: ManifestStore,
     coordinator: &LifecycleCoordinator,
     activation_id: &str,
@@ -35,6 +37,10 @@ pub fn apply_native_kernel_plan(
     owner_uid: u32,
     owner_gid: u32,
 ) -> Result<(ActivationToken, AppliedKernelTransaction)> {
+    ensure!(
+        matches!(core, CoreKind::SingBox | CoreKind::Mihomo),
+        "journaled persistent-device activation supports only sing-box and Mihomo; Xray requires its separate descriptor-backed attachment path"
+    );
     ensure!(generation > 0, "TUN activation generation must be non-zero");
     ensure!(owner_uid != 0, "TUN interface owner UID must be non-zero");
     let store_path = store.path();
@@ -79,6 +85,7 @@ mod tests {
         let coordinator = LifecycleCoordinator::new(manifest_store).unwrap();
 
         let result = apply_native_kernel_plan(
+            CoreKind::SingBox,
             journal_store,
             &coordinator,
             "12345678-1234-4234-8234-123456789abc",
@@ -90,3 +97,25 @@ mod tests {
         assert!(result.is_err());
     }
 }
+
+
+    #[test]
+    fn rejects_xray_before_opening_or_mutating_the_kernel_backend() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ManifestStore::open(directory.path().to_path_buf()).unwrap();
+        let coordinator = LifecycleCoordinator::new(store.clone()).unwrap();
+
+        let result = apply_native_kernel_plan(
+            CoreKind::Xray,
+            store.clone(),
+            &coordinator,
+            "12345678-1234-4234-8234-123456789abc",
+            1,
+            1000,
+            1000,
+        );
+
+        assert!(result.is_err());
+        assert!(store.load_transaction_journal().unwrap().is_none());
+        assert!(store.load().unwrap().is_none());
+    }
