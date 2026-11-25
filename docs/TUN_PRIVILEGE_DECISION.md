@@ -283,3 +283,12 @@ the record, no core is spawned, and the TUN CLI remains fail-closed. The next in
 must commit the record only after capturing and pinning the launched core identity, and
 must coordinate it with the activation manifest so partial commits have deterministic
 rollback/recovery behavior.
+
+
+## Supervisor acknowledgement and coordinated session commit
+
+The implementation now has a bounded, versioned JSON acknowledgement on the dedicated stdout pipe. Human-readable diagnostics remain on stderr. The current validation-only supervisor emits `not_started`; the front end accepts only a future `started` reply carrying a valid privileged session receipt. This pipe is a per-invocation kernel channel rather than a filesystem socket below the root-only runtime directory.
+
+The Linux lifecycle coordinator also has a root-side `bind_core_session` operation. Under the lifecycle lock it verifies the pinned process and invoking UID, writes the root-owned session receipt first, then persists the matching `Running` lifecycle manifest with the same process identity. If the manifest write fails, the receipt is deliberately retained as recovery evidence.
+
+The exact crash-state matrix and remaining gates are documented in [TUN_SUPERVISOR_PROTOCOL.md](TUN_SUPERVISOR_PROTOCOL.md). This is still groundwork only: the acknowledgement transport and durable commit method are not connected to core spawning, readiness, supervisor detachment, stop, or recovery. The TUN activation gate remains closed, and no host networking changes are made.
