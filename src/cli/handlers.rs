@@ -146,8 +146,16 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
     match crate::services::tun_handoff::request_supervisor_session(&spec) {
         Ok(session) => {
             if foreground {
+                crate::services::activation::activate(
+                    active.node_id,
+                    active.core,
+                    false,
+                    Some(active.port),
+                    false,
+                )
+                .context("foreground TUN session ended but the original loopback session could not be restored")?;
                 println!(
-                    "Foreground TUN session for node #{} with {} has exited (activation {}).",
+                    "Foreground TUN session for node #{} with {} has exited (activation {}); loopback mode was restored.",
                     active.node_id,
                     active.core,
                     session.activation_id
