@@ -84,22 +84,22 @@ Proxyctl intentionally improves the handoff and lifecycle boundaries:
 2. The privileged side derives executable selection from an enum and fixed core catalog; it accepts no executable/config paths or arbitrary command arguments.
 3. It stages configuration and runtime state under a root-owned per-UID runtime directory rather than using user-owned configuration paths as privileged instructions.
 4. It retains Proxyctl's exact generation manifest, write-ahead journal, process identity checks, readiness verifier, and conservative recovery behavior.
-5. It refuses to claim support until supervisor crash, core crash, CLI termination, and reboot cases have an explicit safe recovery path.
+5. It keeps startup fail-closed until exact core attachment and end-to-end readiness pass, durable ownership is committed, and the supervisor is established as the live session owner. Supervisor death is bounded by a core parent-death signal plus explicit journal recovery; reboot clears the volatile `/run` runtime and kernel TUN/routes/rules.
 
 ## Current implementation boundary
 
 The repository currently has:
 
-- a hidden `__tun-supervisor` command that checks effective UID, rejects terminal stdin, reads a bounded version-3 launch specification, verifies the invoking UID and root-owned runtime, stages the generated config as a root-owned mode-0600 file, and then deliberately exits as not implemented;
-- a hidden `__tun-recover` command used by `tun stop`, which opens only the invoking user's root-owned runtime, reconciles the durable session records, stops the exact recorded core process, performs journaled compare-before-delete cleanup, and finalizes records only after cleanup is durable;
-- a version-3 request containing node ID, core enum, listener port, a validated-later managed-core directory hint, and the generated native configuration as bounded JSON data;
-- user-owned managed core binaries under the private data directory;
-- TUN adapters with different native device-attachment contracts;
-- offline manifest/journal, route/rule mutation, cleanup, and readiness groundwork;
-- a closed TUN activation gate.
-
-The current version-3 launch specification carries the generated configuration as JSON data plus an untrusted managed-core-root hint. The hint is not an executable path: the supervisor validates the complete directory tree against the invoking UID, enforces the fixed `proxyctl/cores/<core>/<core>` layout, and derives the executable from the closed CoreKind enum. The request still rejects unknown fields and non-object/invalid JSON, caps the config at 1 MiB, and bounds the complete wire envelope. The privileged process does not open redb or reconstruct the node from its ID. The hidden start supervisor verifies caller provenance and the root-owned runtime, validates the managed core, stages the config, and exits as not implemented. The separate hidden recovery role is invoked only by `tun stop`; it uses the durable root-owned manifest/journal/session receipt and the typed Linux recovery backend. It does not read the user database or launch a core.
-
+- a hidden `__tun-supervisor` command that authenticates the invoking UID, validates the bounded version-5 launch specification, stages the generated config in the root-owned per-UID runtime, and launches sing-box or Mihomo directly from the same Proxyctl executable;
+- a startup acknowledgement emitted only after exact process attachment, dual-stack end-to-end readiness, root-owned session receipt commit, and the manifest transition to Running;
+- a live supervisor monitor that retains the staged config, observes core exit, and performs generation-scoped journal recovery;
+- a hidden `__tun-recover` command used by `tun stop` and `proxyctl stop`, which stops the exact recorded process and performs compare-before-delete cleanup;
+- a version-5 request containing the generated JSON config, closed core enum, managed-core-root hint, activation UUID/generation, foreground preference, protocol-correct peer transport and resolved endpoints, and bounded IPv4/IPv6 readiness targets;
+- private user-owned TUN handoff/restoration markers, with the activation lock held until the supervisor's Started acknowledgement so concurrent stop operations cannot race startup;
+- user-owned managed core binaries under the private data directory; the invoking user explicitly authorizes their root execution only for TUN mode;
+- a native persistent-device startup path for sing-box and Mihomo; Xray's descriptor-backed lifecycle remains separate and is not yet enabled;
+- explicit `tun start` transition from a verified active loopback session, `tun stop` restoration to loopback when saved, and full `proxyctl stop` semantics that discard saved restoration state;
+- offline manifest/journal, route/rule mutation, cleanup, and readiness tests.
 ## Non-goals
 
 - Do not restore the separate file-capability mutation helper, Xray launcher, or transient systemd service.
