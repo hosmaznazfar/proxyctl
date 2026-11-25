@@ -672,7 +672,7 @@ pub fn verify_readiness_with_traffic_observation(
     verify_readiness(expected, &promoted)
 }
 
-/// Complete preflight evidence plus the exact helper response needed by the final readiness gate.
+/// Complete preflight evidence plus the exact kernel socket-diagnostic response needed by the final readiness gate.
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagedPreflight {
