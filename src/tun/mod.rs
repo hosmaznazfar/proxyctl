@@ -46,6 +46,8 @@ pub mod mutation_helper_launcher;
 pub mod native_core_launcher;
 #[cfg(target_os = "linux")]
 pub mod native_session;
+#[cfg(target_os = "linux")]
+pub mod native_supervisor;
 pub mod ownership;
 #[cfg(target_os = "linux")]
 pub mod persistent_tun_owner;
