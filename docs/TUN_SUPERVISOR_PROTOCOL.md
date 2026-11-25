@@ -146,3 +146,10 @@ The startup sequence is fixed:
 If any post-spawn step fails, the direct child is killed and reaped where possible. The Prepared manifest, journal, and any receipt already committed are retained as recovery evidence; this path never attempts ad-hoc kernel cleanup. The caller must invoke the existing explicit recovery path. The caller must also retain the staged config for the complete core lifetime.
 
 This is a startup/commit primitive, not yet the production supervisor loop. It does not send the `started` acknowledgement, own the staged config beyond the caller's scope, monitor the child after commit, handle supervisor signals, or enable `tun start`. Those remain mandatory integration gates.
+
+
+## Launch specification version 5: readiness inputs
+
+Version 5 binds the activation generation and full dual-stack readiness inputs to the unprivileged launch request. The request carries one to eight resolved selected-node peer endpoints and exactly one numeric IPv4 plus one numeric IPv6 HTTP probe target. Targets retain the original HTTP Host header and path, and each expected response status must be a successful 2xx code. The privileged supervisor validates all fields again before use.
+
+The supervisor captures its own pre-activation host-network baseline after authenticating the invoking UID; it never accepts a caller-supplied DNS or firewall baseline. Supplied numeric destinations are bounded data, not executable paths or commands. The generation, activation UUID, generated core configuration, peer candidates, and traffic targets are validated together before any privileged network mutation.
