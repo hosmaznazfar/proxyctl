@@ -15,6 +15,9 @@ use crate::{cores::CoreId, domain::ProxyNode};
 pub use benchmark_batch::BenchmarkTarget;
 /// Linux interface name shared by Xray's native TUN config and supervisor attachment checks.
 pub const XRAY_TUN_INTERFACE_NAME: &str = "tun-proxyctl";
+/// Legacy descriptor-orchestrator compatibility constant. The active Xray adapter uses
+/// NativeDeviceCreation and never selects or exports this environment variable.
+pub const XRAY_TUN_FD_ENV: &str = "XRAY_TUN_FD";
 pub use shared::{Compatibility, CompatibilityStatus, GeneratedConfig};
 
 /// Socket mark used only by a core's proxy outbound during TUN operation.
