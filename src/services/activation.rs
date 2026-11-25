@@ -1268,7 +1268,7 @@ pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
             "pending loopback restoration metadata contains invalid values"
         );
         ensure!(
-            matches!(previous.core.as_str(), "sing-box" | "mihomo"),
+            core_from_session_name(&previous.core).is_some(),
             "pending loopback restoration metadata names an unsupported core"
         );
         if state_path.exists() {
