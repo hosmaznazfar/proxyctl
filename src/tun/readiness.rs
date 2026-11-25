@@ -1027,11 +1027,10 @@ pub fn probe_core_outbound_socket_mark(
         process.verify()?,
         "managed core identity changed before socket-mark probe"
     );
+    let _ = (runtime_directory, activation_id);
     let response = super::socket_mark_probe::observe_proxy_outbound_mark(
-        runtime_directory,
-        activation_id,
         process.clone(),
-        expected_peer,
+        &[expected_peer],
         transport,
         expected_mark,
         mark_mask,
