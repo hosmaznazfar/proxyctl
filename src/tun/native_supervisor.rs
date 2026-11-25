@@ -477,6 +477,9 @@ mod signal_tests {
         }
     }
 
+    // TestChild's Drop implementation always kills (when needed) and waits for the child.
+    // Clippy cannot see that ownership transfer into the RAII wrapper guarantees reaping.
+    #[allow(clippy::zombie_processes)]
     fn live_child() -> (TestChild, super::super::process::ProcessIdentity) {
         let child = Command::new("sleep")
             .arg("30")
@@ -517,7 +520,7 @@ mod signal_tests {
     #[test]
     fn supervisor_only_termination_is_forwarded_to_the_pinned_child() {
         let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
-        let (mut child, identity) = live_child();
+        let (child, identity) = live_child();
         let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
         let guard = SignalForwardingGuard::install(identity, false).unwrap();
         forward_supervisor_signal(libc::SIGTERM);
