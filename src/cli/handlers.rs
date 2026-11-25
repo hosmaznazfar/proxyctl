@@ -325,6 +325,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     #[cfg(target_os = "linux")]
                     {
                         crate::services::tun_handoff::request_supervisor_recovery()?;
+                        crate::services::activation::clear_tun_session_marker()?;
                         if crate::services::activation::restore_previous_loopback_if_any()? {
                             println!("Restored the previous loopback proxy session.");
                         }
@@ -522,6 +523,15 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         }
         Command::Stop => {
             crate::services::activation::stop()?;
+            if crate::services::activation::has_pending_tun_session()?
+                || crate::services::activation::has_pending_previous_loopback()?
+            {
+                crate::services::tun_handoff::request_supervisor_recovery()?;
+                crate::services::activation::clear_tun_session_marker()?;
+                if crate::services::activation::restore_previous_loopback_if_any()? {
+                    println!("Restored the previous loopback proxy session.");
+                }
+            }
             return Ok(());
         }
         Command::Setup { core } => {
