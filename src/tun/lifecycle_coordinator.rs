@@ -2,9 +2,10 @@
 use super::process::{ProcessHandle, ProcessIdentity, read_process_owner_uid};
 use super::{
     manifest_store::{ManifestSnapshot, ManifestStore},
-    session_record::{SessionRecord, SessionStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
+#[cfg(target_os = "linux")]
+use super::session_record::{SessionRecord, SessionStore};
 use anyhow::{Context, Result, ensure};
 use std::{fs::File, path::PathBuf, time::Duration};
 #[cfg(unix)]
