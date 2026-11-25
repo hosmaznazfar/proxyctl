@@ -122,7 +122,7 @@ pub fn prepare_launch_spec(
             .to_socket_addrs()
             .context("cannot resolve TUN readiness endpoint before privilege escalation")?
             .take(16)
-            .collect::<Vec<_>>,
+            .collect::<Vec<_>>(),
     };
     let traffic_targets =
         build_dual_stack_probe_targets(&probe, probe_addresses, expected_status)?;
