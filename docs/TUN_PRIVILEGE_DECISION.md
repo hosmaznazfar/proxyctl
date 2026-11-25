@@ -107,3 +107,14 @@ The current version-2 launch specification now carries the already-generated con
 - Do not let the core install Proxyctl-owned host routes, policy rules, DNS settings, or firewall rules independently.
 - Do not use the user's database, user-owned config files, or caller-supplied filesystem paths from the privileged process.
 - Do not enable TUN merely because the request parser or a core's native config validator succeeds.
+
+
+## Implemented preparation boundary (next slice)
+
+The launch-spec module now exposes a pure `from_generated_config` constructor. It accepts
+node/core/port metadata and the already-generated configuration bytes, requires UTF-8,
+constructs the version-2 request, and validates it before returning. It does not resolve
+database state, validate through a core executable, spawn processes, create runtime
+files, or change host networking. The constructor is a narrow building block for the
+unprivileged front-end preparation path; it does not connect that path to sudo or open
+the supervisor gate.
