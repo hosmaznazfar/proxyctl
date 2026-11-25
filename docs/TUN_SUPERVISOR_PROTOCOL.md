@@ -20,7 +20,7 @@ The reply schema is versioned and strict:
 
 Unknown fields, unsupported versions, empty/trailing data and replies beyond 16 KiB are rejected. The front end must accept success only for `started`, and only after validating the embedded session record. A zero sudo exit status or successful process creation is not a startup acknowledgement.
 
-The current implementation deliberately emits `not_started` after request validation. The front-end transport parses the reply and rejects it as a non-start. The supervisor does not launch a core, daemonize, or keep a background lifecycle alive yet. The pipe framing is groundwork for the later startup handshake, not evidence that the handshake is operational end-to-end.
+The current implementation deliberately emits `not_started` after request validation. The front-end transport parses the reply and rejects it as a non-start. It bounds the wait to 30 seconds, requires the supervisor to close stdout after the one-shot reply, and accepts a future `started` reply only while the supervisor process remains alive. The supervisor does not launch a core, daemonize, or keep a background lifecycle alive yet. The pipe framing and timeout are groundwork for the later startup handshake, not evidence that the handshake is operational end-to-end.
 
 ## Durable commit ordering
 
@@ -62,7 +62,7 @@ A future `started` reply is permitted only after all of the following are true:
 - the core-specific readiness check succeeded;
 - the supervisor has established a terminal-independent monitoring lifecycle and stop/recovery ownership.
 
-The foreground path must use this same sequence. Background mode must not return merely because sudo spawned; it returns only after the supervisor sends the `started` reply. Supervisor detachment, bounded startup timeout, child-exit monitoring, stop requests and reboot recovery remain separate gates.
+The foreground path must use this same sequence. Background mode must not return merely because sudo spawned; it returns only after the supervisor sends the `started` reply, closes the acknowledgement pipe, and remains alive as the session owner. The front end's 30-second acknowledgement timeout is implemented; supervisor detachment, ongoing child-exit monitoring, stop requests and reboot recovery remain separate gates.
 
 ## Current safety boundary
 
