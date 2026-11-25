@@ -4,13 +4,18 @@
 //! after validation until the root-owned lifecycle and recovery backend is implemented.
 use anyhow::{Context, Result, ensure};
 use std::{
-    io::Write,
+    io::{Read, Write},
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    thread,
 };
 
-use crate::tun::launch_spec::LaunchSpec;
+use crate::tun::{
+    launch_spec::LaunchSpec,
+    session_record::SessionRecord,
+    supervisor_protocol::{self, SupervisorOutcome},
+};
 
 /// Resolve sudo only from conventional system locations, never from the caller's PATH.
 ///
@@ -59,7 +64,7 @@ fn abort_child(child: &mut Child) -> String {
 ///
 /// No shell is involved; sudo's password prompt is handled via its terminal, not stdin.
 /// A failed request write always triggers a best-effort kill and reap of the sudo child.
-pub fn validate_supervisor_handoff(spec: &LaunchSpec) -> Result<()> {
+pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
     let encoded = spec
         .encode_bounded()
         .context("cannot encode bounded TUN request")?;
@@ -71,34 +76,69 @@ pub fn validate_supervisor_handoff(spec: &LaunchSpec) -> Result<()> {
         .arg(executable)
         .arg("__tun-supervisor")
         .stdin(Stdio::piped())
-        .stdout(Stdio::inherit())
+        .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
         .context("cannot launch privileged Proxyctl supervisor via sudo")?;
 
+    // Drain only the bounded protocol channel. Dropping the read end after the limit prevents
+    // an unexpectedly noisy or compromised child from growing the parent's memory without bound.
+    let stdout = child
+        .stdout
+        .take()
+        .context("supervisor acknowledgement pipe was not created")?;
+    let reader = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout
+            .take(supervisor_protocol::MAX_REPLY_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map(|_| bytes)
+    });
+
     let write_result = match child.stdin.take() {
-        Some(stdin) => {
-            let mut stdin = stdin;
-            stdin.write_all(&encoded)
-        }
+        Some(mut stdin) => stdin.write_all(&encoded),
         None => Err(std::io::Error::other("sudo request stdin was not created")),
     };
     // Closing the pipe delimits the complete bounded request for the supervisor.
     if let Err(error) = write_result {
         let cleanup = abort_child(&mut child);
+        let _ = reader.join();
         return Err(error).context(format!(
             "cannot deliver TUN launch request to supervisor; {cleanup}"
         ));
     }
 
-    let status = child
-        .wait()
-        .context("cannot wait for supervisor validation")?;
-    ensure!(
-        status.success(),
-        "privileged TUN supervisor validation exited with {status}"
-    );
-    Ok(())
+    let status = match child.wait() {
+        Ok(status) => status,
+        Err(error) => {
+            let cleanup = abort_child(&mut child);
+            let _ = reader.join();
+            return Err(error).context(format!(
+                "cannot wait for privileged supervisor; {cleanup}"
+            ));
+        }
+    };
+    let response = reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("supervisor acknowledgement reader panicked"))??;
+    let reply = supervisor_protocol::read_reply(response.as_slice())?;
+
+    match reply.outcome {
+        SupervisorOutcome::Started { session } => {
+            ensure!(
+                status.success(),
+                "supervisor reported a started session but exited with {status}"
+            );
+            session.validate()?;
+            Ok(session)
+        }
+        SupervisorOutcome::NotStarted { reason } => {
+            anyhow::bail!("supervisor did not start a TUN session: {reason}")
+        }
+        SupervisorOutcome::Failed { reason } => {
+            anyhow::bail!("privileged TUN supervisor rejected the request: {reason}")
+        }
+    }
 }
 
 #[cfg(test)]
