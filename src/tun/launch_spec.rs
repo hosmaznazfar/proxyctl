@@ -46,6 +46,8 @@ pub struct LaunchSpec {
     pub node_id: u64,
     pub core: CoreKind,
     pub listen_port: u16,
+    /// Keep core diagnostics attached to the invoking terminal until the session exits.
+    pub foreground: bool,
     /// Kernel-generated activation identity; also binds the generated socket mark to recovery.
     pub activation_id: String,
     /// Untrusted hint; the supervisor validates this tree and derives the executable from CoreKind.
@@ -82,6 +84,7 @@ pub fn from_generated_config(
     node_id: u64,
     core: CoreKind,
     listen_port: u16,
+    foreground: bool,
     activation_id: String,
     managed_core_root: PathBuf,
     generated_config: &[u8],
@@ -97,6 +100,7 @@ pub fn from_generated_config(
         node_id,
         core,
         listen_port,
+        foreground,
         activation_id,
         managed_core_root,
         generated_config,
@@ -204,6 +208,7 @@ mod tests {
             node_id: 5,
             core: CoreKind::Xray,
             listen_port: 1080,
+            foreground: false,
             activation_id: "12345678-1234-4234-8234-123456789abc".to_owned(),
             managed_core_root: PathBuf::from("/home/user/.local/share/proxyctl/cores"),
             generated_config: r#"{"inbounds":[],"outbounds":[]}"#.to_owned(),
