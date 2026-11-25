@@ -982,6 +982,12 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
 }
 
+/// Report whether a prior loopback session is awaiting restoration after TUN mode.
+pub fn has_pending_previous_loopback() -> anyhow::Result<bool> {
+    let (runtime, _) = paths()?;
+    Ok(runtime.join("tun-previous.json").exists())
+}
+
 /// Restore the saved loopback session after a TUN session has been stopped or failed.
 ///
 /// The marker is user-owned and is used only to re-resolve the node through the ordinary
