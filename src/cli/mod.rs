@@ -48,7 +48,7 @@ enum CompletionAction {
 
 #[derive(Debug, Subcommand)]
 enum TunCommand {
-    /// Start TUN mode for the currently active session (not yet implemented).
+    /// Transition the currently active loopback session to native TUN mode.
     Start {
         /// Keep the TUN supervisor attached to this terminal.
         #[arg(long)]
