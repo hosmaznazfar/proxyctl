@@ -38,7 +38,12 @@ impl SessionRecord {
         ensure!(canonical_uuid(&self.session_nonce), "TUN session nonce must be a canonical lowercase UUID");
         ensure!(canonical_uuid(&self.activation_id), "TUN activation ID must be a canonical lowercase UUID");
         ensure!(self.generation > 0, "TUN session generation must be non-zero");
-        self.process.validate()
+        self.process.validate()?;
+        ensure!(
+            self.process.executable.file_name().is_some_and(|name| name == self.core.as_str()),
+            "recorded process executable name does not match the selected core kind"
+        );
+        Ok(())
     }
 }
 
@@ -229,6 +234,9 @@ mod tests {
         assert!(invalid.validate().is_err());
         let mut invalid = record();
         invalid.generation = 0;
+        assert!(invalid.validate().is_err());
+        let mut invalid = record();
+        invalid.process.executable = PathBuf::from("/usr/bin/not-xray");
         assert!(invalid.validate().is_err());
     }
 
