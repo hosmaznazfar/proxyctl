@@ -7,6 +7,7 @@ pub mod display_config;
 
 pub mod activation;
 pub mod tun_preparation;
+pub mod tun_handoff;
 pub mod benchmark;
 pub mod cores;
 pub mod listener_config;
