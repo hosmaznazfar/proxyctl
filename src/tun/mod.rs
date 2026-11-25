@@ -16,6 +16,8 @@ pub mod broker_transport;
 #[cfg(target_os = "linux")]
 pub mod config_staging;
 #[cfg(target_os = "linux")]
+pub mod core_paths;
+#[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
 pub mod egress_probe;
 pub mod journal;
