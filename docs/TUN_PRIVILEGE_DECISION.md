@@ -149,3 +149,24 @@ paths or arguments. This transport is deliberately not connected to the TUN CLI 
 the supervisor remains validation-only and networking stays fail-closed until the
 root-runtime ownership, lifecycle handshake, process identity, journaled mutation,
 readiness and recovery path are completed and locally verified.
+
+
+
+## Invoking-user identity and root runtime boundary
+
+The Linux supervisor now derives the session owner from sudo's `SUDO_UID` and requires
+it to match the inherited kernel audit login UID in `/proc/self/loginuid`. It also
+requires both real and effective process UIDs to be root. Missing, malformed, root,
+or mismatched identity data fails closed; the launch JSON cannot nominate a UID.
+
+After request validation, the supervisor creates or verifies `/run/proxyctl`
+(root-owned, mode 0755) and `/run/proxyctl/<uid>` (root-owned, mode 0700). Existing
+symlinks, non-directories, unexpected owners, or unexpected permission modes are
+rejected. This runtime bootstrap is the only privileged filesystem side effect in
+the current supervisor path. It does not stage the config, launch a core, create a
+TUN device, alter routes/rules/DNS/firewall state, or enable the CLI activation path.
+
+The audit-login-UID cross-check intentionally fails closed in environments where
+Linux does not provide a valid login UID. Supporting such environments requires a
+separate, explicit identity-provenance design rather than trusting a caller-supplied
+UID or silently falling back to `SUDO_UID` alone.
