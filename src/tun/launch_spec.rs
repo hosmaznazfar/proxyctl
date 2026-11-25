@@ -3,13 +3,13 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{io::Read, str::FromStr};
+use std::{io::Read, path::PathBuf, str::FromStr};
 
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 /// JSON string escaping can expand the generated document, so the wire limit allows
 /// up to twice the config byte limit plus bounded request metadata.
-pub const MAX_SPEC_BYTES: usize = (MAX_CONFIG_BYTES * 2) + (16 * 1024);
+pub const MAX_SPEC_BYTES: usize = (MAX_CONFIG_BYTES * 2) + (24 * 1024);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -46,6 +46,8 @@ pub struct LaunchSpec {
     pub node_id: u64,
     pub core: CoreKind,
     pub listen_port: u16,
+    /// Untrusted hint; the supervisor validates this tree and derives the executable from CoreKind.
+    pub managed_core_root: PathBuf,
     /// Generated native core configuration, transferred as data rather than a filesystem path.
     pub generated_config: String,
 }
@@ -72,6 +74,7 @@ pub fn from_generated_config(
     node_id: u64,
     core: CoreKind,
     listen_port: u16,
+    managed_core_root: PathBuf,
     generated_config: &[u8],
 ) -> Result<LaunchSpec> {
     let generated_config = std::str::from_utf8(generated_config)
@@ -82,6 +85,7 @@ pub fn from_generated_config(
         node_id,
         core,
         listen_port,
+        managed_core_root,
         generated_config,
     };
     spec.validate()?;
@@ -95,6 +99,13 @@ impl LaunchSpec {
             "unsupported launch specification version"
         );
         ensure!(self.node_id > 0, "node ID must be non-zero");
+        ensure!(
+            self.managed_core_root.is_absolute()
+                && self.managed_core_root.as_os_str().len() <= 4096
+                && self.managed_core_root.file_name().is_some_and(|name| name == "cores")
+                && self.managed_core_root.parent().and_then(std::path::Path::file_name).is_some_and(|name| name == "proxyctl"),
+            "managed core directory hint is invalid"
+        );
         ensure!(
             self.listen_port >= 1024,
             "listener port must be between 1024 and 65535"
@@ -139,6 +150,7 @@ mod tests {
             node_id: 5,
             core: CoreKind::Xray,
             listen_port: 1080,
+            managed_core_root: PathBuf::from("/home/user/.local/share/proxyctl/cores"),
             generated_config: r#"{"inbounds":[],"outbounds":[]}"#.to_owned(),
         }
     }
@@ -179,13 +191,13 @@ mod tests {
     fn rejects_unknown_fields_and_invalid_core() {
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":2,"node_id":1,"core":"xray","listen_port":1080,"generated_config":"{}","path":"/tmp"}"#
+                br#"{"version":3,"node_id":1,"core":"xray","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}","path":"/tmp"}"#
             )
             .is_err()
         );
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":2,"node_id":1,"core":"root","listen_port":1080,"generated_config":"{}"}"#
+                br#"{"version":3,"node_id":1,"core":"root","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}"}"#
             )
             .is_err()
         );
