@@ -64,7 +64,7 @@ pub fn spawn_core(
     ensure!(invoking_uid != 0, "invoking user UID must be non-zero");
 
     let executable =
-        super::core_paths::resolve_managed_core(managed_core_root, invoking_uid, domain_core(core))
+        super::core_paths::resolve_managed_core(managed_core_root, invoking_uid, core)
             .context("cannot revalidate the selected managed core immediately before launch")?;
     let executable_metadata = fs::symlink_metadata(&executable)
         .context("cannot inspect selected managed core executable before launch")?;
