@@ -81,9 +81,7 @@ pub fn validate_supervisor_handoff(spec: &LaunchSpec) -> Result<()> {
             let mut stdin = stdin;
             stdin.write_all(&encoded)
         }
-        None => Err(std::io::Error::other(
-            "sudo request stdin was not created",
-        )),
+        None => Err(std::io::Error::other("sudo request stdin was not created")),
     };
     // Closing the pipe delimits the complete bounded request for the supervisor.
     if let Err(error) = write_result {
