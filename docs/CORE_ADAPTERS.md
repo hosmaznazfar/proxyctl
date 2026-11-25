@@ -48,35 +48,27 @@ The adapter reports how its core obtains the TUN device. This is separate from w
 |---|---|---|---|
 | sing-box | `NativeDeviceCreation` | Adds a named TUN inbound (`tun-proxyctl`); disables automatic route and DNS integration; marks the proxy outbound. | Enabled on Linux |
 | Mihomo | `NativeDeviceCreation` | Enables the named TUN device (`tun-proxyctl`); disables auto-route, auto-redirect, and DNS integration; marks proxy outbound traffic. | Enabled on Linux |
-| Xray | `ExternalDescriptorEnvironment` (`XRAY_TUN_FD`) | Generates a native Xray `tun` inbound with a fixed interface name, gateway addresses, MTU, sniffing, and marked proxy outbound. Linux can either create the device itself or adopt a supplied FD. | Deliberately disabled pending descriptor lifecycle integration |
+| Xray | `NativeDeviceCreation` | Generates a native Xray `tun` inbound with the fixed interface name, gateway addresses, MTU, sniffing, and marked proxy outbound. Proxyctl creates the generation-owned persistent interface first; Xray opens that named device and configures its MTU and gateway addresses. Automatic route/DNS integration remains disabled. | Enabled on Linux through the same supervisor |
 
-### Xray descriptor integration is not yet complete
+### Xray native named-device lifecycle
 
-Xray's Linux TUN implementation has two distinct startup paths:
+Xray's Linux TUN inbound supports both a native named-device path and an optional externally supplied descriptor path. Proxyctl uses the native named-device path, matching the single-application, TUN-only elevation model verified in v2rayN:
 
-1. Without `XRAY_TUN_FD`, Xray opens `/dev/net/tun`, creates the named interface, configures its MTU and gateway addresses, and owns its link setup/teardown.
-2. With `XRAY_TUN_FD`, Xray validates and adopts the supplied TUN descriptor. In this path, Xray does **not** own the interface and its Linux `Start` path does not configure the link, MTU, gateway addresses, or routes. The component that creates the descriptor must own those operations.
+1. The privileged Proxyctl supervisor creates and journals one generation-owned persistent TUN interface with the fixed name `tun-proxyctl`.
+2. Xray starts directly as the selected root-owned session child, opens that existing named TUN device through its native inbound, and configures the configured MTU and IPv4/IPv6 gateway addresses.
+3. Xray's generated config keeps automatic route and DNS integration disabled. Proxyctl remains the sole owner of routes and policy rules through the write-ahead journal.
+4. Proxyctl verifies that the exact Xray process has attached to the expected interface, then runs the same dual-stack end-to-end readiness checks and commits the session receipt.
+5. The supervisor stops/reaps the exact core before generation-scoped recovery removes the persistent interface, routes, and policy rules.
 
-This behavior is documented by the [Xray TUN configuration reference](https://xtls.github.io/en/config/inbounds/tun.html) and implemented in [Xray's Linux TUN source](https://github.com/XTLS/Xray-core/blob/main/proxy/tun/tun_linux.go) (`NewTun`, `openFromEnv`, `Start`, and `Close`).
+The optional `XRAY_TUN_FD` path is deliberately not used. When Xray adopts an external FD, its Linux `Start` path does not configure link state, MTU, gateway addresses, or routes; that would require a separate Proxyctl-owned interface-configuration lifecycle. Avoid that unnecessary descriptor path because the native named-device mode already fits the supervisor architecture.
 
-Proxyctl's generated config currently sets a fixed name and gateway addresses, but the supervisor's journaled `apply_native` path creates a persistent named interface and does not retain a descriptor for Xray. Conversely, the existing direct launcher can transfer a descriptor, but no complete single-process supervisor path currently creates, retains, configures, journals, and recovers that descriptor-backed interface. Merely changing Xray's adapter mode or removing its allowlist rejection would therefore be incorrect.
-
-The agreed integration direction is to keep Xray's explicit descriptor contract and move descriptor ownership into the same privileged `proxyctl __tun-supervisor` process:
-
-- create one generation-scoped TUN descriptor inside the supervisor (no separately installed helper or persistent daemon);
-- keep the owning descriptor alive for the complete session and pass only a close-on-exec duplicate to Xray through `XRAY_TUN_FD`;
-- make Proxyctl, not Xray, own link-up, MTU, gateway-address, route, and policy-rule setup for this FD path;
-- extend the write-ahead journal and recovery model to cover the descriptor-owned interface and the case where parent-death termination automatically removes it;
-- verify the exact Xray process holds the expected interface descriptor before end-to-end readiness and durable session commit;
-- close/release the descriptor only after the exact Xray process has stopped and generation-scoped cleanup is safe.
-
-The current native supervisor enables only sing-box and Mihomo. Keep Xray rejected until all of these ownership, journaling, startup, readiness, stop, and crash-recovery requirements are implemented together.
+This behavior is documented by the [Xray TUN configuration reference](https://xtls.github.io/en/config/inbounds/tun.html) and implemented in [Xray's Linux TUN source](https://github.com/XTLS/Xray-core/blob/main/proxy/tun/tun_linux.go) (`NewTun`, `openFromEnv`, `Start`, and `Close`). The exact behavior must still be verified against the installed Xray version during local integration testing.
 
 ### Ownership rules
 
-- `NativeDeviceCreation` means the selected core creates and owns its named TUN device. Proxyctl's privileged supervisor still owns routes, policy rules, session records, readiness, monitoring, and recovery.
+- `NativeDeviceCreation` means the selected core opens or creates its named TUN device from native config. Proxyctl may pre-create a generation-owned persistent interface so journaled routes and policy rules can be installed before the core starts. The supervisor still owns the interface's persistence, session records, readiness, monitoring, and recovery.
 - `ExternalDescriptorEnvironment` means Proxyctl (or another explicitly designated owner) creates and configures the TUN device, then passes an already-open descriptor to the core. The core does not become the interface's lifecycle owner.
-- A descriptor-backed Xray session must not also ask Xray to create a second TUN device. The descriptor's actual interface name must match the generated config.
+- Xray's optional descriptor mode is not used by the supervised lifecycle; its native named-device mode avoids split ownership of link/address configuration.
 - Never enable activation from adapter metadata alone. The process attachment, end-to-end readiness, session commit, monitor, stop, and journaled recovery contracts must all be complete.
 
 ## Test layers

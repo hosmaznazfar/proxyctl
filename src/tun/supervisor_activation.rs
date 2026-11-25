@@ -8,6 +8,8 @@
 
 use anyhow::{Context, Result, ensure};
 
+use crate::cores::{CoreId, adapters::{self, TunAttachmentMode}};
+
 use super::{
     activation_plan,
     kernel_transaction::{self, AppliedKernelTransaction},
@@ -16,6 +18,23 @@ use super::{
     linux_journal_backend::LinuxJournalBackend,
     manifest_store::ManifestStore,
 };
+
+/// Validate that a core adapter uses the named native-device contract implemented by this
+/// supervisor. In particular, Xray uses its native named TUN inbound: Proxyctl creates the
+/// generation-owned persistent interface first, then Xray opens it and configures its MTU
+/// and gateway addresses. No descriptor transfer is needed.
+pub fn validate_native_device_core(core: CoreKind) -> Result<()> {
+    let domain_core = match core {
+        CoreKind::SingBox => CoreId::SingBox,
+        CoreKind::Xray => CoreId::Xray,
+        CoreKind::Mihomo => CoreId::Mihomo,
+    };
+    ensure!(
+        adapters::adapter(domain_core).tun_attachment_mode() == TunAttachmentMode::NativeDeviceCreation,
+        "selected core does not use the supervisor's native named-device TUN contract"
+    );
+    Ok(())
+}
 
 /// Apply the exact native-device transaction for one activation and adopt its Prepared
 /// manifest into the lifecycle coordinator.
@@ -37,10 +56,7 @@ pub fn apply_native_kernel_plan(
     owner_uid: u32,
     owner_gid: u32,
 ) -> Result<(ActivationToken, AppliedKernelTransaction)> {
-    ensure!(
-        matches!(core, CoreKind::SingBox | CoreKind::Xray | CoreKind::Mihomo),
-        "unsupported TUN core kind"
-    );
+    validate_native_device_core(core)?;
     ensure!(generation > 0, "TUN activation generation must be non-zero");
     ensure!(owner_uid != 0, "TUN interface owner UID must be non-zero");
     let store_path = store.path();
@@ -97,23 +113,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_xray_before_opening_or_mutating_the_kernel_backend() {
-        let directory = tempfile::tempdir().unwrap();
-        let store = ManifestStore::open(directory.path().to_path_buf()).unwrap();
-        let coordinator = LifecycleCoordinator::new(store.clone()).unwrap();
-
-        let result = apply_native_kernel_plan(
-            CoreKind::Xray,
-            store.clone(),
-            &coordinator,
-            "12345678-1234-4234-8234-123456789abc",
-            1,
-            1000,
-            1000,
-        );
-
-        assert!(result.is_err());
-        assert!(store.load_transaction_journal().unwrap().is_none());
-        assert!(store.load().unwrap().is_none());
+    fn every_supported_core_uses_the_native_named_device_contract() {
+        for core in [CoreKind::SingBox, CoreKind::Xray, CoreKind::Mihomo] {
+            assert!(validate_native_device_core(core).is_ok(), "{core:?}");
+        }
     }
 }

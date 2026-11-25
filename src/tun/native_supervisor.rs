@@ -141,10 +141,7 @@ pub fn start(
         unsafe { libc::getuid() } == 0 && unsafe { libc::geteuid() } == 0,
         "native TUN startup must run inside the real/effective-root supervisor"
     );
-    ensure!(
-        matches!(spec.core, CoreKind::SingBox | CoreKind::Xray | CoreKind::Mihomo),
-        "unsupported TUN core kind"
-    );
+    supervisor_activation::validate_native_device_core(spec.core)?;
     spec.validate()?;
     ensure!(invoking_uid != 0, "invoking TUN UID must be non-zero");
     ensure!(

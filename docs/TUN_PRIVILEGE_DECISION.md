@@ -1,6 +1,6 @@
 # TUN privilege architecture decision
 
-> Decision status: accepted and implemented for sing-box and Mihomo on Linux.
+> Decision status: accepted and implemented for sing-box, Mihomo, and Xray on Linux.
 > Reference revision: v2rayN commit `91c61b1fe595994c7bcf09739ddb5dc32fde4f04`.
 > Scope: TUN-only privilege handoff, native persistent-device activation, and the single-executable Proxyctl session owner.
 
@@ -13,7 +13,7 @@ Proxyctl follows v2rayN's **TUN-only elevation model**:
 - The selected TUN core runs with root credentials for the TUN session and either creates its native TUN device or adopts a supervisor-owned descriptor, according to its adapter contract.
 - Proxyctl remains one application package with one installed `proxyctl` executable. The hidden `__tun-supervisor` and `__tun-recover` roles are invocations of that executable, not separately installed helpers, launchers, daemons, or systemd services.
 - No setuid bit or permanent file capabilities are installed.
-- Native persistent-device activation is enabled for sing-box and Mihomo. Xray remains disabled until its descriptor-backed lifecycle is integrated into the same single-executable supervisor.
+- Native persistent-device activation is enabled for sing-box, Mihomo, and Xray. Xray uses its native named-device inbound; no external descriptor broker is needed.
 
 The privileged process does not elevate the whole application, read the user's node database, or accept arbitrary commands, executable paths, config paths, working directories, or environment maps.
 
@@ -34,7 +34,7 @@ This confirms the operational model, not a complete proof of every failure or cr
 2. It builds a bounded, versioned request and invokes `sudo -- <current-proxyctl-executable> __tun-supervisor` with direct argv. The generated config is sent as data on stdin; no shell or generated script is involved.
 3. The supervisor authenticates the invoking UID from sudo credentials and cross-checks Linux's audit login UID. It resolves the primary GID from the system account database; neither UID nor GID is trusted from the request.
 4. It verifies and creates the root-owned `/run/proxyctl/<uid>` runtime, captures its own host-network baseline, stages the generated config as a root-owned 0600 file, and validates the selected managed core path.
-5. For sing-box and Mihomo, it captures a fresh kernel snapshot, creates a generation-bound write-ahead journal, and applies the persistent native TUN interface, routes, and policy rules through the typed Linux backend. Xray is not admitted to this path.
+5. For sing-box, Mihomo, and Xray, it captures a fresh kernel snapshot, creates a generation-bound write-ahead journal, and applies the persistent native TUN interface, routes, and policy rules through the typed Linux backend. Xray's native inbound opens the pre-created named interface and configures its MTU and gateway addresses; automatic route/DNS integration remains disabled.
 6. It launches the selected core directly with fixed core-specific arguments, verifies the exact process identity and TUN attachment, and runs the complete dual-stack end-to-end readiness gate.
 7. It commits the root-owned session receipt and Running manifest, then sends the one-shot Started acknowledgement. The same supervisor remains alive, retains the staged config, monitors the core, and performs generation-scoped journal recovery when the core exits.
 8. `proxyctl tun stop` performs privileged recovery and restores a saved loopback session. `proxyctl stop` performs privileged recovery only when a TUN handoff/session marker is present, discards saved restoration state, and otherwise stops an ordinary loopback session without elevation.
@@ -55,7 +55,7 @@ The privileged process never reads the user's redb database, writes root-owned f
 
 - **sing-box:** native persistent TUN device creation; launched directly by the privileged supervisor.
 - **Mihomo:** native persistent TUN device creation; launched directly by the privileged supervisor.
-- **Xray:** its native TUN inbound can create its own Linux interface, or adopt a supplied descriptor through `XRAY_TUN_FD`. Proxyctl's adapter currently declares the descriptor contract. When Xray adopts an FD, its Linux implementation does not configure link state, MTU, gateway addresses, or routes; the descriptor owner must do so. The current supervisor's persistent-device transaction does not retain/pass that descriptor, and the old descriptor broker is not integrated into the single-executable supervisor. Xray is therefore deliberately rejected. The intended implementation is a supervisor-owned, generation-scoped descriptor, passed to Xray with `XRAY_TUN_FD`, with link/address/route setup journaled by Proxyctl. See [CORE_ADAPTERS.md](CORE_ADAPTERS.md) for the source-level behavior and integration requirements.
+- **Xray:** uses its native named-device TUN inbound. Proxyctl's supervisor creates and journals the persistent interface first; Xray opens that existing interface and configures MTU and gateway addresses from its native config. Its optional `XRAY_TUN_FD` mode is intentionally unused because that mode would transfer interface-configuration ownership to Proxyctl without adding value. See [CORE_ADAPTERS.md](CORE_ADAPTERS.md) for the source-level behavior and integration requirements.
 
 Proxyctl owns route and policy-rule creation through its journal. Core-managed automatic route and DNS mutation must remain disabled where it would compete with that ownership. The new native supervisor does not modify host DNS or firewall state; readiness verifies that both remain unchanged.
 
@@ -72,7 +72,7 @@ Proxyctl owns route and policy-rule creation through its journal. Core-managed a
 
 ## Current implementation boundary
 
-Implemented on Linux for sing-box and Mihomo:
+Implemented on Linux for sing-box, Mihomo, and Xray:
 
 - `proxyctl use <number> --core <core> --tun` starts a new TUN session.
 - `proxyctl tun start` transitions a verified active loopback session to TUN mode and saves enough metadata to restore that loopback session later.
@@ -80,7 +80,7 @@ Implemented on Linux for sing-box and Mihomo:
 - `proxyctl stop` performs the same privileged recovery only when a TUN marker is pending; it discards the saved loopback marker because this command means a full stop. Without a TUN marker, it stops the ordinary loopback session under the activation lock and does not request sudo.
 - `proxyctl tun status` and `proxyctl status` provide read-only network/session inspection.
 
-Xray TUN descriptor integration, automatic reboot-time recovery, and any migration of pre-existing legacy helper/systemd-managed sessions remain separate work. Legacy compatibility code must not be used for new sing-box or Mihomo TUN sessions.
+Automatic reboot-time recovery and migration of pre-existing legacy helper/systemd-managed sessions remain separate work. Legacy compatibility code must not be used for new native TUN sessions.
 
 ## Non-goals
 

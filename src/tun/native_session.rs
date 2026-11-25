@@ -27,10 +27,7 @@ pub fn validate_prepared_native_activation(
     snapshot: &ManifestSnapshot,
 ) -> Result<()> {
     spec.validate()?;
-    ensure!(
-        matches!(spec.core, CoreKind::SingBox | CoreKind::Xray | CoreKind::Mihomo),
-        "unsupported TUN core kind"
-    );
+    super::supervisor_activation::validate_native_device_core(spec.core)?;
     ensure!(
         spec.activation_id == token.activation_id()
             && snapshot.manifest.activation_id == token.activation_id()
