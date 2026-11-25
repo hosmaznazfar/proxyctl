@@ -1120,6 +1120,42 @@ pub fn has_pending_previous_loopback() -> anyhow::Result<bool> {
     Ok(false)
 }
 
+/// Discard a saved loopback restoration marker when the user requests a full stop.
+#[cfg(target_os = "linux")]
+pub fn discard_previous_loopback_marker() -> anyhow::Result<bool> {
+    let (runtime, _) = paths()?;
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    let previous_path = runtime.join("tun-previous.json");
+    if !previous_path.exists() {
+        return Ok(false);
+    }
+    let metadata = fs::symlink_metadata(&previous_path)
+        .context("cannot inspect pending loopback restoration metadata")?;
+    ensure!(
+        metadata.file_type().is_file()
+            && metadata.uid() == unsafe { libc::getuid() }
+            && metadata.permissions().mode() & 0o7777 == 0o600
+            && metadata.nlink() == 1,
+        "pending loopback restoration metadata has an unsafe identity or mode"
+    );
+    let previous: PreviousLoopbackSession = serde_json::from_slice(&fs::read(&previous_path)?)
+        .context("pending loopback restoration metadata is corrupt")?;
+    ensure!(
+        previous.node_id != 0
+            && previous.port >= 1024
+            && matches!(previous.core.as_str(), "sing-box" | "mihomo"),
+        "pending loopback restoration metadata contains invalid values"
+    );
+    fs::remove_file(&previous_path)
+        .context("cannot discard previous loopback restoration metadata")?;
+    Ok(true)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn discard_previous_loopback_marker() -> anyhow::Result<bool> {
+    Ok(false)
+}
+
 /// Restore the saved loopback session after a TUN session has been stopped or failed.
 ///
 /// The marker is user-owned and is used only to re-resolve the node through the ordinary
