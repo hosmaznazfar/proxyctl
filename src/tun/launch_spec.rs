@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{io::Read, path::PathBuf, str::FromStr};
 
+use super::privilege_broker::BrokerSocketTransport;
+
 pub const VERSION: u16 = 5;
 pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 /// JSON string escaping can expand the generated document, so the wire limit allows
@@ -48,6 +50,8 @@ pub struct LaunchSpec {
     pub listen_port: u16,
     /// Keep core diagnostics attached to the invoking terminal until the session exits.
     pub foreground: bool,
+    /// Transport used by the selected node's outbound peer socket.
+    pub peer_transport: BrokerSocketTransport,
     /// Kernel-generated activation identity; also binds the generated socket mark to recovery.
     pub activation_id: String,
     /// Untrusted hint; the supervisor validates this tree and derives the executable from CoreKind.
@@ -85,6 +89,7 @@ pub fn from_generated_config(
     core: CoreKind,
     listen_port: u16,
     foreground: bool,
+    peer_transport: BrokerSocketTransport,
     activation_id: String,
     managed_core_root: PathBuf,
     generated_config: &[u8],
@@ -101,6 +106,7 @@ pub fn from_generated_config(
         core,
         listen_port,
         foreground,
+        peer_transport,
         activation_id,
         managed_core_root,
         generated_config,
@@ -209,6 +215,7 @@ mod tests {
             core: CoreKind::Xray,
             listen_port: 1080,
             foreground: false,
+            peer_transport: BrokerSocketTransport::Tcp,
             activation_id: "12345678-1234-4234-8234-123456789abc".to_owned(),
             managed_core_root: PathBuf::from("/home/user/.local/share/proxyctl/cores"),
             generated_config: r#"{"inbounds":[],"outbounds":[]}"#.to_owned(),
