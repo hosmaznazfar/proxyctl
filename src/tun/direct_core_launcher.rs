@@ -27,9 +27,6 @@ use crate::{
 pub struct SupervisedCore {
     pub child: Child,
     pub identity: ProcessIdentity,
-    /// Installed immediately after the exact child identity is captured, before attachment
-    /// polling or end-to-end readiness can block for several seconds.
-    _signal_guard: super::native_supervisor::SignalForwardingGuard,
 }
 
 /// Construct the fixed native argument vector for a core and staged config.
@@ -59,6 +56,7 @@ pub fn spawn_core(
     config: &Path,
     invoking_uid: u32,
     foreground: bool,
+    signal_guard: &mut super::native_supervisor::SignalForwardingGuard,
 ) -> Result<SupervisedCore> {
     ensure!(
         unsafe { libc::getuid() } == 0 && unsafe { libc::geteuid() } == 0,
@@ -169,21 +167,13 @@ pub fn spawn_core(
         }
     };
 
-    // Install signal ownership as soon as the exact child identity is available. In
-    // particular, do not wait for TUN attachment/readiness: those checks can block while
-    // the supervisor already owns journaled kernel state.
-    let signal_guard = match super::native_supervisor::SignalForwardingGuard::install(
-        identity.clone(),
-        foreground,
-    ) {
-        Ok(guard) => guard,
-        Err(error) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(error)
-                .context("cannot install TUN core signal forwarding immediately after spawn");
-        }
-    };
+    // Bind the pre-installed startup signal guard to this exact child before any attachment
+    // polling or end-to-end readiness can block.
+    if let Err(error) = signal_guard.attach_core(identity.clone()) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error).context("cannot attach the TUN core to startup signal ownership");
+    }
 
     let verification = (|| -> Result<()> {
         let process = ProcessHandle::open(identity.clone())
@@ -207,7 +197,6 @@ pub fn spawn_core(
     Ok(SupervisedCore {
         child,
         identity,
-        _signal_guard: signal_guard,
     })
 }
 
