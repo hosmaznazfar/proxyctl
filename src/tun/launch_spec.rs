@@ -102,6 +102,7 @@ impl LaunchSpec {
         ensure!(
             self.managed_core_root.is_absolute()
                 && self.managed_core_root.as_os_str().len() <= 4096
+                && self.managed_core_root.components().all(|component| matches!(component, std::path::Component::RootDir | std::path::Component::Normal(_)))
                 && self.managed_core_root.file_name().is_some_and(|name| name == "cores")
                 && self.managed_core_root.parent().and_then(std::path::Path::file_name).is_some_and(|name| name == "proxyctl"),
             "managed core directory hint is invalid"
@@ -211,7 +212,7 @@ mod tests {
         spec.managed_core_root = PathBuf::from("/home/user/proxyctl/other");
         assert!(spec.validate().is_err());
         spec.managed_core_root = PathBuf::from("/home/user/../other/proxyctl/cores");
-        assert!(spec.validate().is_ok(), "lexical traversal is rejected by the privileged path validator");
+        assert!(spec.validate().is_err());
     }
 
     #[test]
