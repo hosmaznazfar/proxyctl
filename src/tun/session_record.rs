@@ -52,27 +52,46 @@ impl SessionRecord {
 pub struct SessionStore {
     directory: PathBuf,
     owner_uid: u32,
+    invoking_uid: u32,
 }
 
 impl SessionStore {
     /// Open the root-owned runtime directory created by the privileged runtime bootstrap.
-    pub fn open_root_owned(directory: impl Into<PathBuf>) -> Result<Self> {
-        Self::open_for_owner(directory.into(), 0)
+    pub fn open_root_owned(
+        directory: impl Into<PathBuf>,
+        invoking_uid: u32,
+    ) -> Result<Self> {
+        let directory = directory.into();
+        ensure!(invoking_uid != 0, "TUN session owner UID must be non-zero");
+        ensure!(
+            directory.file_name().is_some_and(|name| name == invoking_uid.to_string()),
+            "privileged runtime directory does not match the invoking UID"
+        );
+        Self::open_for_owner(directory, 0, invoking_uid)
     }
 
-    fn open_for_owner(directory: PathBuf, expected_uid: u32) -> Result<Self> {
-        verify_directory(&directory, expected_uid)?;
+    fn open_for_owner(
+        directory: PathBuf,
+        expected_owner_uid: u32,
+        invoking_uid: u32,
+    ) -> Result<Self> {
+        ensure!(invoking_uid != 0, "TUN session owner UID must be non-zero");
+        verify_directory(&directory, expected_owner_uid)?;
         Ok(Self {
             directory: fs::canonicalize(&directory)
                 .context("cannot canonicalize privileged TUN session directory")?,
-            owner_uid: expected_uid,
+            owner_uid: expected_owner_uid,
+            invoking_uid,
         })
     }
 
     /// Persist the first session record without replacing any existing recovery evidence.
     pub fn create(&self, record: &SessionRecord) -> Result<()> {
         record.validate()?;
-        ensure!(record.invoking_uid != 0, "root cannot own an unprivileged TUN session");
+        ensure!(
+            record.invoking_uid == self.invoking_uid,
+            "TUN session record UID does not match its privileged runtime directory"
+        );
         ensure!(
             self.load()?.is_none(),
             "an existing privileged TUN session must be recovered before starting another"
@@ -128,6 +147,10 @@ impl SessionStore {
         let record: SessionRecord = serde_json::from_slice(&bytes)
             .context("privileged TUN session record is malformed")?;
         record.validate()?;
+        ensure!(
+            record.invoking_uid == self.invoking_uid,
+            "TUN session record UID does not match its privileged runtime directory"
+        );
         Ok(Some(record))
     }
 
@@ -254,14 +277,14 @@ mod tests {
         fs::create_dir(&target).unwrap();
         fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
         symlink(&target, &link).unwrap();
-        assert!(SessionStore::open_for_owner(link, unsafe { libc::geteuid() }).is_err());
+        assert!(SessionStore::open_for_owner(link, unsafe { libc::geteuid() }, unsafe { libc::getuid() }).is_err());
     }
 
     #[test]
     fn rejects_session_directory_with_permissive_mode() {
         let directory = tempfile::tempdir().unwrap();
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }).is_err());
+        assert!(SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }, unsafe { libc::getuid() }).is_err());
     }
 
     #[test]
