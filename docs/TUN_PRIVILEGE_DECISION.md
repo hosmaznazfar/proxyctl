@@ -296,7 +296,7 @@ The implementation has a bounded, versioned JSON acknowledgement on the dedicate
 
 The Linux lifecycle coordinator also has a root-side `bind_core_session` operation. Under the lifecycle lock it verifies the pinned process and its credentials against the privileged supervisor's effective UID (root in production), writes the root-owned session receipt first, then persists the matching `Running` lifecycle manifest with the same process identity. The receipt separately binds the invoking non-root UID. If the manifest write fails, the receipt is deliberately retained as recovery evidence.
 
-The exact crash-state matrix and remaining gates are documented in [TUN_SUPERVISOR_PROTOCOL.md](TUN_SUPERVISOR_PROTOCOL.md). This is still groundwork only: the acknowledgement transport and durable commit method are not connected to core spawning, readiness, supervisor detachment, stop, or recovery. The TUN activation gate remains closed, and no host networking changes are made.
+The exact crash-state matrix and remaining gates are documented in [TUN_SUPERVISOR_PROTOCOL.md](TUN_SUPERVISOR_PROTOCOL.md). The acknowledgement transport, durable commit, native core startup, full readiness, background monitoring, explicit stop, and journal recovery are now connected for sing-box and Mihomo. Xray's descriptor-backed lifecycle and automatic reboot-time recovery remain outside this implementation.
 
 
 ## Pidfd-safe stop and durable cleanup finalization
@@ -305,7 +305,7 @@ The lifecycle coordinator can now move a matching activation to `CleanupPending`
 
 Final record cleanup is separate and fail-closed. It requires the recorded core to be gone, a matching transaction journal with all operations durably `Removed` or `Absent`, and an exact removed fingerprint for every owned manifest resource. It then persists `Cleaned`, removes the completed journal and matching session receipt, and finally removes the manifest. The operation is restartable across crashes at each durable boundary.
 
-The coordinator now has a generic recovery orchestration method that can invoke the existing compare-before-delete journal recovery executor through a caller-supplied privileged backend, then finalize the root-owned receipt and manifest. It retains the completed journal until the `Cleaned` phase is durable. This method is not wired to CLI stop or the hidden supervisor, and no recovery backend has been invoked by this implementation. The hidden supervisor still does not launch a core, and TUN remains disabled.
+The coordinator's generic recovery orchestration is wired into both explicit `tun stop` and the native supervisor's core-exit path. It invokes the compare-before-delete journal executor through the privileged Linux backend, retains the completed journal until the `Cleaned` phase is durable, and then finalizes the root-owned receipt and manifest. Abrupt supervisor death is bounded by a parent-death signal on the core; any remaining kernel resources are recovered by explicit `tun stop`.
 
 
 Launch protocol version 5 carries the kernel-generated activation UUID, non-zero generation, foreground preference, resolved proxy peer candidates, and exactly one IPv4 plus one IPv6 numeric HTTP readiness target. The supervisor validates those bounded inputs and reuses the exact activation UUID/generation for the manifest, transaction journal, and session receipt; it does not generate replacement identities. The pre-activation DNS/firewall baseline is captured independently by the privileged supervisor and is never accepted from the request.
