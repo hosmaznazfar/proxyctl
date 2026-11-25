@@ -149,6 +149,11 @@ impl ProcessHandle {
         &self.identity
     }
 
+    /// Borrow the pinned pidfd for async-signal-safe supervisor forwarding.
+    pub fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        self.pidfd.as_raw_fd()
+    }
+
     pub fn is_exited(&self) -> Result<bool> {
         self.wait_exit(Duration::ZERO)
     }
