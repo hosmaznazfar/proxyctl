@@ -396,7 +396,19 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     tun_probe_status,
                     foreground,
                 )?;
-                let session = crate::services::tun_handoff::request_supervisor_session(&spec)?;
+                let session = match crate::services::tun_handoff::request_supervisor_session(&spec) {
+                    Ok(session) => session,
+                    Err(error) => {
+                        return match crate::services::tun_handoff::request_supervisor_recovery() {
+                            Ok(()) => Err(error).context(
+                                "TUN startup failed; privileged recovery was requested for any partial activation",
+                            ),
+                            Err(recovery_error) => Err(error).context(format!(
+                                "TUN startup failed and privileged recovery also failed ({recovery_error:#}); durable evidence may require manual recovery"
+                            )),
+                        };
+                    }
+                };
                 if foreground {
                     println!(
                         "Foreground TUN session for node #{} with {} has exited (activation {}).",
