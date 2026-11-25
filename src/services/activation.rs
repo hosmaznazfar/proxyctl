@@ -983,9 +983,15 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
 }
 
 /// Report whether a prior loopback session is awaiting restoration after TUN mode.
+#[cfg(target_os = "linux")]
 pub fn has_pending_previous_loopback() -> anyhow::Result<bool> {
     let (runtime, _) = paths()?;
     Ok(runtime.join("tun-previous.json").exists())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn has_pending_previous_loopback() -> anyhow::Result<bool> {
+    Ok(false)
 }
 
 /// Restore the saved loopback session after a TUN session has been stopped or failed.
