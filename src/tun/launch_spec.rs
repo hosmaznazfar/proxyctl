@@ -347,6 +347,13 @@ mod tests {
         assert!(spec.validate().is_err());
 
         spec = sample();
+        spec.expected_peers = vec![
+            "198.51.100.1:443".parse().unwrap(),
+            "198.51.100.1:443".parse().unwrap(),
+        ];
+        assert!(spec.validate().is_err());
+
+        spec = sample();
         spec.traffic_targets.pop();
         assert!(spec.validate().is_err());
 
