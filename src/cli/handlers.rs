@@ -116,8 +116,7 @@ fn run_tun_recovery() -> anyhow::Result<()> {
                     &journal.activation_id,
                     journal.generation,
                 )?;
-            let report =
-                crate::tun::journal_recovery_executor::recover(&store, &mut backend)?;
+            let report = crate::tun::journal_recovery_executor::recover(&store, &mut backend)?;
             println!(
                 "Recovered pre-manifest TUN transaction {} (generation {}): {} resources removed, {} already absent.",
                 journal.activation_id,

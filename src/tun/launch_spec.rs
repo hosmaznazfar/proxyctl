@@ -243,7 +243,10 @@ mod tests {
             "12345678-1234-4234-8234-123456789abz",
         ] {
             spec.activation_id = invalid.to_owned();
-            assert!(spec.validate().is_err(), "accepted activation ID {invalid:?}");
+            assert!(
+                spec.validate().is_err(),
+                "accepted activation ID {invalid:?}"
+            );
         }
     }
 
