@@ -9,6 +9,7 @@ use anyhow::{Context, Result, ensure};
 use std::{
     fs,
     os::fd::BorrowedFd,
+    os::unix::process::CommandExt,
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::Path,
     process::{Child, Command, Stdio},
@@ -113,6 +114,30 @@ pub fn spawn_core(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+
+    // The supervisor is the core's direct parent. If it is killed or crashes, the kernel
+    // terminates this child so an unmonitored root core cannot outlive its session owner.
+    let supervisor_pid = unsafe { libc::getpid() };
+    // SAFETY: the pre-exec hook uses only async-signal-safe syscalls and does not access
+    // parent-owned Rust state beyond the copied PID.
+    unsafe {
+        command.pre_exec(move || {
+            if libc::prctl(
+                libc::PR_SET_PDEATHSIG,
+                libc::SIGTERM as libc::c_ulong,
+                0,
+                0,
+                0,
+            ) != 0
+            {
+                return Err(std::io::Error::last_os_error());
+            }
+            if libc::getppid() != supervisor_pid {
+                return Err(std::io::Error::from_raw_os_error(libc::ESRCH));
+            }
+            Ok(())
+        });
+    }
 
     // Keep the duplicated descriptor alive until spawn has completed. The parent copy stays
     // CLOEXEC; only the forked child clears CLOEXEC in its pre-exec hook.
