@@ -153,10 +153,21 @@ fn build_dual_stack_probe_targets(
     addresses: impl IntoIterator<Item = std::net::SocketAddr>,
     expected_status: u16,
 ) -> anyhow::Result<Vec<crate::tun::readiness::HttpProbeTarget>> {
-    let host_header = probe
-        .host_str()
-        .context("TUN readiness URL has no host")?
-        .to_owned();
+    let host_header = match probe.host().context("TUN readiness URL has no host")? {
+        url::Host::Ipv6(address) => format!("[{address}]"),
+        url::Host::Ipv4(address) => address.to_string(),
+        url::Host::Domain(domain) => domain.to_owned(),
+    };
+    let host_header = if probe.port_or_known_default() == Some(80) {
+        host_header
+    } else {
+        format!(
+            "{host_header}:{}",
+            probe
+                .port_or_known_default()
+                .context("TUN readiness URL has no usable port")?
+        )
+    };
     let path = if probe.path().is_empty() {
         "/".to_owned()
     } else {
