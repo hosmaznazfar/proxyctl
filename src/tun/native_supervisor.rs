@@ -130,6 +130,12 @@ pub fn start(
         runtime == std::path::PathBuf::from("/run/proxyctl").join(invoking_uid.to_string()),
         "TUN runtime path does not match the authenticated invoking UID"
     );
+    super::core_paths::resolve_managed_core(
+        &spec.managed_core_root,
+        invoking_uid,
+        spec.core,
+    )
+    .context("selected managed core failed privileged path validation before kernel setup")?;
 
     let baseline_host = crate::tun::inspect()
         .context("cannot capture pre-activation host network baseline")?;
