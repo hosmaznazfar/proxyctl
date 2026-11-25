@@ -4,6 +4,28 @@ use anyhow::Context;
 use std::io::IsTerminal;
 
 
+
+/// Write the one-shot acknowledgement, then close stdout so a future detached supervisor can
+/// keep monitoring without keeping the front end's acknowledgement pipe open.
+fn write_final_supervisor_reply(
+    reply: &crate::tun::supervisor_protocol::SupervisorReply,
+) -> anyhow::Result<()> {
+    let write_result = crate::tun::supervisor_protocol::write_reply(
+        std::io::stdout().lock(),
+        reply,
+    );
+    // SAFETY: this hidden supervisor owns its stdout descriptor and never writes human output
+    // there; closing it delimits the one-shot protocol frame for the waiting front end.
+    let close_result = unsafe { libc::close(1) };
+    write_result?;
+    anyhow::ensure!(
+        close_result == 0,
+        "cannot close supervisor acknowledgement channel: {}",
+        std::io::Error::last_os_error()
+    );
+    Ok(())
+}
+
 /// Execute the validation-only supervisor and always return a machine-readable acknowledgement
 /// on stdout. Human-readable errors continue through the normal stderr path.
 fn run_tun_supervisor() -> anyhow::Result<()> {
@@ -40,8 +62,7 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
 
     match result {
         Ok(()) => {
-            crate::tun::supervisor_protocol::write_reply(
-                std::io::stdout().lock(),
+            write_final_supervisor_reply(
                 &crate::tun::supervisor_protocol::SupervisorReply::not_started(
                     "request validated; core launch and networking are not implemented",
                 ),
@@ -54,7 +75,7 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
             let reply = crate::tun::supervisor_protocol::SupervisorReply::failed(format!(
                 "{error:#}"
             ));
-            crate::tun::supervisor_protocol::write_reply(std::io::stdout().lock(), &reply)
+            write_final_supervisor_reply(&reply)
                 .context("cannot send structured supervisor failure acknowledgement")?;
             Err(error)
         }
