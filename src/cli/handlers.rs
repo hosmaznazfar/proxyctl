@@ -101,10 +101,32 @@ fn run_tun_recovery() -> anyhow::Result<()> {
         crate::tun::session_record::SessionStore::open_root_owned(runtime, invoking_uid)?;
 
     let Some(current) = coordinator.load_current()? else {
+        // The journal is committed before the first kernel mutation. A crash can therefore
+        // leave a journal without a manifest while creating the initial TUN interface. With
+        // no session receipt, the journal itself is sufficient authority for the existing
+        // compare-before-delete executor; it never guesses a PID or consults user state.
         anyhow::ensure!(
-            sessions.load()?.is_none() && store.load_transaction_journal()?.is_none(),
-            "orphaned privileged TUN receipt or transaction journal has no manifest; preserving it for manual recovery"
+            sessions.load()?.is_none(),
+            "orphaned privileged TUN session receipt has no manifest; preserving it for manual recovery"
         );
+        if let Some(journal) = store.load_transaction_journal()? {
+            let mut backend =
+                crate::tun::linux_journal_backend::LinuxJournalBackend::open_for_recovery(
+                    store.clone(),
+                    &journal.activation_id,
+                    journal.generation,
+                )?;
+            let report =
+                crate::tun::journal_recovery_executor::recover(&store, &mut backend)?;
+            println!(
+                "Recovered pre-manifest TUN transaction {} (generation {}): {} resources removed, {} already absent.",
+                journal.activation_id,
+                journal.generation,
+                report.removed.len(),
+                report.already_absent.len()
+            );
+            return Ok(());
+        }
         println!("No privileged TUN session or recovery manifest exists.");
         return Ok(());
     };
