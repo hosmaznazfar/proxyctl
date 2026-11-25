@@ -374,7 +374,8 @@ impl LifecycleCoordinator {
             }
         } else {
             ensure!(
-                snapshot.manifest.resources.is_empty(),
+                snapshot.phase == SupervisorPhase::Cleaned
+                    || snapshot.manifest.resources.is_empty(),
                 "TUN resource manifest exists but its transaction journal is missing"
             );
         }
