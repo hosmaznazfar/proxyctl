@@ -1632,10 +1632,11 @@ mod tests {
     }
 
     #[test]
-    fn new_tun_activation_stays_fail_closed_during_supervisor_migration() {
+    fn legacy_tun_activation_api_stays_fail_closed() {
         let error = ensure_tun_session_backend_ready().unwrap_err().to_string();
-        assert!(error.contains("single-executable supervisor migration"));
-        assert!(error.contains("existing generations"));
+        assert!(error.contains("legacy helper-managed TUN activation API is disabled"));
+        assert!(error.contains("proxyctl use --tun"));
+        assert!(error.contains("proxyctl tun start"));
     }
 
     #[cfg(target_os = "linux")]
