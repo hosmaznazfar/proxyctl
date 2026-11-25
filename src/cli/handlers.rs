@@ -400,71 +400,72 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
             if tun {
-                anyhow::ensure!(
-                    !crate::services::activation::has_pending_previous_loopback()?
-                        && !crate::services::activation::has_pending_tun_session()?,
-                    "a previous TUN session or loopback restoration is pending; run 'proxyctl tun stop' before starting another TUN session"
-                );
-                let listen_port = match port {
-                    Some(port) => port,
-                    None => crate::services::listener_config::listen_port()?,
-                };
-                let spec = crate::services::tun_preparation::prepare_launch_spec(
-                    stable_id,
-                    core,
-                    listen_port,
-                    &tun_probe_url,
-                    tun_probe_status,
-                    foreground,
-                )?;
-                crate::services::activation::write_tun_session_marker(
-                    &spec.activation_id,
-                    spec.generation,
-                )?;
-                let session = match crate::services::tun_handoff::request_supervisor_session(&spec) {
-                    Ok(session) => session,
-                    Err(error) => {
-                        if let Err(recovery_error) =
-                            crate::services::tun_handoff::request_supervisor_recovery()
-                        {
-                            return Err(error).context(format!(
-                                "TUN startup failed and privileged recovery also failed ({recovery_error:#}); durable evidence may require manual recovery"
-                            ));
-                        }
-                        crate::services::activation::clear_tun_session_marker()?;
-                        return match crate::services::activation::restore_previous_loopback_if_any() {
-                            Ok(true) => Err(error).context(
-                                "TUN startup failed; privileged recovery completed and the previous loopback session was restored",
-                            ),
-                            Ok(false) => Err(error).context(
-                                "TUN startup failed; privileged recovery was requested for any partial activation",
-                            ),
-                            Err(restore_error) => Err(error).context(format!(
-                                "TUN startup failed; privileged recovery completed but previous loopback restoration failed ({restore_error:#})"
-                            )),
-                        };
-                    }
-                };
-                if foreground {
-                    crate::services::activation::clear_tun_session_marker()?;
-                    println!(
-                        "Foreground TUN session for node #{} with {} has exited (activation {}).",
+                #[cfg(target_os = "linux")]
+                {
+                    anyhow::ensure!(
+                        !crate::services::activation::has_pending_previous_loopback()?
+                            && !crate::services::activation::has_pending_tun_session()?,
+                        "a previous TUN session or loopback restoration is pending; run 'proxyctl tun stop' before starting another TUN session"
+                    );
+                    let listen_port = match port {
+                        Some(port) => port,
+                        None => crate::services::listener_config::listen_port()?,
+                    };
+                    let spec = crate::services::tun_preparation::prepare_launch_spec(
                         stable_id,
                         core,
-                        session.activation_id
-                    );
-                } else {
-                    println!(
-                        "Started node #{} with {} in TUN mode.",
-                        stable_id,
-                        core
-                    );
-                    println!(
-                        "Local HTTP/SOCKS proxy listener: 127.0.0.1:{}",
-                        listen_port
-                    );
-                    println!("Stop TUN mode with 'proxyctl tun stop'.");
+                        listen_port,
+                        &tun_probe_url,
+                        tun_probe_status,
+                        foreground,
+                    )?;
+                    crate::services::activation::write_tun_session_marker(
+                        &spec.activation_id,
+                        spec.generation,
+                    )?;
+                    let session = match crate::services::tun_handoff::request_supervisor_session(&spec) {
+                        Ok(session) => session,
+                        Err(error) => {
+                            if let Err(recovery_error) =
+                                crate::services::tun_handoff::request_supervisor_recovery()
+                            {
+                                return Err(error).context(format!(
+                                    "TUN startup failed and privileged recovery also failed ({recovery_error:#}); durable evidence may require manual recovery"
+                                ));
+                            }
+                            crate::services::activation::clear_tun_session_marker()?;
+                            return match crate::services::activation::restore_previous_loopback_if_any() {
+                                Ok(true) => Err(error).context(
+                                    "TUN startup failed; privileged recovery completed and the previous loopback session was restored",
+                                ),
+                                Ok(false) => Err(error).context(
+                                    "TUN startup failed; privileged recovery was requested for any partial activation",
+                                ),
+                                Err(restore_error) => Err(error).context(format!(
+                                    "TUN startup failed; privileged recovery completed but previous loopback restoration failed ({restore_error:#})"
+                                )),
+                            };
+                        }
+                    };
+                    if foreground {
+                        crate::services::activation::clear_tun_session_marker()?;
+                        println!(
+                            "Foreground TUN session for node #{} with {} has exited (activation {}).",
+                            stable_id,
+                            core,
+                            session.activation_id
+                        );
+                    } else {
+                        println!("Started node #{} with {} in TUN mode.", stable_id, core);
+                        println!(
+                            "Local HTTP/SOCKS proxy listener: 127.0.0.1:{}",
+                            listen_port
+                        );
+                        println!("Stop TUN mode with 'proxyctl tun stop'.");
+                    }
                 }
+                #[cfg(not(target_os = "linux"))]
+                anyhow::bail!("managed TUN activation is supported only on Linux");
             } else {
                 crate::services::activation::activate(stable_id, core, false, port, foreground)?;
             }
