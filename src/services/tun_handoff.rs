@@ -1,7 +1,8 @@
 //! Direct, shell-free privilege handoff for the internal TUN supervisor.
 //!
-//! This transports a bounded generated request only. The supervisor still fails closed
-//! after validation until the root-owned lifecycle and recovery backend is implemented.
+//! This transports a bounded generated request to the single-executable privileged supervisor.
+//! The supervisor owns native core startup, readiness, durable session commit, monitoring,
+//! and generation-scoped journal recovery.
 use anyhow::{Context, Result, ensure};
 use std::{
     io::{Read, Write},
