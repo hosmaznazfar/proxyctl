@@ -6,7 +6,7 @@ Each supported core has an explicit adapter implementation:
 - `src/cores/adapters/xray.rs`
 - `src/cores/adapters/mihomo.rs`
 
-The shared `CoreAdapter` trait is a contract, not a place for core-specific configuration switches. Every adapter must implement:
+The shared `CoreAdapter` trait is a contract, not a place for core-specific configuration switches. Every adapter implements:
 
 - semantic compatibility evaluation;
 - single-node native config generation;
@@ -36,15 +36,43 @@ For a new core:
 - Interactive and benchmark listeners bind only to `127.0.0.1`.
 - Interactive activation exposes the intended local mixed SOCKS5/HTTP endpoint.
 - Benchmark configs expose only the configured local listener and route each batch listener to its matching outbound.
-- Generated TUN config must keep automatic route, DNS, and firewall integration disabled until the separately gated TUN lifecycle is implemented and approved.
+- Generated TUN config must keep automatic route, DNS, and firewall integration disabled until the separately gated TUN lifecycle owns those resources.
 - A native option that cannot be represented must be reported as unsupported; it must not be silently discarded.
 - Secrets must not appear in diagnostics or persisted runtime metadata.
+
+## Native TUN attachment contracts
+
+The adapter reports how its core obtains the TUN device. This is separate from whether the complete privileged runtime lifecycle is enabled.
+
+| Core | Adapter attachment mode | Generated TUN behavior | Native supervisor |
+|---|---|---|---|
+| sing-box | `NativeDeviceCreation` | Adds a named TUN inbound (`tun-proxyctl`); disables automatic route and DNS integration; marks the proxy outbound. | Enabled on Linux |
+| Mihomo | `NativeDeviceCreation` | Enables the named TUN device (`tun-proxyctl`); disables auto-route, auto-redirect, and DNS integration; marks proxy outbound traffic. | Enabled on Linux |
+| Xray | `ExternalDescriptorEnvironment` (`XRAY_TUN_FD`) | Generates an Xray native `tun` inbound with the configured interface name, addresses, MTU, sniffing, and marked proxy outbound. | Deliberately disabled pending reconciliation |
+
+### Xray is not yet enabled
+
+Xray currently has two different contracts that must not be conflated:
+
+- Its adapter generates a native Xray `tun` inbound with a named interface.
+- Its attachment metadata and legacy `xray_launcher` describe an externally supplied descriptor, including a separate systemd/helper-based launch path.
+
+The new single-executable native supervisor accepts only `NativeDeviceCreation` and currently enables sing-box and Mihomo. Do not change Xray's attachment mode or enable it in that supervisor until the adapter, config, process launch, device ownership, readiness, stop, and recovery paths all agree on one model.
+
+The legacy descriptor/systemd launcher is compatibility code, not the architecture for new native sessions. New TUN sessions must continue to use one installed `proxyctl` executable, TUN-only sudo elevation, and no separately installed helper package or persistent service.
+
+### Ownership rules
+
+- `NativeDeviceCreation` means the selected core creates and owns its named TUN device. Proxyctl's privileged supervisor still owns routes, policy rules, session records, readiness, monitoring, and recovery.
+- An externally supplied descriptor means another component creates and owns the TUN device and passes an already-open file descriptor to the core. It is not interchangeable with native device creation.
+- Never combine a broker-created exclusive descriptor with a core configuration that independently creates a persistent named device.
+- Never enable activation from adapter metadata alone. The process attachment, end-to-end readiness, session commit, monitor, stop, and journaled recovery contracts must all be complete.
 
 ## Test layers
 
 Core-specific config contract tests live alongside each adapter and assert that adapter-owned native fields and safety defaults remain stable. Shared adapter tests verify cross-core invariants. Benchmark batch tests cover one, ten, and fifty targets and ensure listener-to-outbound routing remains one-to-one.
 
-Run the offline adapter checks with:
+Run the offline adapter checks locally:
 
 ```fish
 cargo fmt --all -- --check
@@ -55,14 +83,3 @@ cargo build --release --locked
 ```
 
 These checks do not start a real proxy core or change system networking.
-
-
-## Native TUN attachment contracts
-
-The adapter contract now reports the native device-acquisition mode independently of config generation:
-
-- **Xray:** Linux supports an externally supplied TUN descriptor through `XRAY_TUN_FD`. This is documented by Project X. Proxyctl has not yet wired descriptor export from the privileged broker, inheritance into the managed Xray process, or readiness confirmation; this capability declaration is not end-to-end support.
-- **sing-box:** the current standalone configuration opens/creates a named TUN device. No verified external-FD injection contract is exposed by the current adapter, so it is classified as native device creation and cannot consume the broker-retained descriptor through the present path.
-- **Mihomo:** remains unsupported for Proxyctl's marked TUN activation contract.
-
-Do not treat `NativeDeviceCreation` as compatible with a broker-owned exclusive TUN descriptor. Do not enable activation based on this metadata alone. The adapter metadata exists so orchestration can reject mismatched ownership models rather than assuming every native TUN config can adopt an externally created device.
