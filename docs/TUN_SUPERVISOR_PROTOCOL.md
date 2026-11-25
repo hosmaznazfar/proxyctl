@@ -128,3 +128,21 @@ The journaled `supervisor_activation::apply_native_kernel_plan` API now requires
 Xray is rejected before the journal backend is opened. Its current adapter contract is `XRAY_TUN_FD` and its launcher requires a generation-bound broker descriptor; it must use the descriptor-backed transaction/attachment path rather than accidentally combining an externally supplied descriptor with a separately created persistent named device. The three core strategies must not be treated as interchangeable.
 
 This guard is a migration safety boundary, not an Xray implementation. The hidden single-executable supervisor still does not launch any core, and `tun start` remains disabled.
+
+
+## Native core startup and session commit boundary
+
+A Linux-only `native_session` module now provides the next ordered step after journaled native-device preparation. It accepts only sing-box and Mihomo and validates that the launch request, activation token, and durable manifest all identify the same `Prepared` generation and persistent `tun-proxyctl` interface.
+
+The startup sequence is fixed:
+
+1. Re-read the root-owned Prepared manifest and verify its exact activation token.
+2. Spawn the selected managed core directly with fixed argv, the root-staged config, and no external descriptor.
+3. Wait a bounded five seconds for the exact process to open the exact persistent TUN interface (name and ifindex).
+4. Run a mandatory caller-supplied end-to-end readiness verifier. There is no no-op/default readiness callback.
+5. Construct a kernel-nonce session receipt binding the invoking UID, activation, generation, core kind, and exact process identity.
+6. Commit the receipt first, then atomically bind the same process identity to the manifest's Running phase.
+
+If any post-spawn step fails, the direct child is killed and reaped where possible. The Prepared manifest, journal, and any receipt already committed are retained as recovery evidence; this path never attempts ad-hoc kernel cleanup. The caller must invoke the existing explicit recovery path. The caller must also retain the staged config for the complete core lifetime.
+
+This is a startup/commit primitive, not yet the production supervisor loop. It does not send the `started` acknowledgement, own the staged config beyond the caller's scope, monitor the child after commit, handle supervisor signals, or enable `tun start`. Those remain mandatory integration gates.
