@@ -133,3 +133,19 @@ steps. It does not launch sudo/supervisor/core, allocate or persist a TUN genera
 create privileged runtime files, or mutate host networking. The activation gate remains
 closed. This API is not yet wired to `tun start`; port-availability checks and supervisor
 handoff/startup acknowledgement belong to subsequent slices.
+
+
+## Shell-free privilege handoff transport
+
+A new `services::tun_handoff` transport serializes a validated LaunchSpec using the
+bounded protocol encoder and invokes `sudo -- <current-proxyctl-executable>
+__tun-supervisor` using direct argv (no shell or shell script). The generated request
+is written to the child stdin and stdin is closed to delimit the message. stdout and
+stderr are inherited; sudo's password prompt remains terminal-driven, not stdin-driven.
+
+The transport resolves sudo from PATH and canonicalizes its executable, and resolves the
+current Proxyctl executable from the process environment. It does not pass arbitrary core
+paths or arguments. This transport is deliberately not connected to the TUN CLI yet:
+the supervisor remains validation-only and networking stays fail-closed until the
+root-runtime ownership, lifecycle handshake, process identity, journaled mutation,
+readiness and recovery path are completed and locally verified.
