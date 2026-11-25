@@ -200,17 +200,13 @@ The first supervisor process-launch implementation must reuse the established co
 
 Only the staged config pathname is dynamic, and it is generated inside the verified root-owned runtime. The request cannot supply argv, environment variables, a working directory, or any filesystem path. The child receives null stdin; supervisor diagnostics remain separate from the generated-config transport. No shell is involved.
 
-### Managed-core path resolution is a prerequisite
+### Managed-core path resolution
 
-The unprivileged installer currently honors `XDG_DATA_HOME` (or `$HOME/.local/share`) and places cores below `proxyctl/cores/<core>/<executable>`. The root supervisor cannot safely reuse its own environment, trust an arbitrary path from the request, or read the user's redb database to discover that path. Before core spawning is implemented, the project must settle a trusted way to resolve the invoking user's effective data root while preserving XDG behavior. The path resolver must:
+This prerequisite is implemented by the version-3 launch request and Linux `tun::core_paths` validator. The unprivileged preparation service sends the effective `managed_cores_path()` as a directory hint, preserving custom `XDG_DATA_HOME` without asking the privileged process to trust root's environment or guess a home-directory default.
 
-- derive the home directory from the invoking UID's system account record, not from root's `HOME`;
-- define and validate how a non-default `XDG_DATA_HOME` is obtained without accepting an unchecked request path;
-- walk each path component without following symlinks, verify ownership and non-group/world-writable permissions, and enforce the fixed `proxyctl/cores/<core>` suffix;
-- require a regular executable owned by the invoking UID and reject unexpected mode/ownership states;
-- canonicalize and re-check the final executable immediately before spawn.
+The hint is not an executable path. The supervisor validates the absolute `proxyctl/cores` suffix, rejects lexical traversal and symlinked components, checks ownership and write permissions through the full path, requires the Proxyctl and core directories to be invoking-user-owned mode 0700, and derives the executable name from the closed CoreKind enum. The executable must be a regular file owned by the invoking UID, executable, not group/world writable, and resolve beneath the canonical managed root.
 
-If a secure, compatible XDG resolution cannot be established, the supervisor must fail closed with a clear diagnostic; it must not silently launch a different core from the default data directory. These checks document the trust boundary, not immutability: the invoking user owns the managed binary and explicitly authorizes its execution as root through sudo.
+The validator is deliberately not described as race-free or as making a user-owned binary immutable. The invoking user owns the binary and explicitly authorizes its root execution through sudo. The eventual process-launch path must repeat the validation immediately before spawning and retain the canonical executable identity in its session record. No executable is launched by the current validation-only supervisor.
 
 ### Process identity and startup handshake
 
