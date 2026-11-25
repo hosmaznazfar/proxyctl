@@ -1099,6 +1099,17 @@ mod tests {
         assert_eq!(current.snapshot.phase, SupervisorPhase::CleanupPending);
         assert_eq!(current.snapshot.core_process, Some(identity));
         assert_eq!(sessions.load().unwrap(), Some(record));
+        assert!(
+            coordinator
+                .finalize_session_cleanup(&token, &sessions)
+                .is_err(),
+            "resource-bearing manifest without its completed transaction journal must be retained"
+        );
+        assert_eq!(sessions.load().unwrap(), Some(record));
+        assert_eq!(
+            coordinator.load_current().unwrap().unwrap().snapshot.phase,
+            SupervisorPhase::CleanupPending
+        );
         child.wait().unwrap();
     }
 
