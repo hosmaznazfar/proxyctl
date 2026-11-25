@@ -25,7 +25,7 @@ fn write_final_supervisor_reply(
     Ok(())
 }
 
-/// Execute the validation-only supervisor and always return a machine-readable acknowledgement
+/// Execute the privileged native TUN supervisor and return a machine-readable startup acknowledgement
 /// on stdout. Human-readable errors continue through the normal stderr path.
 #[cfg(target_os = "linux")]
 fn run_tun_supervisor() -> anyhow::Result<()> {
