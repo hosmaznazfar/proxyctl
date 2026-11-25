@@ -275,9 +275,7 @@ impl CoreAdapter for XrayAdapter {
 
     #[cfg(target_os = "linux")]
     fn tun_attachment_mode(&self) -> super::TunAttachmentMode {
-        super::TunAttachmentMode::ExternalDescriptorEnvironment {
-            variable: super::XRAY_TUN_FD_ENV,
-        }
+        super::TunAttachmentMode::NativeDeviceCreation
     }
 
     fn generate_tun_activation_config(
@@ -574,9 +572,7 @@ mod config_contract_tests {
         #[cfg(target_os = "linux")]
         assert_eq!(
             super::XrayAdapter.tun_attachment_mode(),
-            super::super::TunAttachmentMode::ExternalDescriptorEnvironment {
-                variable: super::super::XRAY_TUN_FD_ENV
-            }
+            super::super::TunAttachmentMode::NativeDeviceCreation
         );
         const {
             assert!(!CAPABILITIES.hysteria2 && CAPABILITIES.reality_vmess);

@@ -16,9 +16,10 @@ use std::path::Path;
 use crate::{cores::CoreId, domain::ProxyNode};
 
 pub use benchmark_batch::BenchmarkTarget;
-/// Linux interface name shared by Xray's generated TUN config and broker attachment checks.
+/// Linux interface name shared by Xray's native TUN config and supervisor attachment checks.
 pub const XRAY_TUN_INTERFACE_NAME: &str = "tun-proxyctl";
-/// Linux environment variable used by Xray to adopt an externally supplied TUN fd.
+/// Retained for compatibility with the isolated descriptor-transfer primitive; the supervised
+/// Xray path uses its native named-device mode and never sets this environment variable.
 pub const XRAY_TUN_FD_ENV: &str = "XRAY_TUN_FD";
 pub use shared::{Compatibility, CompatibilityStatus, GeneratedConfig};
 
@@ -54,8 +55,7 @@ pub enum TunAttachmentMode {
     /// The core accepts an externally supplied descriptor through a documented environment key.
     ExternalDescriptorEnvironment { variable: &'static str },
     /// The core creates or opens the device itself from its native configuration.
-    /// This is not compatible with broker-owned descriptor transfer and needs a separate
-    /// native-device lifecycle backend before it can be activated by Proxyctl.
+    /// Proxyctl may pre-create a generation-owned persistent interface for the core to open.
     NativeDeviceCreation,
     /// No supported TUN attachment contract is available in this adapter.
     Unsupported,
@@ -185,10 +185,8 @@ mod tun_mark_tests {
     #[test]
     fn core_tun_attachment_inventory_matches_verified_launch_contracts() {
         assert_eq!(
-            super::adapter(crate::cores::CoreId::Xray)
-                .tun_attachment_mode()
-                .external_descriptor_environment(),
-            Some(super::XRAY_TUN_FD_ENV)
+            super::adapter(crate::cores::CoreId::Xray).tun_attachment_mode(),
+            TunAttachmentMode::NativeDeviceCreation
         );
         assert_eq!(
             super::adapter(crate::cores::CoreId::SingBox).tun_attachment_mode(),

@@ -1,7 +1,8 @@
 //! Complete single-executable startup and monitoring for native persistent-device TUN cores.
 //!
 //! The privileged supervisor owns the staged config, kernel transaction, exact core child,
-//! durable session receipt, and cleanup monitor for the full session lifetime.
+//! durable session receipt, and cleanup monitor for the full session lifetime. Xray attaches
+//! through its native named-device mode; no descriptor broker or helper process is involved.
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
@@ -141,8 +142,8 @@ pub fn start(
         "native TUN startup must run inside the real/effective-root supervisor"
     );
     ensure!(
-        matches!(spec.core, CoreKind::SingBox | CoreKind::Mihomo),
-        "native persistent-device supervisor supports only sing-box and Mihomo"
+        matches!(spec.core, CoreKind::SingBox | CoreKind::Xray | CoreKind::Mihomo),
+        "unsupported TUN core kind"
     );
     spec.validate()?;
     ensure!(invoking_uid != 0, "invoking TUN UID must be non-zero");

@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
-    os::fd::{BorrowedFd, FromRawFd, OwnedFd},
+    os::fd::{FromRawFd, OwnedFd},
     os::unix::fs::{MetadataExt, PermissionsExt},
     os::unix::process::CommandExt,
     path::Path,
@@ -16,7 +16,7 @@ use std::{
 };
 
 use crate::{
-    cores::{CoreId, adapters::xray_tun_fd::XrayTunDescriptor},
+    cores::CoreId,
     tun::{
         launch_spec::CoreKind,
         process::{ProcessHandle, ProcessIdentity, read_process_owner_uid},
@@ -48,16 +48,14 @@ pub fn core_arguments(core: CoreKind, config: &Path) -> Result<Vec<String>> {
 
 /// Spawn one selected core directly as root, retaining only its exact process identity.
 ///
-/// Xray must receive the broker-created descriptor through its documented
-/// XRAY_TUN_FD contract. Sing-box and Mihomo use their persistent named TUN device and
-/// must not receive an inherited descriptor.
+/// All supported cores open the generation-owned persistent named TUN device from their
+/// native configuration. No core receives an inherited descriptor or special environment key.
 pub fn spawn_core(
     core: CoreKind,
     managed_core_root: &Path,
     config: &Path,
     invoking_uid: u32,
     foreground: bool,
-    xray_descriptor: Option<BorrowedFd<'_>>,
 ) -> Result<SupervisedCore> {
     ensure!(
         unsafe { libc::getuid() } == 0 && unsafe { libc::geteuid() } == 0,
@@ -93,16 +91,6 @@ pub fn spawn_core(
     let config =
         fs::canonicalize(config).context("cannot canonicalize staged TUN configuration")?;
     let arguments = core_arguments(core, &config)?;
-
-    match (core, xray_descriptor) {
-        (CoreKind::Xray, Some(_)) | (CoreKind::SingBox | CoreKind::Mihomo, None) => {}
-        (CoreKind::Xray, None) => {
-            anyhow::bail!("Xray TUN launch requires its generation-bound broker descriptor")
-        }
-        (CoreKind::SingBox | CoreKind::Mihomo, Some(_)) => {
-            anyhow::bail!("native-device TUN cores must not inherit an external descriptor")
-        }
-    }
 
     let mut command = Command::new(&executable);
     command
@@ -156,20 +144,9 @@ pub fn spawn_core(
         });
     }
 
-    // Keep the duplicated descriptor alive until spawn has completed. The parent copy stays
-    // CLOEXEC; only the forked child clears CLOEXEC in its pre-exec hook.
-    let descriptor_guard = xray_descriptor
-        .map(XrayTunDescriptor::duplicate)
-        .transpose()
-        .context("cannot duplicate the generation-bound Xray TUN descriptor")?;
-    if let Some(descriptor) = &descriptor_guard {
-        descriptor.configure_command(&mut command)?;
-    }
-
     let mut child = command
         .spawn()
         .with_context(|| format!("cannot spawn managed {} TUN core", core.as_str()))?;
-    drop(descriptor_guard);
 
     let identity_result = (|| -> Result<ProcessIdentity> {
         let identity = ProcessIdentity::capture(child.id())

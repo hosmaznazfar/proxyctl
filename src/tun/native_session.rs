@@ -19,8 +19,8 @@ use super::{
 };
 
 /// Validate that the launch request, Prepared manifest, and token describe one exact native
-/// persistent-device activation. Xray is deliberately excluded because its current adapter
-/// contract is descriptor-backed.
+/// persistent-device activation. Every supported core attaches to the same generation-owned
+/// named interface; Xray configures its MTU and gateway addresses through its native inbound.
 pub fn validate_prepared_native_activation(
     spec: &LaunchSpec,
     token: &ActivationToken,
@@ -28,8 +28,8 @@ pub fn validate_prepared_native_activation(
 ) -> Result<()> {
     spec.validate()?;
     ensure!(
-        matches!(spec.core, CoreKind::SingBox | CoreKind::Mihomo),
-        "native persistent-device startup supports only sing-box and Mihomo"
+        matches!(spec.core, CoreKind::SingBox | CoreKind::Xray | CoreKind::Mihomo),
+        "unsupported TUN core kind"
     );
     ensure!(
         spec.activation_id == token.activation_id()
@@ -87,7 +87,6 @@ where
         staged_config,
         invoking_uid,
         spec.foreground,
-        None,
     )
     .context("cannot launch selected native TUN core")?;
 

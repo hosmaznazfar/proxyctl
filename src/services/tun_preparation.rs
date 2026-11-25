@@ -41,10 +41,6 @@ pub fn prepare_launch_spec(
     let peer_transport = peer_transport_for_protocol(node.protocol);
 
     ensure!(
-        matches!(core, CoreId::SingBox | CoreId::Mihomo),
-        "the native persistent-device supervisor currently supports sing-box and Mihomo; Xray requires its separate descriptor-backed lifecycle"
-    );
-    ensure!(
         (200..=299).contains(&expected_status),
         "TUN readiness HTTP status must be within 200..=299"
     );

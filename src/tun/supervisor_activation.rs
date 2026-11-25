@@ -38,8 +38,8 @@ pub fn apply_native_kernel_plan(
     owner_gid: u32,
 ) -> Result<(ActivationToken, AppliedKernelTransaction)> {
     ensure!(
-        matches!(core, CoreKind::SingBox | CoreKind::Mihomo),
-        "journaled persistent-device activation supports only sing-box and Mihomo; Xray requires its separate descriptor-backed attachment path"
+        matches!(core, CoreKind::SingBox | CoreKind::Xray | CoreKind::Mihomo),
+        "unsupported TUN core kind"
     );
     ensure!(generation > 0, "TUN activation generation must be non-zero");
     ensure!(owner_uid != 0, "TUN interface owner UID must be non-zero");
