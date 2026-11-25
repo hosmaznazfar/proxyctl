@@ -10,7 +10,7 @@ Proxyctl follows v2rayN's **TUN-only elevation model**:
 
 - Ordinary Proxyctl commands and ordinary loopback core sessions remain unprivileged.
 - Only an explicitly requested TUN session invokes `sudo`.
-- The selected TUN core runs with root credentials for the TUN session and either creates its native TUN device or adopts a supervisor-owned descriptor, according to its adapter contract.
+- The selected TUN core runs with root credentials only for the TUN session and attaches to the generation-owned persistent named TUN device using its native configuration. Proxyctl remains the single owner of the privileged session lifecycle.
 - Proxyctl remains one application package with one installed `proxyctl` executable. The hidden `__tun-supervisor` and `__tun-recover` roles are invocations of that executable, not separately installed helpers, launchers, daemons, or systemd services.
 - No setuid bit or permanent file capabilities are installed.
 - Native persistent-device activation is enabled for sing-box, Mihomo, and Xray. Xray uses its native named-device inbound; no external descriptor broker is needed.
