@@ -4,6 +4,7 @@
 //! TCP connection. Other dataplane evidence remains independently supplied and fail-closed.
 
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 use std::{
     net::{IpAddr, SocketAddr, TcpStream},
     time::Duration,
