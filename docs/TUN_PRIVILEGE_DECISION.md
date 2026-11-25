@@ -170,3 +170,20 @@ The audit-login-UID cross-check intentionally fails closed in environments where
 Linux does not provide a valid login UID. Supporting such environments requires a
 separate, explicit identity-provenance design rather than trusting a caller-supplied
 UID or silently falling back to `SUDO_UID` alone.
+
+
+## Root-owned generated-config staging
+
+The Linux supervisor now stages the request's already-validated JSON configuration
+inside the verified per-UID runtime directory. It uses a kernel-generated unique
+identifier and exclusive file creation, writes the payload without shell or path input
+from the request, syncs it, and verifies that the resulting file is regular, root-owned,
+and mode 0600. The runtime directory is rechecked as a real root-owned mode-0700
+directory before staging.
+
+The staged-file guard removes the temporary config on normal scope exit and explicit
+close. If writing or metadata verification fails, the partial file is removed. This
+stage is intentionally ephemeral in the current validation-only supervisor: no core
+consumes it, no process/session manifest is created, and no host networking is changed.
+Durable config retention and cleanup will be tied to the supervisor-owned session
+manifest only when process lifecycle and crash recovery are implemented.
