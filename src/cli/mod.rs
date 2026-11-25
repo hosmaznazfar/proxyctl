@@ -209,11 +209,11 @@ enum Command {
         /// Override the persistent shared HTTP/SOCKS5 listener port for this activation only.
         #[arg(long, value_name = "PORT")]
         port: Option<u16>,
-        /// Request TUN mode (temporarily disabled during the single-executable supervisor migration).
+        /// Request TUN mode using the single-executable privileged supervisor.
         #[arg(long)]
         tun: bool,
         /// Keep the selected core attached to this terminal instead of backgrounding it.
-        #[arg(long, conflicts_with = "tun")]
+        #[arg(long)]
         foreground: bool,
         /// Plain HTTP endpoint used for a bounded direct TUN probe; it must return the expected 2xx status and keep the HTTP connection alive.
         #[arg(
