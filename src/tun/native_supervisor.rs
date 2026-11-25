@@ -51,7 +51,7 @@ impl RunningNativeSession {
             (Ok(status), Ok(())) => {
                 let requested_stop = matches!(
                     status.signal(),
-                    Some(libc::SIGINT | libc::SIGTERM | libc::SIGKILL)
+                    Some(libc::SIGINT) | Some(libc::SIGTERM) | Some(libc::SIGKILL)
                 );
                 ensure!(
                     status.success() || requested_stop,
