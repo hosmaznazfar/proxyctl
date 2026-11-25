@@ -1130,10 +1130,6 @@ pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
         if !previous_path.exists() {
             return Ok(false);
         }
-        ensure!(
-            !state_path.exists(),
-            "another Proxyctl-managed session is active; preserving the pending loopback restoration marker"
-        );
         let metadata = fs::symlink_metadata(&previous_path)
             .context("cannot inspect pending loopback restoration metadata")?;
         ensure!(
@@ -1154,6 +1150,21 @@ pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
             matches!(previous.core.as_str(), "sing-box" | "mihomo"),
             "pending loopback restoration metadata names an unsupported core"
         );
+        if state_path.exists() {
+            let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
+                .context("active Proxyctl session state is corrupt")?;
+            ensure!(
+                state.node_id == previous.node_id
+                    && state.core == previous.core
+                    && state.port == previous.port
+                    && state.tun.is_none()
+                    && matches_process(state.pid, &state.executable, state.start_ticks),
+                "another Proxyctl-managed session is active; preserving the pending loopback restoration marker"
+            );
+            fs::remove_file(&previous_path)
+                .context("cannot remove already-completed loopback restoration metadata")?;
+            return Ok(true);
+        }
         previous
     };
 
