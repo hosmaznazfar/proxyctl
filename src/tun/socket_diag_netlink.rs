@@ -2,7 +2,7 @@
 //!
 //! This module performs no socket I/O and grants no privileges. It builds bounded IPv4/IPv6
 //! TCP/UDP dump requests and decodes complete netlink datagrams into marked socket records.
-//! A future broker owns the actual NETLINK_SOCK_DIAG socket and must enforce time/size limits.
+//! The privileged supervisor supplies the transport and the collector enforces time/size limits.
 
 use anyhow::{Context, Result, ensure};
 
