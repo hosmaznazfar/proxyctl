@@ -1,5 +1,6 @@
 //! CLI command handlers. Argument definitions remain in the parent CLI module.
 use super::*;
+#[cfg(target_os = "linux")]
 use anyhow::Context;
 use std::io::IsTerminal;
 
