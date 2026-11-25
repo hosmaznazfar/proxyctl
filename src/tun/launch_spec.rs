@@ -102,9 +102,22 @@ impl LaunchSpec {
         ensure!(
             self.managed_core_root.is_absolute()
                 && self.managed_core_root.as_os_str().len() <= 4096
-                && self.managed_core_root.components().all(|component| matches!(component, std::path::Component::RootDir | std::path::Component::Normal(_)))
-                && self.managed_core_root.file_name().is_some_and(|name| name == "cores")
-                && self.managed_core_root.parent().and_then(std::path::Path::file_name).is_some_and(|name| name == "proxyctl"),
+                && self
+                    .managed_core_root
+                    .components()
+                    .all(|component| matches!(
+                        component,
+                        std::path::Component::RootDir | std::path::Component::Normal(_)
+                    ))
+                && self
+                    .managed_core_root
+                    .file_name()
+                    .is_some_and(|name| name == "cores")
+                && self
+                    .managed_core_root
+                    .parent()
+                    .and_then(std::path::Path::file_name)
+                    .is_some_and(|name| name == "proxyctl"),
             "managed core directory hint is invalid"
         );
         ensure!(

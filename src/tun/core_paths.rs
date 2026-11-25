@@ -66,14 +66,21 @@ pub fn resolve_managed_core(
 }
 
 fn validate_managed_root(path: &Path, uid: u32) -> anyhow::Result<()> {
-    ensure!(path.is_absolute(), "managed core directory must be absolute");
     ensure!(
-        path.components().all(|component| matches!(component, Component::RootDir | Component::Normal(_))),
+        path.is_absolute(),
+        "managed core directory must be absolute"
+    );
+    ensure!(
+        path.components()
+            .all(|component| matches!(component, Component::RootDir | Component::Normal(_))),
         "managed core directory contains an unsafe path component"
     );
     ensure!(
         path.file_name().is_some_and(|name| name == "cores")
-            && path.parent().and_then(Path::file_name).is_some_and(|name| name == EXECUTABLE_NAME),
+            && path
+                .parent()
+                .and_then(Path::file_name)
+                .is_some_and(|name| name == EXECUTABLE_NAME),
         "managed core directory must end in proxyctl/cores"
     );
 
@@ -87,8 +94,12 @@ fn validate_managed_root(path: &Path, uid: u32) -> anyhow::Result<()> {
         .collect::<Vec<_>>();
     for (index, component) in components.iter().enumerate() {
         current.push(component);
-        let metadata = fs::symlink_metadata(&current)
-            .with_context(|| format!("cannot inspect managed-core path component {}", current.display()))?;
+        let metadata = fs::symlink_metadata(&current).with_context(|| {
+            format!(
+                "cannot inspect managed-core path component {}",
+                current.display()
+            )
+        })?;
         ensure!(
             metadata.file_type().is_dir(),
             "managed-core path component {} is not a real directory",
@@ -144,8 +155,16 @@ mod tests {
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         let managed = managed_tree(&root);
-        let resolved = resolve_managed_core(&managed, unsafe { libc::getuid() }, crate::tun::launch_spec::CoreKind::Xray).unwrap();
-        assert_eq!(resolved, fs::canonicalize(managed.join("xray/xray")).unwrap());
+        let resolved = resolve_managed_core(
+            &managed,
+            unsafe { libc::getuid() },
+            crate::tun::launch_spec::CoreKind::Xray,
+        )
+        .unwrap();
+        assert_eq!(
+            resolved,
+            fs::canonicalize(managed.join("xray/xray")).unwrap()
+        );
     }
 
     #[test]
@@ -155,13 +174,27 @@ mod tests {
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         let managed = managed_tree(&root);
-        assert!(resolve_managed_core(&root, unsafe { libc::getuid() }, crate::tun::launch_spec::CoreKind::Xray).is_err());
+        assert!(
+            resolve_managed_core(
+                &root,
+                unsafe { libc::getuid() },
+                crate::tun::launch_spec::CoreKind::Xray
+            )
+            .is_err()
+        );
 
         let executable = managed.join("xray/xray");
         let target = managed.join("xray/real-xray");
         fs::rename(&executable, &target).unwrap();
         std::os::unix::fs::symlink(&target, &executable).unwrap();
-        assert!(resolve_managed_core(&managed, unsafe { libc::getuid() }, crate::tun::launch_spec::CoreKind::Xray).is_err());
+        assert!(
+            resolve_managed_core(
+                &managed,
+                unsafe { libc::getuid() },
+                crate::tun::launch_spec::CoreKind::Xray
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -172,6 +205,13 @@ mod tests {
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         let managed = managed_tree(&root);
         fs::set_permissions(root.join("proxyctl"), fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(resolve_managed_core(&managed, unsafe { libc::getuid() }, crate::tun::launch_spec::CoreKind::Xray).is_err());
+        assert!(
+            resolve_managed_core(
+                &managed,
+                unsafe { libc::getuid() },
+                crate::tun::launch_spec::CoreKind::Xray
+            )
+            .is_err()
+        );
     }
 }
