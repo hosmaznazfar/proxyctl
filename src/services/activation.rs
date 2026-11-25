@@ -336,6 +336,9 @@ pub fn status() -> anyhow::Result<()> {
                 }
             );
             println!("Run 'proxyctl tun status' for read-only host-network details.");
+        } else if runtime.join("tun-previous.json").exists() {
+            println!("Proxyctl session: native TUN transition or recovery is pending.");
+            println!("Previous loopback session metadata is saved; run 'proxyctl tun stop' to recover TUN state and restore it.");
         } else {
             println!("No active Proxyctl-managed session.");
         }
