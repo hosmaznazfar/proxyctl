@@ -5,7 +5,12 @@
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
-use std::{net::SocketAddr, process::ExitStatus, time::Duration};
+use std::{
+    net::SocketAddr,
+    os::unix::process::ExitStatusExt,
+    process::ExitStatus,
+    time::Duration,
+};
 
 use super::{
     config_staging::{self, StagedConfig},
@@ -44,9 +49,13 @@ impl RunningNativeSession {
         let recovery = self.recover_if_current();
         match (status, recovery) {
             (Ok(status), Ok(())) => {
+                let requested_stop = matches!(
+                    status.signal(),
+                    Some(libc::SIGINT | libc::SIGTERM | libc::SIGKILL)
+                );
                 ensure!(
-                    status.success(),
-                    "managed {} TUN core exited with {status}",
+                    status.success() || requested_stop,
+                    "managed {} TUN core exited unexpectedly with {status}",
                     self.record.core.as_str()
                 );
                 Ok(status)
