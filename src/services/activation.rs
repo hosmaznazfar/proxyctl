@@ -143,6 +143,27 @@ pub fn activate(
     port_override: Option<u16>,
     foreground: bool,
 ) -> anyhow::Result<()> {
+    activate_with_policy(node_id, core, tun_enabled, port_override, foreground, false)
+}
+
+/// Activate only when the loopback slot is still idle; used to restore a prior session after TUN.
+pub fn activate_if_idle(
+    node_id: u64,
+    core: CoreId,
+    port_override: Option<u16>,
+    foreground: bool,
+) -> anyhow::Result<()> {
+    activate_with_policy(node_id, core, false, port_override, foreground, true)
+}
+
+fn activate_with_policy(
+    node_id: u64,
+    core: CoreId,
+    tun_enabled: bool,
+    port_override: Option<u16>,
+    foreground: bool,
+    require_idle: bool,
+) -> anyhow::Result<()> {
     ensure_tun_mode_disabled(tun_enabled)?;
     #[cfg(not(target_os = "linux"))]
     {
@@ -154,6 +175,12 @@ pub fn activate(
         let (foreground_child, state_path, port, foreground_identity) = {
             let (runtime, state_path) = paths()?;
             let _lock = RuntimeLock::acquire(&runtime)?;
+            if require_idle {
+                ensure!(
+                    !state_path.exists(),
+                    "another Proxyctl-managed session became active before loopback restoration"
+                );
+            }
             let db = NodeDatabase::open(default_database_path()?)?;
             let record = db
                 .get_node(node_id)?
