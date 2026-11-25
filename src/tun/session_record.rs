@@ -58,14 +58,32 @@ impl SessionRecord {
     }
 
     pub fn validate(&self) -> Result<()> {
-        ensure!(self.schema_version == 1, "unsupported TUN session record version");
-        ensure!(self.invoking_uid != 0, "TUN session owner UID must be non-zero");
-        ensure!(canonical_uuid(&self.session_nonce), "TUN session nonce must be a canonical lowercase UUID");
-        ensure!(canonical_uuid(&self.activation_id), "TUN activation ID must be a canonical lowercase UUID");
-        ensure!(self.generation > 0, "TUN session generation must be non-zero");
+        ensure!(
+            self.schema_version == 1,
+            "unsupported TUN session record version"
+        );
+        ensure!(
+            self.invoking_uid != 0,
+            "TUN session owner UID must be non-zero"
+        );
+        ensure!(
+            canonical_uuid(&self.session_nonce),
+            "TUN session nonce must be a canonical lowercase UUID"
+        );
+        ensure!(
+            canonical_uuid(&self.activation_id),
+            "TUN activation ID must be a canonical lowercase UUID"
+        );
+        ensure!(
+            self.generation > 0,
+            "TUN session generation must be non-zero"
+        );
         self.process.validate()?;
         ensure!(
-            self.process.executable.file_name().is_some_and(|name| name == self.core.as_str()),
+            self.process
+                .executable
+                .file_name()
+                .is_some_and(|name| name == self.core.as_str()),
             "recorded process executable name does not match the selected core kind"
         );
         Ok(())
@@ -82,10 +100,7 @@ pub struct SessionStore {
 
 impl SessionStore {
     /// Open the root-owned runtime directory created by the privileged runtime bootstrap.
-    pub fn open_root_owned(
-        directory: impl Into<PathBuf>,
-        invoking_uid: u32,
-    ) -> Result<Self> {
+    pub fn open_root_owned(directory: impl Into<PathBuf>, invoking_uid: u32) -> Result<Self> {
         let directory = directory.into();
         ensure!(invoking_uid != 0, "TUN session owner UID must be non-zero");
         let expected_directory = PathBuf::from("/run/proxyctl").join(invoking_uid.to_string());
@@ -147,19 +162,29 @@ impl SessionStore {
         let file = match open_private_file(&self.path()) {
             Ok(file) => file,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error).context("cannot securely open privileged TUN session record"),
+            Err(error) => {
+                return Err(error).context("cannot securely open privileged TUN session record");
+            }
         };
         let before = file.metadata()?;
         verify_file(&before, self.owner_uid)?;
-        ensure!(before.len() <= MAX_SESSION_BYTES, "privileged TUN session record exceeds its size limit");
+        ensure!(
+            before.len() <= MAX_SESSION_BYTES,
+            "privileged TUN session record exceeds its size limit"
+        );
 
         let mut bytes = Vec::new();
-        bytes.try_reserve_exact(before.len() as usize)
+        bytes
+            .try_reserve_exact(before.len() as usize)
             .context("cannot reserve bounded privileged session read buffer")?;
-        (&file).take(MAX_SESSION_BYTES + 1).read_to_end(&mut bytes)?;
+        (&file)
+            .take(MAX_SESSION_BYTES + 1)
+            .read_to_end(&mut bytes)?;
         let after = file.metadata()?;
-        ensure!(bytes.len() as u64 == before.len() && after.len() == before.len(),
-            "privileged TUN session record changed size while being read");
+        ensure!(
+            bytes.len() as u64 == before.len() && after.len() == before.len(),
+            "privileged TUN session record changed size while being read"
+        );
         ensure!(
             before.dev() == after.dev()
                 && before.ino() == after.ino()
@@ -170,8 +195,8 @@ impl SessionStore {
             "privileged TUN session record changed while being read"
         );
         ensure!(!bytes.is_empty(), "privileged TUN session record is empty");
-        let record: SessionRecord = serde_json::from_slice(&bytes)
-            .context("privileged TUN session record is malformed")?;
+        let record: SessionRecord =
+            serde_json::from_slice(&bytes).context("privileged TUN session record is malformed")?;
         record.validate()?;
         ensure!(
             record.invoking_uid == self.invoking_uid,
@@ -183,9 +208,15 @@ impl SessionStore {
     /// Remove only the exact session record supplied by the caller.
     pub fn remove(&self, expected: &SessionRecord) -> Result<()> {
         expected.validate()?;
-        let current = self.load()?.context("no privileged TUN session record exists")?;
-        ensure!(current == *expected, "refusing to remove a different privileged TUN session record");
-        fs::remove_file(self.path()).context("cannot remove completed privileged TUN session record")?;
+        let current = self
+            .load()?
+            .context("no privileged TUN session record exists")?;
+        ensure!(
+            current == *expected,
+            "refusing to remove a different privileged TUN session record"
+        );
+        fs::remove_file(self.path())
+            .context("cannot remove completed privileged TUN session record")?;
         sync_directory(&self.directory)?;
         Ok(())
     }
@@ -207,10 +238,20 @@ fn canonical_uuid(value: &str) -> bool {
 }
 
 fn verify_directory(path: &Path, expected_uid: u32) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("cannot inspect privileged session directory {}", path.display()))?;
-    ensure!(metadata.file_type().is_dir(), "privileged session path is not a real directory");
-    ensure!(metadata.uid() == expected_uid, "privileged session directory has an unexpected owner");
+    let metadata = fs::symlink_metadata(path).with_context(|| {
+        format!(
+            "cannot inspect privileged session directory {}",
+            path.display()
+        )
+    })?;
+    ensure!(
+        metadata.file_type().is_dir(),
+        "privileged session path is not a real directory"
+    );
+    ensure!(
+        metadata.uid() == expected_uid,
+        "privileged session directory has an unexpected owner"
+    );
     ensure!(
         metadata.permissions().mode() & 0o7777 == PRIVATE_DIRECTORY_MODE,
         "privileged session directory must be owned by the expected UID with mode 0700"
@@ -224,13 +265,22 @@ fn set_private_file(file: &File) -> Result<()> {
 }
 
 fn verify_file(metadata: &fs::Metadata, expected_uid: u32) -> Result<()> {
-    ensure!(metadata.file_type().is_file(), "privileged TUN session record is not a regular file");
-    ensure!(metadata.uid() == expected_uid, "privileged TUN session record has an unexpected owner");
+    ensure!(
+        metadata.file_type().is_file(),
+        "privileged TUN session record is not a regular file"
+    );
+    ensure!(
+        metadata.uid() == expected_uid,
+        "privileged TUN session record has an unexpected owner"
+    );
     ensure!(
         metadata.permissions().mode() & 0o7777 == PRIVATE_FILE_MODE,
         "privileged TUN session record must have mode 0600"
     );
-    ensure!(metadata.nlink() == 1, "privileged TUN session record must not have hard links");
+    ensure!(
+        metadata.nlink() == 1,
+        "privileged TUN session record must not have hard links"
+    );
     Ok(())
 }
 
@@ -243,7 +293,12 @@ fn open_private_file(path: &Path) -> std::io::Result<File> {
 
 fn sync_directory(directory: &Path) -> Result<()> {
     File::open(directory)
-        .with_context(|| format!("cannot open privileged runtime directory {}", directory.display()))?
+        .with_context(|| {
+            format!(
+                "cannot open privileged runtime directory {}",
+                directory.display()
+            )
+        })?
         .sync_all()
         .context("cannot sync privileged runtime directory")
 }
@@ -317,21 +372,38 @@ mod tests {
         fs::create_dir(&target).unwrap();
         fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
         symlink(&target, &link).unwrap();
-        assert!(SessionStore::open_for_owner(link, unsafe { libc::geteuid() }, unsafe { libc::getuid() }).is_err());
+        assert!(
+            SessionStore::open_for_owner(link, unsafe { libc::geteuid() }, unsafe {
+                libc::getuid()
+            })
+            .is_err()
+        );
     }
 
     #[test]
     fn rejects_session_directory_with_permissive_mode() {
         let directory = tempfile::tempdir().unwrap();
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o755)).unwrap();
-        assert!(SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }, unsafe { libc::getuid() }).is_err());
+        assert!(
+            SessionStore::open_for_owner(
+                directory.path().to_path_buf(),
+                unsafe { libc::geteuid() },
+                unsafe { libc::getuid() }
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn creates_loads_and_removes_only_the_matching_record() {
         let directory = tempfile::tempdir().unwrap();
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
-        let store = SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }, unsafe { libc::getuid() }).unwrap();
+        let store = SessionStore::open_for_owner(
+            directory.path().to_path_buf(),
+            unsafe { libc::geteuid() },
+            unsafe { libc::getuid() },
+        )
+        .unwrap();
         let mut expected = record();
         expected.invoking_uid = unsafe { libc::getuid() };
         store.create(&expected).unwrap();
@@ -348,7 +420,12 @@ mod tests {
     fn refuses_to_replace_an_existing_session_record() {
         let directory = tempfile::tempdir().unwrap();
         fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).unwrap();
-        let store = SessionStore::open_for_owner(directory.path().to_path_buf(), unsafe { libc::geteuid() }, unsafe { libc::getuid() }).unwrap();
+        let store = SessionStore::open_for_owner(
+            directory.path().to_path_buf(),
+            unsafe { libc::geteuid() },
+            unsafe { libc::getuid() },
+        )
+        .unwrap();
         let mut expected = record();
         expected.invoking_uid = unsafe { libc::getuid() };
         store.create(&expected).unwrap();
