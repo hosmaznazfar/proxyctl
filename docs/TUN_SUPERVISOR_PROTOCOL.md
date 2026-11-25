@@ -70,3 +70,15 @@ The foreground path must use this same sequence. Background mode must not return
 - No managed core is launched by the hidden supervisor.
 - No TUN device, route, policy rule, DNS, firewall or forwarding state is created or changed.
 - The acknowledgement protocol and coordinated durable commit method are not yet wired into a real launch.
+
+## Exact core termination and final record cleanup
+
+The lifecycle coordinator now has a pidfd-based stop operation. Under the lifecycle lock it first persists `CleanupPending`, then opens the recorded process instance and verifies its credentials against the privileged supervisor. It sends SIGTERM through `pidfd_send_signal`, waits for the bounded grace period, and escalates to SIGKILL only for that same pinned process. If the recorded PID has exited or been reused, it never signals the replacement.
+
+The stop operation intentionally leaves the session receipt, manifest and transaction journal in place. It does not remove routes, rules or interfaces. This preserves the evidence required by the separate kernel-resource recovery executor.
+
+A separate finalization operation is available only after the caller has completed resource cleanup and durably marked every journal operation `Removed` or `Absent`. Each resource in the ownership manifest must have a matching journal operation marked `Removed` with the exact original fingerprint. It then writes the `Cleaned` phase with no process identity, removes the completed transaction journal, removes the exact session receipt, and finally removes the cleaned manifest.
+
+This order is restartable: a crash after the `Cleaned` write can resume from the remaining journal/receipt; a crash after journal removal can resume using the durable `Cleaned` marker; a crash after receipt removal leaves a `Cleaned` manifest with no receipt, which can be safely removed. Missing journals are not accepted for a `CleanupPending` manifest with owned resources.
+
+These are lifecycle primitives only. They are not connected to a CLI stop path or the kernel journal recovery executor, and no network cleanup is performed by either method.
