@@ -14,6 +14,7 @@ pub mod nodes;
 pub mod pruning;
 pub mod reporting;
 pub mod sorting;
+#[cfg(target_os = "linux")]
 pub mod tun_handoff;
 pub mod tun_preparation;
 pub mod updates;
