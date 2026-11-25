@@ -476,7 +476,7 @@ pub fn start(
                 token.activation_id(),
                 token.generation(),
                 Duration::from_secs(10),
-                64 * 1024,
+                16 * 1024,
                 &baseline_host,
                 &current_host,
             )
