@@ -337,6 +337,12 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 TunCommand::Status => {}
             }
             crate::tun::inspect()?.print();
+            if crate::services::activation::has_pending_tun_session()? {
+                println!("Privileged TUN session marker: present (active or recovery pending).");
+            }
+            if crate::services::activation::has_pending_previous_loopback()? {
+                println!("Previous loopback session: saved for restoration after TUN stop.");
+            }
             let manager = crate::tun::service_manager::ServiceManager::detect();
             let backend = crate::tun::recovery::RecoveryBackendKind::for_manager(manager);
             println!("Detected init/service manager: {}", manager.as_str());
