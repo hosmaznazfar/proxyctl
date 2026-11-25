@@ -30,7 +30,7 @@ The Linux lifecycle coordinator now exposes `bind_core_session`, which enforces 
 
 1. Validate the session record and require its activation ID/generation to match the prepared activation token.
 2. Require the session receipt and lifecycle manifest to share the same runtime directory.
-3. Open a pidfd for the recorded process, verify the process identity remains live, and verify all process UID credentials match the invoking UID.
+3. Open a pidfd for the recorded process, verify the process identity remains live, and verify all process UID credentials match the privileged supervisor's effective UID (root in production); the receipt separately binds the invoking UID.
 4. Persist the root-owned session receipt with no-clobber semantics.
 5. Recheck the pinned process, then atomically transition the matching manifest from `Prepared` to `Running` with the identical process identity.
 
@@ -57,7 +57,7 @@ A future `started` reply is permitted only after all of the following are true:
 
 - the selected core was spawned with the fixed argv and root-staged config;
 - the supervisor captured and pidfd-pinned the exact child identity;
-- the child credentials match the invoking UID policy;
+- the child credentials match the privileged supervisor's effective UID policy (root in production);
 - the session receipt and matching `Running` manifest are durably committed;
 - the core-specific readiness check succeeded;
 - the supervisor has established a terminal-independent monitoring lifecycle and stop/recovery ownership.
