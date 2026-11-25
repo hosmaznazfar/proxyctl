@@ -281,13 +281,38 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
             if tun {
-                crate::services::activation::activate_tun_core(
+                let listen_port = match port {
+                    Some(port) => port,
+                    None => crate::services::listener_config::listen_port()?,
+                };
+                let spec = crate::services::tun_preparation::prepare_launch_spec(
                     stable_id,
                     core,
-                    port,
+                    listen_port,
                     &tun_probe_url,
                     tun_probe_status,
+                    foreground,
                 )?;
+                let session = crate::services::tun_handoff::request_supervisor_session(&spec)?;
+                if foreground {
+                    println!(
+                        "Foreground TUN session for node #{} with {} has exited (activation {}).",
+                        stable_id,
+                        core,
+                        session.activation_id
+                    );
+                } else {
+                    println!(
+                        "Started node #{} with {} in TUN mode.",
+                        stable_id,
+                        core
+                    );
+                    println!(
+                        "Local HTTP/SOCKS proxy listener: 127.0.0.1:{}",
+                        listen_port
+                    );
+                    println!("Stop TUN mode with 'proxyctl tun stop'.");
+                }
             } else {
                 crate::services::activation::activate(stable_id, core, false, port, foreground)?;
             }
