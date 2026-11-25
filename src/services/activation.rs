@@ -919,6 +919,15 @@ pub struct ActiveLoopbackSession {
     pub port: u16,
 }
 
+fn core_from_session_name(name: &str) -> Option<CoreId> {
+    match name {
+        "sing-box" => Some(CoreId::SingBox),
+        "xray" => Some(CoreId::Xray),
+        "mihomo" => Some(CoreId::Mihomo),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PreviousLoopbackSession {
@@ -962,14 +971,8 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
             && matches_process(state.pid, &state.executable, state.start_ticks),
         "active loopback process identity does not match its recorded session"
     );
-    let core = match state.core.as_str() {
-        "sing-box" => CoreId::SingBox,
-        "mihomo" => CoreId::Mihomo,
-        "xray" => anyhow::bail!(
-            "the active Xray session uses a descriptor-backed TUN contract not yet wired into the native supervisor"
-        ),
-        _ => anyhow::bail!("active loopback state names an unsupported core"),
-    };
+    let core = core_from_session_name(&state.core)
+        .ok_or_else(|| anyhow::anyhow!("active loopback state names an unsupported core"))?;
     let active = ActiveLoopbackSession {
         node_id: state.node_id,
         core,
@@ -1215,7 +1218,7 @@ pub fn discard_previous_loopback_marker_with_guard(
     ensure!(
         previous.node_id != 0
             && previous.port >= 1024
-            && matches!(previous.core.as_str(), "sing-box" | "mihomo"),
+            && core_from_session_name(&previous.core).is_some(),
         "pending loopback restoration metadata contains invalid values"
     );
     fs::remove_file(&previous_path)
@@ -1286,11 +1289,8 @@ pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
         previous
     };
 
-    let core = match previous.core.as_str() {
-        "sing-box" => CoreId::SingBox,
-        "mihomo" => CoreId::Mihomo,
-        _ => anyhow::bail!("pending loopback restoration core is unsupported"),
-    };
+    let core = core_from_session_name(&previous.core)
+        .ok_or_else(|| anyhow::anyhow!("pending loopback restoration core is unsupported"))?;
     if let Err(activation_error) =
         activate_if_idle(previous.node_id, core, Some(previous.port), false)
     {
@@ -1544,6 +1544,14 @@ mod tests {
     }
 
     #[cfg(target_os = "linux")]
+    #[test]
+    fn loopback_session_core_mapping_supports_all_native_tun_cores() {
+        assert_eq!(core_from_session_name("sing-box"), Some(CoreId::SingBox));
+        assert_eq!(core_from_session_name("xray"), Some(CoreId::Xray));
+        assert_eq!(core_from_session_name("mihomo"), Some(CoreId::Mihomo));
+        assert_eq!(core_from_session_name("unknown"), None);
+    }
+
     #[test]
     fn legacy_tun_recovery_ignores_unrelated_interface_and_dns_changes() {
         let baseline = TunBaseline {
