@@ -167,7 +167,7 @@ fn activate_with_policy(
     ensure_tun_mode_disabled(tun_enabled)?;
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (node_id, core, tun_enabled, port_override, foreground);
+        let _ = (node_id, core, tun_enabled, port_override, foreground, require_idle);
         anyhow::bail!("activation currently requires Linux process-identity support");
     }
     #[cfg(target_os = "linux")]
