@@ -184,21 +184,32 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
 
     match reply.outcome {
         SupervisorOutcome::Started { session } => {
-            match child.try_wait() {
-                Ok(None) => {
-                    // The supervisor has closed the acknowledgement channel and remains alive
-                    // to own the session. Dropping Child deliberately does not kill it.
-                    drop(child);
-                    Ok(session)
-                }
-                Ok(Some(status)) => anyhow::bail!(
-                    "supervisor exited with {status} immediately after reporting a started session"
-                ),
-                Err(error) => {
-                    let cleanup = abort_child(&mut child);
-                    Err(error).context(format!(
-                        "cannot verify supervisor survived its startup acknowledgement; {cleanup}"
-                    ))
+            if spec.foreground {
+                let status = child
+                    .wait()
+                    .context("cannot wait for the foreground TUN supervisor")?;
+                ensure!(
+                    status.success(),
+                    "foreground TUN supervisor exited with {status}"
+                );
+                Ok(session)
+            } else {
+                match child.try_wait() {
+                    Ok(None) => {
+                        // The supervisor has closed the acknowledgement channel and remains
+                        // alive to own the background session. Dropping Child does not kill it.
+                        drop(child);
+                        Ok(session)
+                    }
+                    Ok(Some(status)) => anyhow::bail!(
+                        "supervisor exited with {status} immediately after reporting a started session"
+                    ),
+                    Err(error) => {
+                        let cleanup = abort_child(&mut child);
+                        Err(error).context(format!(
+                            "cannot verify supervisor survived its startup acknowledgement; {cleanup}"
+                        ))
+                    }
                 }
             }
         }
