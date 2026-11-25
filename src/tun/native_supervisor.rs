@@ -578,9 +578,28 @@ mod signal_tests {
         let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
         let (child, identity) = live_child();
         let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
-        let guard = SignalForwardingGuard::install(identity, true).unwrap();
+        let mut guard = SignalForwardingGuard::install(true).unwrap();
+        guard.attach_core(identity).unwrap();
         forward_supervisor_signal(libc::SIGINT);
         assert!(!process.is_exited().unwrap());
+        drop(guard);
+        drop(child);
+    }
+
+    #[test]
+    fn startup_termination_is_latched_and_cancels_core_attachment() {
+        let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
+        let (child, identity) = live_child();
+        let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
+        let mut guard = SignalForwardingGuard::install(false).unwrap();
+
+        forward_supervisor_signal(libc::SIGTERM);
+
+        assert!(
+            guard.attach_core(identity).is_err(),
+            "a startup signal must prevent the core from entering readiness"
+        );
+        assert!(process.wait_exit(Duration::from_secs(2)).unwrap());
         drop(guard);
         drop(child);
     }
@@ -590,7 +609,8 @@ mod signal_tests {
         let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
         let (child, identity) = live_child();
         let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
-        let guard = SignalForwardingGuard::install(identity, false).unwrap();
+        let mut guard = SignalForwardingGuard::install(false).unwrap();
+        guard.attach_core(identity).unwrap();
         forward_supervisor_signal(libc::SIGTERM);
         assert!(process.wait_exit(Duration::from_secs(2)).unwrap());
         drop(guard);
