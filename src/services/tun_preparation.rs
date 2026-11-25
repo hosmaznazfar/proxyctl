@@ -35,12 +35,7 @@ pub fn prepare_launch_spec(
     );
     let node = record.node;
     drop(db);
-    let peer_transport = match node.protocol {
-        Protocol::Hysteria2 => BrokerSocketTransport::Udp,
-        Protocol::Vless | Protocol::Vmess | Protocol::Trojan | Protocol::Shadowsocks => {
-            BrokerSocketTransport::Tcp
-        }
-    };
+    let peer_transport = peer_transport_for_protocol(node.protocol);
 
     ensure!(
         matches!(core, CoreId::SingBox | CoreId::Mihomo),
@@ -200,4 +195,35 @@ fn build_dual_stack_probe_targets(
     ];
     crate::tun::readiness::validate_dual_stack_probe_targets(&targets)?;
     Ok(targets)
+}
+
+
+fn peer_transport_for_protocol(protocol: Protocol) -> BrokerSocketTransport {
+    match protocol {
+        Protocol::Hysteria2 => BrokerSocketTransport::Udp,
+        Protocol::Vless | Protocol::Vmess | Protocol::Trojan | Protocol::Shadowsocks => {
+            BrokerSocketTransport::Tcp
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selects_udp_for_hysteria2_and_tcp_for_stream_proxy_protocols() {
+        assert_eq!(
+            peer_transport_for_protocol(Protocol::Hysteria2),
+            BrokerSocketTransport::Udp
+        );
+        for protocol in [
+            Protocol::Vless,
+            Protocol::Vmess,
+            Protocol::Trojan,
+            Protocol::Shadowsocks,
+        ] {
+            assert_eq!(peer_transport_for_protocol(protocol), BrokerSocketTransport::Tcp);
+        }
+    }
 }
