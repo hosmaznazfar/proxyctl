@@ -622,6 +622,11 @@ mod config_contract_tests {
             tun["inbounds"][1]["settings"]["name"],
             super::super::XRAY_TUN_INTERFACE_NAME
         );
+        assert_eq!(tun["inbounds"][1]["settings"]["mtu"], 1500);
+        assert_eq!(
+            tun["inbounds"][1]["settings"]["gateway"],
+            serde_json::json!(["198.18.0.1/30", "fdfe:dcba:9876::1/126"])
+        );
         assert_eq!(
             tun["inbounds"][1]["settings"]["autoOutboundsInterface"],
             "auto"
