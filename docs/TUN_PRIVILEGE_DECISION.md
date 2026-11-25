@@ -143,9 +143,14 @@ __tun-supervisor` using direct argv (no shell or shell script). The generated re
 is written to the child stdin and stdin is closed to delimit the message. stdout and
 stderr are inherited; sudo's password prompt remains terminal-driven, not stdin-driven.
 
-The transport resolves sudo from PATH and canonicalizes its executable, and resolves the
-current Proxyctl executable from the process environment. It does not pass arbitrary core
-paths or arguments. This transport is deliberately not connected to the TUN CLI yet:
+The transport checks only the conventional `/usr/bin/sudo` and `/bin/sudo` system
+locations; it never searches the caller-controlled PATH. It canonicalizes the selected
+executable and requires a root-owned regular file with execute permission and no group/world
+write permission. The current Proxyctl executable is resolved from the running process. If
+request delivery fails, the transport closes stdin, best-effort kills the sudo child, and
+waits to reap it rather than leaving a potentially blocked validation process behind. It
+does not pass arbitrary core paths or arguments. This transport is deliberately not
+connected to the TUN CLI yet:
 the supervisor remains validation-only and networking stays fail-closed until the
 root-runtime ownership, lifecycle handshake, process identity, journaled mutation,
 readiness and recovery path are completed and locally verified.
@@ -235,3 +240,18 @@ The privileged supervisor validates the hint after deriving the invoking UID:
 - The resolved executable must remain below the canonical managed-core root.
 
 This intentionally accepts a validated user-selected XDG data root while refusing unchecked paths. It does not make the user-owned binary immutable against the same user; sudo authorization remains the explicit trust boundary. The supervisor currently performs validation only: it does not execute the returned path.
+
+
+## Privilege handoff hardening
+
+The unprivileged handoff no longer searches `PATH` for sudo. It considers only
+`/usr/bin/sudo` and `/bin/sudo`, canonicalizes the selected candidate, and checks that
+the resulting executable is a root-owned regular file with at least one execute bit
+and no group/world write permission. This prevents a user-controlled PATH entry from
+being selected as the privilege broker.
+
+If writing the bounded launch request to sudo's stdin fails, the handoff closes the
+pipe, sends a termination request to the sudo child, and waits for the child to be
+reaped. The request pipe remains separate from sudo's terminal-driven password prompt;
+`sudo -S` is not used. These checks harden transport setup only: the supervisor remains
+validation-only, and no core or host networking operation is enabled.
