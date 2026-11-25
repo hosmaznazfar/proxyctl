@@ -227,10 +227,24 @@ mod tests {
         );
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":3,"node_id":1,"core":"root","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}"}"#
+                br#"{"version":4,"node_id":1,"core":"root","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}"}"#
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_noncanonical_activation_ids() {
+        let mut spec = sample();
+        for invalid in [
+            "",
+            "not-a-uuid",
+            "12345678-1234-4234-8234-123456789ABC",
+            "12345678-1234-4234-8234-123456789abz",
+        ] {
+            spec.activation_id = invalid.to_owned();
+            assert!(spec.validate().is_err(), "accepted activation ID {invalid:?}");
+        }
     }
 
     #[test]
