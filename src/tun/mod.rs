@@ -1,9 +1,14 @@
-//! Read-only Linux network inspection for the future TUN lifecycle.
+//! Linux network inspection, privileged TUN lifecycle, and recovery.
 //!
-//! This module deliberately has no mutation APIs. It inspects procfs/sysfs and
-//! invokes fixed read-only route/rule inventory commands only.
+//! The ordinary status and inventory APIs inspect procfs/sysfs and use fixed
+//! read-only route/rule queries. Explicit TUN operations are implemented by
+//! the single-executable native supervisor and its journaled kernel backend;
+//! they run with root privileges only after the user requests TUN mode.
 //!
-//! Runtime service-manager discovery is also read-only and distro-agnostic.
+//! The older mutation-helper, broker, Xray descriptor launcher, and systemd
+//! recovery modules remain for compatibility with exact legacy generations.
+//! They are not used to create new TUN sessions. Service-manager discovery
+//! remains read-only and distro-agnostic.
 
 #[cfg(target_os = "linux")]
 pub mod activation_orchestrator;
