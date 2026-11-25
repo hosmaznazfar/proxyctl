@@ -687,8 +687,8 @@ pub struct ManagedPreflight {
 #[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
 pub fn collect_managed_preflight_with_response(
-    runtime_directory: &std::path::Path,
-    activation_id: &str,
+    _runtime_directory: &std::path::Path,
+    _activation_id: &str,
     process: &super::process::ProcessIdentity,
     listener: SocketAddr,
     listener_timeout: Duration,
@@ -704,7 +704,7 @@ pub fn collect_managed_preflight_with_response(
     );
     ensure!(
         !expected_peers.is_empty() && expected_peers.len() <= 8,
-        "Xray outbound peer candidate list must contain one to eight addresses"
+        "proxy outbound peer candidate list must contain one to eight addresses"
     );
     let listener = probe_core_listener(process, listener, listener_timeout)?;
     let interface = probe_tun_interface(&plan.interface_name, plan.interface_index)?;
@@ -746,7 +746,7 @@ pub fn collect_managed_preflight_with_response(
             }
             Ok(_) => {
                 last_error = Some(anyhow::anyhow!(
-                    "socket-mark helper response did not match the requested Xray peer and transport"
+                    "socket-mark diagnostic response did not match the requested proxy peer and transport"
                 ))
             }
             Err(error) => last_error = Some(error),
@@ -754,7 +754,7 @@ pub fn collect_managed_preflight_with_response(
     }
     let (response, mark) = matched.ok_or_else(|| {
         last_error.unwrap_or_else(|| {
-            anyhow::anyhow!("no Xray outbound socket matched any resolved node address")
+            anyhow::anyhow!("no proxy outbound socket matched any resolved node address")
         })
     })?;
     verify_host_network_unchanged(baseline_host, current_host)?;
@@ -778,8 +778,7 @@ pub fn collect_managed_preflight_with_response(
     })
 }
 
-/// Verify a native named-device core using the same direct TUN dataplane and marked
-/// outbound-socket evidence required by the Xray descriptor path.
+/// Verify a native named-device core using direct TUN dataplane and marked outbound-socket evidence.
 #[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
 pub fn verify_native_core_end_to_end_readiness(
