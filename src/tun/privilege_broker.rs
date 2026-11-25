@@ -389,12 +389,11 @@ pub enum BrokerSocketTransport {
     Udp,
 }
 
-/// Read-only request to inspect marked sockets owned by one exact managed process.
+/// Bounded read-only request model for direct socket-mark evidence collection.
 ///
-/// The future helper must authenticate the caller using its IPC peer credentials, require
-/// the target process to belong to that caller, pin it with pidfd, and recheck identity
-/// before and after collection. The request grants no authority to inspect arbitrary
-/// processes or mutate networking.
+/// The native supervisor is already privileged and pins the exact core process with pidfd;
+/// this data model does not create an IPC endpoint or launch a separate helper. It grants no
+/// authority to inspect arbitrary processes or mutate networking.
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -412,27 +411,27 @@ impl SocketMarkBrokerRequest {
     pub fn validate(&self) -> Result<()> {
         ensure!(
             self.version == BROKER_REQUEST_VERSION,
-            "unsupported socket-mark broker request version"
+            "unsupported socket-mark diagnostic request version"
         );
         self.process.validate()?;
         ensure!(
             !self.expected_peer.ip().is_unspecified()
                 && !self.expected_peer.ip().is_multicast()
                 && self.expected_peer.port() != 0,
-            "socket-mark broker peer must be a unicast endpoint with a non-zero port"
+            "socket-mark diagnostic peer must be a unicast endpoint with a non-zero port"
         );
         ensure!(
             self.expected_mark > 0
                 && self.expected_mark <= i32::MAX as u32
                 && self.mark_mask > 0
                 && self.expected_mark & !self.mark_mask == 0,
-            "socket-mark broker policy is invalid"
+            "socket-mark diagnostic policy is invalid"
         );
         Ok(())
     }
 }
 
-/// Build a response only after stable pidfd socket attribution and exact peer classification.
+/// Build diagnostic evidence only after stable pidfd socket attribution and exact peer classification.
 ///
 /// The snapshots must describe the request's exact process identity. This pure stage does
 /// not perform netlink I/O and cannot establish successful application-level traffic.
@@ -484,7 +483,7 @@ pub fn build_socket_mark_broker_response(
     Ok(response)
 }
 
-/// Maximum serialized broker response size (256 KiB).
+/// Maximum serialized socket-mark diagnostic response size (256 KiB).
 #[cfg(target_os = "linux")]
 pub const MAX_SOCKET_MARK_RESPONSE_BYTES: usize = 256 * 1024;
 /// Maximum number of peer-matched diagnostic records returned to the controller.
@@ -511,7 +510,7 @@ impl SocketMarkBrokerResponse {
 
         ensure!(
             self.version == BROKER_REQUEST_VERSION,
-            "unsupported socket-mark broker response version"
+            "unsupported socket-mark diagnostic response version"
         );
         ensure!(
             !self.expected_peer.ip().is_unspecified()
