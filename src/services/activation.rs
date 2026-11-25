@@ -887,6 +887,51 @@ pub fn active_loopback_session() -> anyhow::Result<ActiveLoopbackSession> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
 }
 
+/// Atomically verify and stop the active loopback core for a TUN transition.
+///
+/// The activation lock covers both identity validation and stop, so a concurrent activation
+/// cannot cause this operation to stop a different node/core than the one it returns.
+#[cfg(target_os = "linux")]
+pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
+    let (runtime, state_path) = paths()?;
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    let state: ActiveProcess = serde_json::from_slice(
+        &fs::read(&state_path).context("no Proxyctl-managed loopback session is active")?,
+    )
+    .context("Proxyctl activation state is corrupt; refusing to transition it to TUN")?;
+    ensure!(
+        state.tun.is_none(),
+        "the tracked session is already a legacy TUN session; use 'proxyctl tun stop' to recover it"
+    );
+    ensure!(
+        state.node_id != 0
+            && state.port >= 1024
+            && state.start_ticks > 0
+            && matches_process(state.pid, &state.executable, state.start_ticks),
+        "active loopback process identity does not match its recorded session"
+    );
+    let core = match state.core.as_str() {
+        "sing-box" => CoreId::SingBox,
+        "mihomo" => CoreId::Mihomo,
+        "xray" => anyhow::bail!(
+            "the active Xray session uses a descriptor-backed TUN contract not yet wired into the native supervisor"
+        ),
+        _ => anyhow::bail!("active loopback state names an unsupported core"),
+    };
+    let active = ActiveLoopbackSession {
+        node_id: state.node_id,
+        core,
+        port: state.port,
+    };
+    stop_locked(&runtime, &state_path, &managed_cores_path()?)?;
+    Ok(active)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
+    anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
 /// Require a clean unprivileged activation slot before handing a new TUN request to sudo.
 #[cfg(target_os = "linux")]
 pub fn ensure_tun_start_available(port: u16) -> anyhow::Result<()> {
