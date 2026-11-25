@@ -1,6 +1,6 @@
 # TUN supervisor acknowledgement and session commit protocol
 
-This document defines the single-executable, sudo-only TUN lifecycle. Native persistent-device startup is connected for sing-box and Mihomo through `proxyctl use --tun` and `proxyctl tun start`; the explicit `tun stop` path performs privileged, journal-verified cleanup. Xray's descriptor-backed path and automatic reboot-time recovery remain separate unfinished work.
+This document records the supervisor protocol and its implementation history. Current native persistent-device startup supports sing-box, Mihomo, and Xray through `proxyctl use --tun` and `proxyctl tun start`; `proxyctl tun stop` performs privileged, journal-verified cleanup. All three cores attach by interface name to the supervisor-created persistent TUN device; the former Xray descriptor handoff is obsolete. Automatic reboot-time recovery remains out of scope. Historical sections below are retained as design history where they describe superseded intermediate states.
 
 ## One-way acknowledgement channel
 
@@ -71,7 +71,7 @@ A new Linux-only direct launcher now provides the process-creation primitive for
 The launcher re-resolves the executable from the closed `CoreKind` enum and invoking user's private managed-core tree immediately before spawn. It rechecks ownership, executable permissions and link count, requires the staged config to be a root-owned single-link 0600 regular file, and uses only fixed core-specific arguments:
 
 - sing-box: `run -c <staged-config>`
-- Xray: `run -c <staged-config>`, with the generation-bound descriptor supplied through `XRAY_TUN_FD`;
+- Xray: `run -c <staged-config>`; its native TUN inbound attaches to the named persistent interface;
 - Mihomo: `-f <staged-config>`.
 
 The child receives a cleared environment with a minimal fixed `PATH`, `HOME` and locale, no stdin, and no inherited output streams. Xray's descriptor is duplicated CLOEXEC and made inheritable only in the forked child immediately before exec. The parent captures the exact executable/PID/start-time identity, pins it with pidfd, and verifies that all process UID credentials remain root. Any post-spawn verification failure kills and reaps that exact child.
@@ -80,7 +80,7 @@ The direct launcher is called by the native supervisor after the write-ahead ker
 
 ## Current safety boundary
 
-- `tun start` transitions the verified active loopback session to native TUN mode; `use --tun` starts a new native TUN session directly. Both currently support sing-box and Mihomo.
+- `tun start` transitions the verified active loopback session to native TUN mode; `use --tun` starts a new native TUN session directly. Both support sing-box, Mihomo, and Xray.
 - The supervisor creates the persistent TUN interface and policy routes/rules through the generation-bound write-ahead journal. It does not modify DNS or firewall state.
 - The selected managed core runs as root only for the lifetime of the explicitly requested TUN session; ordinary loopback activation remains unprivileged.
 - `tun stop` and unexpected core exit use the same pidfd-safe process termination and compare-before-delete journal recovery. No separate helper executable, systemd service, or file capability is installed for new sessions.
@@ -123,16 +123,14 @@ A successful call means only that the native TUN resources and `Prepared` manife
 
 ## Core-specific TUN attachment boundary
 
-The journaled `supervisor_activation::apply_native_kernel_plan` API now requires an explicit `CoreKind` and accepts only sing-box and Mihomo. These two adapters use a persistent named TUN device, so their interface, routes and policy rules are created together through the native-device transaction.
+The journaled `supervisor_activation::apply_native_kernel_plan` API validates the selected `CoreKind` against the native-device adapter contract. Sing-box, Mihomo, and Xray all use the persistent named TUN device, so the interface, routes, and policy rules are created together through the native-device transaction.
 
-Xray is rejected before the journal backend is opened. Its current adapter contract is `XRAY_TUN_FD` and its launcher requires a generation-bound broker descriptor; it must use the descriptor-backed transaction/attachment path rather than accidentally combining an externally supplied descriptor with a separately created persistent named device. The three core strategies must not be treated as interchangeable.
-
-This guard is a migration safety boundary, not an Xray implementation. The hidden single-executable supervisor currently launches only sing-box and Mihomo through the native persistent-device path. Xray remains disabled until its generation-bound descriptor lifecycle is integrated.
+Xray no longer uses the former `XRAY_TUN_FD` descriptor handoff. Its Linux TUN inbound opens the already-created persistent interface by name, configures the link and gateway addresses, and closes its queue when the core exits; Proxyctl retains persistence ownership and performs journaled cleanup. The three adapter configurations remain core-specific even though their device-ownership strategy is now shared.
 
 
 ## Native core startup and session commit boundary
 
-A Linux-only `native_session` module now provides the next ordered step after journaled native-device preparation. It accepts only sing-box and Mihomo and validates that the launch request, activation token, and durable manifest all identify the same `Prepared` generation and persistent `tun-proxyctl` interface.
+A Linux-only `native_session` module provides the ordered step after journaled native-device preparation. It accepts sing-box, Mihomo, and Xray and validates that the launch request, activation token, and durable manifest all identify the same `Prepared` generation and persistent TUN interface.
 
 The startup sequence is fixed:
 
