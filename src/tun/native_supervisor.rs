@@ -10,64 +10,78 @@ use std::{
     net::SocketAddr,
     os::unix::process::ExitStatusExt,
     process::ExitStatus,
-    sync::atomic::{AtomicBool, AtomicI32, Ordering},
+    sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},
     time::Duration,
 };
 
-/// The foreground supervisor shares the terminal process group with its core. Terminal
-/// signals therefore reach both processes. Install forwarding only after spawn so exec has
-/// already reset the core's signal dispositions to their normal defaults; the supervisor
-/// then survives long enough to observe the core exit and run generation-scoped recovery.
+/// Signal state is installed before privileged network preparation. Until a core pidfd is
+/// attached, signals are latched and delivered/cancelled as soon as the child is available.
 static FORWARDED_CORE_PIDFD: AtomicI32 = AtomicI32::new(-1);
 static FOREGROUND_SIGNAL_GROUP: AtomicBool = AtomicBool::new(false);
+static PENDING_STARTUP_SIGNALS: AtomicU64 = AtomicU64::new(0);
 
-extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
-    // Foreground cores share the terminal process group, so the terminal already delivers
-    // INT/QUIT/HUP directly to the core. Forwarding those again would double-signal it.
-    if FOREGROUND_SIGNAL_GROUP.load(Ordering::Relaxed)
-        && matches!(signal, libc::SIGINT | libc::SIGQUIT | libc::SIGHUP)
-    {
-        return;
-    }
-    let pidfd = FORWARDED_CORE_PIDFD.load(Ordering::Relaxed);
-    if pidfd >= 0 {
-        // A pidfd continues to identify the original child after wait() reaps it; it can
-        // never redirect a late signal to a process that reused the numeric PID.
-        unsafe {
-            libc::syscall(
-                libc::SYS_pidfd_send_signal,
-                pidfd,
-                signal,
-                std::ptr::null::<libc::siginfo_t>(),
-                0u32,
-            );
-        }
+fn signal_bit(signal: libc::c_int) -> Option<u64> {
+    (1..=64)
+        .contains(&signal)
+        .then(|| 1u64 << (signal - 1))
+}
+
+fn send_pidfd_signal(pidfd: libc::c_int, signal: libc::c_int) {
+    // A pidfd continues to identify the original child after wait() reaps it; it can
+    // never redirect a late signal to a process that reused the numeric PID.
+    unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            pidfd,
+            signal,
+            std::ptr::null::<libc::siginfo_t>(),
+            0u32,
+        );
     }
 }
 
-/// Forwards supervisor-directed termination signals to the exact direct core child.
-///
-/// In foreground mode the core receives terminal-generated signals directly from the shared
-/// terminal process group; the supervisor ignores its duplicate delivery and retains cleanup
-/// ownership. Signals sent only to the supervisor are forwarded through the pinned pidfd.
+extern "C" fn forward_supervisor_signal(signal: libc::c_int) {
+    let foreground_terminal_signal = FOREGROUND_SIGNAL_GROUP.load(Ordering::Relaxed)
+        && matches!(signal, libc::SIGINT | libc::SIGQUIT | libc::SIGHUP);
+    let pidfd = FORWARDED_CORE_PIDFD.load(Ordering::Acquire);
+    if pidfd >= 0 {
+        // Foreground cores share the terminal process group, so terminal-generated signals
+        // already reach the core directly. Do not deliver those a second time.
+        if !foreground_terminal_signal {
+            send_pidfd_signal(pidfd, signal);
+        }
+        return;
+    }
+
+    // There is no child yet. Latch the signal and recheck the pidfd to close the race with
+    // attach_core(): exactly one side either drains the bit or forwards it after attachment.
+    let Some(bit) = signal_bit(signal) else {
+        return;
+    };
+    PENDING_STARTUP_SIGNALS.fetch_or(bit, Ordering::AcqRel);
+    let pidfd = FORWARDED_CORE_PIDFD.load(Ordering::Acquire);
+    if pidfd >= 0 && PENDING_STARTUP_SIGNALS.fetch_and(!bit, Ordering::AcqRel) & bit != 0 {
+        send_pidfd_signal(pidfd, signal);
+    }
+}
+
+/// Owns process-wide signal dispositions from before kernel preparation until session cleanup.
+/// Signals received before a core is attached are latched; once attached, supervisor-only
+/// signals are forwarded through its pinned pidfd.
 pub struct SignalForwardingGuard {
     previous: Vec<(libc::c_int, libc::sighandler_t)>,
-    _process: super::process::ProcessHandle,
+    process: Option<super::process::ProcessHandle>,
 }
 
 impl SignalForwardingGuard {
-    pub fn install(core: super::process::ProcessIdentity, foreground: bool) -> Result<Self> {
-        let process = super::process::ProcessHandle::open(core)
-            .context("cannot pin the exact TUN core for signal forwarding")?;
+    pub fn install(foreground: bool) -> Result<Self> {
         ensure!(
-            !process.is_exited()?,
-            "cannot install signal forwarding for an exited TUN core"
+            FORWARDED_CORE_PIDFD.load(Ordering::Acquire) == -1,
+            "a core signal-forwarding guard is already active"
         );
-        FORWARDED_CORE_PIDFD
-            .compare_exchange(-1, process.as_raw_fd(), Ordering::SeqCst, Ordering::SeqCst)
-            .map_err(|_| anyhow::anyhow!("a core signal-forwarding guard is already active"))?;
+        PENDING_STARTUP_SIGNALS.store(0, Ordering::Release);
+        FOREGROUND_SIGNAL_GROUP.store(foreground, Ordering::Release);
 
-        FOREGROUND_SIGNAL_GROUP.store(foreground, Ordering::SeqCst);
         let mut signals = vec![libc::SIGTERM, libc::SIGINT];
         if foreground {
             signals.extend([libc::SIGQUIT, libc::SIGHUP]);
@@ -87,23 +101,60 @@ impl SignalForwardingGuard {
                         libc::signal(*installed, *handler);
                     }
                 }
-                FORWARDED_CORE_PIDFD.store(-1, Ordering::SeqCst);
-                FOREGROUND_SIGNAL_GROUP.store(false, Ordering::SeqCst);
+                FOREGROUND_SIGNAL_GROUP.store(false, Ordering::Release);
+                PENDING_STARTUP_SIGNALS.store(0, Ordering::Release);
                 return Err(error).context("cannot install TUN supervisor signal forwarding");
             }
             previous.push((signal, old));
         }
         Ok(Self {
             previous,
-            _process: process,
+            process: None,
         })
+    }
+
+    /// Fail before further startup work if a termination signal arrived before child spawn.
+    pub fn check_startup(&self) -> Result<()> {
+        let pending = PENDING_STARTUP_SIGNALS.swap(0, Ordering::AcqRel);
+        ensure!(
+            pending == 0,
+            "TUN supervisor received a termination signal during startup; activation will be recovered"
+        );
+        Ok(())
+    }
+
+    /// Bind signal forwarding to the exact child. A signal latched before attachment cancels
+    /// startup instead of allowing readiness/commit to proceed after an interrupted handoff.
+    pub fn attach_core(&mut self, identity: super::process::ProcessIdentity) -> Result<()> {
+        let process = super::process::ProcessHandle::open(identity)
+            .context("cannot pin the exact TUN core for signal forwarding")?;
+        ensure!(
+            !process.is_exited()?,
+            "cannot install signal forwarding for an exited TUN core"
+        );
+        FORWARDED_CORE_PIDFD
+            .compare_exchange(-1, process.as_raw_fd(), Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| anyhow::anyhow!("a core signal-forwarding pidfd is already active"))?;
+        self.process = Some(process);
+
+        let pending = PENDING_STARTUP_SIGNALS.swap(0, Ordering::AcqRel);
+        if pending != 0 {
+            if let Some(process) = self.process.as_ref() {
+                let _ = process.signal(libc::SIGTERM);
+            }
+            anyhow::bail!(
+                "TUN supervisor received a termination signal before core attachment; startup was cancelled"
+            );
+        }
+        Ok(())
     }
 }
 
 impl Drop for SignalForwardingGuard {
     fn drop(&mut self) {
-        FORWARDED_CORE_PIDFD.store(-1, Ordering::SeqCst);
-        FOREGROUND_SIGNAL_GROUP.store(false, Ordering::SeqCst);
+        FORWARDED_CORE_PIDFD.store(-1, Ordering::Release);
+        FOREGROUND_SIGNAL_GROUP.store(false, Ordering::Release);
+        PENDING_STARTUP_SIGNALS.store(0, Ordering::Release);
         for (signal, handler) in self.previous.iter().rev() {
             unsafe {
                 libc::signal(*signal, *handler);
@@ -135,6 +186,7 @@ pub struct RunningNativeSession {
     coordinator: LifecycleCoordinator,
     sessions: SessionStore,
     token: ActivationToken,
+    _signal_guard: SignalForwardingGuard,
     pub record: SessionRecord,
 }
 
@@ -255,6 +307,10 @@ pub fn start(
     super::core_paths::resolve_managed_core(&spec.managed_core_root, invoking_uid, spec.core)
         .context("selected managed core failed privileged path validation before kernel setup")?;
 
+    // Own termination signals before staging or any privileged network mutation.
+    let mut signal_guard = SignalForwardingGuard::install(spec.foreground)?;
+    signal_guard.check_startup()?;
+
     let baseline_host =
         crate::tun::inspect().context("cannot capture pre-activation host network baseline")?;
     ensure!(
@@ -284,6 +340,8 @@ pub fn start(
         "an existing privileged TUN session must be recovered before starting another"
     );
 
+    signal_guard.check_startup()?;
+
     let (token, applied) = match supervisor_activation::apply_native_kernel_plan(
         spec.core,
         store.clone(),
@@ -312,6 +370,14 @@ pub fn start(
             };
         }
     };
+
+    if let Err(error) = signal_guard.check_startup() {
+        let recovery = recover_committed_start(&store, &coordinator, &sessions, &token);
+        return match recovery {
+            Ok(()) => Err(error).context("startup signal received after kernel activation; journaled resources were recovered"),
+            Err(recovery_error) => Err(error).context(format!("startup signal received after kernel activation; recovery also failed ({recovery_error:#}); durable evidence was retained")),
+        };
+    }
 
     let (core_mark, core_mark_mask, plan) = match (|| -> Result<_> {
         let (core_mark, core_mark_mask) =
@@ -383,6 +449,7 @@ pub fn start(
         &token,
         &sessions,
         readiness,
+        &mut signal_guard,
     ) {
         Ok(value) => value,
         Err(error) => {
@@ -405,6 +472,7 @@ pub fn start(
         coordinator,
         sessions,
         token,
+        _signal_guard: signal_guard,
         record,
     })
 }
