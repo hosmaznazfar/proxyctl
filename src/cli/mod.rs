@@ -340,6 +340,10 @@ enum Command {
     #[command(name = "__tun-supervisor", hide = true)]
     __TunSupervisor,
 
+    /// Internal privileged TUN recovery entry point.
+    #[command(name = "__tun-recover", hide = true)]
+    __TunRecover,
+
     /// Inspect Linux networking state without changing it.
     Tun {
         #[command(subcommand)]
