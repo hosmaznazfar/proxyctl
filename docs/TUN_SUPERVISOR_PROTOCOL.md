@@ -153,3 +153,8 @@ This is a startup/commit primitive, not yet the production supervisor loop. It d
 Version 5 binds the activation generation and full dual-stack readiness inputs to the unprivileged launch request. The request carries one to eight resolved selected-node peer endpoints and exactly one numeric IPv4 plus one numeric IPv6 HTTP probe target. Targets retain the original HTTP Host header and path, and each expected response status must be a successful 2xx code. The privileged supervisor validates all fields again before use.
 
 The supervisor captures its own pre-activation host-network baseline after authenticating the invoking UID; it never accepts a caller-supplied DNS or firewall baseline. Supplied numeric destinations are bounded data, not executable paths or commands. The generation, activation UUID, generated core configuration, peer candidates, and traffic targets are validated together before any privileged network mutation.
+
+
+## In-process socket-mark readiness
+
+The native persistent-device readiness path collects `INET_DIAG_MARK` data directly through the bounded `NETLINK_SOCK_DIAG` transport inside the already privileged Proxyctl supervisor. It snapshots the exact core process's socket inodes before and after collection, then joins those stable inodes to kernel-origin socket records and classifies the expected peer/transport. This path does not execute `/usr/libexec/proxyctl-tun-helper`, create a diagnostic Unix socket, or require a separately installed helper package. Missing mark attributes, incomplete netlink dumps, process identity changes, and ambiguous socket ownership remain hard failures.
