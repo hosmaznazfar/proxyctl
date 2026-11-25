@@ -14,6 +14,7 @@ use std::{
     time::Duration,
 };
 
+use super::activation::TunHandoffGuard;
 use crate::tun::{
     launch_spec::LaunchSpec,
     session_record::SessionRecord,
@@ -99,7 +100,10 @@ pub fn request_supervisor_recovery() -> Result<()> {
     Ok(())
 }
 
-pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
+pub fn request_supervisor_session(
+    spec: &LaunchSpec,
+    handoff_guard: TunHandoffGuard,
+) -> Result<SessionRecord> {
     let encoded = spec
         .encode_bounded()
         .context("cannot encode bounded TUN request")?;
@@ -185,6 +189,9 @@ pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
 
     match reply.outcome {
         SupervisorOutcome::Started { session } => {
+            // Release the activation lock only after a durable Started reply is accepted.
+            // A concurrent stop can now safely recover this exact session.
+            drop(handoff_guard);
             if spec.foreground {
                 let status = match child.wait() {
                     Ok(status) => status,
