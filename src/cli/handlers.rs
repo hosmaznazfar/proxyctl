@@ -2,6 +2,64 @@
 use super::*;
 use std::io::IsTerminal;
 
+
+/// Execute the validation-only supervisor and always return a machine-readable acknowledgement
+/// on stdout. Human-readable errors continue through the normal stderr path.
+fn run_tun_supervisor() -> anyhow::Result<()> {
+    let result = (|| -> anyhow::Result<()> {
+        anyhow::ensure!(
+            unsafe { libc::geteuid() } == 0,
+            "internal TUN supervisor entry point must run with root privileges"
+        );
+        let stdin = std::io::stdin();
+        anyhow::ensure!(
+            !stdin.is_terminal(),
+            "internal TUN supervisor requires a launch specification on standard input"
+        );
+        let spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
+        #[cfg(target_os = "linux")]
+        {
+            let invoking_uid = crate::tun::runtime::invoking_uid()?;
+            let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
+            let executable = crate::tun::core_paths::resolve_managed_core(
+                &spec.managed_core_root,
+                invoking_uid,
+                spec.core,
+            )?;
+            let _staged = crate::tun::config_staging::stage_config(
+                &runtime,
+                spec.generated_config.as_bytes(),
+            )?;
+            let _ = executable;
+        }
+        #[cfg(not(target_os = "linux"))]
+        anyhow::bail!("the privileged TUN supervisor is supported only on Linux");
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            crate::tun::supervisor_protocol::write_reply(
+                std::io::stdout().lock(),
+                &crate::tun::supervisor_protocol::SupervisorReply::not_started(
+                    "request validated; core launch and networking are not implemented",
+                ),
+            )?;
+            anyhow::bail!(
+                "TUN request validated but no session was started; activation remains disabled"
+            );
+        }
+        Err(error) => {
+            let reply = crate::tun::supervisor_protocol::SupervisorReply::failed(format!(
+                "{error:#}"
+            ));
+            crate::tun::supervisor_protocol::write_reply(std::io::stdout().lock(), &reply)
+                .context("cannot send structured supervisor failure acknowledgement")?;
+            Err(error)
+        }
+    }
+}
+
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let Some(command) = cli.command else {
         println!("Proxyctl is ready. Use --help to see available commands.");
@@ -25,42 +83,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        Command::__TunSupervisor => {
-            anyhow::ensure!(
-                unsafe { libc::geteuid() } == 0,
-                "internal TUN supervisor entry point must run with root privileges"
-            );
-            let stdin = std::io::stdin();
-            anyhow::ensure!(
-                !stdin.is_terminal(),
-                "internal TUN supervisor requires a launch specification on standard input"
-            );
-            let _spec = crate::tun::launch_spec::read_bounded(stdin.lock())?;
-            #[cfg(target_os = "linux")]
-            {
-                let invoking_uid = crate::tun::runtime::invoking_uid()?;
-                let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
-                let executable = crate::tun::core_paths::resolve_managed_core(
-                    &_spec.managed_core_root,
-                    invoking_uid,
-                    _spec.core,
-                )?;
-                let _staged = crate::tun::config_staging::stage_config(
-                    &runtime,
-                    _spec.generated_config.as_bytes(),
-                )?;
-                println!(
-                    "TUN supervisor request validated for invoking UID {invoking_uid}; managed {} executable verified at {}; private runtime and temporary root-owned config staging succeeded",
-                    _spec.core.as_str(),
-                    executable.display()
-                );
-            }
-            #[cfg(not(target_os = "linux"))]
-            anyhow::bail!("the privileged TUN supervisor is supported only on Linux");
-            anyhow::bail!(
-                "launch specification and root runtime validated; core launch and networking operations are not implemented"
-            );
-        }
+        Command::__TunSupervisor => return run_tun_supervisor(),
         Command::Tun { command } => {
             match command {
                 TunCommand::Start { .. } | TunCommand::Stop => {
