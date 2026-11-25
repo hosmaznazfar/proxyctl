@@ -10,7 +10,7 @@ use crate::{
     database::{NodeDatabase, default_database_path},
     domain::Protocol,
     tun::{
-        launch_spec::{CoreKind, LaunchSpec, from_generated_config},
+        launch_spec::{CoreKind, GeneratedLaunchSpec, LaunchSpec, from_generated_config},
         privilege_broker::BrokerSocketTransport,
     },
 };
@@ -136,19 +136,19 @@ pub fn prepare_launch_spec(
         CoreId::Xray => CoreKind::Xray,
         CoreId::Mihomo => CoreKind::Mihomo,
     };
-    from_generated_config(
+    from_generated_config(GeneratedLaunchSpec {
         node_id,
-        kind,
-        port,
+        core: kind,
+        listen_port: port,
         foreground,
         peer_transport,
         activation_id,
-        managed_root,
-        &generated.content,
+        managed_core_root: managed_root,
+        generated_config: generated.content,
         generation,
         expected_peers,
         traffic_targets,
-    )
+    })
 }
 
 fn build_dual_stack_probe_targets(
