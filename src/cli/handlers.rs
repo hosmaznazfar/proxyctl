@@ -538,9 +538,14 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 || crate::services::activation::has_pending_previous_loopback()?;
             crate::services::activation::stop()?;
             if tun_pending {
-                crate::services::tun_handoff::request_supervisor_recovery()?;
-                crate::services::activation::clear_tun_session_marker()?;
-                crate::services::activation::discard_previous_loopback_marker()?;
+                #[cfg(target_os = "linux")]
+                {
+                    crate::services::tun_handoff::request_supervisor_recovery()?;
+                    crate::services::activation::clear_tun_session_marker()?;
+                    crate::services::activation::discard_previous_loopback_marker()?;
+                }
+                #[cfg(not(target_os = "linux"))]
+                anyhow::bail!("managed TUN recovery is supported only on Linux");
             }
             return Ok(());
         }
