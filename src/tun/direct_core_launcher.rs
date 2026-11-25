@@ -9,8 +9,8 @@ use anyhow::{Context, Result, ensure};
 use std::{
     fs,
     os::fd::{BorrowedFd, FromRawFd, OwnedFd},
-    os::unix::process::CommandExt,
     os::unix::fs::{MetadataExt, PermissionsExt},
+    os::unix::process::CommandExt,
     path::Path,
     process::{Child, Command, Stdio},
 };

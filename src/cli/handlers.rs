@@ -58,22 +58,17 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
         }
     }
 
-    let session = match crate::tun::native_supervisor::start(
-        &spec,
-        invoking_uid,
-        invoking_gid,
-        runtime,
-    ) {
-        Ok(session) => session,
-        Err(error) => {
-            let reply = crate::tun::supervisor_protocol::SupervisorReply::failed(format!(
-                "{error:#}"
-            ));
-            write_final_supervisor_reply(&reply)
-                .context("cannot send structured supervisor startup failure")?;
-            return Err(error);
-        }
-    };
+    let session =
+        match crate::tun::native_supervisor::start(&spec, invoking_uid, invoking_gid, runtime) {
+            Ok(session) => session,
+            Err(error) => {
+                let reply =
+                    crate::tun::supervisor_protocol::SupervisorReply::failed(format!("{error:#}"));
+                write_final_supervisor_reply(&reply)
+                    .context("cannot send structured supervisor startup failure")?;
+                return Err(error);
+            }
+        };
 
     let reply = match crate::tun::supervisor_protocol::SupervisorReply::started(
         session.record.clone(),
@@ -184,23 +179,18 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
                 if restored {
                     println!(
                         "Foreground TUN session for node #{} with {} has exited (activation {}); loopback mode was restored.",
-                        active.node_id,
-                        active.core,
-                        session.activation_id
+                        active.node_id, active.core, session.activation_id
                     );
                 } else {
                     println!(
                         "Foreground TUN session for node #{} with {} has exited (activation {}); no previous loopback session was restored.",
-                        active.node_id,
-                        active.core,
-                        session.activation_id
+                        active.node_id, active.core, session.activation_id
                     );
                 }
             } else {
                 println!(
                     "Started the active node #{} with {} in TUN mode.",
-                    active.node_id,
-                    active.core
+                    active.node_id, active.core
                 );
                 println!("Local HTTP/SOCKS proxy listener: 127.0.0.1:{}", active.port);
                 println!("Stop TUN mode with 'proxyctl tun stop'.");
@@ -208,8 +198,7 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
             Ok(())
         }
         Err(error) => {
-            if let Err(recovery_error) =
-                crate::services::tun_handoff::request_supervisor_recovery()
+            if let Err(recovery_error) = crate::services::tun_handoff::request_supervisor_recovery()
             {
                 return Err(error).context(format!(
                     "TUN transition failed and privileged recovery also failed ({recovery_error:#}); the original loopback session was not restarted to avoid conflicting network state"
@@ -357,8 +346,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 TunCommand::Stop => {
                     #[cfg(target_os = "linux")]
                     {
-                        let stop_guard =
-                            crate::services::activation::acquire_tun_stop_guard()?;
+                        let stop_guard = crate::services::activation::acquire_tun_stop_guard()?;
                         crate::services::tun_handoff::request_supervisor_recovery()?;
                         crate::services::activation::clear_tun_session_marker_with_guard(
                             &stop_guard,
@@ -452,12 +440,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         tun_probe_status,
                         foreground,
                     )?;
-                    let handoff_guard =
-                        crate::services::activation::begin_tun_session_handoff(
-                            &spec.activation_id,
-                            spec.generation,
-                            false,
-                        )?;
+                    let handoff_guard = crate::services::activation::begin_tun_session_handoff(
+                        &spec.activation_id,
+                        spec.generation,
+                        false,
+                    )?;
                     let session = match crate::services::tun_handoff::request_supervisor_session(
                         &spec,
                         handoff_guard,
@@ -489,16 +476,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         crate::services::activation::clear_tun_session_marker()?;
                         println!(
                             "Foreground TUN session for node #{} with {} has exited (activation {}).",
-                            stable_id,
-                            core,
-                            session.activation_id
+                            stable_id, core, session.activation_id
                         );
                     } else {
                         println!("Started node #{} with {} in TUN mode.", stable_id, core);
-                        println!(
-                            "Local HTTP/SOCKS proxy listener: 127.0.0.1:{}",
-                            listen_port
-                        );
+                        println!("Local HTTP/SOCKS proxy listener: 127.0.0.1:{}", listen_port);
                         println!("Stop TUN mode with 'proxyctl tun stop'.");
                     }
                 }
@@ -582,9 +564,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     // Do not route this path through activation::stop(), whose compatibility
                     // branch is reserved for legacy helper-managed generations.
                     crate::services::tun_handoff::request_supervisor_recovery()?;
-                    crate::services::activation::clear_tun_session_marker_with_guard(
-                        &stop_guard,
-                    )?;
+                    crate::services::activation::clear_tun_session_marker_with_guard(&stop_guard)?;
                     crate::services::activation::discard_previous_loopback_marker_with_guard(
                         &stop_guard,
                     )?;

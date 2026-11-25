@@ -13,9 +13,9 @@ mod tun_runtime;
 use identity::*;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
-use std::os::unix::process::CommandExt;
-#[cfg(target_os = "linux")]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt;
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -169,7 +169,14 @@ fn activate_with_policy(
     ensure_tun_mode_disabled(tun_enabled)?;
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (node_id, core, tun_enabled, port_override, foreground, require_idle);
+        let _ = (
+            node_id,
+            core,
+            tun_enabled,
+            port_override,
+            foreground,
+            require_idle,
+        );
         anyhow::bail!("activation currently requires Linux process-identity support");
     }
     #[cfg(target_os = "linux")]
@@ -356,7 +363,9 @@ pub fn status() -> anyhow::Result<()> {
             println!("Run 'proxyctl tun stop' to stop/recover it.");
         } else if runtime.join("tun-previous.json").exists() {
             println!("Proxyctl session: native TUN transition or loopback restoration is pending.");
-            println!("Previous loopback session metadata is saved; run 'proxyctl tun stop' to recover TUN state and restore it.");
+            println!(
+                "Previous loopback session metadata is saved; run 'proxyctl tun stop' to recover TUN state and restore it."
+            );
         } else {
             println!("No active Proxyctl-managed session.");
         }
@@ -418,12 +427,10 @@ fn stop_activation_under_guard(runtime: &Path, state: &Path) -> anyhow::Result<(
     let current_manifest = store.load()?;
     let transaction_journal = store.load_transaction_journal()?;
     if current_manifest.is_some() || transaction_journal.is_some() {
-        let helper =
-            crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(runtime)
-                .context("cannot connect to the TUN mutation helper for safe stop")?;
+        let helper = crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(runtime)
+            .context("cannot connect to the TUN mutation helper for safe stop")?;
         if current_manifest.is_some() {
-            let coordinator =
-                crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
+            let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
             let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(
                 &helper,
                 &coordinator,
@@ -447,8 +454,7 @@ fn stop_activation_under_guard(runtime: &Path, state: &Path) -> anyhow::Result<(
                 let remaining =
                     crate::tun::manifest_store::ManifestStore::open(runtime.to_path_buf())?;
                 ensure!(
-                    remaining.load()?.is_none()
-                        && remaining.load_transaction_journal()?.is_none(),
+                    remaining.load()?.is_none() && remaining.load_transaction_journal()?.is_none(),
                     "orphaned TUN journal recovery is incomplete: {recovery_message}"
                 );
             }
@@ -1123,8 +1129,8 @@ pub fn clear_tun_session_marker_with_guard(
     if !marker_path.exists() {
         return Ok(false);
     }
-    let metadata = fs::symlink_metadata(&marker_path)
-        .context("cannot inspect pending TUN session marker")?;
+    let metadata =
+        fs::symlink_metadata(&marker_path).context("cannot inspect pending TUN session marker")?;
     ensure!(
         metadata.file_type().is_file()
             && metadata.uid() == unsafe { libc::getuid() }
@@ -1138,13 +1144,17 @@ pub fn clear_tun_session_marker_with_guard(
         marker.schema_version == 1
             && marker.generation > 0
             && marker.activation_id.len() == 36
-            && marker.activation_id.bytes().enumerate().all(|(index, byte)| {
-                if [8, 13, 18, 23].contains(&index) {
-                    byte == b'-'
-                } else {
-                    byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
-                }
-            }),
+            && marker
+                .activation_id
+                .bytes()
+                .enumerate()
+                .all(|(index, byte)| {
+                    if [8, 13, 18, 23].contains(&index) {
+                        byte == b'-'
+                    } else {
+                        byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                    }
+                }),
         "pending TUN session marker contains invalid identity data"
     );
     fs::remove_file(&marker_path).context("cannot remove completed TUN session marker")?;
@@ -1248,9 +1258,8 @@ pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
                 && metadata.nlink() == 1,
             "pending loopback restoration metadata has an unsafe identity or mode"
         );
-        let previous: PreviousLoopbackSession =
-            serde_json::from_slice(&fs::read(&previous_path)?)
-                .context("pending loopback restoration metadata is corrupt")?;
+        let previous: PreviousLoopbackSession = serde_json::from_slice(&fs::read(&previous_path)?)
+            .context("pending loopback restoration metadata is corrupt")?;
         ensure!(
             previous.node_id != 0 && previous.port >= 1024,
             "pending loopback restoration metadata contains invalid values"

@@ -5,12 +5,7 @@
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
-use std::{
-    net::SocketAddr,
-    os::unix::process::ExitStatusExt,
-    process::ExitStatus,
-    time::Duration,
-};
+use std::{net::SocketAddr, os::unix::process::ExitStatusExt, process::ExitStatus, time::Duration};
 
 use super::{
     config_staging::{self, StagedConfig},
@@ -20,8 +15,8 @@ use super::{
     linux_journal_backend::LinuxJournalBackend,
     manifest_store::ManifestStore,
     native_session,
-    route_policy::RoutingPolicyPlan,
     recovery::SupervisorPhase,
+    route_policy::RoutingPolicyPlan,
     session_record::{SessionRecord, SessionStore},
     supervisor_activation,
 };
@@ -60,8 +55,9 @@ impl RunningNativeSession {
                 );
                 Ok(status)
             }
-            (Err(wait_error), Ok(())) => Err(wait_error)
-                .context("native TUN core wait failed; session recovery completed"),
+            (Err(wait_error), Ok(())) => {
+                Err(wait_error).context("native TUN core wait failed; session recovery completed")
+            }
             (Ok(_), Err(recovery_error)) => Err(recovery_error),
             (Err(wait_error), Err(recovery_error)) => Err(wait_error).context(format!(
                 "native TUN core wait failed; session recovery also failed ({recovery_error:#})"
@@ -154,15 +150,11 @@ pub fn start(
         runtime == std::path::PathBuf::from("/run/proxyctl").join(invoking_uid.to_string()),
         "TUN runtime path does not match the authenticated invoking UID"
     );
-    super::core_paths::resolve_managed_core(
-        &spec.managed_core_root,
-        invoking_uid,
-        spec.core,
-    )
-    .context("selected managed core failed privileged path validation before kernel setup")?;
+    super::core_paths::resolve_managed_core(&spec.managed_core_root, invoking_uid, spec.core)
+        .context("selected managed core failed privileged path validation before kernel setup")?;
 
-    let baseline_host = crate::tun::inspect()
-        .context("cannot capture pre-activation host network baseline")?;
+    let baseline_host =
+        crate::tun::inspect().context("cannot capture pre-activation host network baseline")?;
     ensure!(
         baseline_host.routes_inspected && baseline_host.dns_inspected,
         "native TUN startup requires complete pre-activation route and DNS inspection"
@@ -170,11 +162,8 @@ pub fn start(
     super::readiness::verify_host_network_unchanged(&baseline_host, &baseline_host)
         .context("pre-activation DNS or firewall evidence is incomplete")?;
 
-    let staged_config = config_staging::stage_config(
-        &runtime,
-        spec.generated_config.as_bytes(),
-    )
-    .context("cannot stage generated core configuration in the root-owned runtime")?;
+    let staged_config = config_staging::stage_config(&runtime, spec.generated_config.as_bytes())
+        .context("cannot stage generated core configuration in the root-owned runtime")?;
     staged_config.sync()?;
 
     let store = ManifestStore::open(runtime.clone())?;
@@ -257,33 +246,32 @@ pub fn start(
     };
 
     let listener = SocketAddr::from(([127, 0, 0, 1], spec.listen_port));
-    let readiness = |process: &super::process::ProcessIdentity,
-                     token: &ActivationToken|
-     -> Result<()> {
-        let current_host = crate::tun::inspect()
-            .context("cannot capture post-activation DNS and firewall state")?;
-        super::readiness::verify_native_core_dual_stack_end_to_end_readiness(
-            &runtime,
-            process,
-            &applied.manifest.interface_name,
-            applied.manifest.interface_index,
-            core_mark,
-            core_mark_mask,
-            listener,
-            Duration::from_secs(5),
-            &plan,
-            &spec.expected_peers,
-            spec.peer_transport,
-            &spec.traffic_targets,
-            token.activation_id(),
-            token.generation(),
-            Duration::from_secs(10),
-            64 * 1024,
-            &baseline_host,
-            &current_host,
-        )
-        .map(|_| ())
-    };
+    let readiness =
+        |process: &super::process::ProcessIdentity, token: &ActivationToken| -> Result<()> {
+            let current_host = crate::tun::inspect()
+                .context("cannot capture post-activation DNS and firewall state")?;
+            super::readiness::verify_native_core_dual_stack_end_to_end_readiness(
+                &runtime,
+                process,
+                &applied.manifest.interface_name,
+                applied.manifest.interface_index,
+                core_mark,
+                core_mark_mask,
+                listener,
+                Duration::from_secs(5),
+                &plan,
+                &spec.expected_peers,
+                spec.peer_transport,
+                &spec.traffic_targets,
+                token.activation_id(),
+                token.generation(),
+                Duration::from_secs(10),
+                64 * 1024,
+                &baseline_host,
+                &current_host,
+            )
+            .map(|_| ())
+        };
 
     let (core, record) = match native_session::launch_and_commit_native_session(
         spec,
@@ -341,11 +329,8 @@ fn recover_after_apply_failure(
         journal.activation_id == activation_id && journal.generation == generation,
         "a different TUN transaction journal exists; preserving it without recovery"
     );
-    let mut backend = LinuxJournalBackend::open_for_recovery(
-        store.clone(),
-        activation_id,
-        generation,
-    )?;
+    let mut backend =
+        LinuxJournalBackend::open_for_recovery(store.clone(), activation_id, generation)?;
     super::journal_recovery_executor::recover(store, &mut backend)
         .context("cannot recover the partial pre-manifest TUN transaction")?;
     Ok(())

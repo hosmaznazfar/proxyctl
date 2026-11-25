@@ -7,9 +7,12 @@ use std::net::ToSocketAddrs;
 
 use crate::{
     cores::{CoreId, adapters, core_binary_path, managed_cores_path},
-    domain::Protocol,
     database::{NodeDatabase, default_database_path},
-    tun::{launch_spec::{CoreKind, LaunchSpec, from_generated_config}, privilege_broker::BrokerSocketTransport},
+    domain::Protocol,
+    tun::{
+        launch_spec::{CoreKind, LaunchSpec, from_generated_config},
+        privilege_broker::BrokerSocketTransport,
+    },
 };
 
 /// Resolve a stored node and construct a bounded supervisor request, without launching it.
@@ -91,9 +94,7 @@ pub fn prepare_launch_spec(
         .to_socket_addrs()
         .context("cannot resolve the selected proxy node endpoint before privilege escalation")?
         .filter(|peer| {
-            !peer.ip().is_unspecified()
-                && !peer.ip().is_multicast()
-                && unique_peers.insert(*peer)
+            !peer.ip().is_unspecified() && !peer.ip().is_multicast() && unique_peers.insert(*peer)
         })
         .take(8)
         .collect::<Vec<_>>();
@@ -111,7 +112,9 @@ pub fn prepare_launch_spec(
             && probe.fragment().is_none(),
         "TUN readiness probe must be a plain HTTP URL without credentials, query, or fragment"
     );
-    let probe_host = probe.host().context("TUN readiness probe URL has no host")?;
+    let probe_host = probe
+        .host()
+        .context("TUN readiness probe URL has no host")?;
     let probe_port = probe
         .port_or_known_default()
         .context("TUN readiness probe URL has no usable port")?;
@@ -124,8 +127,7 @@ pub fn prepare_launch_spec(
             .take(16)
             .collect::<Vec<_>>(),
     };
-    let traffic_targets =
-        build_dual_stack_probe_targets(&probe, probe_addresses, expected_status)?;
+    let traffic_targets = build_dual_stack_probe_targets(&probe, probe_addresses, expected_status)?;
     let generation = u64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
@@ -213,7 +215,6 @@ fn build_dual_stack_probe_targets(
     Ok(targets)
 }
 
-
 fn peer_transport_for_protocol(protocol: Protocol) -> BrokerSocketTransport {
     match protocol {
         Protocol::Hysteria2 => BrokerSocketTransport::Udp,
@@ -239,7 +240,10 @@ mod tests {
             Protocol::Trojan,
             Protocol::Shadowsocks,
         ] {
-            assert_eq!(peer_transport_for_protocol(protocol), BrokerSocketTransport::Tcp);
+            assert_eq!(
+                peer_transport_for_protocol(protocol),
+                BrokerSocketTransport::Tcp
+            );
         }
     }
 }

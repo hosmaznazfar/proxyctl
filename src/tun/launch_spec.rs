@@ -130,13 +130,15 @@ impl LaunchSpec {
             !self.expected_peers.is_empty()
                 && self.expected_peers.len() <= 8
                 && self.expected_peers.iter().all(|peer| {
-                    !peer.ip().is_unspecified()
-                        && !peer.ip().is_multicast()
-                        && peer.port() != 0
+                    !peer.ip().is_unspecified() && !peer.ip().is_multicast() && peer.port() != 0
                 }),
             "expected proxy peers must contain one to eight usable unicast endpoints"
         );
-        let unique_peers = self.expected_peers.iter().copied().collect::<std::collections::BTreeSet<_>>();
+        let unique_peers = self
+            .expected_peers
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
         ensure!(
             unique_peers.len() == self.expected_peers.len(),
             "expected proxy peers must not contain duplicates"

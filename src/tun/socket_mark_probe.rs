@@ -62,8 +62,14 @@ pub fn observe_proxy_outbound_mark(
     let mut ipv4_records = None;
     let mut ipv6_records = None;
     for (family, peers) in [
-        (libc::AF_INET as u8, expected_peers.iter().filter(|peer| peer.is_ipv4()).count()),
-        (libc::AF_INET6 as u8, expected_peers.iter().filter(|peer| peer.is_ipv6()).count()),
+        (
+            libc::AF_INET as u8,
+            expected_peers.iter().filter(|peer| peer.is_ipv4()).count(),
+        ),
+        (
+            libc::AF_INET6 as u8,
+            expected_peers.iter().filter(|peer| peer.is_ipv6()).count(),
+        ),
     ] {
         if peers == 0 {
             continue;
@@ -111,9 +117,11 @@ pub fn observe_proxy_outbound_mark(
             Err(error) => last_error = Some(error),
         }
     }
-    Err(last_error.unwrap_or_else(|| anyhow::anyhow!(
-        "no exact marked proxy-peer socket was found in the kernel diagnostic records"
-    )))
+    Err(last_error.unwrap_or_else(|| {
+        anyhow::anyhow!(
+            "no exact marked proxy-peer socket was found in the kernel diagnostic records"
+        )
+    }))
 }
 
 /// Validate a direct socket-mark observation against the expected routing policy.
@@ -193,5 +201,4 @@ mod tests {
         empty.records.clear();
         assert!(observed_proxy_outbound_mark(&empty, 0x42, 0xff).is_err());
     }
-
 }
