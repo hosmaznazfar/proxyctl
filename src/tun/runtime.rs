@@ -27,7 +27,10 @@ pub fn invoking_uid() -> anyhow::Result<u32> {
         .context("SUDO_UID is missing; invoke the TUN supervisor through sudo")?
         .parse::<u32>()
         .context("SUDO_UID is not a valid numeric user ID")?;
-    ensure!(sudo_uid != 0, "root cannot be the invoking TUN session owner");
+    ensure!(
+        sudo_uid != 0,
+        "root cannot be the invoking TUN session owner"
+    );
 
     let login_uid = fs::read_to_string("/proc/self/loginuid")
         .context("cannot read Linux audit login UID")?

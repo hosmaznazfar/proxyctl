@@ -64,7 +64,6 @@ pub fn read_bounded<R: Read>(reader: R) -> Result<LaunchSpec> {
     LaunchSpec::decode_bounded(&bytes)
 }
 
-
 /// Build a supervisor request from the already generated native config.
 ///
 /// This is a pure handoff constructor: it neither resolves user state nor starts

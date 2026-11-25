@@ -49,11 +49,11 @@ pub mod recovery;
 pub mod resource_snapshot;
 pub mod route_policy;
 #[cfg(target_os = "linux")]
-pub mod runtime;
-#[cfg(target_os = "linux")]
 pub mod rtnetlink;
 #[cfg(target_os = "linux")]
 pub mod rtnetlink_mutations;
+#[cfg(target_os = "linux")]
+pub mod runtime;
 pub mod service_manager;
 #[cfg(target_os = "linux")]
 pub mod socket_diag_collector;

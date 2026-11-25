@@ -6,8 +6,6 @@
 pub mod display_config;
 
 pub mod activation;
-pub mod tun_preparation;
-pub mod tun_handoff;
 pub mod benchmark;
 pub mod cores;
 pub mod listener_config;
@@ -16,6 +14,8 @@ pub mod nodes;
 pub mod pruning;
 pub mod reporting;
 pub mod sorting;
+pub mod tun_handoff;
+pub mod tun_preparation;
 pub mod updates;
 pub mod validation;
 

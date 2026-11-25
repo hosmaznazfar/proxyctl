@@ -19,7 +19,10 @@ pub fn prepare_launch_spec(node_id: u64, core: CoreId, port: u16) -> anyhow::Res
     let record = db
         .get_node(node_id)?
         .with_context(|| format!("node #{node_id} not found"))?;
-    ensure!(!record.is_deleted(), "node #{node_id} is deleted; restore it first");
+    ensure!(
+        !record.is_deleted(),
+        "node #{node_id} is deleted; restore it first"
+    );
     let node = record.node;
     drop(db);
 
@@ -28,14 +31,23 @@ pub fn prepare_launch_spec(node_id: u64, core: CoreId, port: u16) -> anyhow::Res
     ensure!(
         compatibility.is_supported(),
         "selected core does not support this node: {}",
-        compatibility.reason.as_deref().unwrap_or("unsupported configuration")
+        compatibility
+            .reason
+            .as_deref()
+            .unwrap_or("unsupported configuration")
     );
 
     let executable = core_binary_path(core)?;
-    ensure!(executable.is_file(), "selected core is not installed by Proxyctl; run setup for the selected core");
+    ensure!(
+        executable.is_file(),
+        "selected core is not installed by Proxyctl; run setup for the selected core"
+    );
     let executable = std::fs::canonicalize(executable)?;
     let managed_root = std::fs::canonicalize(managed_cores_path()?)?;
-    ensure!(executable.starts_with(managed_root), "refusing to validate a core outside Proxyctl's managed-core directory");
+    ensure!(
+        executable.starts_with(managed_root),
+        "refusing to validate a core outside Proxyctl's managed-core directory"
+    );
 
     let activation_id = std::fs::read_to_string("/proc/sys/kernel/random/uuid")
         .context("cannot obtain a kernel-generated activation UUID")?
