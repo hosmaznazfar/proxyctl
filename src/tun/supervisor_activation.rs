@@ -42,7 +42,7 @@ pub fn apply_native_kernel_plan(
         .parent()
         .context("TUN manifest store has no runtime directory")?;
     ensure!(
-        coordinator.runtime_directory()? == store_runtime,
+        coordinator.runtime_directory()?.as_path() == store_runtime,
         "kernel journal and lifecycle coordinator must share one runtime directory"
     );
     ensure!(
