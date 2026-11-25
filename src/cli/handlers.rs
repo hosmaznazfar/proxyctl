@@ -83,6 +83,74 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
     anyhow::bail!("the privileged TUN supervisor is supported only on Linux")
 }
 
+/// Recover the exact root-owned TUN activation for the invoking sudo user.
+///
+/// The supervisor never reads the user's node database or accepts resource paths from stdin.
+/// All cleanup decisions come from the root-owned manifest, journal, and session receipt.
+#[cfg(target_os = "linux")]
+fn run_tun_recovery() -> anyhow::Result<()> {
+    anyhow::ensure!(
+        unsafe { libc::geteuid() } == 0 && unsafe { libc::getuid() } == 0,
+        "internal TUN recovery entry point must run with real and effective root credentials"
+    );
+    let invoking_uid = crate::tun::runtime::invoking_uid()?;
+    let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
+    let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
+    let coordinator = crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store.clone())?;
+    let sessions = crate::tun::session_record::SessionStore::open_root_owned(runtime, invoking_uid)?;
+
+    let Some(current) = coordinator.load_current()? else {
+        anyhow::ensure!(
+            sessions.load()?.is_none(),
+            "orphaned privileged TUN session receipt has no manifest; preserving it for manual recovery"
+        );
+        println!("No privileged TUN session or recovery manifest exists.");
+        return Ok(());
+    };
+    let token = current.token;
+    if store.load_transaction_journal()?.is_some() {
+        let mut backend = crate::tun::linux_journal_backend::LinuxJournalBackend::open_for_recovery(
+            store,
+            token.activation_id(),
+            token.generation(),
+        )?;
+        coordinator.recover_session(&token, &sessions, &mut backend)?;
+    } else {
+        // A resource-free activation can be finalized without touching the kernel. If the
+        // coordinator discovers resource ownership without a journal, it fails closed before
+        // either backend method can be called.
+        struct MissingJournalBackend;
+        impl crate::tun::journal_recovery_executor::JournalRecoveryBackend for MissingJournalBackend {
+            fn inspect_fresh(
+                &mut self,
+            ) -> anyhow::Result<crate::tun::kernel_inventory::KernelSnapshot> {
+                anyhow::bail!("kernel recovery backend must not run without a durable journal")
+            }
+
+            fn remove_if_fingerprint_matches(
+                &mut self,
+                _kind: crate::tun::journal::JournalOperationKind,
+                _resource_key: &str,
+                _expected_fingerprint: &str,
+            ) -> anyhow::Result<crate::tun::ownership::ResourceState> {
+                anyhow::bail!("kernel recovery backend must not run without a durable journal")
+            }
+        }
+        coordinator.recover_session(&token, &sessions, &mut MissingJournalBackend)?;
+    }
+    println!(
+        "TUN recovery completed for activation {} (generation {}).",
+        token.activation_id(),
+        token.generation()
+    );
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn run_tun_recovery() -> anyhow::Result<()> {
+    anyhow::bail!("privileged TUN recovery is supported only on Linux")
+}
+
 pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
     let Some(command) = cli.command else {
         println!("Proxyctl is ready. Use --help to see available commands.");
@@ -107,12 +175,17 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             return Ok(());
         }
         Command::__TunSupervisor => return run_tun_supervisor(),
+        Command::__TunRecover => return run_tun_recovery(),
         Command::Tun { command } => {
             match command {
-                TunCommand::Start { .. } | TunCommand::Stop => {
+                TunCommand::Start { .. } => {
                     anyhow::bail!(
-                        "TUN session start/stop is not yet implemented; activation remains fail-closed during the supervisor migration"
+                        "TUN session start is not yet implemented; activation remains fail-closed during the supervisor migration"
                     );
+                }
+                TunCommand::Stop => {
+                    crate::services::tun_handoff::request_supervisor_recovery()?;
+                    return Ok(());
                 }
                 TunCommand::Status => {}
             }
