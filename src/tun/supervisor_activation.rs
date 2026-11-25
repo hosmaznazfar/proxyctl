@@ -96,8 +96,6 @@ mod tests {
 
         assert!(result.is_err());
     }
-}
-
 
     #[test]
     fn rejects_xray_before_opening_or_mutating_the_kernel_backend() {
@@ -119,3 +117,5 @@ mod tests {
         assert!(store.load_transaction_journal().unwrap().is_none());
         assert!(store.load().unwrap().is_none());
     }
+
+}
