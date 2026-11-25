@@ -96,6 +96,14 @@ impl RunningNativeSession {
 
     fn recover_if_current(&self) -> Result<()> {
         let Some(current) = self.coordinator.load_current()? else {
+            ensure!(
+                self.store.load_transaction_journal()?.is_none(),
+                "TUN manifest is absent while its transaction journal remains; preserving recovery evidence"
+            );
+            ensure!(
+                self.sessions.load()?.is_none(),
+                "TUN manifest is absent while its privileged session receipt remains; preserving recovery evidence"
+            );
             return Ok(());
         };
         ensure!(
