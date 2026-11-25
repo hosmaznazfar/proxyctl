@@ -142,8 +142,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(transaction.policy.table_id, RT_TABLE_MIN_PROXYCTL + 1);
-        assert_eq!(transaction.policy.bypass_priority, 10_001);
-        assert_eq!(transaction.policy.proxy_priority, 10_002);
+        assert_eq!(transaction.policy.bypass_priority, 10_002);
+        assert_eq!(transaction.policy.proxy_priority, 10_003);
     }
 
     #[test]
