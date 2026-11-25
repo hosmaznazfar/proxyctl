@@ -17,6 +17,7 @@ use super::{
     native_session,
     privilege_broker::BrokerSocketTransport,
     route_policy::RoutingPolicyPlan,
+    recovery::SupervisorPhase,
     session_record::{SessionRecord, SessionStore},
     supervisor_activation,
 };
@@ -93,6 +94,12 @@ impl RunningNativeSession {
             current.token == self.token,
             "TUN session changed before supervisor cleanup; preserving the newer generation"
         );
+        if current.snapshot.phase == SupervisorPhase::Cleaned {
+            return self
+                .coordinator
+                .finalize_session_cleanup(&self.token, &self.sessions)
+                .context("cannot finish already-cleaned native TUN session records");
+        }
         let mut backend = LinuxJournalBackend::open_for_recovery(
             self.store.clone(),
             self.token.activation_id(),
