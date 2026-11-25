@@ -261,12 +261,17 @@ impl LifecycleCoordinator {
                 );
             }
             SessionReconciliation::Inconsistent(reason) => {
-                anyhow::bail!("TUN session records are inconsistent; preserving evidence: {reason}");
+                anyhow::bail!(
+                    "TUN session records are inconsistent; preserving evidence: {reason}"
+                );
             }
         }
 
         let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
-        let snapshot = self.store.load()?.context("TUN manifest disappeared during recovery")?;
+        let snapshot = self
+            .store
+            .load()?
+            .context("TUN manifest disappeared during recovery")?;
         ensure!(
             snapshot.manifest.activation_id == token.activation_id
                 && snapshot.generation == token.generation
@@ -281,7 +286,10 @@ impl LifecycleCoordinator {
                 "recorded TUN core is still alive or its identity conflicts with the recovery token"
             );
             ensure!(
-                snapshot.core_process.as_ref().is_none_or(|identity| identity == &record.process),
+                snapshot
+                    .core_process
+                    .as_ref()
+                    .is_none_or(|identity| identity == &record.process),
                 "manifest process identity conflicts with the privileged session receipt"
             );
         } else {
@@ -311,10 +319,7 @@ impl LifecycleCoordinator {
                     "owned resource does not match its journaled fingerprint"
                 );
             }
-            super::journal_recovery_executor::recover_preserving_journal(
-                &self.store,
-                backend,
-            )?
+            super::journal_recovery_executor::recover_preserving_journal(&self.store, backend)?
         } else {
             ensure!(
                 snapshot.manifest.resources.is_empty(),
@@ -351,8 +356,13 @@ impl LifecycleCoordinator {
             sessions.path().parent() == self.store.path().parent(),
             "privileged session receipt and lifecycle manifest must share one runtime directory"
         );
-        let mut snapshot = self.store.load()?.context("no TUN recovery manifest exists")?;
-        let record = sessions.load()?.context("no privileged TUN session receipt exists")?;
+        let mut snapshot = self
+            .store
+            .load()?
+            .context("no TUN recovery manifest exists")?;
+        let record = sessions
+            .load()?
+            .context("no privileged TUN session receipt exists")?;
         ensure!(
             snapshot.manifest.activation_id == token.activation_id
                 && snapshot.generation == token.generation
@@ -372,7 +382,10 @@ impl LifecycleCoordinator {
 
         if snapshot.phase != SupervisorPhase::CleanupPending {
             ensure!(
-                matches!(snapshot.phase, SupervisorPhase::Prepared | SupervisorPhase::Running),
+                matches!(
+                    snapshot.phase,
+                    SupervisorPhase::Prepared | SupervisorPhase::Running
+                ),
                 "TUN session is not in a stoppable lifecycle phase"
             );
             snapshot.phase = SupervisorPhase::CleanupPending;
@@ -422,7 +435,10 @@ impl LifecycleCoordinator {
             sessions.path().parent() == self.store.path().parent(),
             "privileged session receipt and lifecycle manifest must share one runtime directory"
         );
-        let mut snapshot = self.store.load()?.context("no TUN recovery manifest exists")?;
+        let mut snapshot = self
+            .store
+            .load()?
+            .context("no TUN recovery manifest exists")?;
         ensure!(
             snapshot.manifest.activation_id == token.activation_id
                 && snapshot.generation == token.generation,
@@ -448,7 +464,10 @@ impl LifecycleCoordinator {
                 "refusing to finalize TUN cleanup while the recorded core is still alive"
             );
             ensure!(
-                snapshot.core_process.as_ref().is_none_or(|identity| identity == &record.process),
+                snapshot
+                    .core_process
+                    .as_ref()
+                    .is_none_or(|identity| identity == &record.process),
                 "manifest process identity conflicts with the privileged session receipt"
             );
         } else {
@@ -498,10 +517,8 @@ impl LifecycleCoordinator {
             snapshot.core_process = None;
             self.store.write(&snapshot)?;
         }
-        self.store.remove_completed_transaction_journal(
-            &token.activation_id,
-            token.generation,
-        )?;
+        self.store
+            .remove_completed_transaction_journal(&token.activation_id, token.generation)?;
         if let Some(record) = receipt {
             sessions.remove(&record)?;
         }
@@ -658,8 +675,10 @@ pub fn reconcile_session_records(
             if snapshot.core_process.is_none()
                 || snapshot.core_process.as_ref() == Some(&record.process) =>
         {
-            Ok(SessionReconciliation::CleanedAwaitingReceiptRemoval(record.clone()))
-        },
+            Ok(SessionReconciliation::CleanedAwaitingReceiptRemoval(
+                record.clone(),
+            ))
+        }
         _ => Ok(SessionReconciliation::Inconsistent(
             "manifest phase or process identity conflicts with the session receipt".into(),
         )),
@@ -1146,11 +1165,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let runtime = directory.path().join("runtime");
         let store = ManifestStore::open(&runtime).unwrap();
-        let sessions = SessionStore::open_for_owner(
-            runtime,
-            unsafe { libc::geteuid() },
-            unsafe { libc::getuid() },
-        )
+        let sessions = SessionStore::open_for_owner(runtime, unsafe { libc::geteuid() }, unsafe {
+            libc::getuid()
+        })
         .unwrap();
         let coordinator = LifecycleCoordinator::new(store).unwrap();
         let token = coordinator
@@ -1174,7 +1191,10 @@ mod tests {
 
         let deadline = Instant::now() + Duration::from_secs(2);
         let identity = loop {
-            assert!(Instant::now() < deadline, "fake core did not become inspectable");
+            assert!(
+                Instant::now() < deadline,
+                "fake core did not become inspectable"
+            );
             if let Ok(identity) = ProcessIdentity::capture(child.id())
                 && identity.executable == executable
                 && identity.verify().unwrap_or(false)
@@ -1219,7 +1239,9 @@ mod tests {
 
         struct UnexpectedRecoveryBackend;
         impl JournalRecoveryBackend for UnexpectedRecoveryBackend {
-            fn inspect_fresh(&mut self) -> anyhow::Result<crate::tun::kernel_inventory::KernelSnapshot> {
+            fn inspect_fresh(
+                &mut self,
+            ) -> anyhow::Result<crate::tun::kernel_inventory::KernelSnapshot> {
                 anyhow::bail!("backend must not be called without a durable journal")
             }
 
