@@ -2,9 +2,13 @@
 use super::process::{ProcessHandle, ProcessIdentity, read_process_owner_uid};
 #[cfg(target_os = "linux")]
 use super::session_record::{SessionRecord, SessionStore};
+#[cfg(target_os = "linux")]
 use super::{
     journal_recovery_executor::{JournalRecoveryBackend, JournalRecoveryReport},
-    manifest_store::{JournalOperationState, ManifestSnapshot, ManifestStore},
+    manifest_store::JournalOperationState,
+};
+use super::{
+    manifest_store::{ManifestSnapshot, ManifestStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
 use anyhow::{Context, Result, ensure};
@@ -1211,6 +1215,28 @@ mod tests {
                 .finalize_session_cleanup(&token, &sessions)
                 .is_err(),
             "resource-bearing manifest without its completed transaction journal must be retained"
+        );
+
+        struct UnexpectedRecoveryBackend;
+        impl JournalRecoveryBackend for UnexpectedRecoveryBackend {
+            fn inspect_fresh(&mut self) -> anyhow::Result<crate::tun::kernel_inventory::KernelSnapshot> {
+                anyhow::bail!("backend must not be called without a durable journal")
+            }
+
+            fn remove_if_fingerprint_matches(
+                &mut self,
+                _kind: crate::tun::journal::JournalOperationKind,
+                _resource_key: &str,
+                _expected_fingerprint: &str,
+            ) -> anyhow::Result<crate::tun::ownership::ResourceState> {
+                anyhow::bail!("backend must not be called without a durable journal")
+            }
+        }
+        assert!(
+            coordinator
+                .recover_session(&token, &sessions, &mut UnexpectedRecoveryBackend)
+                .is_err(),
+            "recovery must fail closed when the resource journal is missing"
         );
         assert_eq!(sessions.load().unwrap(), Some(record));
         assert_eq!(
