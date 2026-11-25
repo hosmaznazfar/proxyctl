@@ -101,8 +101,8 @@ fn run_tun_recovery() -> anyhow::Result<()> {
 
     let Some(current) = coordinator.load_current()? else {
         anyhow::ensure!(
-            sessions.load()?.is_none(),
-            "orphaned privileged TUN session receipt has no manifest; preserving it for manual recovery"
+            sessions.load()?.is_none() && store.load_transaction_journal()?.is_none(),
+            "orphaned privileged TUN receipt or transaction journal has no manifest; preserving it for manual recovery"
         );
         println!("No privileged TUN session or recovery manifest exists.");
         return Ok(());
@@ -184,8 +184,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     );
                 }
                 TunCommand::Stop => {
-                    crate::services::tun_handoff::request_supervisor_recovery()?;
-                    return Ok(());
+                    #[cfg(target_os = "linux")]
+                    {
+                        crate::services::tun_handoff::request_supervisor_recovery()?;
+                        return Ok(());
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    anyhow::bail!("privileged TUN recovery is supported only on Linux");
                 }
                 TunCommand::Status => {}
             }
