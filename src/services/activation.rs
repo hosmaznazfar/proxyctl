@@ -180,6 +180,10 @@ fn activate_with_policy(
                     !state_path.exists(),
                     "another Proxyctl-managed session became active before loopback restoration"
                 );
+                ensure!(
+                    !runtime.join("tun-session.json").exists(),
+                    "privileged TUN recovery must finish before loopback restoration"
+                );
             } else {
                 ensure!(
                     !runtime.join("tun-previous.json").exists(),
