@@ -893,6 +893,14 @@ struct PreviousLoopbackSession {
     port: u16,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PendingTunSession {
+    schema_version: u16,
+    activation_id: String,
+    generation: u64,
+}
+
 /// Read the active loopback session without changing it, for the explicit TUN transition.
 #[cfg(target_os = "linux")]
 pub fn active_loopback_session() -> anyhow::Result<ActiveLoopbackSession> {
@@ -991,6 +999,102 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
 #[cfg(not(target_os = "linux"))]
 pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
+/// Persist an unprivileged hint that a privileged TUN session is being started.
+///
+/// The marker is written before sudo handoff so a front-end crash cannot make a live TUN
+/// session invisible to `proxyctl stop`. It is never trusted for privileged recovery.
+#[cfg(target_os = "linux")]
+pub fn write_tun_session_marker(activation_id: &str, generation: u64) -> anyhow::Result<()> {
+    ensure!(
+        activation_id.len() == 36
+            && activation_id.bytes().enumerate().all(|(index, byte)| {
+                if [8, 13, 18, 23].contains(&index) {
+                    byte == b'-'
+                } else {
+                    byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                }
+            }),
+        "invalid TUN activation identity for user runtime marker"
+    );
+    ensure!(generation > 0, "TUN marker generation must be non-zero");
+    let (runtime, state_path) = paths()?;
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    ensure!(
+        !state_path.exists(),
+        "a loopback session became active before the TUN handoff"
+    );
+    let marker_path = runtime.join("tun-session.json");
+    ensure!(
+        !marker_path.exists(),
+        "a TUN session marker already exists; recover it before starting another session"
+    );
+    let marker = PendingTunSession {
+        schema_version: 1,
+        activation_id: activation_id.to_owned(),
+        generation,
+    };
+    write_atomic(&marker_path, &serde_json::to_vec(&marker)?)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn write_tun_session_marker(_activation_id: &str, _generation: u64) -> anyhow::Result<()> {
+    anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
+/// Whether a TUN handoff or session is pending in the current user's runtime.
+#[cfg(target_os = "linux")]
+pub fn has_pending_tun_session() -> anyhow::Result<bool> {
+    let (runtime, _) = paths()?;
+    Ok(runtime.join("tun-session.json").exists())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn has_pending_tun_session() -> anyhow::Result<bool> {
+    Ok(false)
+}
+
+/// Remove the user-owned TUN hint only after privileged recovery or session completion.
+#[cfg(target_os = "linux")]
+pub fn clear_tun_session_marker() -> anyhow::Result<bool> {
+    let (runtime, _) = paths()?;
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    let marker_path = runtime.join("tun-session.json");
+    if !marker_path.exists() {
+        return Ok(false);
+    }
+    let metadata = fs::symlink_metadata(&marker_path)
+        .context("cannot inspect pending TUN session marker")?;
+    ensure!(
+        metadata.file_type().is_file()
+            && metadata.uid() == unsafe { libc::getuid() }
+            && metadata.permissions().mode() & 0o7777 == 0o600
+            && metadata.nlink() == 1,
+        "pending TUN session marker has an unsafe identity or mode"
+    );
+    let marker: PendingTunSession = serde_json::from_slice(&fs::read(&marker_path)?)
+        .context("pending TUN session marker is corrupt")?;
+    ensure!(
+        marker.schema_version == 1
+            && marker.generation > 0
+            && marker.activation_id.len() == 36
+            && marker.activation_id.bytes().enumerate().all(|(index, byte)| {
+                if [8, 13, 18, 23].contains(&index) {
+                    byte == b'-'
+                } else {
+                    byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                }
+            }),
+        "pending TUN session marker contains invalid identity data"
+    );
+    fs::remove_file(&marker_path).context("cannot remove completed TUN session marker")?;
+    Ok(true)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn clear_tun_session_marker() -> anyhow::Result<bool> {
+    Ok(false)
 }
 
 /// Report whether a prior loopback session is awaiting restoration after TUN mode.
