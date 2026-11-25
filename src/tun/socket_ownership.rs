@@ -2,7 +2,8 @@
 //!
 //! INET_DIAG_MARK records expose socket inodes, not process IDs. This module maps those
 //! inodes to the exact pidfd-pinned managed core process without requiring privileges.
-//! It does not inspect or infer socket marks; that requires the privileged sock_diag broker.
+//! It does not inspect or infer socket marks; the privileged supervisor joins these inodes
+//! with kernel-origin INET_DIAG_MARK records.
 
 use anyhow::{Context, Result, ensure};
 use std::{collections::BTreeSet, fs, path::Path};
