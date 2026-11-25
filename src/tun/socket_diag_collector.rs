@@ -1,9 +1,9 @@
 //! Bounded orchestration for Linux socket-diagnostic dumps.
 //!
-//! This layer owns no file descriptor and performs no privilege escalation. A future
-//! NETLINK_SOCK_DIAG transport supplies kernel-origin metadata and must honor receive
-//! timeouts. The orchestration independently enforces a monotonic deadline and the
-//! accumulator bounds; tests use an in-memory transport.
+//! This layer owns no file descriptor and performs no privilege escalation. The privileged
+//! Proxyctl supervisor supplies a NETLINK_SOCK_DIAG transport with kernel-origin metadata
+//! and bounded receive timeouts. The orchestration independently enforces a monotonic deadline
+//! and accumulator bounds; tests use an in-memory transport.
 
 use std::time::{Duration, Instant};
 
@@ -26,8 +26,7 @@ pub struct ReceivedNetlinkDatagram {
 /// Narrow transport contract for a single NETLINK_SOCK_DIAG socket.
 ///
 /// Implementations must send to the kernel netlink address and return sender port ID
-/// and MSG_TRUNC status from the same recvmsg call. The production implementation is
-/// intentionally separate.
+/// and MSG_TRUNC status from the same recvmsg call.
 pub trait SocketDiagnosticIo {
     fn send_request(&mut self, request: &[u8]) -> Result<()>;
     fn receive(&mut self, timeout: Duration) -> Result<ReceivedNetlinkDatagram>;
