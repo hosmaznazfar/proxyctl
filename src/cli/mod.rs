@@ -54,7 +54,7 @@ enum TunCommand {
         #[arg(long)]
         foreground: bool,
     },
-    /// Return the current TUN session to loopback mode (not yet implemented).
+    /// Stop the recorded privileged core and recover its journaled TUN resources.
     Stop,
     /// Show interfaces, default routes, DNS, and firewall state (read-only).
     Status,
