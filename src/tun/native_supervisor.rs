@@ -450,3 +450,58 @@ fn recover_committed_start(
         .context("cannot recover the failed native TUN startup generation")?;
     Ok(())
 }
+
+#[cfg(test)]
+mod signal_tests {
+    use super::*;
+    use std::{
+        process::{Command, Stdio},
+        time::Instant,
+    };
+
+    fn live_child() -> (std::process::Child, super::super::process::ProcessIdentity) {
+        let child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("sleep must be available for signal-forwarding tests");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Ok(identity) = super::super::process::ProcessIdentity::capture(child.id()) {
+                if identity.verify().unwrap_or(false) {
+                    return (child, identity);
+                }
+            }
+            assert!(
+                Instant::now() < deadline,
+                "test child did not remain available long enough to capture its identity"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn foreground_terminal_signal_is_not_forwarded_twice() {
+        let (mut child, identity) = live_child();
+        let guard = SignalForwardingGuard::install(identity.clone(), true).unwrap();
+        forward_supervisor_signal(libc::SIGINT);
+        let process = super::super::process::ProcessHandle::open(identity).unwrap();
+        assert!(!process.is_exited().unwrap());
+        child.kill().unwrap();
+        child.wait().unwrap();
+        drop(guard);
+    }
+
+    #[test]
+    fn supervisor_only_termination_is_forwarded_to_the_pinned_child() {
+        let (mut child, identity) = live_child();
+        let guard = SignalForwardingGuard::install(identity.clone(), false).unwrap();
+        forward_supervisor_signal(libc::SIGTERM);
+        let process = super::super::process::ProcessHandle::open(identity).unwrap();
+        assert!(process.wait_exit(Duration::from_secs(2)).unwrap());
+        child.wait().unwrap();
+        drop(guard);
+    }
+}
