@@ -107,20 +107,8 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
     const DEFAULT_PROBE_STATUS: u16 = 204;
 
     // Atomically verify and stop only the active loopback process before reusing its port.
-    let active = match crate::services::activation::stop_active_loopback_for_tun() {
-        Ok(active) => active,
-        Err(error) => {
-            let restoration = crate::services::activation::restore_previous_loopback_if_any();
-            return match restoration {
-                Ok(_) => Err(error).context(
-                    "could not stop the active loopback session for TUN transition",
-                ),
-                Err(restore_error) => Err(error).context(format!(
-                    "could not stop the active loopback session and restoration also failed ({restore_error:#})"
-                )),
-            };
-        }
-    };
+    let active = crate::services::activation::stop_active_loopback_for_tun()
+        .context("cannot transition the active loopback session to TUN mode")?;
 
     let spec = match crate::services::tun_preparation::prepare_launch_spec(
         active.node_id,
