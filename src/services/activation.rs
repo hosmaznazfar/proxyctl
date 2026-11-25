@@ -398,52 +398,67 @@ pub fn stop() -> anyhow::Result<()> {
     {
         let (runtime, state) = paths()?;
         let _lock = RuntimeLock::acquire(&runtime)?;
-        let store = crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
-        let current_manifest = store.load()?;
-        let transaction_journal = store.load_transaction_journal()?;
-        if current_manifest.is_some() || transaction_journal.is_some() {
-            let helper =
-                crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(&runtime)
-                    .context("cannot connect to the TUN mutation helper for safe stop")?;
-            if current_manifest.is_some() {
-                let coordinator =
-                    crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
-                let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(
-                    &helper,
-                    &coordinator,
-                );
-                orchestrator
-                    .stop_current_xray()
-                    .context("cannot stop the active generation-bound TUN service")?;
-            } else if let Some(journal) = transaction_journal {
-                crate::tun::xray_launcher::stop_core_service_generation(
-                    &journal.activation_id,
-                    journal.generation,
-                    None,
-                )
-                .context("cannot stop the Xray service associated with the orphaned TUN journal")?;
-                let recovery = helper.recover(journal.activation_id, journal.generation);
-                if !matches!(recovery.as_ref(), Ok(response) if response.success) {
-                    let recovery_message = match &recovery {
-                        Ok(response) => response.message.clone(),
-                        Err(error) => format!("{error:#}"),
-                    };
-                    let remaining =
-                        crate::tun::manifest_store::ManifestStore::open(runtime.clone())?;
-                    ensure!(
-                        remaining.load()?.is_none()
-                            && remaining.load_transaction_journal()?.is_none(),
-                        "orphaned TUN journal recovery is incomplete: {recovery_message}"
-                    );
-                }
-            }
-            println!("Stopped or recovered the Proxyctl-managed Xray TUN generation.");
-            return Ok(());
-        }
-        let managed = fs::canonicalize(managed_cores_path()?)
-            .context("Proxyctl managed-core directory is unavailable; refusing to stop")?;
-        stop_locked(&runtime, &state, &managed)
+        stop_activation_under_guard(&runtime, &state)
     }
+}
+
+/// Stop the current Proxyctl session while the caller already holds the activation lock.
+///
+/// The CLI uses this after checking for a native TUN handoff, keeping the check and ordinary
+/// loopback stop in one critical section so a concurrent TUN start cannot race between them.
+#[cfg(target_os = "linux")]
+pub fn stop_with_guard(_guard: &ActivationRuntimeGuard) -> anyhow::Result<()> {
+    let (runtime, state) = paths()?;
+    stop_activation_under_guard(&runtime, &state)
+}
+
+#[cfg(target_os = "linux")]
+fn stop_activation_under_guard(runtime: &Path, state: &Path) -> anyhow::Result<()> {
+    let store = crate::tun::manifest_store::ManifestStore::open(runtime.to_path_buf())?;
+    let current_manifest = store.load()?;
+    let transaction_journal = store.load_transaction_journal()?;
+    if current_manifest.is_some() || transaction_journal.is_some() {
+        let helper =
+            crate::tun::mutation_helper_launcher::MutationHelper::ensure_started(runtime)
+                .context("cannot connect to the TUN mutation helper for safe stop")?;
+        if current_manifest.is_some() {
+            let coordinator =
+                crate::tun::lifecycle_coordinator::LifecycleCoordinator::new(store)?;
+            let orchestrator = crate::tun::activation_orchestrator::ActivationOrchestrator::new(
+                &helper,
+                &coordinator,
+            );
+            orchestrator
+                .stop_current_xray()
+                .context("cannot stop the active generation-bound TUN service")?;
+        } else if let Some(journal) = transaction_journal {
+            crate::tun::xray_launcher::stop_core_service_generation(
+                &journal.activation_id,
+                journal.generation,
+                None,
+            )
+            .context("cannot stop the Xray service associated with the orphaned TUN journal")?;
+            let recovery = helper.recover(journal.activation_id, journal.generation);
+            if !matches!(recovery.as_ref(), Ok(response) if response.success) {
+                let recovery_message = match &recovery {
+                    Ok(response) => response.message.clone(),
+                    Err(error) => format!("{error:#}"),
+                };
+                let remaining =
+                    crate::tun::manifest_store::ManifestStore::open(runtime.to_path_buf())?;
+                ensure!(
+                    remaining.load()?.is_none()
+                        && remaining.load_transaction_journal()?.is_none(),
+                    "orphaned TUN journal recovery is incomplete: {recovery_message}"
+                );
+            }
+        }
+        println!("Stopped or recovered the Proxyctl-managed Xray TUN generation.");
+        return Ok(());
+    }
+    let managed = fs::canonicalize(managed_cores_path()?)
+        .context("Proxyctl managed-core directory is unavailable; refusing to stop")?;
+    stop_locked(runtime, state, &managed)
 }
 
 #[cfg(target_os = "linux")]
