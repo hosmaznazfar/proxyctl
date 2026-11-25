@@ -126,6 +126,14 @@ pub fn start(
     let coordinator = LifecycleCoordinator::new(store.clone())?;
     let sessions = SessionStore::open_root_owned(runtime.clone(), invoking_uid)?;
     ensure!(
+        coordinator.load_current()?.is_none(),
+        "an existing TUN activation must be recovered before starting another"
+    );
+    ensure!(
+        store.load_transaction_journal()?.is_none(),
+        "an unresolved TUN transaction journal must be recovered before starting another"
+    );
+    ensure!(
         sessions.load()?.is_none(),
         "an existing privileged TUN session must be recovered before starting another"
     );
@@ -141,7 +149,13 @@ pub fn start(
     ) {
         Ok(value) => value,
         Err(error) => {
-            let recovery = recover_after_apply_failure(&store, &coordinator, &sessions);
+            let recovery = recover_after_apply_failure(
+                &store,
+                &coordinator,
+                &sessions,
+                &spec.activation_id,
+                spec.generation,
+            );
             return match recovery {
                 Ok(()) => Err(error).context(
                     "native TUN kernel setup failed; any recoverable partial transaction was cleaned",
@@ -254,17 +268,28 @@ fn recover_after_apply_failure(
     store: &ManifestStore,
     coordinator: &LifecycleCoordinator,
     sessions: &SessionStore,
+    activation_id: &str,
+    generation: u64,
 ) -> Result<()> {
     if let Some(current) = coordinator.load_current()? {
+        ensure!(
+            current.token.activation_id() == activation_id
+                && current.token.generation() == generation,
+            "a different TUN generation exists; preserving it without recovery"
+        );
         return recover_committed_start(store, coordinator, sessions, &current.token);
     }
     let Some(journal) = store.load_transaction_journal()? else {
         return Ok(());
     };
+    ensure!(
+        journal.activation_id == activation_id && journal.generation == generation,
+        "a different TUN transaction journal exists; preserving it without recovery"
+    );
     let mut backend = LinuxJournalBackend::open_for_recovery(
         store.clone(),
-        &journal.activation_id,
-        journal.generation,
+        activation_id,
+        generation,
     )?;
     super::journal_recovery_executor::recover(store, &mut backend)
         .context("cannot recover the partial pre-manifest TUN transaction")?;
