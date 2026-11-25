@@ -1,5 +1,7 @@
 # Native TUN lifecycle code review
 
+> **Historical review log.** Entries below are chronological snapshots and may describe intermediate architectures, test failures, or activation gates that have since changed. Current behavior is documented in `README.md`, `docs/CORE_ADAPTERS.md`, `docs/TUN_PRIVILEGE_DECISION.md`, and the current supervisor source. The present native persistent-device supervisor supports sing-box, Mihomo, and Xray; TUN remains experimental pending real-host dataplane and cleanup/recovery validation.
+
 ## Scope and workflow
 - Review the Linux managed TUN lifecycle, persistent interface ownership, broker authorization/framing, journal/manifest persistence, recovery, process identity, and systemd supervision.
 - Review live `main` source, apply code and necessary regression-test source changes, and commit review improvements directly.
@@ -30,13 +32,9 @@ Applied source corrections for the reported diagnostics:
 - Fixed the moved-error handling in managed activation and removed unused variables/mutability.
 - Removed unreachable code after the pidfd signal retry loop and corrected the Xray socket file-type extension import and attachment-wait error handling.
 
-## Verification status
+## Verification status at the time of this review entry
 
-- `cargo fmt --all -- --check`: no diagnostics in the maintainer-provided run.
-- `cargo test --all-targets`: compilation failed before test execution; the single native-adapter integration test was reported ignored because all three managed core binaries were unavailable.
-- `cargo clippy --all-targets --all-features -- -D warnings`: compilation failed on the same diagnostics.
-- The above compile fixes have been committed to `main`, but they are **not verified** until the maintainer reruns formatting, tests, and Clippy against the latest commit.
-- No tests, formatting, Clippy, CI, or host TUN/network mutations were run by this review pass.
+The compile failures and incomplete validation recorded here were resolved in later work. On 2026-11-25, the maintainer reported that local formatting, Clippy, and Rust test checks all passed against the then-current `main`. This does not constitute live TUN host/dataplane validation. No claim is made here about hosted workflow status or privileged host networking tests.
 
 ## Recovery integration review — compatibility activation boundary
 
@@ -97,9 +95,9 @@ Source-level passes covered recovery lifecycle/generation binding, activation ha
 - `cargo test --all-targets`
 - Focused TUN tests and native adapter integration validation once all managed core binaries are installed.
 
-### Activation gate status
+### Activation gate status at the time of this review entry
 
-**Keep Xray TUN experimental and restricted to controlled maintainer testing; do not treat it as production-ready.** The explicit Xray CLI path exists, but the kernel cleanup ownership limitations, IPv4 global dead-route flush side effects, systemd/helper host behavior, crash/reboot recovery, DNS semantics, and real VMess/VLESS dataplane results remain unresolved. sing-box and Mihomo TUN activation remain disabled. Source review and green unit tests alone cannot close these blockers.
+At that point, Xray was restricted to controlled maintainer testing and sing-box/Mihomo were still disabled. That status is historical and has been superseded by the native persistent-device supervisor integration for all three cores. Current TUN remains experimental: real-host traffic, DNS semantics, cleanup side effects, and crash/recovery behavior still require explicit validation. Passing Rust tests alone does not establish production readiness.
 
 
 ## Generation-bound startup resume hardening
