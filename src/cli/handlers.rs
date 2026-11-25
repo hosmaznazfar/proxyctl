@@ -590,10 +590,14 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     )?;
                     return Ok(());
                 }
-                drop(stop_guard);
+                crate::services::activation::stop_with_guard(&stop_guard)?;
+                return Ok(());
             }
-            crate::services::activation::stop()?;
-            return Ok(());
+            #[cfg(not(target_os = "linux"))]
+            {
+                crate::services::activation::stop()?;
+                return Ok(());
+            }
         }
         Command::Setup { core } => {
             crate::services::cores::setup(parse_core(core.as_deref())?)?;
