@@ -55,6 +55,23 @@ pub fn recover<B: JournalRecoveryBackend>(
     store: &ManifestStore,
     backend: &mut B,
 ) -> Result<JournalRecoveryReport> {
+    recover_inner(store, backend, true)
+}
+
+/// Recover every journaled kernel resource but retain the completed journal as a durable
+/// receipt until the lifecycle coordinator commits its Cleaned phase and removes session state.
+pub(crate) fn recover_preserving_journal<B: JournalRecoveryBackend>(
+    store: &ManifestStore,
+    backend: &mut B,
+) -> Result<JournalRecoveryReport> {
+    recover_inner(store, backend, false)
+}
+
+fn recover_inner<B: JournalRecoveryBackend>(
+    store: &ManifestStore,
+    backend: &mut B,
+    remove_journal: bool,
+) -> Result<JournalRecoveryReport> {
     let mut report = JournalRecoveryReport::default();
     let journal = store
         .load_transaction_journal()?
@@ -186,7 +203,9 @@ pub fn recover<B: JournalRecoveryBackend>(
             }),
         "transaction journal is not fully resolved after recovery"
     );
-    store.remove_completed_transaction_journal(&journal.activation_id, journal.generation)?;
+    if remove_journal {
+        store.remove_completed_transaction_journal(&journal.activation_id, journal.generation)?;
+    }
     Ok(report)
 }
 
