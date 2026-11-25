@@ -33,7 +33,8 @@ impl StagedConfig {
 
     pub fn close(mut self) -> anyhow::Result<()> {
         if let Some(file) = self.file.take() {
-            file.sync_all().context("cannot sync staged TUN configuration")?;
+            file.sync_all()
+                .context("cannot sync staged TUN configuration")?;
             drop(file);
         }
         fs::remove_file(&self.path).context("cannot remove staged TUN configuration")
@@ -54,14 +55,23 @@ pub fn stage_config(runtime: &std::path::Path, config: &[u8]) -> anyhow::Result<
         config.len() <= crate::tun::launch_spec::MAX_CONFIG_BYTES,
         "generated TUN configuration exceeds the size limit"
     );
-    let document: serde_json::Value = serde_json::from_slice(config)
-        .context("generated TUN configuration is not valid JSON")?;
-    ensure!(document.is_object(), "generated TUN configuration must be a JSON object");
+    let document: serde_json::Value =
+        serde_json::from_slice(config).context("generated TUN configuration is not valid JSON")?;
+    ensure!(
+        document.is_object(),
+        "generated TUN configuration must be a JSON object"
+    );
 
-    let runtime_metadata = fs::symlink_metadata(runtime)
-        .context("cannot inspect TUN runtime directory")?;
-    ensure!(runtime_metadata.file_type().is_dir(), "TUN runtime path is not a real directory");
-    ensure!(runtime_metadata.uid() == 0, "TUN runtime directory is not root-owned");
+    let runtime_metadata =
+        fs::symlink_metadata(runtime).context("cannot inspect TUN runtime directory")?;
+    ensure!(
+        runtime_metadata.file_type().is_dir(),
+        "TUN runtime path is not a real directory"
+    );
+    ensure!(
+        runtime_metadata.uid() == 0,
+        "TUN runtime directory is not root-owned"
+    );
     ensure!(
         runtime_metadata.permissions().mode() & 0o7777 == 0o700,
         "TUN runtime directory does not have mode 0700"
@@ -72,7 +82,9 @@ pub fn stage_config(runtime: &std::path::Path, config: &[u8]) -> anyhow::Result<
     let nonce = nonce.trim();
     ensure!(
         nonce.len() == 36
-            && nonce.bytes().all(|byte| byte.is_ascii_hexdigit() || byte == b'-'),
+            && nonce
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() || byte == b'-'),
         "kernel returned an invalid config identifier"
     );
     let path = runtime.join(format!("config-{nonce}.json"));
@@ -84,9 +96,13 @@ pub fn stage_config(runtime: &std::path::Path, config: &[u8]) -> anyhow::Result<
         .with_context(|| format!("cannot create staged config {}", path.display()))?;
 
     let result = (|| -> anyhow::Result<()> {
-        file.write_all(config).context("cannot write staged TUN configuration")?;
-        file.sync_all().context("cannot sync staged TUN configuration")?;
-        let metadata = file.metadata().context("cannot inspect staged config file")?;
+        file.write_all(config)
+            .context("cannot write staged TUN configuration")?;
+        file.sync_all()
+            .context("cannot sync staged TUN configuration")?;
+        let metadata = file
+            .metadata()
+            .context("cannot inspect staged config file")?;
         ensure!(metadata.is_file(), "staged config is not a regular file");
         ensure!(metadata.uid() == 0, "staged config is not root-owned");
         ensure!(

@@ -14,6 +14,8 @@ pub mod attachment_protocol;
 pub mod broker_executor;
 pub mod broker_transport;
 #[cfg(target_os = "linux")]
+pub mod config_staging;
+#[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
 pub mod egress_probe;
 pub mod journal;
@@ -23,8 +25,6 @@ pub mod kernel_backend;
 pub mod kernel_inventory;
 pub mod kernel_transaction;
 pub mod launch_spec;
-#[cfg(target_os = "linux")]
-pub mod config_staging;
 pub mod lifecycle_coordinator;
 #[cfg(target_os = "linux")]
 pub mod linux_journal_backend;
