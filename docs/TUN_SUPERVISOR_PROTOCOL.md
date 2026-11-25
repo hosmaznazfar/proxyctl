@@ -36,6 +36,8 @@ The Linux lifecycle coordinator now exposes `bind_core_session`, which enforces 
 
 The session receipt is committed first. If the manifest write fails after that point, the receipt is intentionally retained; deleting it would destroy the only durable process-ownership evidence for that partial commit. Recovery must reconcile the receipt and manifest rather than treating either file as an independent instruction.
 
+The coordinator also exposes a read-only reconciliation classifier for the manifest/receipt pair. It distinguishes idle, prepared-without-receipt, receipt-ahead-of-manifest, matching running, cleanup-pending, cleaned-awaiting-receipt-removal, orphan-receipt and inconsistent states. It takes the same lifecycle lock and performs no signaling, deletion or kernel operation. The process credential check is against the privileged supervisor's effective UID (root in production), not the invoking user's UID: the selected core intentionally runs elevated for the TUN session, while the receipt separately binds the non-root invoking UID.
+
 ## Crash-state reconciliation requirements
 
 | Durable state | Required recovery interpretation |
