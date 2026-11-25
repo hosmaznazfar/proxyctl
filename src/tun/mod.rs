@@ -8,6 +8,8 @@
 #[cfg(target_os = "linux")]
 pub mod activation_orchestrator;
 #[cfg(target_os = "linux")]
+pub mod activation_plan;
+#[cfg(target_os = "linux")]
 pub mod attachment_contract;
 #[cfg(target_os = "linux")]
 pub mod attachment_protocol;
