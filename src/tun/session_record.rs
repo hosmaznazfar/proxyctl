@@ -32,6 +32,31 @@ pub struct SessionRecord {
 }
 
 impl SessionRecord {
+    /// Construct a record with a kernel-generated session nonce.
+    pub fn new(
+        invoking_uid: u32,
+        activation_id: String,
+        generation: u64,
+        core: CoreKind,
+        process: ProcessIdentity,
+    ) -> Result<Self> {
+        let session_nonce = fs::read_to_string("/proc/sys/kernel/random/uuid")
+            .context("cannot obtain a kernel-generated TUN session nonce")?
+            .trim()
+            .to_owned();
+        let record = Self {
+            schema_version: 1,
+            invoking_uid,
+            session_nonce,
+            activation_id,
+            generation,
+            core,
+            process,
+        };
+        record.validate()?;
+        Ok(record)
+    }
+
     pub fn validate(&self) -> Result<()> {
         ensure!(self.schema_version == 1, "unsupported TUN session record version");
         ensure!(self.invoking_uid != 0, "TUN session owner UID must be non-zero");
@@ -63,9 +88,9 @@ impl SessionStore {
     ) -> Result<Self> {
         let directory = directory.into();
         ensure!(invoking_uid != 0, "TUN session owner UID must be non-zero");
-        let uid_component = invoking_uid.to_string();
+        let expected_directory = PathBuf::from("/run/proxyctl").join(invoking_uid.to_string());
         ensure!(
-            directory.file_name().and_then(|name| name.to_str()) == Some(uid_component.as_str()),
+            directory == expected_directory,
             "privileged runtime directory does not match the invoking UID"
         );
         Self::open_for_owner(directory, 0, invoking_uid)
@@ -245,6 +270,20 @@ mod tests {
                 executable: PathBuf::from("/home/user/.local/share/proxyctl/cores/xray/xray"),
             },
         }
+    }
+
+    #[test]
+    fn constructs_record_with_kernel_generated_session_nonce() {
+        let source = record();
+        let generated = SessionRecord::new(
+            unsafe { libc::getuid() },
+            source.activation_id,
+            source.generation,
+            source.core,
+            source.process,
+        )
+        .unwrap();
+        assert!(canonical_uuid(&generated.session_nonce));
     }
 
     #[test]
