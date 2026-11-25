@@ -86,3 +86,15 @@ cargo build --release --locked
 ```
 
 These checks do not start a real proxy core or change system networking.
+
+
+## WebSocket early-data URI normalization
+
+Xray-compatible share links may encode WebSocket early data inside the path query
+(for example, `path=%2Fsocket%3Fed%3D2048`). The URI parser decodes the outer
+query value, and shared transport normalization extracts the inner `ed` parameter.
+sing-box receives a clean WebSocket path plus `max_early_data` and the
+`Sec-WebSocket-Protocol` header convention. Xray receives its native path form
+with `?ed=N` restored, while other adapters receive their corresponding native
+early-data fields. Conflicting or duplicate early-data values are rejected rather
+than silently choosing one.
