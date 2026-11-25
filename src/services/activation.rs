@@ -1178,8 +1178,29 @@ pub fn restore_previous_loopback_if_any() -> anyhow::Result<bool> {
         "mihomo" => CoreId::Mihomo,
         _ => anyhow::bail!("pending loopback restoration core is unsupported"),
     };
-    activate_if_idle(previous.node_id, core, Some(previous.port), false)
-        .context("cannot restore the previous loopback session")?;
+    if let Err(activation_error) =
+        activate_if_idle(previous.node_id, core, Some(previous.port), false)
+    {
+        // Another concurrent TUN-stop path may have restored the same session after this
+        // caller read the marker. Accept only that exact live node/core/port identity.
+        let _lock = RuntimeLock::acquire(&runtime)?;
+        if state_path.exists() {
+            let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
+                .context("active loopback state is corrupt during restoration reconciliation")?;
+            ensure!(
+                state.node_id == previous.node_id
+                    && state.core == previous.core
+                    && state.port == previous.port
+                    && state.tun.is_none()
+                    && matches_process(state.pid, &state.executable, state.start_ticks),
+                "another session won the loopback slot; preserving restoration metadata"
+            );
+            fs::remove_file(&previous_path)
+                .context("cannot remove concurrently completed loopback restoration metadata")?;
+            return Ok(true);
+        }
+        return Err(activation_error).context("cannot restore the previous loopback session");
+    }
 
     let _lock = RuntimeLock::acquire(&runtime)?;
     let state: ActiveProcess = serde_json::from_slice(&fs::read(&state_path)?)
