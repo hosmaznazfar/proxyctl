@@ -543,9 +543,11 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             return Ok(());
         }
         Command::Stop => {
-            let tun_pending = crate::services::activation::has_pending_tun_session()?
+            let mut tun_pending = crate::services::activation::has_pending_tun_session()?
                 || crate::services::activation::has_pending_previous_loopback()?;
             crate::services::activation::stop()?;
+            tun_pending |= crate::services::activation::has_pending_tun_session()?
+                || crate::services::activation::has_pending_previous_loopback()?;
             if tun_pending {
                 #[cfg(target_os = "linux")]
                 {
