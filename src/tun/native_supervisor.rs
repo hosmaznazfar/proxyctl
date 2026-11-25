@@ -466,8 +466,19 @@ mod signal_tests {
 
     static SIGNAL_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    fn live_child() -> (std::process::Child, super::super::process::ProcessIdentity) {
-        let mut child = Command::new("sleep")
+    struct TestChild(std::process::Child);
+
+    impl Drop for TestChild {
+        fn drop(&mut self) {
+            if !matches!(self.0.try_wait(), Ok(Some(_))) {
+                let _ = self.0.kill();
+            }
+            let _ = self.0.wait();
+        }
+    }
+
+    fn live_child() -> (TestChild, super::super::process::ProcessIdentity) {
+        let child = Command::new("sleep")
             .arg("30")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -479,9 +490,10 @@ mod signal_tests {
             if let Ok(identity) = super::super::process::ProcessIdentity::capture(child.id())
                 && identity.verify().unwrap_or(false)
             {
-                return (child, identity);
+                return (TestChild(child), identity);
             }
             if Instant::now() >= deadline {
+                let mut child = child;
                 let _ = child.kill();
                 let _ = child.wait();
                 panic!("test child did not remain available long enough to capture its identity");
@@ -493,14 +505,13 @@ mod signal_tests {
     #[test]
     fn foreground_terminal_signal_is_not_forwarded_twice() {
         let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
-        let (mut child, identity) = live_child();
+        let (child, identity) = live_child();
         let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
         let guard = SignalForwardingGuard::install(identity, true).unwrap();
         forward_supervisor_signal(libc::SIGINT);
         assert!(!process.is_exited().unwrap());
-        child.kill().unwrap();
-        child.wait().unwrap();
         drop(guard);
+        drop(child);
     }
 
     #[test]
@@ -511,7 +522,7 @@ mod signal_tests {
         let guard = SignalForwardingGuard::install(identity, false).unwrap();
         forward_supervisor_signal(libc::SIGTERM);
         assert!(process.wait_exit(Duration::from_secs(2)).unwrap());
-        child.wait().unwrap();
         drop(guard);
+        drop(child);
     }
 }
