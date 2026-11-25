@@ -41,6 +41,8 @@ pub mod manifest_store;
 #[cfg(target_os = "linux")]
 pub mod mutation_broker;
 #[cfg(target_os = "linux")]
+pub mod native_session;
+#[cfg(target_os = "linux")]
 pub mod mutation_helper_launcher;
 #[cfg(target_os = "linux")]
 pub mod native_core_launcher;
