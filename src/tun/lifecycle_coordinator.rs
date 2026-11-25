@@ -3,6 +3,7 @@ use super::process::{ProcessHandle, ProcessIdentity, read_process_owner_uid};
 #[cfg(target_os = "linux")]
 use super::session_record::{SessionRecord, SessionStore};
 use super::{
+    journal_recovery_executor::{JournalRecoveryBackend, JournalRecoveryReport},
     manifest_store::{JournalOperationState, ManifestSnapshot, ManifestStore},
     recovery::{RecoveryAction, SupervisorEvent, SupervisorPhase},
 };
@@ -214,6 +215,112 @@ impl LifecycleCoordinator {
         let manifest = self.store.load()?;
         let receipt = sessions.load()?;
         reconcile_session_records(manifest.as_ref(), receipt.as_ref())
+    }
+
+    /// Recover one activation end-to-end: stop its exact core, execute the existing
+    /// compare-before-delete journal recovery, then finalize durable session records.
+    ///
+    /// The caller supplies the privileged kernel backend. No user database or arbitrary
+    /// executable path is consulted. The lifecycle lock spans journal recovery so another
+    /// start/stop operation cannot race the resource teardown.
+    #[cfg(target_os = "linux")]
+    pub fn recover_session<B: JournalRecoveryBackend>(
+        &self,
+        token: &ActivationToken,
+        sessions: &SessionStore,
+        backend: &mut B,
+    ) -> Result<JournalRecoveryReport> {
+        match self.reconcile_session_records(sessions)? {
+            SessionReconciliation::Idle => return Ok(JournalRecoveryReport::default()),
+            SessionReconciliation::PreparedWithoutReceipt { .. } => {
+                self.claim_prepared_cleanup(token)?;
+            }
+            SessionReconciliation::ReceiptCommittedBeforeManifest(_)
+            | SessionReconciliation::Running(_)
+            | SessionReconciliation::CleanupPending(Some(_)) => {
+                self.stop_session_core(
+                    token,
+                    sessions,
+                    Duration::from_secs(2),
+                    Duration::from_secs(2),
+                )?;
+            }
+            SessionReconciliation::CleanupPending(None) => {}
+            SessionReconciliation::CleanedAwaitingReceiptRemoval(_)
+            | SessionReconciliation::CleanedWithoutReceipt => {
+                self.finalize_session_cleanup(token, sessions)?;
+                return Ok(JournalRecoveryReport::default());
+            }
+            SessionReconciliation::OrphanReceipt(_) => {
+                anyhow::bail!(
+                    "orphaned privileged TUN session receipt has no matching manifest; preserving it for explicit recovery"
+                );
+            }
+            SessionReconciliation::Inconsistent(reason) => {
+                anyhow::bail!("TUN session records are inconsistent; preserving evidence: {reason}");
+            }
+        }
+
+        let _lock = LifecycleLock::acquire(&self.lock_path, LOCK_TIMEOUT)?;
+        let snapshot = self.store.load()?.context("TUN manifest disappeared during recovery")?;
+        ensure!(
+            snapshot.manifest.activation_id == token.activation_id
+                && snapshot.generation == token.generation
+                && snapshot.phase == SupervisorPhase::CleanupPending,
+            "TUN activation changed before journal recovery could begin"
+        );
+        if let Some(record) = sessions.load()? {
+            ensure!(
+                record.activation_id == token.activation_id
+                    && record.generation == token.generation
+                    && !record.process.verify()?,
+                "recorded TUN core is still alive or its identity conflicts with the recovery token"
+            );
+            ensure!(
+                snapshot.core_process.as_ref().is_none_or(|identity| identity == &record.process),
+                "manifest process identity conflicts with the privileged session receipt"
+            );
+        } else {
+            ensure!(
+                snapshot.core_process.is_none(),
+                "manifest references a core process but its privileged session receipt is missing"
+            );
+        }
+
+        let report = if let Some(journal) = self.store.load_transaction_journal()? {
+            ensure!(
+                journal.activation_id == token.activation_id
+                    && journal.generation == token.generation,
+                "TUN transaction journal belongs to another activation"
+            );
+            for resource in &snapshot.manifest.resources {
+                let operation = journal
+                    .operations
+                    .iter()
+                    .find(|operation| operation.resource_key == resource.key)
+                    .context("owned resource is missing from the transaction journal")?;
+                ensure!(
+                    matches!(
+                        operation.state,
+                        JournalOperationState::Applied | JournalOperationState::Removed
+                    ) && operation.fingerprint.as_deref() == Some(resource.fingerprint.as_str()),
+                    "owned resource does not match its journaled fingerprint"
+                );
+            }
+            super::journal_recovery_executor::recover_preserving_journal(
+                &self.store,
+                backend,
+            )?
+        } else {
+            ensure!(
+                snapshot.manifest.resources.is_empty(),
+                "TUN resource manifest exists but its transaction journal is missing"
+            );
+            JournalRecoveryReport::default()
+        };
+        drop(_lock);
+        self.finalize_session_cleanup(token, sessions)?;
+        Ok(report)
     }
 
     /// Stop only the exact root-owned core process recorded for this activation.
