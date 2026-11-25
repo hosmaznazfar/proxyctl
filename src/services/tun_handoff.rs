@@ -73,6 +73,28 @@ const STARTUP_ACK_TIMEOUT: Duration = Duration::from_secs(30);
 /// The supervisor closes stdout after its reply; a future detached supervisor can then continue
 /// monitoring independently. A Started reply is accepted only while the supervisor is still
 /// alive. This function does not itself enable TUN or start a core.
+/// Ask the single Proxyctl executable to recover and stop the current privileged TUN session.
+///
+/// Sudo keeps its terminal attached for authentication. The request carries no caller-controlled
+/// paths or arguments beyond the fixed hidden command; the supervisor derives the runtime owner
+/// from sudo credentials and loads only root-owned durable records.
+pub fn request_supervisor_recovery() -> Result<()> {
+    let sudo = find_sudo()?;
+    let executable =
+        std::env::current_exe().context("cannot resolve current Proxyctl executable")?;
+    let status = Command::new(sudo)
+        .arg("--")
+        .arg(executable)
+        .arg("__tun-recover")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .context("cannot launch privileged Proxyctl TUN recovery via sudo")?;
+    ensure!(status.success(), "privileged TUN recovery exited with {status}");
+    Ok(())
+}
+
 pub fn request_supervisor_session(spec: &LaunchSpec) -> Result<SessionRecord> {
     let encoded = spec
         .encode_bounded()
