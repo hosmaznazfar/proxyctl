@@ -54,11 +54,11 @@ The adapter reports how its core obtains the TUN device. This is separate from w
 
 Xray's Linux TUN inbound supports both a native named-device path and an optional externally supplied descriptor path. Proxyctl uses the native named-device path, matching the single-application, TUN-only elevation model verified in v2rayN:
 
-1. The privileged Proxyctl supervisor creates and journals one generation-owned persistent TUN interface with the fixed name `tun-proxyctl`.
-2. Xray starts directly as the selected root-owned session child, opens that existing named TUN device through its native inbound, and configures the configured MTU and IPv4/IPv6 gateway addresses.
-3. Xray's generated config keeps automatic route and DNS integration disabled. Proxyctl remains the sole owner of routes and policy rules through the write-ahead journal.
-4. Proxyctl verifies that the exact Xray process has attached to the expected interface, then runs the same dual-stack end-to-end readiness checks and commits the session receipt.
-5. The supervisor stops/reaps the exact core before generation-scoped recovery removes the persistent interface, routes, and policy rules.
+1. The privileged Proxyctl supervisor creates and journals one generation-owned persistent TUN interface with the fixed name `tun-proxyctl`. Its initial `TUNSETIFF` uses `IFF_TUN | IFF_NO_PI | IFF_TUN_EXCL`; after `TUNSETPERSIST`, the creating descriptor is closed.
+2. Xray starts directly as the selected root-owned session child. Its Linux native inbound opens `/dev/net/tun`, attaches to the existing name with `TUNSETIFF`, and looks up that link. Xray first attempts `IFF_VNET_HDR` and falls back to the ordinary TUN flags if that attachment/offload mode is unavailable.
+3. Xray's native `Start` sets the interface MTU, brings the link up, and assigns its configured IPv4/IPv6 gateway addresses. Its generated config leaves automatic route and DNS integration disabled. Proxyctl remains the sole owner of routes and policy rules through the write-ahead journal.
+4. Proxyctl verifies that the exact Xray process has attached to the expected interface by inspecting its live `/proc/<pid>/fdinfo` entries and matching the interface name and ifindex, then runs the same dual-stack end-to-end readiness checks and commits the session receipt.
+5. Xray's native `Close` removes the addresses it added, brings the link down, and closes its queue descriptor; it does not clear Proxyctl's persistent-device ownership. The supervisor stops/reaps the exact core before generation-scoped recovery clears persistence and removes the interface, routes, and policy rules.
 
 The optional `XRAY_TUN_FD` path is deliberately not used. When Xray adopts an external FD, its Linux `Start` path does not configure link state, MTU, gateway addresses, or routes; that would require a separate Proxyctl-owned interface-configuration lifecycle. Avoid that unnecessary descriptor path because the native named-device mode already fits the supervisor architecture.
 
