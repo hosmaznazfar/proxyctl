@@ -81,4 +81,6 @@ A separate finalization operation is available only after the caller has complet
 
 This order is restartable: a crash after the `Cleaned` write can resume from the remaining journal/receipt; a crash after journal removal can resume using the durable `Cleaned` marker; a crash after receipt removal leaves a `Cleaned` manifest with no receipt, which can be safely removed. Missing journals are not accepted for a `CleanupPending` manifest with owned resources.
 
-These are lifecycle primitives only. They are not connected to a CLI stop path or the kernel journal recovery executor, and no network cleanup is performed by either method.
+The coordinator now also exposes a generic `recover_session` orchestration method. It classifies the durable state, claims an orphaned Prepared activation, stops a matching recorded core, invokes the existing compare-before-delete journal recovery executor under the lifecycle lock, and then finalizes the session records. The executor can retain its completed journal so the coordinator writes `Cleaned` before removing the journal and receipt. Orphan receipts, inconsistent records, missing journals for resource-bearing manifests, and fingerprint mismatches remain fail-closed.
+
+This orchestration method is not connected to a CLI stop path or the hidden supervisor yet. It requires a caller-supplied privileged recovery backend and does not launch a core. Network cleanup can occur only if a future caller deliberately invokes it with the concrete Linux backend; no network cleanup has been run as part of this implementation.
