@@ -47,10 +47,7 @@ pub struct SignalForwardingGuard {
 }
 
 impl SignalForwardingGuard {
-    pub fn install(
-        core: super::process::ProcessIdentity,
-        foreground: bool,
-    ) -> Result<Self> {
+    pub fn install(core: super::process::ProcessIdentity, foreground: bool) -> Result<Self> {
         let process = super::process::ProcessHandle::open(core)
             .context("cannot pin the exact TUN core for signal forwarding")?;
         ensure!(
@@ -82,7 +79,10 @@ impl SignalForwardingGuard {
             }
             previous.push((signal, old));
         }
-        Ok(Self { previous, _process: process })
+        Ok(Self {
+            previous,
+            _process: process,
+        })
     }
 }
 
