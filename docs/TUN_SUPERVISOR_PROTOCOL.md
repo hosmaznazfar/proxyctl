@@ -1,6 +1,6 @@
 # TUN supervisor acknowledgement and session commit protocol
 
-This document defines the next boundary in the single-executable, sudo-only TUN migration. It does not enable TUN activation, launch a core, or mutate host networking.
+This document defines the single-executable, sudo-only TUN migration boundary. The start path remains disabled and does not launch a core or create network state. The explicit `tun stop` path is connected to privileged, journal-verified cleanup and may remove only resources owned by its durable activation journal.
 
 ## One-way acknowledgement channel
 
