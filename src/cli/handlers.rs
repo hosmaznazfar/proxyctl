@@ -381,6 +381,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("node number {id} was not found"))?;
             if tun {
+                anyhow::ensure!(
+                    !crate::services::activation::has_pending_previous_loopback()?,
+                    "a previous loopback session is awaiting restoration; run 'proxyctl tun stop' before starting another TUN session"
+                );
                 let listen_port = match port {
                     Some(port) => port,
                     None => crate::services::listener_config::listen_port()?,
