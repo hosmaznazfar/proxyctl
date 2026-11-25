@@ -77,7 +77,7 @@ pub fn write_reply<W: Write>(mut writer: W, reply: &SupervisorReply) -> Result<(
     reply.validate()?;
     let mut bytes = serde_json::to_vec(reply).context("cannot encode supervisor reply")?;
     ensure!(bytes.len() < MAX_REPLY_BYTES, "supervisor reply exceeds size limit");
-    bytes.push(b'\\n');
+    bytes.push(b'\n');
     writer.write_all(&bytes).context("cannot write supervisor reply")?;
     writer.flush().context("cannot flush supervisor reply")
 }
@@ -90,7 +90,7 @@ pub fn read_reply<R: Read>(reader: R) -> Result<SupervisorReply> {
         .read_to_end(&mut bytes)
         .context("cannot read supervisor acknowledgement")?;
     ensure!(!bytes.is_empty() && bytes.len() <= MAX_REPLY_BYTES, "supervisor reply size is invalid");
-    if bytes.last() == Some(&b'\\n') {
+    if bytes.last() == Some(&b'\n') {
         bytes.pop();
     }
     ensure!(!bytes.is_empty(), "supervisor reply is empty");
