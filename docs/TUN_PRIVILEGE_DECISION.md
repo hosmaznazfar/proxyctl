@@ -255,3 +255,29 @@ pipe, sends a termination request to the sudo child, and waits for the child to 
 reaped. The request pipe remains separate from sudo's terminal-driven password prompt;
 `sudo -S` is not used. These checks harden transport setup only: the supervisor remains
 validation-only, and no core or host networking operation is enabled.
+
+
+## Root-owned privileged session record
+
+A separate Linux session record now models the privileged supervisor's durable process
+ownership without treating the user-owned lifecycle manifest as privileged input. Its
+versioned, strict schema binds:
+
+- the invoking non-root UID;
+- a fresh canonical session nonce;
+- the activation UUID and non-zero generation;
+- the closed core-kind enum; and
+- the exact process identity (PID, procfs start-time ticks, canonical executable path).
+
+The record store is rooted only in the root-owned per-UID runtime directory. It requires
+a real mode-0700 directory, writes a mode-0600 root-owned regular file through an
+exclusive temporary-file plus no-clobber atomic persistence, syncs the file and directory,
+and rejects symlinks, hard links, unexpected ownership/modes, oversized or changing
+records, unknown schema fields, and malformed identities. Removal requires a full
+record equality match, so a stale cleanup request cannot delete a newer session record.
+
+This is storage groundwork only. The current hidden supervisor does not create or consume
+the record, no core is spawned, and the TUN CLI remains fail-closed. The next integration
+must commit the record only after capturing and pinning the launched core identity, and
+must coordinate it with the activation manifest so partial commits have deterministic
+rollback/recovery behavior.
