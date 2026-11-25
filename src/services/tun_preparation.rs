@@ -71,5 +71,12 @@ pub fn prepare_launch_spec(node_id: u64, core: CoreId, port: u16) -> anyhow::Res
         CoreId::Xray => CoreKind::Xray,
         CoreId::Mihomo => CoreKind::Mihomo,
     };
-    from_generated_config(node_id, kind, port, managed_root, &generated.content)
+    from_generated_config(
+        node_id,
+        kind,
+        port,
+        activation_id,
+        managed_root,
+        &generated.content,
+    )
 }
