@@ -8,9 +8,9 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     net::SocketAddr,
+    os::fd::{AsRawFd, FromRawFd, OwnedFd},
     os::unix::process::ExitStatusExt,
     process::ExitStatus,
-    os::fd::{AsRawFd, FromRawFd, OwnedFd},
     sync::{
         Mutex, OnceLock,
         atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering},

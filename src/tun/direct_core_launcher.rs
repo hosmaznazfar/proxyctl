@@ -194,10 +194,7 @@ pub fn spawn_core(
         return Err(error).context("spawned core failed privileged process verification");
     }
 
-    Ok(SupervisedCore {
-        child,
-        identity,
-    })
+    Ok(SupervisedCore { child, identity })
 }
 
 /// Convert the closed launch-protocol enum to the domain core enum.
