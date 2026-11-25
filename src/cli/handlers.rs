@@ -47,14 +47,16 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
             previous != libc::SIG_ERR,
             "cannot detach the background TUN supervisor from terminal hangup"
         );
-        // No post-ack diagnostics are sent to the invoking terminal.
-        unsafe {
-            libc::close(libc::STDERR_FILENO);
-        }
     }
     let invoking_uid = crate::tun::runtime::invoking_uid()?;
     let invoking_gid = crate::tun::runtime::invoking_gid(invoking_uid)?;
     let runtime = crate::tun::runtime::prepare_user_runtime(invoking_uid)?;
+    if !spec.foreground {
+        // No post-bootstrap diagnostics are sent to the invoking terminal.
+        unsafe {
+            libc::close(libc::STDERR_FILENO);
+        }
+    }
 
     let session = match crate::tun::native_supervisor::start(
         &spec,
