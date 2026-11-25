@@ -6,9 +6,13 @@
 #![cfg(target_os = "linux")]
 
 use anyhow::{Context, Result, ensure};
-use std::sync::atomic::{AtomicI32, Ordering};
-use std::{net::SocketAddr, os::unix::process::ExitStatusExt, process::ExitStatus, time::Duration};
-
+use std::{
+    net::SocketAddr,
+    os::unix::process::ExitStatusExt,
+    process::ExitStatus,
+    sync::atomic::{AtomicI32, Ordering},
+    time::Duration,
+};
 
 /// The foreground supervisor shares the terminal process group with its core. Terminal
 /// signals therefore reach both processes. Install forwarding only after spawn so exec has
