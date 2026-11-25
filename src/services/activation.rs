@@ -977,12 +977,22 @@ pub fn stop_active_loopback_for_tun() -> anyhow::Result<ActiveLoopbackSession> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
 }
 
-/// Persist an unprivileged hint that a privileged TUN session is being started.
+/// Hold the user activation lock until the privileged supervisor acknowledges startup.
+#[must_use = "keep the handoff guard until the supervisor acknowledges startup"]
+pub struct TunHandoffGuard {
+    _lock: RuntimeLock,
+}
+
+/// Atomically persist the user-owned TUN hint and reserve the activation slot for handoff.
 ///
-/// The marker is written before sudo handoff so a front-end crash cannot make a live TUN
-/// session invisible to `proxyctl stop`. It is never trusted for privileged recovery.
+/// `require_previous_loopback` is true for `tun start`, which must retain the saved
+/// loopback marker. Direct `use --tun` starts require no prior session marker.
 #[cfg(target_os = "linux")]
-pub fn write_tun_session_marker(activation_id: &str, generation: u64) -> anyhow::Result<()> {
+pub fn begin_tun_session_handoff(
+    activation_id: &str,
+    generation: u64,
+    require_previous_loopback: bool,
+) -> anyhow::Result<TunHandoffGuard> {
     ensure!(
         activation_id.len() == 36
             && activation_id.bytes().enumerate().all(|(index, byte)| {
@@ -996,7 +1006,7 @@ pub fn write_tun_session_marker(activation_id: &str, generation: u64) -> anyhow:
     );
     ensure!(generation > 0, "TUN marker generation must be non-zero");
     let (runtime, state_path) = paths()?;
-    let _lock = RuntimeLock::acquire(&runtime)?;
+    let lock = RuntimeLock::acquire(&runtime)?;
     ensure!(
         !state_path.exists(),
         "a loopback session became active before the TUN handoff"
@@ -1006,17 +1016,47 @@ pub fn write_tun_session_marker(activation_id: &str, generation: u64) -> anyhow:
         !marker_path.exists(),
         "a TUN session marker already exists; recover it before starting another session"
     );
+    let previous_path = runtime.join("tun-previous.json");
+    if require_previous_loopback {
+        ensure!(
+            previous_path.exists(),
+            "the saved loopback session disappeared before TUN handoff"
+        );
+    } else {
+        ensure!(
+            !previous_path.exists(),
+            "a previous loopback restoration is pending; run 'proxyctl tun stop' first"
+        );
+    }
     let marker = PendingTunSession {
         schema_version: 1,
         activation_id: activation_id.to_owned(),
         generation,
     };
-    write_atomic(&marker_path, &serde_json::to_vec(&marker)?)
+    write_atomic(&marker_path, &serde_json::to_vec(&marker)?)?;
+    Ok(TunHandoffGuard { _lock: lock })
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn write_tun_session_marker(_activation_id: &str, _generation: u64) -> anyhow::Result<()> {
+pub fn begin_tun_session_handoff(
+    _activation_id: &str,
+    _generation: u64,
+    _require_previous_loopback: bool,
+) -> anyhow::Result<TunHandoffGuard> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
+}
+
+/// Wait for any in-progress TUN handoff to release the activation lock.
+#[cfg(target_os = "linux")]
+pub fn synchronize_tun_handoff() -> anyhow::Result<()> {
+    let (runtime, _) = paths()?;
+    let _lock = RuntimeLock::acquire(&runtime)?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn synchronize_tun_handoff() -> anyhow::Result<()> {
+    Ok(())
 }
 
 /// Whether a TUN handoff or session is pending in the current user's runtime.
