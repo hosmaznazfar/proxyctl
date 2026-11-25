@@ -119,3 +119,12 @@ A Linux-only `supervisor_activation` boundary now composes the read-only activat
 6. Adopt the exact committed `Prepared` manifest into the lifecycle coordinator.
 
 A successful call means only that the native TUN resources and `Prepared` manifest are durably recorded. It does not launch a core, prove readiness, create a session receipt, bind `Running`, or send a `started` acknowledgement. The hidden supervisor does not call this boundary yet, and `tun start` remains fail-closed. The caller is responsible for authenticating the invoking UID and selecting the intended non-root UID/GID for the TUN device.
+
+
+## Core-specific TUN attachment boundary
+
+The journaled `supervisor_activation::apply_native_kernel_plan` API now requires an explicit `CoreKind` and accepts only sing-box and Mihomo. These two adapters use a persistent named TUN device, so their interface, routes and policy rules are created together through the native-device transaction.
+
+Xray is rejected before the journal backend is opened. Its current adapter contract is `XRAY_TUN_FD` and its launcher requires a generation-bound broker descriptor; it must use the descriptor-backed transaction/attachment path rather than accidentally combining an externally supplied descriptor with a separately created persistent named device. The three core strategies must not be treated as interchangeable.
+
+This guard is a migration safety boundary, not an Xray implementation. The hidden single-executable supervisor still does not launch any core, and `tun start` remains disabled.
