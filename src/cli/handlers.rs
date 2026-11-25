@@ -107,8 +107,20 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
     const DEFAULT_PROBE_STATUS: u16 = 204;
 
     // Atomically verify and stop only the active loopback process before reusing its port.
-    let active = crate::services::activation::stop_active_loopback_for_tun()
-        .context("cannot transition the active loopback session to TUN mode")?;
+    let active = match crate::services::activation::stop_active_loopback_for_tun() {
+        Ok(active) => active,
+        Err(error) => {
+            let restoration = crate::services::activation::restore_previous_loopback_if_any();
+            return match restoration {
+                Ok(_) => Err(error).context(
+                    "could not stop the active loopback session for TUN transition",
+                ),
+                Err(restore_error) => Err(error).context(format!(
+                    "could not stop the active loopback session and restoration also failed ({restore_error:#})"
+                )),
+            };
+        }
+    };
 
     let spec = match crate::services::tun_preparation::prepare_launch_spec(
         active.node_id,
@@ -120,15 +132,12 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
     ) {
         Ok(spec) => spec,
         Err(error) => {
-            return match crate::services::activation::activate(
-                active.node_id,
-                active.core,
-                false,
-                Some(active.port),
-                false,
-            ) {
-                Ok(()) => Err(error).context(
+            return match crate::services::activation::restore_previous_loopback_if_any() {
+                Ok(true) => Err(error).context(
                     "TUN preparation failed; the original loopback session was restored",
+                ),
+                Ok(false) => Err(error).context(
+                    "TUN preparation failed and no previous loopback session was available to restore",
                 ),
                 Err(restore_error) => Err(error).context(format!(
                     "TUN preparation failed and the original loopback session could not be restored ({restore_error:#})"
@@ -140,14 +149,8 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
     match crate::services::tun_handoff::request_supervisor_session(&spec) {
         Ok(session) => {
             if foreground {
-                crate::services::activation::activate(
-                    active.node_id,
-                    active.core,
-                    false,
-                    Some(active.port),
-                    false,
-                )
-                .context("foreground TUN session ended but the original loopback session could not be restored")?;
+                crate::services::activation::restore_previous_loopback_if_any()
+                    .context("foreground TUN session ended but the original loopback session could not be restored")?;
                 println!(
                     "Foreground TUN session for node #{} with {} has exited (activation {}); loopback mode was restored.",
                     active.node_id,
@@ -173,15 +176,12 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
                     "TUN transition failed and privileged recovery also failed ({recovery_error:#}); the original loopback session was not restarted to avoid conflicting network state"
                 ));
             }
-            match crate::services::activation::activate(
-                active.node_id,
-                active.core,
-                false,
-                Some(active.port),
-                false,
-            ) {
-                Ok(()) => Err(error).context(
+            match crate::services::activation::restore_previous_loopback_if_any() {
+                Ok(true) => Err(error).context(
                     "TUN transition failed; privileged recovery completed and the original loopback session was restored",
+                ),
+                Ok(false) => Err(error).context(
+                    "TUN transition failed; privileged recovery completed but no previous loopback session was available to restore",
                 ),
                 Err(restore_error) => Err(error).context(format!(
                     "TUN transition failed; privileged recovery completed but the original loopback session could not be restored ({restore_error:#})"
@@ -318,6 +318,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     #[cfg(target_os = "linux")]
                     {
                         crate::services::tun_handoff::request_supervisor_recovery()?;
+                        if crate::services::activation::restore_previous_loopback_if_any()? {
+                            println!("Restored the previous loopback proxy session.");
+                        }
                         return Ok(());
                     }
                     #[cfg(not(target_os = "linux"))]
