@@ -13,7 +13,8 @@ use super::{
     direct_core_launcher::{self, SupervisedCore},
     launch_spec::{CoreKind, LaunchSpec},
     lifecycle_coordinator::{ActivationToken, LifecycleCoordinator},
-    manifest_store::{ManifestSnapshot, SupervisorPhase},
+    manifest_store::ManifestSnapshot,
+    recovery::SupervisorPhase,
     session_record::{SessionRecord, SessionStore},
 };
 
@@ -123,8 +124,9 @@ where
             let kill_error = core.child.kill().err();
             let wait_error = core.child.wait().err();
             if kill_error.is_some() || wait_error.is_some() {
+                let startup_error = format!("{error:#}");
                 return Err(error).context(format!(
-                    "startup failed ({error:#}); child termination error: {}; child reaping error: {}; durable recovery evidence was retained",
+                    "startup failed ({startup_error}); child termination error: {}; child reaping error: {}; durable recovery evidence was retained",
                     kill_error.map_or_else(|| "none".to_owned(), |value| value.to_string()),
                     wait_error.map_or_else(|| "none".to_owned(), |value| value.to_string())
                 ));
