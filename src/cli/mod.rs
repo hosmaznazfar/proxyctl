@@ -232,7 +232,7 @@ enum Command {
     },
     /// Show the current Proxyctl-managed session and its mode.
     Status,
-    /// Stop only the exact process tracked by Proxyctl.
+    /// Stop the active Proxyctl session; invoke privileged TUN recovery only when a TUN marker is present.
     Stop,
     /// Install all supported cores, or one selected core.
     Setup {
