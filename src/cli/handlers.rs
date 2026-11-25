@@ -71,7 +71,7 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
         };
 
     let _signal_guard = match crate::tun::native_supervisor::SignalForwardingGuard::install(
-        session.record.process.pid,
+        session.record.process.clone(),
         spec.foreground,
     ) {
         Ok(guard) => guard,
