@@ -37,8 +37,12 @@ pub fn apply_native_kernel_plan(
 ) -> Result<(ActivationToken, AppliedKernelTransaction)> {
     ensure!(generation > 0, "TUN activation generation must be non-zero");
     ensure!(owner_uid != 0, "TUN interface owner UID must be non-zero");
+    let store_runtime = store
+        .path()
+        .parent()
+        .context("TUN manifest store has no runtime directory")?;
     ensure!(
-        coordinator.runtime_directory()? == store.path().parent().unwrap_or_default(),
+        coordinator.runtime_directory()? == store_runtime,
         "kernel journal and lifecycle coordinator must share one runtime directory"
     );
     ensure!(
