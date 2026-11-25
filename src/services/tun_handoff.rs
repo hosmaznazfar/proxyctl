@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use super::activation::ActivationRuntimeGuard;
+use super::activation::TunHandoffGuard;
 use crate::tun::{
     launch_spec::LaunchSpec,
     session_record::SessionRecord,
