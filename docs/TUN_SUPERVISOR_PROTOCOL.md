@@ -49,7 +49,7 @@ The coordinator also exposes a read-only reconciliation classifier for the manif
 | Session receipt without a matching manifest | Orphan receipt. Preserve it for explicit reconciliation; do not infer which kernel resources may be removed. |
 | Both records disagree | Treat as corruption or stale-generation conflict. Preserve both records and avoid signaling or deleting resources based on a partial match. |
 
-The table is a recovery contract, not an implemented recovery engine. The existing recovery/journal code still needs an explicit root-owned reconciliation path that checks both records, handles process exit and PID reuse, and removes the receipt only after exact process cleanup and the matching resource journal are durably complete.
+The table is a recovery contract, not an implemented recovery engine. A read-only classifier now inspects both records under the lifecycle lock and identifies these states; it never signals, deletes, or mutates kernel state. The destructive recovery path still needs to handle process exit and PID reuse, reconcile the matching resource journal, and remove the receipt only after exact process cleanup and durable resource cleanup are complete.
 
 ## Readiness and background lifecycle gates
 
