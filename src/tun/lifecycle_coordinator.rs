@@ -241,8 +241,8 @@ impl LifecycleCoordinator {
             "managed core exited before its session receipt could be committed"
         );
         ensure!(
-            read_process_owner_uid(&process_handle)? == record.invoking_uid,
-            "managed core process credentials do not match the invoking user"
+            read_process_owner_uid(&process_handle)? == unsafe { libc::geteuid() },
+            "managed core process credentials do not match the privileged supervisor"
         );
 
         let mut snapshot = self
