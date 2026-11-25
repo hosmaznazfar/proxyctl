@@ -82,6 +82,8 @@ pub mod supervisor;
 #[cfg(target_os = "linux")]
 pub mod supervisor_protocol;
 #[cfg(target_os = "linux")]
+pub mod supervisor_activation;
+#[cfg(target_os = "linux")]
 pub mod systemd_recovery;
 #[cfg(target_os = "linux")]
 pub mod tun_device;
