@@ -112,7 +112,8 @@ pub fn prepare_launch_spec(
         url::Host::Domain(domain) => (domain, probe_port)
             .to_socket_addrs()
             .context("cannot resolve TUN readiness endpoint before privilege escalation")?
-            .collect::<Vec<_>>(),
+            .take(16)
+            .collect::<Vec<_>>,
     };
     let traffic_targets =
         build_dual_stack_probe_targets(&probe, probe_addresses, expected_status)?;
