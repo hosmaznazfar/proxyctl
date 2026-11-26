@@ -118,6 +118,7 @@ where
             token.generation(),
             spec.core,
             core.identity.clone(),
+            spec.resolved_family,
         )
         .context("cannot construct the privileged native TUN session receipt")?;
         coordinator

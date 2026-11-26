@@ -28,6 +28,9 @@ pub struct SessionRecord {
     pub activation_id: String,
     pub generation: u64,
     pub core: CoreKind,
+    /// Resolved application TUN family for new records; absent only in legacy schema v1 receipts.
+    #[serde(default)]
+    pub resolved_family: Option<crate::tun::address_family::ResolvedTunAddressFamily>,
     pub process: ProcessIdentity,
 }
 
@@ -39,18 +42,20 @@ impl SessionRecord {
         generation: u64,
         core: CoreKind,
         process: ProcessIdentity,
+        resolved_family: crate::tun::address_family::ResolvedTunAddressFamily,
     ) -> Result<Self> {
         let session_nonce = fs::read_to_string("/proc/sys/kernel/random/uuid")
             .context("cannot obtain a kernel-generated TUN session nonce")?
             .trim()
             .to_owned();
         let record = Self {
-            schema_version: 1,
+            schema_version: 2,
             invoking_uid,
             session_nonce,
             activation_id,
             generation,
             core,
+            resolved_family: Some(resolved_family),
             process,
         };
         record.validate()?;
@@ -59,7 +64,7 @@ impl SessionRecord {
 
     pub fn validate(&self) -> Result<()> {
         ensure!(
-            self.schema_version == 1,
+            matches!(self.schema_version, 1 | 2),
             "unsupported TUN session record version"
         );
         ensure!(
@@ -77,6 +82,10 @@ impl SessionRecord {
         ensure!(
             self.generation > 0,
             "TUN session generation must be non-zero"
+        );
+        ensure!(
+            self.schema_version == 1 || self.resolved_family.is_some(),
+            "new TUN session receipts must record the resolved address family"
         );
         self.process.validate()?;
         ensure!(
@@ -319,6 +328,7 @@ mod tests {
             activation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
             generation: 7,
             core: CoreKind::Xray,
+            resolved_family: None,
             process: ProcessIdentity {
                 pid: 42,
                 start_ticks: 99,
@@ -336,6 +346,7 @@ mod tests {
             source.generation,
             source.core,
             source.process,
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
         )
         .unwrap();
         assert!(canonical_uuid(&generated.session_nonce));

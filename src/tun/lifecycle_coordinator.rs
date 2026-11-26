@@ -868,6 +868,7 @@ mod tests {
             activation_id: activation_id.into(),
             generation,
             core: super::super::launch_spec::CoreKind::Xray,
+            resolved_family: None,
             process: ProcessIdentity {
                 pid: 4242,
                 start_ticks: 991,
