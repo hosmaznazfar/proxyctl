@@ -308,9 +308,19 @@ impl RoutingPolicyPlan {
             "every rule priority must be in the Proxyctl allocation range"
         );
 
-        ensure!(!self.routes.is_empty(), "routing plan must include at least one address family");
-        let families = self.routes.iter().map(|route| route.family).collect::<std::collections::BTreeSet<_>>();
-        ensure!(families.len() == self.routes.len(), "routing plan contains duplicate address-family routes");
+        ensure!(
+            !self.routes.is_empty(),
+            "routing plan must include at least one address family"
+        );
+        let families = self
+            .routes
+            .iter()
+            .map(|route| route.family)
+            .collect::<std::collections::BTreeSet<_>>();
+        ensure!(
+            families.len() == self.routes.len(),
+            "routing plan contains duplicate address-family routes"
+        );
         ensure!(
             self.rules.iter().all(|rule| [AddressFamily::Ipv4, AddressFamily::Ipv6].contains(&rule.family)),
             "routing plan contains an unsupported address family"
