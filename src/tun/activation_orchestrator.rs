@@ -579,7 +579,7 @@ impl<'a> ActivationOrchestrator<'a> {
                 plan.validate()?;
                 let current_host = crate::tun::inspect()
                     .context("cannot capture post-activation DNS and firewall state")?;
-                super::readiness::verify_native_core_dual_stack_end_to_end_readiness(
+                super::readiness::verify_native_core_address_family_end_to_end_readiness(
                     &runtime,
                     process,
                     &activation_request.interface_name,
@@ -592,6 +592,7 @@ impl<'a> ActivationOrchestrator<'a> {
                     &expected_peers,
                     super::privilege_broker::BrokerSocketTransport::Tcp,
                     &traffic_targets,
+                    crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
                     token.activation_id(),
                     token.generation(),
                     probe_timeout,
