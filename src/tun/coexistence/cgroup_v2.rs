@@ -6,6 +6,7 @@
 use anyhow::{Context, Result, ensure};
 use std::{
     fs,
+    os::fd::AsRawFd,
     os::unix::fs::MetadataExt,
     path::{Component, Path, PathBuf},
 };
@@ -22,6 +23,8 @@ pub struct CgroupV2Target {
     pub hierarchy_path: String,
     /// Number of non-root path components; this is nftables' cgroupv2 level.
     pub hierarchy_level: u32,
+    /// Kernel cgroup ID (kernfs node ID), used by nftables cgroupsv2 sets.
+    pub cgroup_id: u64,
     /// Resolved cgroup2 mount point in this process's mount namespace.
     pub mount_point: PathBuf,
     /// Stable directory identity used to detect deletion/recreation at the same path.
@@ -38,7 +41,7 @@ impl CgroupV2Target {
             "cgroup hierarchy level does not match its path"
         );
         ensure!(
-            self.directory_inode > 0 && self.mount_point.is_absolute(),
+            self.directory_inode > 0 && self.cgroup_id > 0 && self.mount_point.is_absolute(),
             "cgroup directory identity is incomplete"
         );
         Ok(())
@@ -62,34 +65,24 @@ impl CgroupV2Target {
             return Ok(false);
         }
         let directory = self.mount_point.join(&self.hierarchy_path);
-        let metadata = match fs::metadata(&directory) {
-            Ok(metadata) if metadata.is_dir() => metadata,
-            _ => return Ok(false),
+        let directory = match fs::File::open(&directory) {
+            Ok(directory) => directory,
+            Err(_) => return Ok(false),
         };
-        if metadata.dev() != self.directory_device || metadata.ino() != self.directory_inode {
+        let metadata = directory.metadata()?;
+        if !metadata.is_dir()
+            || metadata.dev() != self.directory_device
+            || metadata.ino() != self.directory_inode
+            || read_cgroup_id(&directory)? != self.cgroup_id
+        {
             return Ok(false);
         }
         Ok(self.process.verify()?
             && read_unified_cgroup_path(self.process.pid)? == format!("/{}", self.hierarchy_path))
     }
 
-    /// Return the path syntax accepted by nftables' `socket cgroupv2 level` expression.
-    pub fn nftables_path(&self) -> &str {
-        &self.hierarchy_path
-    }
-
-    /// Quote the path as an nftables string, preserving literal backslashes and quotes.
-    pub fn nftables_quoted_path(&self) -> String {
-        let mut quoted = String::with_capacity(self.hierarchy_path.len() + 2);
-        for character in self.hierarchy_path.chars() {
-            match character {
-                '\\' => quoted.push_str("\\\\"),
-                '"' => quoted.push_str("\\\""),
-                character => quoted.push(character),
-            }
-        }
-        quoted
-    }
+    /// The numeric ID is resolved from the pinned cgroup directory's file handle.
+    /// nftables matches this ID through a named `type cgroupsv2` set.
 }
 
 /// Capture a process and its exact cgroup v2 scope, requiring it to belong to expected_uid.
@@ -126,8 +119,12 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
         canonical_directory.starts_with(&mount_point),
         "resolved process cgroup escapes the cgroup2 mount"
     );
-    let metadata = fs::metadata(&canonical_directory)?;
+    let directory = fs::File::open(&canonical_directory)
+        .with_context(|| format!("cannot pin process cgroup {}", canonical_directory.display()))?;
+    let metadata = directory.metadata()?;
     ensure!(metadata.is_dir(), "process cgroup is not a directory");
+    let cgroup_id = read_cgroup_id(&directory)
+        .context("cannot resolve the kernel cgroup ID from its cgroupfs file handle")?;
 
     ensure!(
         process.verify()?,
@@ -151,12 +148,55 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
         owner_uid,
         hierarchy_level: hierarchy_path.split('/').count() as u32,
         hierarchy_path: hierarchy_path.to_owned(),
+        cgroup_id,
         mount_point,
         directory_device: metadata.dev(),
         directory_inode: metadata.ino(),
     };
     target.validate()?;
     Ok(target)
+}
+
+
+/// The cgroup ID (kernfs node ID) is exposed as an eight-byte cgroupfs file handle.
+/// It is not the directory's `st_ino`; those identifiers are not interchangeable.
+#[repr(C)]
+struct CgroupFileHandle {
+    handle_bytes: u32,
+    handle_type: i32,
+    id: u64,
+}
+
+fn read_cgroup_id(directory: &fs::File) -> Result<u64> {
+    const HANDLE_BYTES: u32 = std::mem::size_of::<u64>() as u32;
+    let mut handle = CgroupFileHandle {
+        handle_bytes: HANDLE_BYTES,
+        handle_type: 0,
+        id: 0,
+    };
+    let mut mount_id: libc::c_int = 0;
+    let empty_path = b"\\0".as_ptr().cast::<libc::c_char>();
+
+    // SAFETY: the fd is live; AT_EMPTY_PATH identifies that pinned directory itself.
+    // cgroup v2 file handles contain exactly the u64 kernfs node ID.
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_name_to_handle_at,
+            directory.as_raw_fd(),
+            empty_path,
+            &mut handle as *mut CgroupFileHandle,
+            &mut mount_id as *mut libc::c_int,
+            libc::AT_EMPTY_PATH,
+        )
+    };
+    ensure!(
+        result == 0,
+        "name_to_handle_at failed for the pinned cgroup directory: {}",
+        std::io::Error::last_os_error()
+    );
+    ensure!(handle.handle_bytes == HANDLE_BYTES, "cgroupfs returned an unexpected file-handle size");
+    ensure!(handle.id != 0, "kernel returned the invalid root cgroup ID");
+    Ok(handle.id)
 }
 
 fn read_unified_cgroup_path(pid: u32) -> Result<String> {
@@ -336,27 +376,6 @@ mod tests {
     }
 
     #[test]
-    fn quotes_literal_backslashes_and_quotes_for_nftables() {
-        let target = CgroupV2Target {
-            process: ProcessIdentity {
-                pid: 1,
-                start_ticks: 1,
-                executable: PathBuf::from("/usr/bin/sleep"),
-            },
-            owner_uid: 1000,
-            hierarchy_path: r#"user.slice/app-dms-v2rayN\x2dbin"scope"#.into(),
-            hierarchy_level: 2,
-            mount_point: PathBuf::from("/sys/fs/cgroup"),
-            directory_device: 1,
-            directory_inode: 2,
-        };
-        assert_eq!(
-            target.nftables_quoted_path(),
-            r#"user.slice/app-dms-v2rayN\\x2dbin\"scope"#
-        );
-    }
-
-    #[test]
     fn validates_cgroup_level_against_component_count() {
         let mut target = CgroupV2Target {
             process: ProcessIdentity {
@@ -367,6 +386,7 @@ mod tests {
             owner_uid: 1000,
             hierarchy_path: "user.slice/user-1000.slice/app.slice/app.scope".into(),
             hierarchy_level: 4,
+            cgroup_id: 42,
             mount_point: PathBuf::from("/sys/fs/cgroup"),
             directory_device: 1,
             directory_inode: 2,
