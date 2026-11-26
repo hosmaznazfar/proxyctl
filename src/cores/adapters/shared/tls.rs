@@ -248,11 +248,6 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             if certificate_pin.is_some() {
                 return Err("certificate pin was supplied while TLS is disabled".into());
             }
-            if insecure {
-                return Err(
-                    "insecure certificate verification was requested while TLS is disabled".into(),
-                );
-            }
             if verify_peer_cert_by_name.is_some() {
                 return Err(
                     "certificate name verification was supplied while TLS is disabled".into(),
