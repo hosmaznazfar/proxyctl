@@ -356,7 +356,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                                 println!("Cgroup v2: /{}", target.hierarchy_path);
                                 println!("Cgroup level: {}", target.hierarchy_level);
                                 println!(
-                                    "nftables selector: socket cgroupv2 level {} \"{}\"" ,
+                                    "nftables selector: socket cgroupv2 level {} \"{}\"",
                                     target.hierarchy_level,
                                     target.nftables_path()
                                 );
