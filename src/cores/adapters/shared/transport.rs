@@ -75,17 +75,15 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         authority = authority_values.first().map(|value| (*value).to_owned());
     } else if matches!(&kind, TransportKind::XHttp | TransportKind::HttpUpgrade) {
         host = source_host.map(str::to_owned);
-    } else if matches!(&kind, TransportKind::Http2) {
-        if let Some(host) = source_host {
-            let values = host.split(',').map(str::trim).collect::<Vec<_>>();
-            if values
-                .iter()
-                .any(|value| value.is_empty() || value.chars().any(char::is_control))
-            {
-                return Err("HTTP/2 host list is invalid".into());
-            }
-            hosts.extend(values.into_iter().map(str::to_owned));
+    } else if matches!(&kind, TransportKind::Http2) && let Some(host) = source_host {
+        let values = host.split(',').map(str::trim).collect::<Vec<_>>();
+        if values
+            .iter()
+            .any(|value| value.is_empty() || value.chars().any(char::is_control))
+        {
+            return Err("HTTP/2 host list is invalid".into());
         }
+        hosts.extend(values.into_iter().map(str::to_owned));
     }
 
     // Some VMess JSON producers encode request headers as an object. Preserve and map
