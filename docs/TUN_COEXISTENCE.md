@@ -61,7 +61,27 @@ Important constraints:
 - Existing established connections may need to reconnect before their routing behavior is fully representative. Readiness tests must establish fresh connections after the bypass is installed.
 - IPv4 and IPv6 must both be covered by the same `inet` policy, and tests must verify that neither family leaks into the Proxyctl TUN.
 
-The user's current environment reports Linux `7.3.6-1-cachyos`, nftables `1.1.7`, and a unified cgroup v2 hierarchy. Those facts are encouraging but do not establish `CONFIG_SOCK_CGROUP_DATA` or prove that the installed kernel accepts the cgroup socket expression. That capability must be probed without changing live networking before implementation is enabled.
+The user's current environment reports Linux `7.3.6-1-cachyos`, nftables `1.1.7`, and a unified cgroup v2 hierarchy. Its kernel configuration reports `CONFIG_SOCK_CGROUP_DATA=y`, `CONFIG_NF_TABLES=m`, and `CONFIG_NFT_SOCKET=m`. This confirms the relevant features were configured, but the latter two are modules and configuration alone does not prove they are currently loadable, loaded, or usable. Runtime capability detection must verify the nftables socket expression without changing live networking before the feature is enabled.
+
+## Linux distribution portability
+
+This feature is Linux-only but must not be CachyOS-specific. The implementation must use stable kernel interfaces and discover runtime capabilities instead of relying on distribution identity, package manager, release naming, or hardcoded filesystem locations.
+
+Supported environments are determined by capabilities, not a distro allowlist:
+
+- A unified cgroup v2 hierarchy mounted and readable by the privileged supervisor.
+- Kernel support for cgroup socket metadata and nftables socket matching (including `CONFIG_SOCK_CGROUP_DATA`, `CONFIG_NF_TABLES`, and `CONFIG_NFT_SOCKET`, built in or available as loadable modules).
+- A compatible nftables userspace tool and kernel netlink API.
+- Permission to create and own a dedicated nftables table and output route chain without taking ownership of another firewall manager's rules.
+- The existing Proxyctl Linux TUN, routing, and privilege prerequisites.
+
+Systemd is not a hard dependency. A systemd application scope is a convenient way to provide an isolated cgroup, but the implementation must resolve cgroup v2 membership from `/proc/<pid>/cgroup` and the mounted cgroup hierarchy. On systems without systemd, an already dedicated cgroup v2 subtree can be selected if its identity and exact matching level can be validated. Proxyctl must not move arbitrary processes or create a persistent service merely to make selection work.
+
+The feature must detect unsupported environments and report a precise reason. It must not silently fall back to UID-wide matching, executable-name matching, iptables rules, broad route exclusions, or a different mechanism with weaker isolation. In particular, cgroup v1-only systems do not satisfy this feature's initial requirements; they should continue to run ordinary Proxyctl features, while this optional coexistence feature reports that unified cgroup v2 is required.
+
+Runtime discovery must account for distro differences in nftables binary location, module loading policy, cgroup mount location, and firewall ownership. Do not assume `/usr/sbin/nft`, `/sys/fs/cgroup` without mount discovery, or permission to load kernel modules. Proxyctl should not automatically load modules or install packages. If a required module is unavailable, explain the missing capability and leave the host unchanged.
+
+A capability probe must be non-mutating with respect to the active ruleset. Prefer an isolated network namespace for syntax/kernel-expression validation when available; otherwise use an offline parser check plus a safe kernel capability query. Do not create a temporary rule in the host's active output hook merely to test support.
 
 ## Ownership and coexistence rules
 
