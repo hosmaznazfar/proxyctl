@@ -349,12 +349,20 @@ mod tests {
             crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
         )
         .unwrap();
+        assert_eq!(generated.schema_version, 2);
+        assert_eq!(
+            generated.resolved_family,
+            Some(crate::tun::address_family::ResolvedTunAddressFamily::DualStack)
+        );
         assert!(canonical_uuid(&generated.session_nonce));
     }
 
     #[test]
     fn validates_complete_session_identity() {
         assert!(record().validate().is_ok());
+        let mut invalid = record();
+        invalid.schema_version = 2;
+        assert!(invalid.validate().is_err());
         let mut invalid = record();
         invalid.invoking_uid = 0;
         assert!(invalid.validate().is_err());
