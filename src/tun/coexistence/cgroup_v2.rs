@@ -86,8 +86,8 @@ impl CgroupV2Target {
         let mut quoted = String::with_capacity(self.hierarchy_path.len() + 2);
         for character in self.hierarchy_path.chars() {
             match character {
-                '\\\\' => quoted.push_str("\\\\\\\\"),
-                '"' => quoted.push_str("\\\\""),
+                '\\' => quoted.push_str("\\\\"),
+                '"' => quoted.push_str("\\\""),
                 character => quoted.push(character),
             }
         }
