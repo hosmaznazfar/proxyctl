@@ -5,7 +5,7 @@
 //! and generation-scoped journal recovery.
 use anyhow::{Context, Result, ensure};
 use std::{
-    io::{Read, Write},
+    io::Write,
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -149,7 +149,7 @@ pub fn request_supervisor_session(
         ));
     }
 
-    let response = match receiver.recv_timeout(STARTUP_ACK_TIMEOUT) {
+    let reply = match receiver.recv_timeout(STARTUP_ACK_TIMEOUT) {
         Ok(Ok(reply)) => reply,
         Ok(Err(error)) => {
             let cleanup = abort_child(&mut child);
@@ -175,16 +175,6 @@ pub fn request_supervisor_session(
         let cleanup = abort_child(&mut child);
         anyhow::bail!("supervisor acknowledgement reader panicked; {cleanup}");
     }
-
-    let reply = match supervisor_protocol::read_reply(response.as_slice()) {
-        Ok(reply) => reply,
-        Err(error) => {
-            let cleanup = abort_child(&mut child);
-            return Err(error).context(format!(
-                "invalid privileged supervisor acknowledgement; {cleanup}"
-            ));
-        }
-    };
 
     match reply.outcome {
         SupervisorOutcome::Started { session } => {

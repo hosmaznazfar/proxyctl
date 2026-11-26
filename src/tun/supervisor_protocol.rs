@@ -169,22 +169,28 @@ mod tests {
 
     #[test]
     fn reads_frame_without_waiting_for_stream_eof() {
-        use std::sync::mpsc;
-        use std::time::Duration;
+        struct FrameOnlyReader {
+            bytes: Vec<u8>,
+            offset: usize,
+        }
+
+        impl std::io::Read for FrameOnlyReader {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                assert!(
+                    self.offset < self.bytes.len(),
+                    "reader attempted to wait for EOF after the complete frame"
+                );
+                buffer[0] = self.bytes[self.offset];
+                self.offset += 1;
+                Ok(1)
+            }
+        }
 
         let reply = SupervisorReply::not_started("frame complete");
         let mut bytes = Vec::new();
         write_reply(&mut bytes, &reply).unwrap();
-        let (sender, receiver) = mpsc::channel();
-        std::thread::spawn(move || {
-            let mut stream = std::io::Cursor::new(bytes);
-            sender.send(read_reply(&mut stream)).unwrap();
-            std::thread::sleep(Duration::from_millis(100));
-        });
-        assert_eq!(
-            receiver.recv_timeout(Duration::from_millis(50)).unwrap().unwrap(),
-            reply
-        );
+        let reader = FrameOnlyReader { bytes, offset: 0 };
+        assert_eq!(read_reply(reader).unwrap(), reply);
     }
 
     #[test]
