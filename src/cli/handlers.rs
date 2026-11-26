@@ -353,10 +353,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                             println!("Executable: {}", target.process.executable.display());
                             println!("Cgroup v2: /{}", target.hierarchy_path);
                             println!("Cgroup level: {}", target.hierarchy_level);
+                            println!("Kernel cgroup ID: {}", target.cgroup_id);
                             println!(
-                                "nftables selector: socket cgroupv2 level {} \"{}\"",
-                                target.hierarchy_level,
-                                target.nftables_quoted_path()
+                                "nftables selector: socket cgroupv2 level {} @vpn_apps",
+                                target.hierarchy_level
                             );
                             println!(
                                 "Cgroup directory identity: device {}, inode {}",
@@ -377,7 +377,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                             println!("nftables cgroup v2 socket matching: supported");
                             println!("Validated scope: /{}", target.hierarchy_path);
                             println!("Validated level: {}", target.hierarchy_level);
-                            println!("Probe: nft --check in an isolated network namespace");
+                            println!("Validated kernel cgroup ID: {}", target.cgroup_id);
+                            println!("Probe: numeric cgroupsv2 set in nft --check inside an isolated network namespace");
                             println!(
                                 "No host firewall, routes, cgroups, or processes were changed."
                             );
