@@ -1276,9 +1276,12 @@ pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Re
                     };
                     match expected.mark {
                         Some(mark) => {
-                            parse_rule_mark(value.get("fwmark")) == Some((mark.value, mark.mask))
+                            parse_rule_mark(value.get("fwmark"), value.get("fwmask"))
+                                == Some((mark.value, mark.mask))
                         }
-                        None => value.get("fwmark").is_none(),
+                        None => {
+                            value.get("fwmark").is_none() && value.get("fwmask").is_none()
+                        },
                     }
                 })
                 .count();
@@ -1302,18 +1305,49 @@ pub fn probe_routing_policy(_plan: &super::route_policy::RoutingPolicyPlan) -> R
     anyhow::bail!("live routing-policy probing is supported only on Linux");
 }
 
-fn parse_rule_mark(value: Option<&serde_json::Value>) -> Option<(u32, u32)> {
-    let value = value?;
-    if let Some(number) = value.as_u64().and_then(|number| u32::try_from(number).ok()) {
-        return Some((number, u32::MAX));
+fn parse_rule_mark(
+    value: Option<&serde_json::Value>,
+    separate_mask: Option<&serde_json::Value>,
+) -> Option<(u32, u32)> {
+    fn parse_part(value: &serde_json::Value) -> Option<u32> {
+        if let Some(number) = value.as_u64() {
+            return u32::try_from(number).ok();
+        }
+        let text = value.as_str()?;
+        let (radix, digits) = if let Some(hex) =
+            text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"))
+        {
+            (16, hex)
+        } else {
+            (10, text)
+        };
+        if digits.is_empty() {
+            return None;
+        }
+        u32::from_str_radix(digits, radix).ok()
     }
-    let text = value.as_str()?;
-    let (mark, mask) = text.split_once('/')?;
-    let parse = |part: &str| {
-        let part = part.strip_prefix("0x").unwrap_or(part);
-        u32::from_str_radix(part, if text.contains("0x") { 16 } else { 10 }).ok()
+
+    let value = value?;
+    let (mark, embedded_mask) = if let Some(text) = value.as_str() {
+        if let Some((mark, mask)) = text.split_once('/') {
+            (parse_part(&serde_json::Value::String(mark.to_owned()))?, Some(
+                parse_part(&serde_json::Value::String(mask.to_owned()))?,
+            ))
+        } else {
+            (parse_part(value)?, None)
+        }
+    } else {
+        (parse_part(value)?, None)
     };
-    Some((parse(mark)?, parse(mask)?))
+    let explicit_mask = separate_mask.map(parse_part).transpose()?;
+    if embedded_mask.is_some() && explicit_mask.is_some() && embedded_mask != explicit_mask {
+        return None;
+    }
+    let mask = embedded_mask.or(explicit_mask).unwrap_or(u32::MAX);
+    if mask == 0 || mark & !mask != 0 {
+        return None;
+    }
+    Some((mark, mask))
 }
 
 pub fn verify_readiness(
@@ -1434,18 +1468,50 @@ mod tests {
     }
 
     #[test]
-    fn parses_kernel_rule_mark_and_mask_without_guessing() {
+    fn parses_kernel_rule_mark_and_mask_from_iproute2_json_shapes() {
         assert_eq!(
-            parse_rule_mark(Some(&serde_json::json!("0x42/0xff"))),
+            parse_rule_mark(Some(&serde_json::json!("0x42/0xff")), None),
             Some((0x42, 0xff))
         );
         assert_eq!(
-            parse_rule_mark(Some(&serde_json::json!("66/255"))),
+            parse_rule_mark(Some(&serde_json::json!("66/255")), None),
             Some((66, 255))
         );
-        assert_eq!(parse_rule_mark(Some(&serde_json::json!("0x42"))), None);
+        // iproute2 JSON can expose FRA_FWMARK and FRA_FWMASK as separate fields.
         assert_eq!(
-            parse_rule_mark(Some(&serde_json::json!("invalid/0xff"))),
+            parse_rule_mark(
+                Some(&serde_json::json!("0x41234567")),
+                Some(&serde_json::json!("0x7fffffff"))
+            ),
+            Some((0x41234567, 0x7fffffff))
+        );
+        assert_eq!(
+            parse_rule_mark(
+                Some(&serde_json::json!(1092836967u64)),
+                Some(&serde_json::json!(2147483647u64))
+            ),
+            Some((0x41234567, 0x7fffffff))
+        );
+        assert_eq!(
+            parse_rule_mark(Some(&serde_json::json!("0x42")), None),
+            Some((0x42, u32::MAX))
+        );
+        assert_eq!(
+            parse_rule_mark(
+                Some(&serde_json::json!("0x42/0xff")),
+                Some(&serde_json::json!("0xffff"))
+            ),
+            None
+        );
+        assert_eq!(
+            parse_rule_mark(
+                Some(&serde_json::json!("0x100")),
+                Some(&serde_json::json!("0xff"))
+            ),
+            None
+        );
+        assert_eq!(
+            parse_rule_mark(Some(&serde_json::json!("invalid/0xff")), None),
             None
         );
     }
