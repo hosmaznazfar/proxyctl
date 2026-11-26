@@ -602,7 +602,11 @@ mod signal_tests {
     // TestChild's Drop implementation always kills (when needed) and waits for the child.
     // Clippy cannot see that ownership transfer into the RAII wrapper guarantees reaping.
     #[allow(clippy::zombie_processes)]
-    fn live_child() -> (TestChild, super::super::process::ProcessIdentity) {
+    fn live_child() -> (
+        TestChild,
+        super::super::process::ProcessIdentity,
+        super::super::process::ProcessHandle,
+    ) {
         let child = Command::new("sleep")
             .arg("30")
             .stdin(Stdio::null())
@@ -614,14 +618,15 @@ mod signal_tests {
         loop {
             if let Ok(identity) = super::super::process::ProcessIdentity::capture(child.id())
                 && identity.verify().unwrap_or(false)
+                && let Ok(process) = super::super::process::ProcessHandle::open(identity.clone())
             {
-                return (TestChild(child), identity);
+                return (TestChild(child), identity, process);
             }
             if Instant::now() >= deadline {
                 let mut child = child;
                 let _ = child.kill();
                 let _ = child.wait();
-                panic!("test child did not remain available long enough to capture its identity");
+                panic!("test child did not remain available long enough to pin its process identity");
             }
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -630,8 +635,7 @@ mod signal_tests {
     #[test]
     fn foreground_terminal_signal_is_not_forwarded_twice() {
         let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
-        let (child, identity) = live_child();
-        let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
+        let (child, identity, process) = live_child();
         let mut guard = SignalForwardingGuard::install(true).unwrap();
         guard.attach_core(identity).unwrap();
         forward_supervisor_signal(libc::SIGINT);
