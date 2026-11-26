@@ -694,7 +694,7 @@ fn websocket_path_and_explicit_early_data_must_not_conflict() {
 #[test]
 fn vless_reality_tcp_ignores_unused_host_metadata_for_all_cores() {
     let node = parse_proxy_url(
-        "vless://11111111-1111-4111-8111-111111111111@example.com:443?encryption=none&security=reality&sni=1.4.4.4&pbk=test-key&sid=abcd&type=tcp&headerType=none&host=%2F%3F",
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?encryption=none&security=reality&sni=1.4.4.4&fp=chrome&pbk=test-key&sid=abcd&type=tcp&headerType=none&host=%2F%3F",
     )
     .unwrap();
 
