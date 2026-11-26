@@ -10,9 +10,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use super::super::process::{
-    ProcessHandle, ProcessIdentity, read_process_owner_uid,
-};
+use super::super::process::{ProcessHandle, ProcessIdentity, read_process_owner_uid};
 
 const MAX_PROC_FILE_BYTES: usize = 1024 * 1024;
 
@@ -71,9 +69,8 @@ impl CgroupV2Target {
         if metadata.dev() != self.directory_device || metadata.ino() != self.directory_inode {
             return Ok(false);
         }
-        Ok(self.process.verify()? 
-            && read_unified_cgroup_path(self.process.pid)?
-                == format!("/{}", self.hierarchy_path))
+        Ok(self.process.verify()?
+            && read_unified_cgroup_path(self.process.pid)? == format!("/{}", self.hierarchy_path))
     }
 
     /// Return the path syntax accepted by nftables' `socket cgroupv2 level` expression.
@@ -114,13 +111,9 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
         mount_root == "/",
         "the initial cgroup v2 backend requires the unified hierarchy root to be mounted"
     );
-    let hierarchy_path = cgroup_path
-        .strip_prefix(&mount_root)
-        .with_context(|| {
-            format!(
-                "process cgroup {cgroup_path:?} is outside cgroup2 mount root {mount_root:?}"
-            )
-        })?;
+    let hierarchy_path = cgroup_path.strip_prefix(&mount_root).with_context(|| {
+        format!("process cgroup {cgroup_path:?} is outside cgroup2 mount root {mount_root:?}")
+    })?;
     let hierarchy_path = hierarchy_path.trim_start_matches('/');
     validate_hierarchy_path(hierarchy_path)?;
 
@@ -168,15 +161,13 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
 
 fn read_unified_cgroup_path(pid: u32) -> Result<String> {
     let contents = read_bounded(&format!("/proc/{pid}/cgroup"))?;
-    let mut unified = contents
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.splitn(3, ':');
-            let hierarchy = fields.next()?;
-            let controllers = fields.next()?;
-            let path = fields.next()?;
-            (hierarchy == "0" && controllers.is_empty()).then_some(path)
-        });
+    let mut unified = contents.lines().filter_map(|line| {
+        let mut fields = line.splitn(3, ':');
+        let hierarchy = fields.next()?;
+        let controllers = fields.next()?;
+        let path = fields.next()?;
+        (hierarchy == "0" && controllers.is_empty()).then_some(path)
+    });
     let path = unified
         .next()
         .context("process has no unified cgroup v2 membership")?;
@@ -244,9 +235,9 @@ fn validate_absolute_cgroup_path(path: &str) -> Result<()> {
         "process cgroup path must be bounded and absolute"
     );
     ensure!(
-        Path::new(path).components().all(|component| {
-            matches!(component, Component::RootDir | Component::Normal(_))
-        }),
+        Path::new(path)
+            .components()
+            .all(|component| { matches!(component, Component::RootDir | Component::Normal(_)) }),
         "process cgroup path contains an unsafe component"
     );
     Ok(())
@@ -258,9 +249,9 @@ fn validate_hierarchy_path(path: &str) -> Result<()> {
         "the cgroup root or an empty cgroup path cannot be selected"
     );
     ensure!(
-        Path::new(path).components().all(|component| {
-            matches!(component, Component::Normal(_))
-        }),
+        Path::new(path)
+            .components()
+            .all(|component| { matches!(component, Component::Normal(_)) }),
         "cgroup hierarchy path contains an unsafe component"
     );
     ensure!(
@@ -331,9 +322,16 @@ mod tests {
 
     #[test]
     fn rejects_root_and_traversal_cgroup_paths() {
-        for path in ["", "/", "/user.slice/../app.scope", "user.slice/./app.scope"] {
-            assert!(validate_hierarchy_path(path.trim_start_matches('/')).is_err()
-                || validate_absolute_cgroup_path(path).is_err());
+        for path in [
+            "",
+            "/",
+            "/user.slice/../app.scope",
+            "user.slice/./app.scope",
+        ] {
+            assert!(
+                validate_hierarchy_path(path.trim_start_matches('/')).is_err()
+                    || validate_absolute_cgroup_path(path).is_err()
+            );
         }
     }
 

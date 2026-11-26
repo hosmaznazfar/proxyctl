@@ -43,7 +43,9 @@ pub fn probe_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .context("cannot start isolated nftables capability probe (sudo may require authentication)")?;
+        .context(
+            "cannot start isolated nftables capability probe (sudo may require authentication)",
+        )?;
 
     {
         let mut stdin = child
@@ -84,7 +86,10 @@ fn candidate_ruleset(target: &CgroupV2Target) -> Result<String> {
 /// invocation receives absolute paths for both commands it launches.
 fn find_trusted_executable(name: &str) -> Result<PathBuf> {
     ensure!(
-        !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'),
+        !name.is_empty()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-'),
         "invalid system executable name"
     );
     let path = env::var_os("PATH").context("PATH is unavailable while locating system tools")?;

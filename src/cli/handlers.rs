@@ -339,56 +339,54 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::__TunRecover => return run_tun_recovery(),
         Command::Tun { command } => {
             match command {
-                TunCommand::Bypass { command } => {
-                    match command {
-                        TunBypassCommand::Inspect { pid } => {
-                            #[cfg(target_os = "linux")]
-                            {
-                                let target = crate::tun::coexistence::inspect_process(
-                                    pid,
-                                    unsafe { libc::getuid() },
-                                )?;
-                                println!("External VPN process (read-only inspection)");
-                                println!("PID: {}", target.process.pid);
-                                println!("Start ticks: {}", target.process.start_ticks);
-                                println!("Owner UID: {}", target.owner_uid);
-                                println!("Executable: {}", target.process.executable.display());
-                                println!("Cgroup v2: /{}", target.hierarchy_path);
-                                println!("Cgroup level: {}", target.hierarchy_level);
-                                println!(
-                                    "nftables selector: socket cgroupv2 level {} \"{}\"",
-                                    target.hierarchy_level,
-                                    target.nftables_quoted_path()
-                                );
-                                println!(
-                                    "Cgroup directory identity: device {}, inode {}",
-                                    target.directory_device, target.directory_inode
-                                );
-                                println!("No cgroup, firewall, route, or process state was changed.");
-                                return Ok(());
-                            }
-                            #[cfg(not(target_os = "linux"))]
-                            anyhow::bail!("external VPN process inspection is supported only on Linux");
+                TunCommand::Bypass { command } => match command {
+                    TunBypassCommand::Inspect { pid } => {
+                        #[cfg(target_os = "linux")]
+                        {
+                            let target = crate::tun::coexistence::inspect_process(pid, unsafe {
+                                libc::getuid()
+                            })?;
+                            println!("External VPN process (read-only inspection)");
+                            println!("PID: {}", target.process.pid);
+                            println!("Start ticks: {}", target.process.start_ticks);
+                            println!("Owner UID: {}", target.owner_uid);
+                            println!("Executable: {}", target.process.executable.display());
+                            println!("Cgroup v2: /{}", target.hierarchy_path);
+                            println!("Cgroup level: {}", target.hierarchy_level);
+                            println!(
+                                "nftables selector: socket cgroupv2 level {} \"{}\"",
+                                target.hierarchy_level,
+                                target.nftables_quoted_path()
+                            );
+                            println!(
+                                "Cgroup directory identity: device {}, inode {}",
+                                target.directory_device, target.directory_inode
+                            );
+                            println!("No cgroup, firewall, route, or process state was changed.");
+                            return Ok(());
                         }
-                        TunBypassCommand::Probe { pid } => {
-                            #[cfg(target_os = "linux")]
-                            {
-                                let target = crate::tun::nftables_probe::probe_process(
-                                    pid,
-                                    unsafe { libc::getuid() },
-                                )?;
-                                println!("nftables cgroup v2 socket matching: supported");
-                                println!("Validated scope: /{}", target.hierarchy_path);
-                                println!("Validated level: {}", target.hierarchy_level);
-                                println!("Probe: nft --check in an isolated network namespace");
-                                println!("No host firewall, routes, cgroups, or processes were changed.");
-                                return Ok(());
-                            }
-                            #[cfg(not(target_os = "linux"))]
-                            anyhow::bail!("nftables cgroup v2 probing is supported only on Linux");
-                        }
+                        #[cfg(not(target_os = "linux"))]
+                        anyhow::bail!("external VPN process inspection is supported only on Linux");
                     }
-                }
+                    TunBypassCommand::Probe { pid } => {
+                        #[cfg(target_os = "linux")]
+                        {
+                            let target = crate::tun::nftables_probe::probe_process(pid, unsafe {
+                                libc::getuid()
+                            })?;
+                            println!("nftables cgroup v2 socket matching: supported");
+                            println!("Validated scope: /{}", target.hierarchy_path);
+                            println!("Validated level: {}", target.hierarchy_level);
+                            println!("Probe: nft --check in an isolated network namespace");
+                            println!(
+                                "No host firewall, routes, cgroups, or processes were changed."
+                            );
+                            return Ok(());
+                        }
+                        #[cfg(not(target_os = "linux"))]
+                        anyhow::bail!("nftables cgroup v2 probing is supported only on Linux");
+                    }
+                },
                 TunCommand::Start { foreground } => {
                     start_tun_from_active(foreground)?;
                     return Ok(());

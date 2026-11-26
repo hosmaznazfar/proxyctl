@@ -21,13 +21,11 @@ pub mod attachment_protocol;
 pub mod broker_executor;
 pub mod broker_transport;
 #[cfg(target_os = "linux")]
+pub mod coexistence;
+#[cfg(target_os = "linux")]
 pub mod config_staging;
 #[cfg(target_os = "linux")]
 pub mod core_paths;
-#[cfg(target_os = "linux")]
-pub mod coexistence;
-#[cfg(target_os = "linux")]
-pub mod nftables_probe;
 #[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
 #[cfg(target_os = "linux")]
@@ -57,6 +55,8 @@ pub mod native_core_launcher;
 pub mod native_session;
 #[cfg(target_os = "linux")]
 pub mod native_supervisor;
+#[cfg(target_os = "linux")]
+pub mod nftables_probe;
 pub mod ownership;
 #[cfg(target_os = "linux")]
 pub mod persistent_tun_owner;
