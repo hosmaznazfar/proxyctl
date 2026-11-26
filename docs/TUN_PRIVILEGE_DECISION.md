@@ -35,7 +35,7 @@ This confirms the operational model, not a complete proof of every failure or cr
 3. The supervisor authenticates the invoking UID from sudo credentials and cross-checks Linux's audit login UID. It resolves the primary GID from the system account database; neither UID nor GID is trusted from the request.
 4. Before staging or privileged network mutation, it installs signal handlers and begins latching startup termination signals. It then verifies and creates the root-owned `/run/proxyctl/<uid>` runtime, captures its own host-network baseline, stages the generated config as a root-owned 0600 file, and validates the selected managed core path.
 5. For sing-box, Mihomo, and Xray, it captures a fresh kernel snapshot, creates a generation-bound write-ahead journal, and applies the persistent native TUN interface, routes, and policy rules through the typed Linux backend. A signal received during this transaction is handled immediately after the transaction returns by generation-scoped recovery. Xray's native inbound opens the pre-created named interface and configures its MTU and gateway addresses; automatic route/DNS integration remains disabled.
-6. It launches the selected core directly with fixed core-specific arguments, verifies the exact process identity and TUN attachment, and runs the complete dual-stack end-to-end readiness gate.
+6. It launches the selected core directly with fixed core-specific arguments, verifies the exact process identity and TUN attachment, and runs end-to-end readiness for every address family that has a usable host default route. IPv4-only and IPv6-only hosts are supported; a family with no main-table default route is not treated as a broken bypass path.
 7. It commits the root-owned session receipt and Running manifest, then sends the one-shot Started acknowledgement. The same supervisor remains alive, retains the staged config, monitors the core, and performs generation-scoped journal recovery when the core exits.
 8. `proxyctl tun stop` performs privileged recovery and restores a saved loopback session. `proxyctl stop` performs privileged recovery only when a TUN handoff/session marker is present, discards saved restoration state, and otherwise stops an ordinary loopback session without elevation.
 
@@ -50,6 +50,12 @@ Running a user-owned core as root means the invoking user explicitly authorizes 
 These checks reduce path confusion and accidental privilege expansion. They do not make a user-owned executable immutable or eliminate every same-UID replacement race. The sudo authorization is the trust boundary for executing that user's selected managed core as root. Do not claim otherwise.
 
 The privileged process never reads the user's redb database, writes root-owned files into the user's data directory, or accepts a caller-provided config pathname. Generated configuration is transferred as bounded data and staged under the root-owned runtime.
+
+## Host egress-family detection
+
+TUN preflight inspects the live Linux route inventory through `iproute2` JSON output. It does not infer capabilities from the distribution, desktop environment, network manager, interface names, or a fixed hardware list. For each address family, Proxyctl checks whether the kernel's main routing table has a usable unicast default route with an output path. It then performs the marked route lookup for that family and verifies that the selected route uses a known non-TUN interface backed by a hardware device. A host with no default route for one family skips only that family; a host with neither family available fails preflight. If a family is available but its marked route is wrong, preflight still fails closed.
+
+The route inventory is a snapshot, not a permanent guarantee. Network changes after preflight can invalidate the observed path; readiness and session monitoring remain responsible for detecting activation failures.
 
 ## Core-specific behavior
 
