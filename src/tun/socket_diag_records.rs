@@ -38,7 +38,7 @@ pub struct SocketDiagnosticRecord {
 ///
 /// Unknown attributes are skipped for forward compatibility. A missing mark is an error:
 /// absence must never be interpreted as mark zero or successful policy evidence.
-pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnosticRecord> {
+pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<Option<SocketDiagnosticRecord>> {
     ensure!(
         payload.len() >= INET_DIAG_MSG_LEN,
         "socket diagnostic message is shorter than inet_diag_msg"
@@ -58,8 +58,9 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
             .try_into()
             .context("socket diagnostic inode field is truncated")?,
     );
-    ensure!(inode > 0, "socket diagnostic record has a zero inode");
-
+    // Kernel socket dumps can include entries without a userspace socket inode
+    // (for example, TCP time-wait records). Parse their attributes for structural
+    // validity, then omit them: they cannot identify a live process-owned socket.
     let mut offset = INET_DIAG_MSG_LEN;
     let mut mark = None;
     while offset < payload.len() {
@@ -96,8 +97,11 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
         );
         offset += aligned;
     }
+    if inode == 0 {
+        return Ok(None);
+    }
     let mark = mark.context("socket diagnostic record does not include INET_DIAG_MARK")?;
-    Ok(SocketDiagnosticRecord {
+    Ok(Some(SocketDiagnosticRecord {
         family,
         state,
         local_address,
@@ -106,7 +110,7 @@ pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<SocketDiagnostic
         remote_port,
         inode,
         mark,
-    })
+    }))
 }
 
 fn parse_address(family: SocketAddressFamily, bytes: &[u8]) -> Result<IpAddr> {
@@ -158,7 +162,7 @@ mod tests {
             (libc::AF_INET as u8, SocketAddressFamily::Ipv4),
             (libc::AF_INET6 as u8, SocketAddressFamily::Ipv6),
         ] {
-            let parsed = parse_socket_diagnostic_record(&record(family, 1234, 0x142)).unwrap();
+            let parsed = parse_socket_diagnostic_record(&record(family, 1234, 0x142))\n                .unwrap()\n                .unwrap();
             assert_eq!(parsed.family, expected);
             assert_eq!(parsed.state, 1);
             assert_eq!(parsed.inode, 1234);
@@ -233,10 +237,22 @@ mod tests {
         truncated.push(1);
         assert!(parse_socket_diagnostic_record(&truncated).is_err());
 
-        let mut invalid = record(libc::AF_INET as u8, 0, 7);
-        assert!(parse_socket_diagnostic_record(&invalid).is_err());
-        invalid[68..72].copy_from_slice(&1u32.to_ne_bytes());
+        let without_inode = record(libc::AF_INET as u8, 0, 7);
+        assert!(parse_socket_diagnostic_record(&without_inode).unwrap().is_none());
+
+        let mut invalid = record(libc::AF_INET as u8, 1, 7);
         invalid[0] = 0;
         assert!(parse_socket_diagnostic_record(&invalid).is_err());
+    }
+
+    #[test]
+    fn zero_inode_records_are_skipped_after_attribute_validation() {
+        let mut without_mark = vec![0u8; INET_DIAG_MSG_LEN];
+        without_mark[0] = libc::AF_INET as u8;
+        assert!(parse_socket_diagnostic_record(&without_mark).unwrap().is_none());
+
+        let mut malformed = record(libc::AF_INET as u8, 0, 7);
+        malformed[72..74].copy_from_slice(&3u16.to_ne_bytes());
+        assert!(parse_socket_diagnostic_record(&malformed).is_err());
     }
 }
