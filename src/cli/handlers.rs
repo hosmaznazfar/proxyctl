@@ -568,6 +568,16 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         settings::DEFAULT_LISTEN_PORT
                     );
                 }
+                Some(ConfigAction::TunFamily { family }) => {
+                    let settings = crate::services::tun_config::address_family()?;
+                    if let Some(family) = family {
+                        let family = family.parse::<crate::tun::address_family::TunAddressFamily>()?;
+                        crate::services::tun_config::set_address_family(family)?;
+                        println!("Saved TUN address-family preference: {family}");
+                    } else {
+                        println!("TUN address-family preference: {settings}");
+                    }
+                }
                 Some(ConfigAction::Display { action }) => {
                     use crate::services::display_config as display;
                     match action {

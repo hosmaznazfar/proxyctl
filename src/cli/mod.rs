@@ -102,6 +102,11 @@ enum NodesCommand {
 
 #[derive(Debug, Subcommand)]
 enum ConfigAction {
+    /// Show or set the persistent TUN address-family preference.
+    TunFamily {
+        #[arg(value_parser = ["auto", "ipv4", "ipv6", "dual-stack"])]
+        family: Option<String>,
+    },
     /// Set the persistent shared HTTP/SOCKS5 listener port.
     Set {
         #[arg(value_parser = ["listen-port"])]
