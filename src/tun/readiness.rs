@@ -1283,10 +1283,22 @@ pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Re
                     }
                 })
                 .count();
-            ensure!(
-                matches == 1,
-                "live {family:?} {purpose:?} policy rule is missing, duplicated, or mismatched"
-            );
+            if matches != 1 {
+                let live_candidates = snapshot
+                    .rules
+                    .iter()
+                    .filter(|record| {
+                        record.family == family && record.priority == expected.priority
+                    })
+                    .map(|record| record.canonical_attributes.as_str())
+                    .collect::<Vec<_>>();
+                anyhow::bail!(
+                    "live {family:?} {purpose:?} policy rule is missing, duplicated, or mismatched; expected priority={}, table={}, mark={:?}; live rules at that priority={live_candidates:?}",
+                    expected.priority,
+                    expected.lookup_table,
+                    expected.mark
+                );
+            }
             if purpose == RulePurpose::CoreTrafficBypass {
                 ensure!(
                     expected.lookup_table == RT_TABLE_MAIN,
