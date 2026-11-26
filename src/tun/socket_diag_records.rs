@@ -213,7 +213,13 @@ mod tests {
         bytes.extend_from_slice(&8u16.to_ne_bytes());
         bytes.extend_from_slice(&INET_DIAG_MARK.to_ne_bytes());
         bytes.extend_from_slice(&7u32.to_ne_bytes());
-        assert_eq!(parse_socket_diagnostic_record(&bytes).unwrap().unwrap().mark, 7);
+        assert_eq!(
+            parse_socket_diagnostic_record(&bytes)
+                .unwrap()
+                .unwrap()
+                .mark,
+            7
+        );
     }
 
     #[test]
@@ -241,7 +247,11 @@ mod tests {
         assert!(parse_socket_diagnostic_record(&truncated).is_err());
 
         let without_inode = record(libc::AF_INET as u8, 0, 7);
-        assert!(parse_socket_diagnostic_record(&without_inode).unwrap().is_none());
+        assert!(
+            parse_socket_diagnostic_record(&without_inode)
+                .unwrap()
+                .is_none()
+        );
 
         let mut invalid = record(libc::AF_INET as u8, 1, 7);
         invalid[0] = 0;
@@ -252,7 +262,11 @@ mod tests {
     fn zero_inode_records_are_skipped_after_attribute_validation() {
         let mut without_mark = vec![0u8; INET_DIAG_MSG_LEN];
         without_mark[0] = libc::AF_INET as u8;
-        assert!(parse_socket_diagnostic_record(&without_mark).unwrap().is_none());
+        assert!(
+            parse_socket_diagnostic_record(&without_mark)
+                .unwrap()
+                .is_none()
+        );
 
         let mut malformed = record(libc::AF_INET as u8, 0, 7);
         malformed[72..74].copy_from_slice(&3u16.to_ne_bytes());

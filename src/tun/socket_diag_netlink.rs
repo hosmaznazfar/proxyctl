@@ -397,11 +397,7 @@ mod tests {
     #[test]
     fn skips_zero_inode_kernel_records_without_discarding_live_socket_evidence() {
         let mut datagram = message(SOCK_DIAG_BY_FAMILY, 7, &marked_record(0, 0));
-        datagram.extend(message(
-            SOCK_DIAG_BY_FAMILY,
-            7,
-            &marked_record(123, 0x142),
-        ));
+        datagram.extend(message(SOCK_DIAG_BY_FAMILY, 7, &marked_record(123, 0x142)));
         let decoded = decode_datagram(&datagram, 7).unwrap();
         assert_eq!(decoded.records.len(), 1);
         assert_eq!(decoded.records[0].inode, 123);
