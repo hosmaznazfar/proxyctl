@@ -127,7 +127,10 @@ fn start_tun_from_active(foreground: bool, family_override: Option<String>) -> a
         DEFAULT_PROBE_URL,
         DEFAULT_PROBE_STATUS,
         foreground,
-        None,
+        family_override
+            .as_deref()
+            .map(str::parse::<crate::tun::address_family::TunAddressFamily>)
+            .transpose()?,
     ) {
         Ok(spec) => spec,
         Err(error) => {
