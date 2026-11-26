@@ -216,7 +216,15 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
 
     if let Some(fingerprint) = option_string(node, "fp") {
         const SUPPORTED_FINGERPRINTS: &[&str] = &[
-            "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random",
+            "chrome",
+            "firefox",
+            "safari",
+            "ios",
+            "android",
+            "edge",
+            "360",
+            "qq",
+            "random",
             "randomized",
         ];
         if !SUPPORTED_FINGERPRINTS.contains(&fingerprint) {
