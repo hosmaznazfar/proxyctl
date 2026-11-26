@@ -112,7 +112,7 @@ fn run_tun_supervisor() -> anyhow::Result<()> {
 /// The supervisor never reads the user's node database or accepts resource paths from stdin.
 /// All cleanup decisions come from the root-owned manifest, journal, and session receipt.
 #[cfg(target_os = "linux")]
-fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
+fn start_tun_from_active(foreground: bool, family_override: Option<String>) -> anyhow::Result<()> {
     const DEFAULT_PROBE_URL: &str = "http://connectivitycheck.gstatic.com/generate_204";
     const DEFAULT_PROBE_STATUS: u16 = 204;
 
@@ -222,7 +222,7 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn start_tun_from_active(_foreground: bool) -> anyhow::Result<()> {
+fn start_tun_from_active(_foreground: bool, _family_override: Option<String>) -> anyhow::Result<()> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
 }
 
@@ -391,8 +391,8 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         anyhow::bail!("nftables cgroup v2 probing is supported only on Linux");
                     }
                 },
-                TunCommand::Start { foreground } => {
-                    start_tun_from_active(foreground)?;
+                TunCommand::Start { foreground, family } => {
+                    start_tun_from_active(foreground, family)?;
                     return Ok(());
                 }
                 TunCommand::Stop => {
