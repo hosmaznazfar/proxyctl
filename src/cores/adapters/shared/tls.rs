@@ -6,7 +6,16 @@ use super::option_string;
 
 /// ClientHello fingerprints accepted by v2rayN's fingerprint selector.
 const CLIENT_FINGERPRINTS: &[&str] = &[
-    "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized",
+    "chrome",
+    "firefox",
+    "safari",
+    "ios",
+    "android",
+    "edge",
+    "360",
+    "qq",
+    "random",
+    "randomized",
 ];
 
 fn validate_client_fingerprint(fingerprint: &str) -> Result<(), String> {

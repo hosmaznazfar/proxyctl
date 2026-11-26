@@ -75,7 +75,9 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         authority = authority_values.first().map(|value| (*value).to_owned());
     } else if matches!(&kind, TransportKind::XHttp | TransportKind::HttpUpgrade) {
         host = source_host.map(str::to_owned);
-    } else if matches!(&kind, TransportKind::Http2) && let Some(host) = source_host {
+    } else if matches!(&kind, TransportKind::Http2)
+        && let Some(host) = source_host
+    {
         let values = host.split(',').map(str::trim).collect::<Vec<_>>();
         if values
             .iter()

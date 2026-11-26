@@ -473,35 +473,57 @@ fn vless_reality_maps_to_each_core_native_schema() {
 #[test]
 fn v2rayn_client_fingerprint_choices_are_accepted_and_empty_uses_core_default() {
     for fingerprint in [
-        "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random",
+        "chrome",
+        "firefox",
+        "safari",
+        "ios",
+        "android",
+        "edge",
+        "360",
+        "qq",
+        "random",
         "randomized",
     ] {
         let node = parse_proxy_url(&format!(
             "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key&fp={fingerprint}"
         )).unwrap();
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-            assert_eq!(adapter(core).compatibility(&node).status, CompatibilityStatus::Supported, "{core} with {fingerprint}");
+            assert_eq!(
+                adapter(core).compatibility(&node).status,
+                CompatibilityStatus::Supported,
+                "{core} with {fingerprint}"
+            );
         }
     }
     let node = parse_proxy_url(
-        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key"
-    ).unwrap();
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key",
+    )
+    .unwrap();
     for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-        assert_eq!(adapter(core).compatibility(&node).status, CompatibilityStatus::Supported, "{core} without explicit fingerprint");
+        assert_eq!(
+            adapter(core).compatibility(&node).status,
+            CompatibilityStatus::Supported,
+            "{core} without explicit fingerprint"
+        );
     }
 }
 
 #[test]
 fn unsupported_client_fingerprint_is_rejected_for_tls_and_reality() {
     let tls = parse_proxy_url(
-        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&fp=unknown"
-    ).unwrap();
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls&fp=unknown",
+    )
+    .unwrap();
     let reality = parse_proxy_url(
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key&fp=unknown"
     ).unwrap();
     for node in [&tls, &reality] {
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
-            assert_eq!(adapter(core).compatibility(node).status, CompatibilityStatus::Invalid, "{core}");
+            assert_eq!(
+                adapter(core).compatibility(node).status,
+                CompatibilityStatus::Invalid,
+                "{core}"
+            );
         }
     }
 }
