@@ -11,6 +11,8 @@
 //! remains read-only and distro-agnostic.
 
 #[cfg(target_os = "linux")]
+pub mod address_family;
+#[cfg(target_os = "linux")]
 pub mod activation_orchestrator;
 #[cfg(target_os = "linux")]
 pub mod activation_plan;
