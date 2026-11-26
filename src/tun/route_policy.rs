@@ -309,6 +309,12 @@ impl RoutingPolicyPlan {
             "all routes must bind the plan's interface identity and dedicated table"
         );
         ensure!(
+            self.routes
+                .iter()
+                .all(|route| route.route_type == RouteType::Unicast),
+            "Proxyctl TUN default routes must be unicast"
+        );
+        ensure!(
             self.rules
                 .iter()
                 .all(|rule| rule.priority >= RPDB_PRIORITY_MIN_PROXYCTL),
