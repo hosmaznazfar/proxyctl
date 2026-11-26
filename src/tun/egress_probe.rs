@@ -30,8 +30,10 @@ pub struct EgressRouteEvidence {
 pub struct EgressBypassEvidence {
     pub mark: u32,
     pub mask: u32,
-    pub ipv4: EgressRouteEvidence,
-    pub ipv6: EgressRouteEvidence,
+    /// Present only when the host has a usable main-table IPv4 default route.
+    pub ipv4: Option<EgressRouteEvidence>,
+    /// Present only when the host has a usable main-table IPv6 default route.
+    pub ipv6: Option<EgressRouteEvidence>,
 }
 
 /// Resolve both address families using the exact core socket mark and require a physical
@@ -44,22 +46,19 @@ pub fn inspect_marked_egress(plan: &RoutingPolicyPlan) -> Result<EgressBypassEvi
     plan.validate()?;
     let snapshot = kernel_inventory::inspect_snapshot()?;
     let mark = format!("{:#x}", plan.core_mark);
-    let ipv4 = resolve_marked_route(
-        AddressFamily::Ipv4,
-        IPV4_PROBE_DESTINATION,
-        &mark,
-        &snapshot.interfaces,
-        &plan.interface_name,
-    )?;
-    let ipv6 = resolve_marked_route(
-        AddressFamily::Ipv6,
-        IPV6_PROBE_DESTINATION,
-        &mark,
-        &snapshot.interfaces,
-        &plan.interface_name,
-    )?;
-    verify_hardware_backed_egress(&ipv4, Path::new("/sys/class/net"))?;
-    verify_hardware_backed_egress(&ipv6, Path::new("/sys/class/net"))?;
+    let ipv4 = if has_main_default_route(&snapshot.routes, AddressFamily::Ipv4)? {
+        Some(resolve_marked_route(AddressFamily::Ipv4, IPV4_PROBE_DESTINATION, &mark, &snapshot.interfaces, &plan.interface_name)?)
+    } else {
+        None
+    };
+    let ipv6 = if has_main_default_route(&snapshot.routes, AddressFamily::Ipv6)? {
+        Some(resolve_marked_route(AddressFamily::Ipv6, IPV6_PROBE_DESTINATION, &mark, &snapshot.interfaces, &plan.interface_name)?)
+    } else {
+        None
+    };
+    ensure!(ipv4.is_some() || ipv6.is_some(), "host has no usable IPv4 or IPv6 default route in the main routing table");
+    if let Some(route) = &ipv4 { verify_hardware_backed_egress(route, Path::new("/sys/class/net"))?; }
+    if let Some(route) = &ipv6 { verify_hardware_backed_egress(route, Path::new("/sys/class/net"))?; }
     Ok(EgressBypassEvidence {
         mark: plan.core_mark,
         mask: plan.core_mark_mask,
@@ -68,6 +67,26 @@ pub fn inspect_marked_egress(plan: &RoutingPolicyPlan) -> Result<EgressBypassEvi
     })
 }
 
+/// Detect usable unicast defaults from the captured kernel inventory, independent of distro
+/// and network manager. A default route must belong to the main table and name an output path.
+fn has_main_default_route(routes: &[kernel_inventory::KernelRouteRecord], family: AddressFamily) -> Result<bool> {
+    for route in routes.iter().filter(|r| r.family == family && r.table_id == RT_TABLE_MAIN) {
+        let attributes: Value = serde_json::from_str(&route.canonical_attributes)
+            .context("kernel route inventory contains invalid canonical JSON")?;
+        let is_default = match attributes.get("dst").and_then(Value::as_str) {
+            None | Some("default") => true,
+            Some("0.0.0.0/0") if family == AddressFamily::Ipv4 => true,
+            Some("::/0") if family == AddressFamily::Ipv6 => true,
+            _ => false,
+        };
+        let is_unicast = attributes.get("type").and_then(Value::as_str)
+            .is_none_or(|kind| kind == "unicast");
+        let has_output = attributes.get("dev").and_then(Value::as_str).is_some_and(|dev| !dev.is_empty())
+            || attributes.get("nexthops").and_then(Value::as_array).is_some_and(|hops| !hops.is_empty());
+        if is_default && is_unicast && has_output { return Ok(true); }
+    }
+    Ok(false)
+}
 #[cfg(not(target_os = "linux"))]
 pub fn inspect_marked_egress(_plan: &RoutingPolicyPlan) -> Result<EgressBypassEvidence> {
     anyhow::bail!("marked physical-egress inspection is supported only on Linux");
@@ -201,6 +220,36 @@ mod tests {
                 is_tun: true,
             },
         ]
+    }
+
+    fn route_record(family: AddressFamily, table_id: u32, json: &str) -> kernel_inventory::KernelRouteRecord {
+        kernel_inventory::KernelRouteRecord { family, table_id, canonical_attributes: json.into() }
+    }
+
+    #[test]
+    fn detects_only_usable_default_routes_from_the_main_table() {
+        let routes = [
+            route_record(AddressFamily::Ipv4, RT_TABLE_MAIN, r#"{"dst":"default","dev":"wlan0"}"#),
+            route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"fe80::/64","dev":"wlan0"}"#),
+            route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"::/0","type":"unreachable","dev":"lo"}"#),
+            route_record(AddressFamily::Ipv6, 42420, r#"{"dst":"::/0","dev":"eth0"}"#),
+        ];
+        assert!(has_main_default_route(&routes, AddressFamily::Ipv4).unwrap());
+        assert!(!has_main_default_route(&routes, AddressFamily::Ipv6).unwrap());
+        let dual_stack = [routes[0].clone(), route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"::/0","dev":"eth0"}"#)];
+        assert!(has_main_default_route(&dual_stack, AddressFamily::Ipv6).unwrap());
+    }
+
+    #[test]
+    fn accepts_default_routes_with_multipath_nexthops() {
+        let routes = [route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"::/0","nexthops":[{"dev":"eth0"},{"dev":"eth1"}]}"#)];
+        assert!(has_main_default_route(&routes, AddressFamily::Ipv6).unwrap());
+    }
+
+    #[test]
+    fn rejects_malformed_default_route_inventory() {
+        let routes = [route_record(AddressFamily::Ipv4, RT_TABLE_MAIN, "not-json")];
+        assert!(has_main_default_route(&routes, AddressFamily::Ipv4).is_err());
     }
 
     #[test]
