@@ -53,6 +53,9 @@ enum TunCommand {
         /// Keep the TUN supervisor attached to this terminal.
         #[arg(long)]
         foreground: bool,
+        /// Override the saved TUN address-family preference for this transition only.
+        #[arg(long, value_name = "FAMILY", value_parser = ["auto", "ipv4", "ipv6", "dual-stack"]) ]
+        family: Option<String>,
     },
     /// Stop the privileged core, recover its journaled resources, and restore prior loopback mode when saved.
     Stop,
