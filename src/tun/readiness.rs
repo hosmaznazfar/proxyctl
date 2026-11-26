@@ -1339,7 +1339,10 @@ fn parse_rule_mark(
     } else {
         (parse_part(value)?, None)
     };
-    let explicit_mask = separate_mask.map(parse_part).transpose()?;
+    let explicit_mask = match separate_mask {
+        Some(value) => Some(parse_part(value)?),
+        None => None,
+    };
     if embedded_mask.is_some() && explicit_mask.is_some() && embedded_mask != explicit_mask {
         return None;
     }
