@@ -159,10 +159,10 @@ impl LaunchSpec {
         self.resolved_family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
         ensure!(
             self.traffic_targets.len()
-                == (if self.resolved_family.includes_ipv4() { 1 } else { 0 })
-                    + (if self.resolved_family.includes_ipv6() { 1 } else { 0 })
-                && has_ipv4 == (if self.resolved_family.includes_ipv4() { 1 } else { 0 })
-                && has_ipv6 == (if self.resolved_family.includes_ipv6() { 1 } else { 0 }),
+                == (usize::from(self.resolved_family.includes_ipv4() as u8))
+                    + (usize::from(self.resolved_family.includes_ipv6() as u8))
+                && has_ipv4 == (usize::from(self.resolved_family.includes_ipv4() as u8))
+                && has_ipv6 == (usize::from(self.resolved_family.includes_ipv6() as u8)),
             "TUN readiness targets must contain exactly one destination for each selected family"
         );
         for target in &self.traffic_targets {
