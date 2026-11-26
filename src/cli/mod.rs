@@ -238,6 +238,9 @@ enum Command {
         /// Request TUN mode using the single-executable privileged supervisor.
         #[arg(long)]
         tun: bool,
+        /// Override the saved TUN address-family preference for this activation only.
+        #[arg(long, value_name = "FAMILY", value_parser = ["auto", "ipv4", "ipv6", "dual-stack"], requires = "tun")]
+        tun_family: Option<String>,
         /// Keep the selected core attached to this terminal instead of backgrounding it.
         #[arg(long)]
         foreground: bool,
