@@ -161,7 +161,7 @@ mod tests {
             is_tun: true,
         });
         assert!(
-            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000)
+            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000, crate::tun::address_family::ResolvedTunAddressFamily::DualStack)
                 .is_err()
         );
         assert!(
