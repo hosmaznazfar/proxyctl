@@ -199,6 +199,7 @@ fn read_cgroup_id(directory: &fs::File) -> Result<u64> {
         std::io::Error::last_os_error()
     );
     ensure!(handle.handle_bytes == HANDLE_BYTES, "cgroupfs returned an unexpected file-handle size");
+    let _handle_type = handle.handle_type;
     ensure!(handle.id != 0, "kernel returned the invalid root cgroup ID");
     Ok(handle.id)
 }
