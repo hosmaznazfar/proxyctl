@@ -154,8 +154,16 @@ impl LaunchSpec {
             unique_peers.len() == self.expected_peers.len(),
             "expected proxy peers must not contain duplicates"
         );
-        let has_ipv4 = self.traffic_targets.iter().filter(|target| target.destination.is_ipv4()).count();
-        let has_ipv6 = self.traffic_targets.iter().filter(|target| target.destination.is_ipv6()).count();
+        let has_ipv4 = self
+            .traffic_targets
+            .iter()
+            .filter(|target| target.destination.is_ipv4())
+            .count();
+        let has_ipv6 = self
+            .traffic_targets
+            .iter()
+            .filter(|target| target.destination.is_ipv6())
+            .count();
         self.resolved_family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
         ensure!(
             self.traffic_targets.len()
