@@ -94,7 +94,7 @@ pub fn probe_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
 fn candidate_ruleset(target: &CgroupV2Target) -> Result<String> {
     target.validate()?;
     Ok(format!(
-        "table inet proxyctl_probe {{\\n    set vpn_apps {{\\n        type cgroupsv2\\n        elements = {{ {} }}\\n    }}\\n    chain output {{\\n        type route hook output priority mangle; policy accept;\\n        socket cgroupv2 level {} @vpn_apps meta mark set 0x1\\n    }}\\n}}\\n",
+        "table inet proxyctl_probe {{\n    set vpn_apps {{\n        type cgroupsv2\n        elements = {{ {} }}\n    }}\n    chain output {{\n        type route hook output priority mangle; policy accept;\n        socket cgroupv2 level {} @vpn_apps meta mark set 0x1\n    }}\n}}\n",
         target.cgroup_id,
         target.hierarchy_level
     ))
@@ -171,6 +171,7 @@ mod tests {
             owner_uid: 1000,
             hierarchy_path: path.into(),
             hierarchy_level: level,
+            cgroup_id: 4242,
             mount_point: PathBuf::from("/sys/fs/cgroup"),
             directory_device: 1,
             directory_inode: 2,
