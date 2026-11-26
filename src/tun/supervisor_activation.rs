@@ -51,6 +51,10 @@ pub fn validate_native_device_core(core: CoreKind) -> Result<()> {
 ///
 /// The caller must already have authenticated the invoking user and validated that
 /// `owner_uid`/`owner_gid` are the intended unprivileged TUN device owner.
+///
+/// The arguments represent the complete activation boundary and are kept explicit so the
+/// privileged mutation inputs remain visible at each call site.
+#[expect(clippy::too_many_arguments, reason = "explicit privileged activation boundary inputs")]
 pub fn apply_native_kernel_plan(
     core: CoreKind,
     store: ManifestStore,
