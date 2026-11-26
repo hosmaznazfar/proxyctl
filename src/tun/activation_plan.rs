@@ -24,6 +24,7 @@ pub fn build_from_snapshot(
     snapshot: &KernelSnapshot,
     owner_uid: u32,
     owner_gid: u32,
+    family: crate::tun::address_family::ResolvedTunAddressFamily,
 ) -> Result<KernelTransaction> {
     ensure!(owner_uid != 0, "TUN device owner UID must be non-zero");
     ensure!(
@@ -38,7 +39,14 @@ pub fn build_from_snapshot(
         route_policy::allocate_policy_identifiers(&snapshot.inventory)
             .context("cannot allocate conflict-free Proxyctl routing identifiers")?;
     let (core_mark, core_mark_mask) = route_policy::mark_for_activation_id(activation_id)?;
-    let policy = RoutingPolicyPlan::new(
+    let mut families = Vec::with_capacity(2);
+    if family.includes_ipv4() {
+        families.push(route_policy::AddressFamily::Ipv4);
+    }
+    if family.includes_ipv6() {
+        families.push(route_policy::AddressFamily::Ipv6);
+    }
+    let policy = RoutingPolicyPlan::new_for_families(
         table_id,
         bypass_priority,
         proxy_priority,
@@ -46,6 +54,7 @@ pub fn build_from_snapshot(
         core_mark_mask,
         TUN_INTERFACE_NAME,
         1,
+        &families,
     );
     let transaction = KernelTransaction {
         activation_id: activation_id.to_owned(),
@@ -65,10 +74,11 @@ pub fn prepare_current(
     activation_id: &str,
     owner_uid: u32,
     owner_gid: u32,
+    family: crate::tun::address_family::ResolvedTunAddressFamily,
 ) -> Result<KernelTransaction> {
     let snapshot = kernel_inventory::inspect_snapshot()
         .context("cannot capture a consistent kernel inventory for TUN preflight")?;
-    build_from_snapshot(activation_id, &snapshot, owner_uid, owner_gid)
+    build_from_snapshot(activation_id, &snapshot, owner_uid, owner_gid, family)
 }
 
 #[cfg(test)]
@@ -92,7 +102,7 @@ mod tests {
     #[test]
     fn builds_dual_stack_transaction_with_activation_bound_mark() {
         let activation_id = "12345678-1234-4234-8234-123456789abc";
-        let transaction = build_from_snapshot(activation_id, &snapshot(), 1000, 1000).unwrap();
+        let transaction = build_from_snapshot(activation_id, &snapshot(), 1000, 1000, crate::tun::address_family::ResolvedTunAddressFamily::DualStack).unwrap();
 
         assert_eq!(transaction.activation_id, activation_id);
         assert_eq!(transaction.owner_uid, 1000);
@@ -135,7 +145,7 @@ mod tests {
         let mut current = snapshot();
         current.inventory = inventory;
         let transaction =
-            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000)
+            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000, crate::tun::address_family::ResolvedTunAddressFamily::DualStack)
                 .unwrap();
         assert_eq!(transaction.policy.table_id, RT_TABLE_MIN_PROXYCTL + 1);
         assert_eq!(transaction.policy.bypass_priority, 10_002);
@@ -155,7 +165,7 @@ mod tests {
                 .is_err()
         );
         assert!(
-            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &snapshot(), 0, 0).is_err()
+            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &snapshot(), 0, 0, crate::tun::address_family::ResolvedTunAddressFamily::DualStack).is_err()
         );
     }
 }

@@ -11,7 +11,7 @@ pub const RT_TABLE_DEFAULT: u32 = 253;
 pub const RT_TABLE_MIN_PROXYCTL: u32 = 10_000;
 pub const RPDB_PRIORITY_MIN_PROXYCTL: u32 = 10_000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AddressFamily {
     Ipv4,
     Ipv6,

@@ -59,6 +59,7 @@ pub fn apply_native_kernel_plan(
     generation: u64,
     owner_uid: u32,
     owner_gid: u32,
+    family: crate::tun::address_family::ResolvedTunAddressFamily,
 ) -> Result<(ActivationToken, AppliedKernelTransaction)> {
     validate_native_device_core(core)?;
     ensure!(generation > 0, "TUN activation generation must be non-zero");
@@ -78,7 +79,7 @@ pub fn apply_native_kernel_plan(
 
     // Planning is read-only. The backend persists the generation-scoped journal before
     // apply_native can create the first persistent interface or install a route/rule.
-    let transaction = activation_plan::prepare_current(activation_id, owner_uid, owner_gid)
+    let transaction = activation_plan::prepare_current(activation_id, owner_uid, owner_gid, family)
         .context("cannot prepare the native TUN kernel transaction")?;
     let mut backend = LinuxJournalBackend::new_native(store, activation_id, generation)
         .context("cannot create the durable native TUN transaction journal")?;
@@ -111,6 +112,7 @@ mod tests {
             1,
             1000,
             1000,
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
         );
 
         assert!(result.is_err());

@@ -392,6 +392,7 @@ pub fn start(
         spec.generation,
         invoking_uid,
         invoking_gid,
+        spec.resolved_family,
     ) {
         Ok(value) => value,
         Err(error) => {
@@ -429,7 +430,14 @@ pub fn start(
             .rule_priority
             .checked_sub(1)
             .context("journaled TUN proxy priority has no preceding core-bypass priority")?;
-        let plan = RoutingPolicyPlan::new(
+        let mut families = Vec::with_capacity(2);
+        if spec.resolved_family.includes_ipv4() {
+            families.push(super::route_policy::AddressFamily::Ipv4);
+        }
+        if spec.resolved_family.includes_ipv6() {
+            families.push(super::route_policy::AddressFamily::Ipv6);
+        }
+        let plan = RoutingPolicyPlan::new_for_families(
             applied.manifest.table_id,
             bypass_priority,
             applied.manifest.rule_priority,
@@ -437,6 +445,7 @@ pub fn start(
             core_mark_mask,
             applied.manifest.interface_name.clone(),
             applied.manifest.interface_index,
+            &families,
         );
         plan.validate()?;
         Ok((core_mark, core_mark_mask, plan))
@@ -460,7 +469,7 @@ pub fn start(
         |process: &super::process::ProcessIdentity, token: &ActivationToken| -> Result<()> {
             let current_host = crate::tun::inspect()
                 .context("cannot capture post-activation DNS and firewall state")?;
-            super::readiness::verify_native_core_dual_stack_end_to_end_readiness(
+            super::readiness::verify_native_core_address_family_end_to_end_readiness(
                 &runtime,
                 process,
                 &applied.manifest.interface_name,
@@ -473,6 +482,7 @@ pub fn start(
                 &spec.expected_peers,
                 spec.peer_transport,
                 &spec.traffic_targets,
+                spec.resolved_family,
                 token.activation_id(),
                 token.generation(),
                 Duration::from_secs(10),
