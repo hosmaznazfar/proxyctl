@@ -474,6 +474,7 @@ mod config_contract_tests {
         assert_eq!(tun["tun"]["auto-route"], false);
         assert_eq!(tun["tun"]["auto-redirect"], false);
         assert_eq!(tun["tun"]["dns-mode"], "disabled");
+        assert_eq!(tun["tun"]["auto-detect-interface"], true);
         assert_eq!(tun["tun"]["dns-hijack"][0], "any:53");
         assert_eq!(tun["tun"]["dns-hijack"][1], "tcp://any:53");
         assert_eq!(tun["dns"]["enable"], true);
