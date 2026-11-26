@@ -143,6 +143,18 @@ The final command design must account for the fact that a TUN activation is gene
 
 Do not implement these commands until the capability probe, nftables ownership contract, and transaction integration are complete.
 
+## First implementation milestone
+
+The first user-facing inspection command is:
+
+```text
+proxyctl tun bypass inspect --pid <PID>
+```
+
+It is read-only. It accepts only a live process owned by the invoking UID, pins and verifies the process instance, resolves its unified cgroup v2 membership and mount, and reports the exact hierarchy path, nftables level, and cgroup directory identity. It does not invoke nftables, move the process, install a bypass, or change routes/firewall state.
+
+This command validates the process/cgroup discovery layer on the current CachyOS system before the nftables capability probe and transactional rule integration are introduced.
+
 ## Required validation before enabling
 
 1. Read-only capability probe confirms cgroup v2 socket matching is supported by the running kernel and nftables userspace. Use nftables check mode (`nft --check --file -`) with a candidate rule; check mode validates commands without applying them.
