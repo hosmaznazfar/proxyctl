@@ -94,8 +94,10 @@ fn verify_listener_process_ownership(
     );
     let after = super::socket_ownership::inspect_process_sockets(&handle)?;
     ensure!(
-        before == after && identity.verify()? && !handle.is_exited()?,
-        "managed core socket ownership changed during listener verification"
+        !listener_inodes.is_disjoint(&after.socket_inodes)
+            && identity.verify()?
+            && !handle.is_exited()?,
+        "managed core listener socket ownership changed during listener verification"
     );
     Ok(())
 }
