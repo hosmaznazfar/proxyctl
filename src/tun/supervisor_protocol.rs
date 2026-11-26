@@ -133,8 +133,8 @@ pub fn read_reply<R: Read>(mut reader: R) -> Result<SupervisorReply> {
             "supervisor acknowledgement ended before its frame delimiter"
         );
         match byte[0] {
-            b'\\n' => break,
-            b'\\r' => anyhow::bail!("supervisor reply contains a carriage return"),
+            b'\n' => break,
+            b'\r' => anyhow::bail!("supervisor reply contains a carriage return"),
             value => bytes.push(value),
         }
     }
