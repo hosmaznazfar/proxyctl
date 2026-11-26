@@ -389,6 +389,17 @@ mod tests {
     }
 
     #[test]
+    fn launch_spec_validates_targets_against_the_resolved_family() {
+        let mut spec = sample();
+        spec.resolved_family = crate::tun::address_family::ResolvedTunAddressFamily::Ipv4;
+        spec.traffic_targets.pop();
+        assert!(spec.validate().is_ok());
+
+        spec.resolved_family = crate::tun::address_family::ResolvedTunAddressFamily::DualStack;
+        assert!(spec.validate().is_err());
+    }
+
+    #[test]
     fn request_limit_accounts_for_json_string_escaping() {
         let mut spec = sample();
         spec.generated_config = format!(r#"{{"payload":"{}"}}"#, "\\".repeat(4096));
