@@ -90,6 +90,7 @@ pub fn read_bounded<R: Read>(reader: R) -> Result<LaunchSpec> {
 pub struct GeneratedLaunchSpec {
     pub node_id: u64,
     pub core: CoreKind,
+    pub resolved_family: crate::tun::address_family::ResolvedTunAddressFamily,
     pub listen_port: u16,
     pub foreground: bool,
     pub peer_transport: BrokerSocketTransport,
