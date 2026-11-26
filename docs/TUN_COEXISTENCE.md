@@ -113,7 +113,7 @@ Runtime discovery must account for distro differences in nftables binary locatio
 
 A capability probe must be non-mutating with respect to the active ruleset. Prefer an isolated network namespace for syntax/kernel-expression validation when available; otherwise use an offline parser check plus a safe kernel capability query. Do not create a temporary rule in the host's active output hook merely to test support.
 
-The initial inline path selector was rejected for the selected v2rayN scope's literal `\\x2d` sequence. A follow-up check accepted the named-set form (`type cgroupsv2` with `socket cgroupv2 level N @set`) in an isolated network namespace. This proves parser/kernel acceptance of the set expression, but does **not** yet prove correct kernel-ID resolution, live socket matching, TCP/UDP behavior, dual-stack routing, or coexistence under a live Proxyctl TUN session.
+The initial inline path selector was rejected for the selected v2rayN scope's literal escaped name. A set-only syntax check accepted `type cgroupsv2` with `socket cgroupv2 level N @set`. The Proxyctl probe now includes the numeric kernel cgroup ID obtained from the cgroupfs file handle; this complete probe still needs to be run on the host. Even a successful check does **not** prove live socket matching, TCP/UDP behavior, dual-stack routing, or coexistence under a live Proxyctl TUN session.
 
 Proxyctl now exposes the same non-mutating check through:
 
@@ -188,7 +188,7 @@ proxyctl tun bypass inspect --pid <PID>
 
 It is read-only. It accepts only a live process owned by the invoking UID, pins and verifies the process instance, resolves its unified cgroup v2 membership and mount, and reports the exact hierarchy path, nftables level, and cgroup directory identity. It does not invoke nftables, move the process, install a bypass, or change routes/firewall state.
 
-This command validates the process/cgroup discovery layer on the current CachyOS system before the nftables capability probe and transactional rule integration are introduced.
+This command validates process/cgroup discovery independently. The companion `proxyctl tun bypass probe --pid <PID>` checks the numeric set-based nftables selector without applying rules to the host. Neither command installs the live bypass; transactional TUN integration remains a separate milestone.
 
 ## Required validation before enabling
 
