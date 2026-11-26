@@ -89,6 +89,7 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
     );
     let mut offset = 0usize;
     let mut records = Vec::new();
+    let mut socket_records = 0usize;
     let mut complete = false;
 
     while offset < bytes.len() {
@@ -150,9 +151,10 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
                     "socket diagnostic record appeared after dump completion"
                 );
                 ensure!(
-                    records.len() < MAX_RECORDS_PER_DATAGRAM,
+                    socket_records < MAX_RECORDS_PER_DATAGRAM,
                     "socket diagnostic datagram exceeds the record limit"
                 );
+                socket_records += 1;
                 if let Some(record) = parse_socket_diagnostic_record(payload)? {
                     records.push(record);
                 }
