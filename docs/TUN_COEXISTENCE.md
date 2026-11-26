@@ -48,7 +48,11 @@ The candidate mechanism is the nftables socket expression:
 socket cgroupv2 level <scope-level> "<exact-cgroup-path>"
 ```
 
-in a dedicated Proxyctl-owned `inet` table and an output base chain of type `route`. The matching rule sets only the packet mark bits used by the active Proxyctl bypass RPDB selector. A route-type output chain is required because changing the packet mark must cause the kernel to reconsider the route.
+The quoted value is a cgroup v2 path relative to the mounted hierarchy, not an arbitrary string compared on every packet. The nftables userspace tool resolves the path to the kernel cgroup identity when the rule is installed. The numeric level identifies the exact hierarchy depth; a socket in a descendant cgroup matches when the selected cgroup is its ancestor at that level. This makes the cgroup path and level a coupled selector.
+
+The expression belongs in a dedicated Proxyctl-owned `inet` table and an output base chain of type `route`. The matching rule sets only the packet mark bits used by the active Proxyctl bypass RPDB selector. A route-type output chain is required because changing the packet mark must cause the kernel to reconsider the route. See the nftables socket-expression and route-chain semantics in the upstream manual.
+
+Because nftables resolves the path to a kernel cgroup identity at rule installation, deleting and recreating a cgroup at the same textual path must not silently transfer the exemption. Proxyctl must compare the current cgroup directory identity and process membership before installation and during lifecycle checks; stale rules must be removed only through the exact journaled ownership record.
 
 Important constraints:
 
@@ -61,7 +65,9 @@ Important constraints:
 - Existing established connections may need to reconnect before their routing behavior is fully representative. Readiness tests must establish fresh connections after the bypass is installed.
 - IPv4 and IPv6 must both be covered by the same `inet` policy, and tests must verify that neither family leaks into the Proxyctl TUN.
 
-The user's current environment reports Linux `7.3.6-1-cachyos`, nftables `1.1.7`, and a unified cgroup v2 hierarchy. Its kernel configuration reports `CONFIG_SOCK_CGROUP_DATA=y`, `CONFIG_NF_TABLES=m`, and `CONFIG_NFT_SOCKET=m`. This confirms the relevant features were configured, but the latter two are modules and configuration alone does not prove they are currently loadable, loaded, or usable. Runtime capability detection must verify the nftables socket expression without changing live networking before the feature is enabled.
+The first implementation target is the user's current CachyOS system: Linux `7.3.6-1-cachyos`, nftables `1.1.7`, unified cgroup v2, and a systemd-created per-application scope. The kernel configuration reports `CONFIG_SOCK_CGROUP_DATA=y`, `CONFIG_NF_TABLES=m`, and `CONFIG_NFT_SOCKET=m`. This confirms the relevant features were configured, but the latter two are modules and configuration alone does not prove they are currently loadable, loaded, or usable. Runtime capability detection must verify the nftables socket expression without changing live networking before the feature is enabled.
+
+The initial provider will discover process membership through procfs and resolve the cgroup2 mount from mountinfo. It will not call systemd APIs or assume a fixed scope name. This is sufficient for the current systemd application scope while keeping the discovery interface independent so other Linux cgroup layouts can be added later.
 
 ## Linux distribution portability
 
@@ -75,7 +81,7 @@ Supported environments are determined by capabilities, not a distro allowlist:
 - Permission to create and own a dedicated nftables table and output route chain without taking ownership of another firewall manager's rules.
 - The existing Proxyctl Linux TUN, routing, and privilege prerequisites.
 
-Systemd is not a hard dependency. A systemd application scope is a convenient way to provide an isolated cgroup, but the implementation must resolve cgroup v2 membership from `/proc/<pid>/cgroup` and the mounted cgroup hierarchy. On systems without systemd, an already dedicated cgroup v2 subtree can be selected if its identity and exact matching level can be validated. Proxyctl must not move arbitrary processes or create a persistent service merely to make selection work.
+The first usable target is an already isolated systemd application scope on the current CachyOS installation. The implementation resolves cgroup v2 membership from `/proc/<pid>/cgroup` and the cgroup2 mount from `/proc/self/mountinfo`; it does not call systemd APIs, depend on systemd's transient scope naming convention, or move arbitrary processes. The discovery contract is kept separate from the nftables backend so non-systemd cgroup v2 providers can be added later.
 
 The feature must detect unsupported environments and report a precise reason. It must not silently fall back to UID-wide matching, executable-name matching, iptables rules, broad route exclusions, or a different mechanism with weaker isolation. In particular, cgroup v1-only systems do not satisfy this feature's initial requirements; they should continue to run ordinary Proxyctl features, while this optional coexistence feature reports that unified cgroup v2 is required.
 
@@ -139,7 +145,7 @@ Do not implement these commands until the capability probe, nftables ownership c
 
 ## Required validation before enabling
 
-1. Read-only capability probe confirms cgroup v2 socket matching is supported by the running kernel and nftables userspace.
+1. Read-only capability probe confirms cgroup v2 socket matching is supported by the running kernel and nftables userspace. Use nftables check mode (`nft --check --file -`) with a candidate rule; check mode validates commands without applying them.
 2. A disposable, non-production cgroup scope can be matched exactly without matching its parent or sibling scopes.
 3. A disposable test verifies that TCP and UDP sockets in the selected cgroup receive the bypass mark, while sockets in the same UID but another cgroup do not.
 4. Both IPv4 and IPv6 route lookups use the main table for the selected scope and Proxyctl's TUN table for ordinary applications.
@@ -149,4 +155,4 @@ Do not implement these commands until the capability probe, nftables ownership c
 8. Failure injection covers target exit, PID reuse, cgroup deletion, nftables rejection, partial transaction, supervisor termination, and recovery.
 9. The existing dual-stack readiness, process attachment, journal, and cleanup guarantees remain mandatory.
 
-No live host networking mutation is part of the design/documentation phase.
+The first implementation milestone adds read-only process/cgroup inspection only. It does not yet install an nftables rule or change host networking. The later capability probe must use nftables check mode and must not apply rules to the host.
