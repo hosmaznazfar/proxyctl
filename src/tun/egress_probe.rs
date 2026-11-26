@@ -88,7 +88,12 @@ fn resolve_marked_route(
     let output =
         kernel_inventory::run_ip(&["-j", family_flag, "route", "get", destination, "mark", mark])
             .with_context(|| format!("could not resolve {family:?} marked egress route"))?;
-    parse_marked_route(&output, family, destination, interfaces, tun_name)
+    parse_marked_route(&output, family, destination, interfaces, tun_name).with_context(|| {
+        format!(
+            "marked route lookup for {family:?} destination {destination} with mark {mark} returned {}",
+            String::from_utf8_lossy(&output).trim()
+        )
+    })
 }
 
 fn parse_marked_route(
