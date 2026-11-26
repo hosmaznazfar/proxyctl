@@ -358,7 +358,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                                 println!(
                                     "nftables selector: socket cgroupv2 level {} \"{}\"",
                                     target.hierarchy_level,
-                                    target.nftables_path()
+                                    target.nftables_quoted_path()
                                 );
                                 println!(
                                     "Cgroup directory identity: device {}, inode {}",
