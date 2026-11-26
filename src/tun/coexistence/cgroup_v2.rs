@@ -85,8 +85,6 @@ impl CgroupV2Target {
             && read_unified_cgroup_path(self.process.pid)? == format!("/{}", self.hierarchy_path))
     }
 
-    /// The numeric ID is resolved from the pinned cgroup directory's file handle.
-    /// nftables matches this ID through a named `type cgroupsv2` set.
 }
 
 /// Capture a process and its exact cgroup v2 scope, requiring it to belong to expected_uid.
