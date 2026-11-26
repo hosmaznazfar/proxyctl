@@ -179,7 +179,7 @@ fn read_cgroup_id(directory: &fs::File) -> Result<u64> {
         id: 0,
     };
     let mut mount_id: libc::c_int = 0;
-    let empty_path = b"\0".as_ptr().cast::<libc::c_char>();
+    let empty_path = c"".as_ptr();
 
     // SAFETY: the fd is live; AT_EMPTY_PATH identifies that pinned directory itself.
     // cgroup v2 file handles contain exactly the u64 kernfs node ID.
