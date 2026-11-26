@@ -112,9 +112,19 @@ fn inspect_fd_directory(directory: &Path) -> Result<BTreeSet<u64>> {
     let mut inodes = BTreeSet::new();
     for entry in entries {
         let entry = entry?;
-        let target = fs::read_link(entry.path()).with_context(|| {
-            format!("cannot read process descriptor {}", entry.path().display())
-        })?;
+        let target = match fs::read_link(entry.path()) {
+            Ok(target) => target,
+            // File descriptors can be closed by the core between read_dir and read_link.
+            // This is an ordinary procfs snapshot race, not evidence that inspection failed.
+            // The process identity is checked again after the walk, and the caller compares
+            // two stable snapshots before accepting any socket mark.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("cannot read process descriptor {}", entry.path().display())
+                });
+            }
+        };
         if let Some(inode) = parse_socket_link(&target)? {
             inodes.insert(inode);
         }
@@ -269,6 +279,20 @@ mod tests {
         assert_eq!(
             inspect_fd_directory(directory.path()).unwrap(),
             BTreeSet::from([123, 456])
+        );
+    }
+
+    #[test]
+    fn tolerates_descriptor_closed_between_directory_read_and_readlink() {
+        let directory = tempfile::tempdir().unwrap();
+        symlink("socket:[123]", directory.path().join("3")).unwrap();
+        let descriptor = directory.path().join("4");
+        symlink("socket:[456]", &descriptor).unwrap();
+        fs::remove_file(&descriptor).unwrap();
+
+        assert_eq!(
+            inspect_fd_directory(directory.path()).unwrap(),
+            BTreeSet::from([123])
         );
     }
 
