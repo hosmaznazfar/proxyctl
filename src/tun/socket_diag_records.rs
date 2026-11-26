@@ -36,8 +36,9 @@ pub struct SocketDiagnosticRecord {
 
 /// Parse one complete inet_diag_msg payload, including its aligned netlink attributes.
 ///
-/// Unknown attributes are skipped for forward compatibility. A missing mark is an error:
-/// absence must never be interpreted as mark zero or successful policy evidence.
+/// Unknown attributes are skipped for forward compatibility. A missing mark is an error for
+/// inode-bearing records; inode-less kernel entries are validated and omitted because they
+/// cannot identify a live process-owned socket.
 pub fn parse_socket_diagnostic_record(payload: &[u8]) -> Result<Option<SocketDiagnosticRecord>> {
     ensure!(
         payload.len() >= INET_DIAG_MSG_LEN,
