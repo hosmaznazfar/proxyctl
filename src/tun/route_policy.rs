@@ -172,7 +172,7 @@ impl RoutingPolicyPlan {
         )
     }
 
-    /// Build routes and RPDB rules only for the application address families selected at launch.
+    /// Build application routes for selected families while keeping core-socket bypass rules dual-family.
     pub fn new_for_families(
         table_id: u32,
         bypass_priority: u32,
@@ -312,8 +312,8 @@ impl RoutingPolicyPlan {
         let families = self.routes.iter().map(|route| route.family).collect::<std::collections::BTreeSet<_>>();
         ensure!(families.len() == self.routes.len(), "routing plan contains duplicate address-family routes");
         ensure!(
-            self.rules.iter().all(|rule| families.contains(&rule.family)),
-            "routing plan contains a rule for an unselected address family"
+            self.rules.iter().all(|rule| [AddressFamily::Ipv4, AddressFamily::Ipv6].contains(&rule.family)),
+            "routing plan contains an unsupported address family"
         );
         for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
             let mut bypass_rules = self.rules.iter().filter(|rule| {
