@@ -363,9 +363,23 @@ impl CoreAdapter for MihomoAdapter {
             "inet6-address": ipv6_addresses,
             "auto-route": false,
             "auto-redirect": false,
+            // Proxyctl routes application DNS packets into this TUN itself. Intercept
+            // those packets here, without asking Mihomo to rewrite the host resolver
+            // or install its own Linux redirect rules.
             "dns-mode": "disabled",
+            "dns-hijack": ["any:53", "tcp://any:53"],
             "strict-route": false,
             "auto-detect-interface": true
+        });
+        // Keep ordinary DNS inside Mihomo. Bootstrap and proxy-node lookups use
+        // literal-IP resolvers; regular lookups use Cloudflare DoH over PROXY so
+        // DNS traffic follows the selected proxy instead of leaking to the LAN.
+        document["dns"] = json!({
+            "enable": true,
+            "ipv6": true,
+            "default-nameserver": ["1.1.1.1", "8.8.8.8"],
+            "proxy-server-nameserver": ["1.1.1.1", "8.8.8.8"],
+            "nameserver": ["https://cloudflare-dns.com/dns-query#PROXY"]
         });
         // Mihomo's global routing-mark is the default mark for proxy outbound connections.
         // Keep core IPv6 capability independent from the application TUN family; the
@@ -460,7 +474,16 @@ mod config_contract_tests {
         assert_eq!(tun["tun"]["auto-route"], false);
         assert_eq!(tun["tun"]["auto-redirect"], false);
         assert_eq!(tun["tun"]["dns-mode"], "disabled");
-        assert_eq!(tun["tun"]["auto-detect-interface"], true);
+        assert_eq!(tun["tun"]["dns-hijack"][0], "any:53");
+        assert_eq!(tun["tun"]["dns-hijack"][1], "tcp://any:53");
+        assert_eq!(tun["dns"]["enable"], true);
+        assert_eq!(tun["dns"]["ipv6"], true);
+        assert_eq!(tun["dns"]["default-nameserver"][0], "1.1.1.1");
+        assert_eq!(tun["dns"]["proxy-server-nameserver"][0], "1.1.1.1");
+        assert_eq!(
+            tun["dns"]["nameserver"][0],
+            "https://cloudflare-dns.com/dns-query#PROXY"
+        );
         assert_eq!(tun["routing-mark"], 0x42);
         assert_eq!(tun["ipv6"], true);
         assert_eq!(tun["tun"]["inet4-address"][0], "198.18.0.1/30");
