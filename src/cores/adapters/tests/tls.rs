@@ -143,7 +143,7 @@ fn vmess_insecure_flag_is_ignored_when_tls_is_disabled() {
     use base64::{Engine as _, engine::general_purpose};
 
     let payload = general_purpose::STANDARD.encode(
-        br#"{\"add\":\"vmess.example\",\"port\":\"28059\",\"id\":\"11111111-1111-4111-8111-111111111111\",\"net\":\"tcp\",\"tls\":\"\",\"insecure\":\"1\"}"#,
+        br#"{"add":"vmess.example","port":"28059","id":"11111111-1111-4111-8111-111111111111","net":"tcp","tls":"","insecure":"1"}"#,
     );
     let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
 
