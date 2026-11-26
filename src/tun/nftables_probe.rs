@@ -34,13 +34,13 @@ pub fn probe_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
     let nft = find_trusted_executable("nft")?;
     let ruleset = candidate_ruleset(&target)?;
 
-    let mut child = Command::new(sudo)
+    let mut child = Command::new(&sudo)
         // Never allow sudo to read the ruleset pipe while trying to authenticate.
         // Authentication must already be cached; stdin belongs exclusively to nft.
         .arg("-n")
-        .arg(unshare)
+        .arg(&unshare)
         .args(["--net", "--"])
-        .arg(nft)
+        .arg(&nft)
         .args(["--check", "--file", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -63,12 +63,27 @@ pub fn probe_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
     let output = child
         .wait_with_output()
         .context("cannot wait for the isolated nftables capability probe")?;
-    ensure!(
-        output.status.success(),
-        "isolated nftables cgroup socket probe failed (exit {}): {}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr).trim()
-    );
+    if !output.status.success() {
+        // Include both a readable escaped representation and the exact input bytes.
+        // This distinguishes path-escaping problems from execution/environment issues.
+        let ruleset_hex = ruleset
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        anyhow::bail!(
+            "isolated nftables cgroup socket probe failed (exit {}); sudo={}, unshare={}, nft={}, ruleset_len={}, ruleset={:?}, ruleset_hex={}: stdout={}, stderr={}",
+            output.status,
+            sudo.display(),
+            unshare.display(),
+            nft.display(),
+            ruleset.len(),
+            ruleset,
+            ruleset_hex,
+            String::from_utf8_lossy(&output.stdout).trim(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
     ensure!(
         target.verify_current()?,
         "selected process or cgroup changed while the nftables probe was running"
