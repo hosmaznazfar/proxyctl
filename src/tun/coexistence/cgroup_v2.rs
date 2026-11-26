@@ -338,6 +338,27 @@ mod tests {
     }
 
     #[test]
+    fn quotes_literal_backslashes_and_quotes_for_nftables() {
+        let target = CgroupV2Target {
+            process: ProcessIdentity {
+                pid: 1,
+                start_ticks: 1,
+                executable: PathBuf::from("/usr/bin/sleep"),
+            },
+            owner_uid: 1000,
+            hierarchy_path: r"user.slice/app-dms-v2rayN\x2dbin\"scope".into(),
+            hierarchy_level: 2,
+            mount_point: PathBuf::from("/sys/fs/cgroup"),
+            directory_device: 1,
+            directory_inode: 2,
+        };
+        assert_eq!(
+            target.nftables_quoted_path(),
+            r#"user.slice/app-dms-v2rayN\\x2dbin\"scope"#
+        );
+    }
+
+    #[test]
     fn validates_cgroup_level_against_component_count() {
         let mut target = CgroupV2Target {
             process: ProcessIdentity {
