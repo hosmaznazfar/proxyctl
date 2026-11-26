@@ -4,6 +4,18 @@ use crate::domain::{Protocol, ProxyNode};
 
 use super::option_string;
 
+/// ClientHello fingerprints accepted by v2rayN's fingerprint selector.
+const CLIENT_FINGERPRINTS: &[&str] = &[
+    "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized",
+];
+
+fn validate_client_fingerprint(fingerprint: &str) -> Result<(), String> {
+    if fingerprint.is_empty() || CLIENT_FINGERPRINTS.contains(&fingerprint) {
+        return Ok(());
+    }
+    Err("unsupported TLS client fingerprint; choose chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized, or empty".into())
+}
+
 /// Collect ALPN identifiers from URI query values or structured VMess arrays.
 pub(crate) fn alpn_protocols(node: &ProxyNode) -> Result<Option<Vec<String>>, String> {
     let mut protocols = Vec::new();
@@ -147,8 +159,8 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
     let public_key = option_string(node, "pbk")
         .or_else(|| option_string(node, "publicKey"))
         .ok_or_else(|| "REALITY public key is missing".to_owned())?;
-    let fingerprint = option_string(node, "fp")
-        .ok_or_else(|| "REALITY client fingerprint is required".to_owned())?;
+    let fingerprint = option_string(node, "fp").unwrap_or("");
+    validate_client_fingerprint(fingerprint)?;
     let short_id = option_string(node, "sid").unwrap_or_default();
     if short_id.len() > 16
         || !short_id.len().is_multiple_of(2)
@@ -287,7 +299,10 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
                 );
             }
             if let Some(fingerprint) = option_string(node, "fp") {
-                tls.insert("fingerprint".into(), Value::String(fingerprint.into()));
+                validate_client_fingerprint(fingerprint)?;
+                if !fingerprint.is_empty() {
+                    tls.insert("fingerprint".into(), Value::String(fingerprint.into()));
+                }
             }
             if let Some(pin) = certificate_pin {
                 let normalized = pin.replace(':', "");
