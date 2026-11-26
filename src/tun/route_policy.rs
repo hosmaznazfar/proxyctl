@@ -282,12 +282,12 @@ impl RoutingPolicyPlan {
             "TUN interface index must be non-zero"
         );
         ensure!(
-            self.routes.len() == 2,
-            "routing plan must contain one default route per family"
+            !self.routes.is_empty() && self.routes.len() <= 2,
+            "routing plan must contain one or two address-family default routes"
         );
         ensure!(
-            self.rules.len() == 4,
-            "routing plan must contain bypass and proxy rules per family"
+            self.rules.len() == self.routes.len() * 2,
+            "routing plan must contain exactly one bypass and proxy rule per selected family"
         );
         ensure!(
             self.routes
@@ -307,6 +307,10 @@ impl RoutingPolicyPlan {
         ensure!(!self.routes.is_empty(), "routing plan must include at least one address family");
         let families = self.routes.iter().map(|route| route.family).collect::<std::collections::BTreeSet<_>>();
         ensure!(families.len() == self.routes.len(), "routing plan contains duplicate address-family routes");
+        ensure!(
+            self.rules.iter().all(|rule| families.contains(&rule.family)),
+            "routing plan contains a rule for an unselected address family"
+        );
         for family in families.iter().copied() {
             let mut routes = self.routes.iter().filter(|route| route.family == family);
             let route = routes
