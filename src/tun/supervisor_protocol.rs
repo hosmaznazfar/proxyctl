@@ -160,12 +160,13 @@ mod tests {
         use std::path::PathBuf;
 
         let session = SessionRecord {
-            schema_version: 1,
+            schema_version: 2,
             invoking_uid: 1000,
             session_nonce: "12345678-1234-4234-8234-123456789abc".into(),
             activation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
             generation: 4,
             core: CoreKind::Xray,
+            resolved_family: Some(crate::tun::address_family::ResolvedTunAddressFamily::DualStack),
             process: ProcessIdentity {
                 pid: 42,
                 start_ticks: 99,
