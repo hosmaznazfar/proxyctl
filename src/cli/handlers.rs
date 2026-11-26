@@ -370,6 +370,23 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                             #[cfg(not(target_os = "linux"))]
                             anyhow::bail!("external VPN process inspection is supported only on Linux");
                         }
+                        TunBypassCommand::Probe { pid } => {
+                            #[cfg(target_os = "linux")]
+                            {
+                                let target = crate::tun::nftables_probe::probe_process(
+                                    pid,
+                                    unsafe { libc::getuid() },
+                                )?;
+                                println!("nftables cgroup v2 socket matching: supported");
+                                println!("Validated scope: /{}", target.hierarchy_path);
+                                println!("Validated level: {}", target.hierarchy_level);
+                                println!("Probe: nft --check in an isolated network namespace");
+                                println!("No host firewall, routes, cgroups, or processes were changed.");
+                                return Ok(());
+                            }
+                            #[cfg(not(target_os = "linux"))]
+                            anyhow::bail!("nftables cgroup v2 probing is supported only on Linux");
+                        }
                     }
                 }
                 TunCommand::Start { foreground } => {

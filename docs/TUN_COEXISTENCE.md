@@ -89,6 +89,16 @@ Runtime discovery must account for distro differences in nftables binary locatio
 
 A capability probe must be non-mutating with respect to the active ruleset. Prefer an isolated network namespace for syntax/kernel-expression validation when available; otherwise use an offline parser check plus a safe kernel capability query. Do not create a temporary rule in the host's active output hook merely to test support.
 
+The first CachyOS probe has now returned exit status `0` for a candidate `inet` output route chain containing `socket cgroupv2 level 5` and a mark assignment, using `sudo unshare --net -- nft --check --file -`. This confirms that check mode accepted the expression in the isolated network namespace; it does **not** yet prove packet matching, TCP/UDP behavior, IPv4/IPv6 routing, or coexistence under a live Proxyctl TUN session.
+
+Proxyctl now exposes the same non-mutating check through:
+
+```text
+proxyctl tun bypass probe --pid <PID>
+```
+
+The command re-inspects the live process and cgroup, locates trusted root-owned `sudo`, `unshare`, and `nft` executables, and invokes them directly without a shell. It uses `nft --check` inside a temporary network namespace and revalidates the process/cgroup identity afterwards. A successful probe changes no host firewall, route, cgroup, or process state.
+
 ## Ownership and coexistence rules
 
 - Use a uniquely named Proxyctl nftables table, chain, and rule comments/handles with an activation identity. Do not modify or flush existing `ip`, `ip6`, `inet`, `bridge`, or `netdev` tables owned by other software.

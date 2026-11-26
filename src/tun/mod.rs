@@ -27,6 +27,8 @@ pub mod core_paths;
 #[cfg(target_os = "linux")]
 pub mod coexistence;
 #[cfg(target_os = "linux")]
+pub mod nftables_probe;
+#[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
 #[cfg(target_os = "linux")]
 pub mod direct_core_launcher;

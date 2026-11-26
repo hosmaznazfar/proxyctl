@@ -73,6 +73,12 @@ enum TunBypassCommand {
         #[arg(long)]
         pid: u32,
     },
+    /// Verify cgroup v2 socket matching with nftables check mode in an isolated network namespace.
+    Probe {
+        /// PID of the external VPN application's long-lived core process.
+        #[arg(long)]
+        pid: u32,
+    },
 }
 
 #[derive(Debug, Subcommand)]
