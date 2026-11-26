@@ -368,7 +368,9 @@ impl CoreAdapter for MihomoAdapter {
             "auto-detect-interface": true
         });
         // Mihomo's global routing-mark is the default mark for proxy outbound connections.
-        document["ipv6"] = json!(family.includes_ipv6());
+        // Keep core IPv6 capability independent from the application TUN family; the
+        // kernel policy routes only selected application destinations through this device.
+        document["ipv6"] = json!(true);
         document["routing-mark"] = json!(mark.value());
         json_config(document)
     }
