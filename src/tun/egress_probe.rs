@@ -36,8 +36,10 @@ pub struct EgressBypassEvidence {
     pub ipv6: Option<EgressRouteEvidence>,
 }
 
-/// Resolve both address families using the exact core socket mark and require a physical
-/// interface through the main routing table. Failure in either family blocks TUN preflight.
+/// Detect address families with a usable main-table default route, then resolve each using
+/// the exact core socket mark and require a physical interface. A family without a host
+/// default route is omitted; every available family remains strictly verified. At least
+/// one family must be available for TUN preflight.
 ///
 /// This proves only the kernel's current marked route lookup. The core adapter must separately
 /// prove that its outbound sockets actually set this SO_MARK value.
@@ -47,18 +49,37 @@ pub fn inspect_marked_egress(plan: &RoutingPolicyPlan) -> Result<EgressBypassEvi
     let snapshot = kernel_inventory::inspect_snapshot()?;
     let mark = format!("{:#x}", plan.core_mark);
     let ipv4 = if has_main_default_route(&snapshot.routes, AddressFamily::Ipv4)? {
-        Some(resolve_marked_route(AddressFamily::Ipv4, IPV4_PROBE_DESTINATION, &mark, &snapshot.interfaces, &plan.interface_name)?)
+        Some(resolve_marked_route(
+            AddressFamily::Ipv4,
+            IPV4_PROBE_DESTINATION,
+            &mark,
+            &snapshot.interfaces,
+            &plan.interface_name,
+        )?)
     } else {
         None
     };
     let ipv6 = if has_main_default_route(&snapshot.routes, AddressFamily::Ipv6)? {
-        Some(resolve_marked_route(AddressFamily::Ipv6, IPV6_PROBE_DESTINATION, &mark, &snapshot.interfaces, &plan.interface_name)?)
+        Some(resolve_marked_route(
+            AddressFamily::Ipv6,
+            IPV6_PROBE_DESTINATION,
+            &mark,
+            &snapshot.interfaces,
+            &plan.interface_name,
+        )?)
     } else {
         None
     };
-    ensure!(ipv4.is_some() || ipv6.is_some(), "host has no usable IPv4 or IPv6 default route in the main routing table");
-    if let Some(route) = &ipv4 { verify_hardware_backed_egress(route, Path::new("/sys/class/net"))?; }
-    if let Some(route) = &ipv6 { verify_hardware_backed_egress(route, Path::new("/sys/class/net"))?; }
+    ensure!(
+        ipv4.is_some() || ipv6.is_some(),
+        "host has no usable IPv4 or IPv6 default route in the main routing table"
+    );
+    if let Some(route) = &ipv4 {
+        verify_hardware_backed_egress(route, Path::new("/sys/class/net"))?;
+    }
+    if let Some(route) = &ipv6 {
+        verify_hardware_backed_egress(route, Path::new("/sys/class/net"))?;
+    }
     Ok(EgressBypassEvidence {
         mark: plan.core_mark,
         mask: plan.core_mark_mask,
@@ -69,8 +90,14 @@ pub fn inspect_marked_egress(plan: &RoutingPolicyPlan) -> Result<EgressBypassEvi
 
 /// Detect usable unicast defaults from the captured kernel inventory, independent of distro
 /// and network manager. A default route must belong to the main table and name an output path.
-fn has_main_default_route(routes: &[kernel_inventory::KernelRouteRecord], family: AddressFamily) -> Result<bool> {
-    for route in routes.iter().filter(|r| r.family == family && r.table_id == RT_TABLE_MAIN) {
+fn has_main_default_route(
+    routes: &[kernel_inventory::KernelRouteRecord],
+    family: AddressFamily,
+) -> Result<bool> {
+    for route in routes
+        .iter()
+        .filter(|route| route.family == family && route.table_id == RT_TABLE_MAIN)
+    {
         let attributes: Value = serde_json::from_str(&route.canonical_attributes)
             .context("kernel route inventory contains invalid canonical JSON")?;
         let is_default = match attributes.get("dst").and_then(Value::as_str) {
@@ -79,11 +106,21 @@ fn has_main_default_route(routes: &[kernel_inventory::KernelRouteRecord], family
             Some("::/0") if family == AddressFamily::Ipv6 => true,
             _ => false,
         };
-        let is_unicast = attributes.get("type").and_then(Value::as_str)
+        let is_unicast = attributes
+            .get("type")
+            .and_then(Value::as_str)
             .is_none_or(|kind| kind == "unicast");
-        let has_output = attributes.get("dev").and_then(Value::as_str).is_some_and(|dev| !dev.is_empty())
-            || attributes.get("nexthops").and_then(Value::as_array).is_some_and(|hops| !hops.is_empty());
-        if is_default && is_unicast && has_output { return Ok(true); }
+        let has_output = attributes
+            .get("dev")
+            .and_then(Value::as_str)
+            .is_some_and(|dev| !dev.is_empty())
+            || attributes
+                .get("nexthops")
+                .and_then(Value::as_array)
+                .is_some_and(|hops| !hops.is_empty());
+        if is_default && is_unicast && has_output {
+            return Ok(true);
+        }
     }
     Ok(false)
 }
