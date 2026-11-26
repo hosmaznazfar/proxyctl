@@ -906,8 +906,14 @@ pub fn validate_resolved_family_probe_targets(
     targets: &[HttpProbeTarget],
     family: crate::tun::address_family::ResolvedTunAddressFamily,
 ) -> Result<()> {
-    let has_ipv4 = targets.iter().filter(|target| target.destination.is_ipv4()).count();
-    let has_ipv6 = targets.iter().filter(|target| target.destination.is_ipv6()).count();
+    let has_ipv4 = targets
+        .iter()
+        .filter(|target| target.destination.is_ipv4())
+        .count();
+    let has_ipv6 = targets
+        .iter()
+        .filter(|target| target.destination.is_ipv6())
+        .count();
     family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
     ensure!(
         targets.len() == (usize::from(family.includes_ipv4() as u8)) + (usize::from(family.includes_ipv6() as u8))
