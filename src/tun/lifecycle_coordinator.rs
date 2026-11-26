@@ -1140,6 +1140,7 @@ mod tests {
             token.generation(),
             super::super::launch_spec::CoreKind::Xray,
             identity.clone(),
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
         )
         .unwrap();
 
@@ -1210,6 +1211,7 @@ mod tests {
             token.generation(),
             super::super::launch_spec::CoreKind::Xray,
             identity.clone(),
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
         )
         .unwrap();
         coordinator
