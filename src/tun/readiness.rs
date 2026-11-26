@@ -901,7 +901,26 @@ pub fn validate_dual_stack_probe_targets(targets: &[HttpProbeTarget]) -> Result<
     Ok(())
 }
 
-/// Verify both IPv4 and IPv6 application flows through the exact TUN routing policy.
+/// Validate exactly one numeric readiness destination for each selected application family.
+pub fn validate_resolved_family_probe_targets(
+    targets: &[HttpProbeTarget],
+    family: crate::tun::address_family::ResolvedTunAddressFamily,
+) -> Result<()> {
+    let has_ipv4 = targets.iter().filter(|target| target.destination.is_ipv4()).count();
+    let has_ipv6 = targets.iter().filter(|target| target.destination.is_ipv6()).count();
+    family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
+    ensure!(
+        targets.len() == usize::from(family.includes_ipv4()) + usize::from(family.includes_ipv6())
+            && has_ipv4 == usize::from(family.includes_ipv4())
+            && has_ipv6 == usize::from(family.includes_ipv6()),
+        "TUN readiness requires exactly one destination for each selected address family"
+    );
+    for target in targets {
+        target.validate()?;
+    }
+    Ok(())
+}
+/// Verify the selected application address families through the exact TUN routing policy.
 ///
 /// Each target is routed independently with an unmarked kernel lookup and a real bounded
 /// HTTP exchange. Listener, process, socket-mark, physical-egress, DNS-preservation, and
@@ -909,7 +928,7 @@ pub fn validate_dual_stack_probe_targets(targets: &[HttpProbeTarget]) -> Result<
 /// address dataplane paths; it does not claim to exercise DNS resolution.
 #[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
-pub fn verify_native_core_dual_stack_end_to_end_readiness(
+pub fn verify_native_core_address_family_end_to_end_readiness(
     runtime_directory: &std::path::Path,
     process: &super::process::ProcessIdentity,
     interface_name: &str,
@@ -922,6 +941,7 @@ pub fn verify_native_core_dual_stack_end_to_end_readiness(
     expected_peers: &[SocketAddr],
     transport: super::privilege_broker::BrokerSocketTransport,
     targets: &[HttpProbeTarget],
+    family: crate::tun::address_family::ResolvedTunAddressFamily,
     activation_id: &str,
     generation: u64,
     probe_timeout: Duration,
@@ -929,7 +949,7 @@ pub fn verify_native_core_dual_stack_end_to_end_readiness(
     baseline_host: &super::NetworkStatus,
     current_host: &super::NetworkStatus,
 ) -> Result<ReadinessEvidence> {
-    validate_dual_stack_probe_targets(targets)?;
+    validate_resolved_family_probe_targets(targets, family)?;
     let mut combined: Option<ReadinessEvidence> = None;
     let mut failures = Vec::new();
     for target in targets {
