@@ -25,6 +25,8 @@ pub mod config_staging;
 #[cfg(target_os = "linux")]
 pub mod core_paths;
 #[cfg(target_os = "linux")]
+pub mod coexistence;
+#[cfg(target_os = "linux")]
 pub mod descriptor_transfer;
 #[cfg(target_os = "linux")]
 pub mod direct_core_launcher;
