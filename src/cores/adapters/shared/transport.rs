@@ -87,7 +87,6 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             hosts.extend(values.into_iter().map(str::to_owned));
         }
     }
-    }
 
     // Some VMess JSON producers encode request headers as an object. Preserve and map
     // string-valued headers; reject malformed structures rather than dropping them.
