@@ -616,7 +616,6 @@ fn http_transport_alias_normalizes_to_http2_for_vless_and_vmess() {
     }
 }
 
-
 #[test]
 fn websocket_early_data_embedded_in_encoded_path_is_normalized_for_each_core() {
     let node = parse_proxy_url(
