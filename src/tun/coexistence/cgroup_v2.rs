@@ -80,6 +80,19 @@ impl CgroupV2Target {
     pub fn nftables_path(&self) -> &str {
         &self.hierarchy_path
     }
+
+    /// Quote the path as an nftables string, preserving literal backslashes and quotes.
+    pub fn nftables_quoted_path(&self) -> String {
+        let mut quoted = String::with_capacity(self.hierarchy_path.len() + 2);
+        for character in self.hierarchy_path.chars() {
+            match character {
+                '\\\\' => quoted.push_str("\\\\\\\\"),
+                '"' => quoted.push_str("\\\\""),
+                character => quoted.push(character),
+            }
+        }
+        quoted
+    }
 }
 
 /// Capture a process and its exact cgroup v2 scope, requiring it to belong to expected_uid.
