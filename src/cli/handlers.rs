@@ -127,6 +127,7 @@ fn start_tun_from_active(foreground: bool) -> anyhow::Result<()> {
         DEFAULT_PROBE_URL,
         DEFAULT_PROBE_STATUS,
         foreground,
+        None,
     ) {
         Ok(spec) => spec,
         Err(error) => {
