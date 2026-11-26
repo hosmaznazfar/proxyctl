@@ -41,6 +41,10 @@ impl CgroupV2Target {
             "cgroup hierarchy level does not match its path"
         );
         ensure!(
+            self.hierarchy_level <= u8::MAX as u32,
+            "cgroup hierarchy level exceeds nftables' supported range"
+        );
+        ensure!(
             self.directory_inode > 0 && self.cgroup_id > 0 && self.mount_point.is_absolute(),
             "cgroup directory identity is incomplete"
         );
@@ -320,6 +324,12 @@ fn read_bounded(path: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cgroup_file_handle_matches_linux_kernel_abi() {
+        assert_eq!(std::mem::size_of::<CgroupFileHandle>(), 16);
+        assert_eq!(std::mem::offset_of!(CgroupFileHandle, id), 8);
+    }
 
     #[test]
     fn parses_cgroup2_mount_from_mountinfo() {
