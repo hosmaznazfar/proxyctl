@@ -27,7 +27,9 @@ Throne is therefore not a coexistence implementation to copy. Proxyctl must expl
 
 ### cgroup-scoped nftables implementations
 
-The open-source [cgtproxy](https://github.com/black-desk/cgtproxy) project is a useful comparison for Linux application-level routing. It uses nftables cgroup-v2 socket expressions and typed cgroup sets/maps, monitors cgroup filesystem events, and keeps applications in their original cgroups instead of moving them. Its design is a long-running TProxy rule manager; Proxyctl will not copy that daemon/event-monitor architecture for this opt-in, single-scope TUN exemption.
+The open-source [cgtproxy](https://github.com/black-desk/cgtproxy) project is a useful comparison for Linux application-level routing. It uses nftables cgroup-v2 socket expressions and typed cgroup sets/maps, monitors cgroup filesystem events, and keeps applications in their original cgroups instead of moving them. Its current userspace helper derives set keys from `stat(2)` inode values; Proxyctl deliberately does **not** copy that ID extraction, because Linux's cgroup selftests explicitly distinguish the kernel kernfs cgroup ID from `st_ino`. Proxyctl reads the eight-byte cgroupfs file handle instead. Its long-running TProxy/event-monitor architecture is also not copied for this opt-in, single-scope TUN exemption.
+
+The smaller [byway](https://github.com/dannyota/byway) project illustrates the same output-route-chain plus fwmark policy-routing pattern, but also uses `stat().Ino` as its cgroup key. Proxyctl borrows the route-chain pattern only; it uses the kernel cgroup ID from the file handle.
 
 The upstream [systemd `NFTSet=` integration](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html) confirms the intended nftables model: a `type cgroupsv2` set populated with numeric cgroup IDs and referenced by `socket cgroupv2 level N @set`. systemd explicitly does not support this integration in per-user service-manager instances, so it is not a solution for the observed desktop application scope.
 
