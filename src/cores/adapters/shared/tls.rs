@@ -208,7 +208,6 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
 
 pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
     let default_tls = matches!(node.protocol, Protocol::Trojan | Protocol::Hysteria2);
-    let insecure = insecure_option(node)?;
     let verify_peer_cert_by_name = option_string(node, "vcn");
     let certificate_pin = option_string(node, "pcs").or_else(|| option_string(node, "pinSHA256"));
     if option_string(node, "pcs").is_some()
@@ -262,6 +261,10 @@ pub(crate) fn tls_options(node: &ProxyNode) -> Result<Option<Value>, String> {
             Ok(None)
         }
         "tls" | "true" | "1" => {
+            // `insecure` controls certificate verification only when TLS is active.
+            // VMess exporters (including v2rayN-compatible links) may retain this
+            // flag when `tls` is empty; in that case it has no connection semantics.
+            let insecure = insecure_option(node)?;
             let mut tls = Map::new();
             tls.insert("enabled".into(), Value::Bool(true));
             if insecure {
