@@ -162,7 +162,9 @@ mod tests {
             (libc::AF_INET as u8, SocketAddressFamily::Ipv4),
             (libc::AF_INET6 as u8, SocketAddressFamily::Ipv6),
         ] {
-            let parsed = parse_socket_diagnostic_record(&record(family, 1234, 0x142))\n                .unwrap()\n                .unwrap();
+            let parsed = parse_socket_diagnostic_record(&record(family, 1234, 0x142))
+                .unwrap()
+                .unwrap();
             assert_eq!(parsed.family, expected);
             assert_eq!(parsed.state, 1);
             assert_eq!(parsed.inode, 1234);
@@ -210,7 +212,7 @@ mod tests {
         bytes.extend_from_slice(&8u16.to_ne_bytes());
         bytes.extend_from_slice(&INET_DIAG_MARK.to_ne_bytes());
         bytes.extend_from_slice(&7u32.to_ne_bytes());
-        assert_eq!(parse_socket_diagnostic_record(&bytes).unwrap().mark, 7);
+        assert_eq!(parse_socket_diagnostic_record(&bytes).unwrap().unwrap().mark, 7);
     }
 
     #[test]
