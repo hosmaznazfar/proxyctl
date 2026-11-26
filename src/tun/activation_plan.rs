@@ -133,6 +133,27 @@ mod tests {
     }
 
     #[test]
+    fn builds_ipv4_only_kernel_transaction_with_dual_family_core_bypass() {
+        let transaction = build_from_snapshot(
+            "12345678-1234-4234-8234-123456789abc",
+            &snapshot(),
+            1000,
+            1000,
+            crate::tun::address_family::ResolvedTunAddressFamily::Ipv4,
+        ).unwrap();
+        assert_eq!(transaction.policy.routes.len(), 1);
+        assert_eq!(transaction.policy.rules.len(), 3);
+        assert!(transaction.policy.routes.iter().all(|route| route.family == AddressFamily::Ipv4));
+        assert_eq!(
+            transaction.policy.rules.iter().filter(|rule| rule.purpose == crate::tun::route_policy::RulePurpose::CoreTrafficBypass).count(),
+            2
+        );
+        assert!(transaction.policy.rules.iter().any(|rule| rule.family == AddressFamily::Ipv6 && rule.purpose == crate::tun::route_policy::RulePurpose::CoreTrafficBypass));
+        assert!(transaction.policy.rules.iter().all(|rule| rule.purpose != crate::tun::route_policy::RulePurpose::ProxyTraffic || rule.family == AddressFamily::Ipv4));
+        transaction.validate().unwrap();
+    }
+
+    #[test]
     fn allocates_around_existing_tables_and_rule_priorities() {
         let mut inventory = KernelInventory::default();
         inventory.occupied_tables.push(RT_TABLE_MIN_PROXYCTL);
