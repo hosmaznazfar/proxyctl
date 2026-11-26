@@ -137,6 +137,32 @@ fn vmess_boolean_tls_and_insecure_values_are_normalized() {
     assert_eq!(mihomo_doc["proxies"][0]["skip-cert-verify"], true);
 }
 
+
+#[test]
+fn vmess_insecure_flag_is_ignored_when_tls_is_disabled() {
+    use base64::{Engine as _, engine::general_purpose};
+
+    let payload = general_purpose::STANDARD.encode(
+        br#"{\"add\":\"vmess.example\",\"port\":\"28059\",\"id\":\"11111111-1111-4111-8111-111111111111\",\"net\":\"tcp\",\"tls\":\"\",\"insecure\":\"1\"}"#,
+    );
+    let node = parse_proxy_url(&format!("vmess://{payload}")).unwrap();
+
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        assert_eq!(
+            adapter(core).compatibility(&node).status,
+            CompatibilityStatus::Supported,
+            "{core}"
+        );
+        let generated = adapter(core).generate_config(&node).unwrap();
+        let document: Value = serde_json::from_slice(&generated.content).unwrap();
+        match core {
+            CoreId::SingBox => assert!(document["outbounds"][0].get("tls").is_none()),
+            CoreId::Xray => assert!(document["outbounds"][0]["streamSettings"].get("tlsSettings").is_none()),
+            CoreId::Mihomo => assert!(document["proxies"][0].get("tls").is_none()),
+        }
+    }
+}
+
 #[test]
 fn vmess_empty_optional_fields_are_treated_as_defaults() {
     use base64::{Engine as _, engine::general_purpose};
