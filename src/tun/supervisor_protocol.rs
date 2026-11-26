@@ -90,53 +90,37 @@ pub fn write_reply<W: Write>(mut writer: W, reply: &SupervisorReply) -> Result<(
     writer.flush().context("cannot flush supervisor reply")
 }
 
-/// Read one reply through EOF. The caller must bound the underlying pipe before trusting it.
-pub fn read_reply<R: Read>(reader: R) -> Result<SupervisorReply> {
-    let mut bytes = Vec::new();
-    reader
-        .take(MAX_REPLY_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)
-        .context("cannot read supervisor acknowledgement")?;
-    ensure!(
-        !bytes.is_empty() && bytes.len() <= MAX_REPLY_BYTES,
-        "supervisor reply size is invalid"
-    );
-    if bytes.last() == Some(&b'\n') {
-        bytes.pop();
+/// Read exactly one bounded newline-delimited reply frame without waiting for pipe EOF.
+///
+/// The privileged supervisor closes its acknowledgement descriptor and then remains alive
+/// monitoring the TUN session. A core or launcher descendant may still hold an inherited
+/// descriptor, so EOF is not a valid startup-frame delimiter.
+pub fn read_reply<R: Read>(mut reader: R) -> Result<SupervisorReply> {
+    let mut bytes = Vec::with_capacity(512);
+    loop {
+        ensure!(
+            bytes.len() < MAX_REPLY_BYTES,
+            "supervisor reply size is invalid"
+        );
+        let mut byte = [0u8; 1];
+        let count = reader
+            .read(&mut byte)
+            .context("cannot read supervisor acknowledgement")?;
+        ensure!(
+            count != 0,
+            "supervisor acknowledgement ended before its frame delimiter"
+        );
+        match byte[0] {
+            b'\\n' => break,
+            b'\\r' => anyhow::bail!("supervisor reply contains a carriage return"),
+            value => bytes.push(value),
+        }
     }
-    ensure!(
-        !bytes.contains(&b'\n') && !bytes.contains(&b'\r'),
-        "supervisor reply contains more than one frame"
-    );
     ensure!(!bytes.is_empty(), "supervisor reply is empty");
     let reply: SupervisorReply =
         serde_json::from_slice(&bytes).context("supervisor reply is malformed")?;
     reply.validate()?;
     Ok(reply)
-}
-
-fn bounded_reason(reason: &str) -> String {
-    reason
-        .chars()
-        .filter(|character| !character.is_control())
-        .take(1024)
-        .collect()
-}
-
-fn validate_reason(reason: &str) -> Result<()> {
-    ensure!(
-        !reason.is_empty(),
-        "supervisor reply reason must not be empty"
-    );
-    ensure!(
-        reason.len() <= 4096,
-        "supervisor reply reason exceeds size limit"
-    );
-    ensure!(
-        !reason.chars().any(char::is_control),
-        "supervisor reply reason contains control characters"
-    );
-    Ok(())
 }
 
 #[cfg(test)]
@@ -181,6 +165,26 @@ mod tests {
             reply.outcome,
             SupervisorOutcome::Started { session: returned } if returned == session
         ));
+    }
+
+    #[test]
+    fn reads_frame_without_waiting_for_stream_eof() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let reply = SupervisorReply::not_started("frame complete");
+        let mut bytes = Vec::new();
+        write_reply(&mut bytes, &reply).unwrap();
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut stream = std::io::Cursor::new(bytes);
+            sender.send(read_reply(&mut stream)).unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+        });
+        assert_eq!(
+            receiver.recv_timeout(Duration::from_millis(50)).unwrap().unwrap(),
+            reply
+        );
     }
 
     #[test]

@@ -129,11 +129,10 @@ pub fn request_supervisor_session(
     };
     let (sender, receiver) = mpsc::sync_channel(1);
     let reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let result = stdout
-            .take(supervisor_protocol::MAX_REPLY_BYTES as u64 + 1)
-            .read_to_end(&mut bytes)
-            .map(|_| bytes);
+        // The supervisor remains alive after acknowledging startup to monitor the session.
+        // Read the complete newline-delimited frame, not EOF: descendants may inherit a
+        // copy of stdout, and waiting for every pipe reference would block until shutdown.
+        let result = supervisor_protocol::read_reply(stdout);
         let _ = sender.send(result);
     });
 
@@ -151,7 +150,7 @@ pub fn request_supervisor_session(
     }
 
     let response = match receiver.recv_timeout(STARTUP_ACK_TIMEOUT) {
-        Ok(Ok(response)) => response,
+        Ok(Ok(reply)) => reply,
         Ok(Err(error)) => {
             let cleanup = abort_child(&mut child);
             let _ = reader.join();
