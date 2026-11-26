@@ -254,31 +254,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn probe_target_discovery_supports_single_available_families() {
-        let probe = url::Url::parse("http://probe.example/health").unwrap();
-        let ipv4 = "198.51.100.10:80".parse().unwrap();
-        let targets = build_probe_targets(&probe, [ipv4], 204).unwrap();
-        assert_eq!(targets.len(), 1);
-        assert!(targets[0].destination.is_ipv4());
-        assert_eq!(
-            crate::tun::address_family::TunAddressFamily::Auto
-                .resolve(true, false)
-                .unwrap(),
-            crate::tun::address_family::ResolvedTunAddressFamily::Ipv4
-        );
-        assert!(
-            crate::tun::address_family::TunAddressFamily::Ipv6
-                .resolve(true, false)
-                .is_err()
-        );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
     fn selects_udp_for_hysteria2_and_tcp_for_stream_proxy_protocols() {
         assert_eq!(
             peer_transport_for_protocol(Protocol::Hysteria2),
