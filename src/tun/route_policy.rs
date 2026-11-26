@@ -445,6 +445,24 @@ mod tests {
     }
 
     #[test]
+    fn single_family_plans_contain_only_the_selected_routes_and_rules() {
+        for (family, expected) in [
+            (AddressFamily::Ipv4, "0.0.0.0/0"),
+            (AddressFamily::Ipv6, "::/0"),
+        ] {
+            let plan = RoutingPolicyPlan::new_for_families(
+                42_420, 42_410, 42_420, 0x42, 0xff, "tun-proxyctl", 77, &[family],
+            );
+            plan.validate().unwrap();
+            assert_eq!(plan.routes.len(), 1);
+            assert_eq!(plan.rules.len(), 2);
+            assert_eq!(plan.routes[0].family, family);
+            assert_eq!(plan.routes[0].destination, expected);
+            assert!(plan.rules.iter().all(|rule| rule.family == family));
+        }
+    }
+
+    #[test]
     fn binds_every_default_route_to_the_actual_kernel_interface_index() {
         let plan = sample_plan().bind_interface_index(143).unwrap();
         assert_eq!(plan.interface_index, 143);
