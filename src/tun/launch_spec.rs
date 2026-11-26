@@ -7,7 +7,7 @@ use std::{io::Read, path::PathBuf, str::FromStr};
 
 use super::privilege_broker::BrokerSocketTransport;
 
-pub const VERSION: u16 = 5;
+pub const VERSION: u16 = 6;
 pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 /// JSON string escaping can expand the generated document, so the wire limit allows
 /// up to twice the config byte limit plus bounded request metadata.
@@ -47,6 +47,8 @@ pub struct LaunchSpec {
     pub version: u16,
     pub node_id: u64,
     pub core: CoreKind,
+    /// Exact application address families selected before privilege escalation.
+    pub resolved_family: crate::tun::address_family::ResolvedTunAddressFamily,
     pub listen_port: u16,
     /// Keep core diagnostics attached to the invoking terminal until the session exits.
     pub foreground: bool,
@@ -111,6 +113,7 @@ pub fn from_generated_config(input: GeneratedLaunchSpec) -> Result<LaunchSpec> {
         version: VERSION,
         node_id: input.node_id,
         core: input.core,
+        resolved_family: input.resolved_family,
         listen_port: input.listen_port,
         foreground: input.foreground,
         peer_transport: input.peer_transport,
@@ -150,8 +153,20 @@ impl LaunchSpec {
             unique_peers.len() == self.expected_peers.len(),
             "expected proxy peers must not contain duplicates"
         );
-        super::readiness::validate_dual_stack_probe_targets(&self.traffic_targets)
-            .context("invalid dual-stack TUN readiness targets")?;
+        let has_ipv4 = self.traffic_targets.iter().filter(|target| target.destination.is_ipv4()).count();
+        let has_ipv6 = self.traffic_targets.iter().filter(|target| target.destination.is_ipv6()).count();
+        self.resolved_family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
+        ensure!(
+            self.traffic_targets.len()
+                == usize::from(self.resolved_family.includes_ipv4())
+                    + usize::from(self.resolved_family.includes_ipv6())
+                && has_ipv4 == usize::from(self.resolved_family.includes_ipv4())
+                && has_ipv6 == usize::from(self.resolved_family.includes_ipv6()),
+            "TUN readiness targets must contain exactly one destination for each selected family"
+        );
+        for target in &self.traffic_targets {
+            target.validate()?;
+        }
         ensure!(
             self.activation_id.len() == 36
                 && self.activation_id.bytes().enumerate().all(|(index, byte)| {
@@ -227,6 +242,7 @@ mod tests {
             version: VERSION,
             node_id: 5,
             core: CoreKind::Xray,
+            resolved_family: crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
             listen_port: 1080,
             foreground: false,
             peer_transport: BrokerSocketTransport::Tcp,
@@ -288,13 +304,13 @@ mod tests {
     fn rejects_unknown_fields_and_invalid_core() {
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":5,"node_id":1,"core":"xray","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}","path":"/tmp"}"#
+                br#"{"version":6,"node_id":1,"core":"xray","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}","path":"/tmp"}"#
             )
             .is_err()
         );
         assert!(
             LaunchSpec::decode_bounded(
-                br#"{"version":5,"node_id":1,"core":"root","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}"}"#
+                br#"{"version":6,"node_id":1,"core":"root","listen_port":1080,"managed_core_root":"/home/user/.local/share/proxyctl/cores","generated_config":"{}"}"#
             )
             .is_err()
         );
