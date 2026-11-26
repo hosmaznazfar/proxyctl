@@ -35,6 +35,9 @@ pub fn probe_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
     let ruleset = candidate_ruleset(&target)?;
 
     let mut child = Command::new(sudo)
+        // Never allow sudo to read the ruleset pipe while trying to authenticate.
+        // Authentication must already be cached; stdin belongs exclusively to nft.
+        .arg("-n")
         .arg(unshare)
         .args(["--net", "--"])
         .arg(nft)
