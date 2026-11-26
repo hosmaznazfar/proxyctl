@@ -58,6 +58,21 @@ enum TunCommand {
     Stop,
     /// Show interfaces, default routes, DNS, and firewall state (read-only).
     Status,
+    /// Inspect a candidate external VPN process for a future scoped coexistence bypass.
+    Bypass {
+        #[command(subcommand)]
+        command: TunBypassCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TunBypassCommand {
+    /// Inspect process identity and its exact cgroup v2 scope without changing the host.
+    Inspect {
+        /// PID of the external VPN application's long-lived core process.
+        #[arg(long)]
+        pid: u32,
+    },
 }
 
 #[derive(Debug, Subcommand)]
