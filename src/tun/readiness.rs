@@ -910,7 +910,7 @@ pub fn validate_resolved_family_probe_targets(
     let has_ipv6 = targets.iter().filter(|target| target.destination.is_ipv6()).count();
     family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
     ensure!(
-        targets.len() == usize::from(family.includes_ipv4()) + usize::from(family.includes_ipv6())
+        targets.len() == if family.includes_ipv4() { 1 } else { 0 } + if family.includes_ipv6() { 1 } else { 0 }
             && has_ipv4 == usize::from(family.includes_ipv4())
             && has_ipv6 == usize::from(family.includes_ipv6()),
         "TUN readiness requires exactly one destination for each selected address family"
