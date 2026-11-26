@@ -1688,3 +1688,10 @@ This transport is not yet a launch protocol: the supervisor does not resolve nod
 ### Supervisor input dispatch boundary
 
 The hidden `__tun-supervisor` command now enforces the root check before reading input, rejects an interactive terminal as its input source, and reads the launch document from standard input through the bounded reader. A valid document is decoded and validated, after which the command exits with an explicit not-implemented error. Invalid, empty, oversized, malformed, or terminal-backed input fails before any privileged operation. The validated fields are intentionally not acted upon yet; this stage still performs no database access, core execution, runtime-file creation, or network mutation.
+### Family-aware native TUN activation (2026-11-26)
+
+The active native activation path now resolves the persistent `auto` / `ipv4` / `ipv6` / `dual-stack` preference before privilege escalation. `--tun-family` on `proxyctl use ... --tun` and `--family` on `proxyctl tun start` override the saved preference for one run only. `auto` selects the application families for which the configured readiness endpoint provides usable numeric targets; explicit choices fail closed if a required target is absent.
+
+The resolved family is bound to launch-spec version 6, drives family-specific sing-box, Xray, and Mihomo TUN interface addresses, selects the application default routes and proxy RPDB rules, limits end-to-end readiness to those targets, and is persisted in schema-version-2 root-owned session receipts. Legacy schema-version-1 receipts remain readable for recovery. Core-outbound mark bypass rules remain installed for both IPv4 and IPv6 regardless of application TUN family, because the selected core's upstream socket family is independent of the application traffic family.
+
+This is implementation progress, not a successful host validation. The feature still requires the maintainer's formatting, Clippy, full test suite, and independent TUN activation/traffic/stop tests for sing-box, Xray, and Mihomo on the target CachyOS system.
