@@ -196,7 +196,9 @@ pub(crate) fn reality_options(node: &ProxyNode) -> Result<Option<Value>, String>
     let mut reality = Map::new();
     reality.insert("public_key".into(), Value::String(public_key.into()));
     reality.insert("short_id".into(), Value::String(short_id.into()));
-    reality.insert("fingerprint".into(), Value::String(fingerprint.into()));
+    if !fingerprint.is_empty() {
+        reality.insert("fingerprint".into(), Value::String(fingerprint.into()));
+    }
     if let Some(server_name) = option_string(node, "sni") {
         if server_name.chars().any(char::is_control) {
             return Err("REALITY server name contains control characters".into());
