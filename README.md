@@ -144,7 +144,7 @@ proxyctl config display profile
 proxyctl config display add-field 
 ```
 
-Core values offered by `--core` are `sing-box`, `xray`, and `mihomo`. Finite config values include `listen-port`, display profiles (`compact`, `normal`, `full`), and supported display fields. Arbitrary node IDs, URLs, search text, and numeric port values remain user-entered.
+Core values offered by `--core` are `sing-box`, `xray`, and `mihomo`. Finite config values include `listen-port`, TUN families (`auto`, `ipv4`, `ipv6`, `dual-stack`), display profiles (`compact`, `normal`, `full`), and supported display fields. Arbitrary node IDs, URLs, search text, and numeric port values remain user-entered.
 
 Inspect command help:
 
@@ -203,6 +203,9 @@ proxyctl use 12 --core sing-box --port 10910
 proxyctl config
 proxyctl config set listen-port 10909
 proxyctl config reset listen-port
+proxyctl config tun-family
+proxyctl config tun-family ipv4
+proxyctl config reset tun-family
 proxyctl stop
 ~~~
 
@@ -244,6 +247,8 @@ proxyctl stop
 ~~~
 
 Ordinary loopback sessions are backgrounded by default. `proxyctl use NODE --core CORE --foreground` keeps the selected core attached to the terminal and returns when that core exits. TUN sessions are backgrounded by default; `--foreground` uses the same privileged supervisor lifecycle and keeps diagnostics attached to the terminal. `proxyctl tun start` switches the currently active node/core into TUN mode without selecting a different node. `proxyctl tun stop` stops the TUN session, recovers its journaled resources, and restores the saved loopback session when one exists. `proxyctl use NODE --core CORE --tun` is the direct TUN-start shortcut. `proxyctl stop` stops the managed session entirely.
+
+TUN application address-family selection is a persistent setting, independent of the physical address family used by the core's upstream proxy socket. `proxyctl config tun-family` displays it; `proxyctl config tun-family auto|ipv4|ipv6|dual-stack` saves it; `proxyctl config reset tun-family` restores `auto`. `auto` selects every family for which the configured readiness endpoint resolves to a usable numeric target. Explicit `ipv4`, `ipv6`, or `dual-stack` selections fail closed when the required target is unavailable. Both activation paths honor the same saved setting: `proxyctl use NODE --core CORE --tun --tun-family ipv4` and `proxyctl tun start --family ipv4` provide one-run overrides without changing the saved preference. The resolved family is carried through native core configuration, the journaled kernel route/rule plan, and end-to-end readiness probes; it is not re-resolved after privilege escalation.
 
 The privilege boundary follows v2rayN's TUN-only elevation model: ordinary Proxyctl operation and loopback cores remain unprivileged; only an explicit TUN operation requests root authorization. The same `proxyctl` executable runs the supervisor and selected core for the TUN session. No separate helper package, daemon, launcher, or systemd service is installed; no setuid bit or permanent file capabilities are used. The native named-device lifecycle supports sing-box, Mihomo, and Xray. This does not make TUN production-ready: the documented kernel cleanup side effects and real-host dataplane/recovery matrix still require validation.
 
