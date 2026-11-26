@@ -797,14 +797,44 @@ pub fn verify_native_core_end_to_end_readiness(
     target.validate()?;
     plan.validate()?;
     probe_unmarked_route_to_tun(plan, target.destination.ip())?;
-    let traffic = probe_tun_routed_http_traffic(
-        process,
-        target,
-        activation_id,
-        generation,
-        probe_timeout,
-        maximum_response_bytes,
-    )?;
+    let family = if target.destination.is_ipv4() { "IPv4" } else { "IPv6" };
+    let mut traffic_result = None;
+    let mut first_error = None;
+    for attempt in 1..=2 {
+        let attempt_timeout = if attempt == 2 {
+            probe_timeout.min(Duration::from_secs(5))
+        } else {
+            probe_timeout
+        };
+        match probe_tun_routed_http_traffic(
+            process,
+            target,
+            activation_id,
+            generation,
+            attempt_timeout,
+            maximum_response_bytes,
+        ) {
+            Ok(traffic) => {
+                traffic_result = Some(traffic);
+                break;
+            }
+            Err(error) if attempt == 1 => first_error = Some(error),
+            Err(error) => {
+                let first = first_error
+                    .take()
+                    .map(|error| format!("{error:#}"))
+                    .unwrap_or_else(|| "no first-attempt error captured".to_owned());
+                return Err(error).context(format!(
+                    "{family} TUN application-flow probe failed on both attempts for {} (first attempt: {first})",
+                    target.destination
+                ));
+            }
+        }
+    }
+    let traffic = traffic_result.context(format!(
+        "{family} TUN application-flow probe produced no result for {}",
+        target.destination
+    ))?;
     let mut preflight = collect_managed_preflight_with_response(
         runtime_directory,
         activation_id,
@@ -901,8 +931,10 @@ pub fn verify_native_core_dual_stack_end_to_end_readiness(
 ) -> Result<ReadinessEvidence> {
     validate_dual_stack_probe_targets(targets)?;
     let mut combined: Option<ReadinessEvidence> = None;
+    let mut failures = Vec::new();
     for target in targets {
-        let evidence = verify_native_core_end_to_end_readiness(
+        let family = if target.destination.is_ipv4() { "IPv4" } else { "IPv6" };
+        match verify_native_core_end_to_end_readiness(
             runtime_directory,
             process,
             interface_name,
@@ -921,17 +953,28 @@ pub fn verify_native_core_dual_stack_end_to_end_readiness(
             maximum_response_bytes,
             baseline_host,
             current_host,
-        )?;
-        if let Some(previous) = &combined {
-            ensure!(
-                previous == &evidence,
-                "IPv4 and IPv6 readiness observations disagree"
-            );
-        } else {
-            combined = Some(evidence);
+        ) {
+            Ok(evidence) => {
+                if let Some(previous) = &combined {
+                    if previous != &evidence {
+                        failures.push(format!("{family}: readiness evidence disagrees with the other address family"));
+                    }
+                } else {
+                    combined = Some(evidence);
+                }
+            }
+            Err(error) => failures.push(format!(
+                "{family} destination {} failed: {error:#}",
+                target.destination
+            )),
         }
     }
-    combined.context("dual-stack readiness produced no evidence")
+    ensure!(
+        failures.is_empty(),
+        "TUN address-family readiness diagnostics: {}",
+        failures.join("; ")
+    );
+    combined.context("address-family readiness produced no evidence")
 }
 
 #[cfg(not(target_os = "linux"))]
