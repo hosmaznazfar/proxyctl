@@ -700,7 +700,11 @@ fn vless_reality_tcp_ignores_unused_host_metadata_for_all_cores() {
 
     for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
         let compatibility = adapter(core).compatibility(&node);
-        assert!(compatibility.is_supported(), "{core}: {:?}", compatibility.reason);
+        assert!(
+            compatibility.is_supported(),
+            "{core}: {:?}",
+            compatibility.reason
+        );
         let generated = adapter(core).generate_config(&node).unwrap();
         let _: Value = serde_json::from_slice(&generated.content).unwrap();
     }
