@@ -626,7 +626,9 @@ mod signal_tests {
                 let mut child = child;
                 let _ = child.kill();
                 let _ = child.wait();
-                panic!("test child did not remain available long enough to pin its process identity");
+                panic!(
+                    "test child did not remain available long enough to pin its process identity"
+                );
             }
             std::thread::sleep(Duration::from_millis(5));
         }
