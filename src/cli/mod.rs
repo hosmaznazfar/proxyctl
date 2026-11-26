@@ -620,6 +620,23 @@ mod tests {
     }
 
     #[test]
+    fn tun_family_overrides_are_available_for_both_activation_paths() {
+        let use_tun = Cli::try_parse_from([
+            "proxyctl", "use", "7", "--core", "xray", "--tun", "--tun-family", "ipv4",
+        ]).expect("TUN use family override should parse");
+        assert!(matches!(use_tun.command, Some(Command::Use { tun_family: Some(value), .. }) if value == "ipv4"));
+
+        let start = Cli::try_parse_from([
+            "proxyctl", "tun", "start", "--family", "dual-stack",
+        ]).expect("TUN start family override should parse");
+        assert!(matches!(start.command, Some(Command::Tun { command: TunCommand::Start { family: Some(value), .. } }) if value == "dual-stack"));
+
+        assert!(Cli::try_parse_from([
+            "proxyctl", "use", "7", "--core", "xray", "--tun-family", "ipv4",
+        ]).is_err());
+    }
+
+    #[test]
     fn every_supported_shell_completes_subcommand_options() {
         for shell in [
             clap_complete::Shell::Bash,
