@@ -328,14 +328,39 @@ impl CoreAdapter for MihomoAdapter {
         listen_port: u16,
         mark: super::TunOutboundMark,
     ) -> anyhow::Result<GeneratedConfig> {
+        self.generate_tun_activation_config_for_family(
+            node,
+            listen_port,
+            mark,
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
+        )
+    }
+
+    fn generate_tun_activation_config_for_family(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+        mark: super::TunOutboundMark,
+        family: crate::tun::address_family::ResolvedTunAddressFamily,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        let ipv4_addresses = if family.includes_ipv4() {
+            vec!["198.18.0.1/30"]
+        } else {
+            Vec::new()
+        };
+        let ipv6_addresses = if family.includes_ipv6() {
+            vec!["fdfe:dcba:9876::1/126"]
+        } else {
+            Vec::new()
+        };
         document["tun"] = json!({
             "enable": true,
             "device": "tun-proxyctl",
             "mtu": 1500,
-            "inet4-address": ["198.18.0.1/30"],
-            "inet6-address": ["fdfe:dcba:9876::1/126"],
+            "inet4-address": ipv4_addresses,
+            "inet6-address": ipv6_addresses,
             "auto-route": false,
             "auto-redirect": false,
             "dns-mode": "disabled",
@@ -343,7 +368,7 @@ impl CoreAdapter for MihomoAdapter {
             "auto-detect-interface": true
         });
         // Mihomo's global routing-mark is the default mark for proxy outbound connections.
-        document["ipv6"] = json!(true);
+        document["ipv6"] = json!(family.includes_ipv6());
         document["routing-mark"] = json!(mark.value());
         json_config(document)
     }

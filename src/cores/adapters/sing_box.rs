@@ -273,14 +273,36 @@ impl CoreAdapter for SingBoxAdapter {
         listen_port: u16,
         mark: super::TunOutboundMark,
     ) -> anyhow::Result<GeneratedConfig> {
+        self.generate_tun_activation_config_for_family(
+            node,
+            listen_port,
+            mark,
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
+        )
+    }
+
+    fn generate_tun_activation_config_for_family(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+        mark: super::TunOutboundMark,
+        family: crate::tun::address_family::ResolvedTunAddressFamily,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        let mut addresses = Vec::with_capacity(2);
+        if family.includes_ipv4() {
+            addresses.push("198.18.0.1/30");
+        }
+        if family.includes_ipv6() {
+            addresses.push("fdfe:dcba:9876::1/126");
+        }
         document["inbounds"]
             .as_array_mut()
             .ok_or_else(|| anyhow::anyhow!("sing-box activation inbounds must be an array"))?
             .push(json!({
                 "type": "tun", "tag": "tun-in", "interface_name": "tun-proxyctl",
-                "address": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"], "mtu": 1500,
+                "address": addresses, "mtu": 1500,
                 "auto_route": false, "strict_route": false, "dns_mode": "disabled"
             }));
         document["route"] = json!({"final": "proxy", "auto_detect_interface": true});

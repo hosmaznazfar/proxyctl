@@ -107,6 +107,18 @@ pub trait CoreAdapter {
         )
     }
 
+    /// Generate a TUN config for the exact application address families selected for this run.
+    /// The default preserves compatibility for adapters that only implement dual-stack TUN.
+    fn generate_tun_activation_config_for_family(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+        mark: TunOutboundMark,
+        _family: crate::tun::address_family::ResolvedTunAddressFamily,
+    ) -> anyhow::Result<GeneratedConfig> {
+        self.generate_tun_activation_config(node, listen_port, mark)
+    }
+
     /// Add this core's loopback-only HTTP/SOCKS benchmark listener.
     fn generate_benchmark_config(
         &self,

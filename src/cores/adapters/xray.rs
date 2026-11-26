@@ -284,8 +284,30 @@ impl CoreAdapter for XrayAdapter {
         listen_port: u16,
         mark: super::TunOutboundMark,
     ) -> anyhow::Result<GeneratedConfig> {
+        self.generate_tun_activation_config_for_family(
+            node,
+            listen_port,
+            mark,
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
+        )
+    }
+
+    fn generate_tun_activation_config_for_family(
+        &self,
+        node: &ProxyNode,
+        listen_port: u16,
+        mark: super::TunOutboundMark,
+        family: crate::tun::address_family::ResolvedTunAddressFamily,
+    ) -> anyhow::Result<GeneratedConfig> {
         let generated = self.generate_activation_config(node, listen_port)?;
         let mut document: serde_json::Value = serde_json::from_slice(&generated.content)?;
+        let mut gateways = Vec::with_capacity(2);
+        if family.includes_ipv4() {
+            gateways.push("198.18.0.1/30");
+        }
+        if family.includes_ipv6() {
+            gateways.push("fdfe:dcba:9876::1/126");
+        }
         document["inbounds"]
             .as_array_mut()
             .ok_or_else(|| anyhow::anyhow!("Xray activation inbounds must be an array"))?
@@ -293,7 +315,7 @@ impl CoreAdapter for XrayAdapter {
                 "tag": "tun-in", "protocol": "tun", "port": 0,
                 "settings": {
                     "name": super::XRAY_TUN_INTERFACE_NAME, "mtu": 1500,
-                    "gateway": ["198.18.0.1/30", "fdfe:dcba:9876::1/126"],
+                    "gateway": gateways,
                     "autoSystemRoutingTable": [], "autoOutboundsInterface": "auto",
                     "autoSystemDnsToGateway": false
                 },

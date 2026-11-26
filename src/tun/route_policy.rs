@@ -150,7 +150,7 @@ pub fn allocate_policy_identifiers(inventory: &KernelInventory) -> Result<(u32, 
 }
 
 impl RoutingPolicyPlan {
-    /// Build an explicit dual-stack plan. Core sockets must set the configured SO_MARK value.
+    /// Build the legacy dual-stack plan. Core sockets must set the configured SO_MARK value.
     pub fn new(
         table_id: u32,
         bypass_priority: u32,
@@ -160,9 +160,33 @@ impl RoutingPolicyPlan {
         interface_name: impl Into<String>,
         interface_index: u32,
     ) -> Self {
+        Self::new_for_families(
+            table_id,
+            bypass_priority,
+            proxy_priority,
+            core_mark,
+            core_mark_mask,
+            interface_name,
+            interface_index,
+            &[AddressFamily::Ipv4, AddressFamily::Ipv6],
+        )
+    }
+
+    /// Build routes and RPDB rules only for the application address families selected at launch.
+    pub fn new_for_families(
+        table_id: u32,
+        bypass_priority: u32,
+        proxy_priority: u32,
+        core_mark: u32,
+        core_mark_mask: u32,
+        interface_name: impl Into<String>,
+        interface_index: u32,
+        families: &[AddressFamily],
+    ) -> Self {
         let interface_name = interface_name.into();
-        let routes = [AddressFamily::Ipv4, AddressFamily::Ipv6]
-            .into_iter()
+        let routes = families
+            .iter()
+            .copied()
             .map(|family| PlannedRoute {
                 family,
                 destination: family.default_prefix().into(),
@@ -172,8 +196,8 @@ impl RoutingPolicyPlan {
                 route_type: RouteType::Unicast,
             })
             .collect();
-        let mut rules = Vec::with_capacity(4);
-        for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
+        let mut rules = Vec::with_capacity(families.len() * 2);
+        for family in families.iter().copied() {
             rules.push(PlannedRule {
                 family,
                 priority: bypass_priority,
@@ -280,7 +304,10 @@ impl RoutingPolicyPlan {
             "every rule priority must be in the Proxyctl allocation range"
         );
 
-        for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
+        ensure!(!self.routes.is_empty(), "routing plan must include at least one address family");
+        let families = self.routes.iter().map(|route| route.family).collect::<std::collections::BTreeSet<_>>();
+        ensure!(families.len() == self.routes.len(), "routing plan contains duplicate address-family routes");
+        for family in families.iter().copied() {
             let mut routes = self.routes.iter().filter(|route| route.family == family);
             let route = routes
                 .next()
@@ -349,7 +376,7 @@ impl RoutingPolicyPlan {
             !inventory.occupied_tables.contains(&self.table_id),
             "dedicated routing table is already occupied"
         );
-        for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
+        for family in self.routes.iter().map(|route| route.family).collect::<std::collections::BTreeSet<_>>() {
             ensure!(
                 !inventory
                     .rule_priorities
