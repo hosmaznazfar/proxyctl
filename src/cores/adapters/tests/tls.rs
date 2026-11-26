@@ -520,7 +520,7 @@ fn reality_requires_public_key_fingerprint_and_valid_short_id() {
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=reality&pbk=key&fp=chrome&sid=abc",
     ).unwrap();
 
-    for node in [&no_key, &no_fp, &bad_sid] {
+    for node in [&no_key, &bad_sid] {
         assert_eq!(
             adapter(CoreId::SingBox).compatibility(node).status,
             CompatibilityStatus::Invalid
@@ -532,6 +532,13 @@ fn reality_requires_public_key_fingerprint_and_valid_short_id() {
         assert_eq!(
             adapter(CoreId::Mihomo).compatibility(node).status,
             CompatibilityStatus::Invalid
+        );
+    }
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        assert_eq!(
+            adapter(core).compatibility(&no_fp).status,
+            CompatibilityStatus::Supported,
+            "{core} uses its native default when REALITY fp is omitted"
         );
     }
 }
