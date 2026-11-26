@@ -19,8 +19,8 @@ use super::coexistence::{CgroupV2Target, inspect_process};
 /// Inspect a process, then validate its exact cgroup selector using nftables check mode.
 ///
 /// The privileged sudo invocation receives absolute paths for both commands it launches.
-/// The nftables script is fixed apart from a validated, escaped cgroup path and is passed
-/// on stdin; no shell is involved.
+/// The nftables script uses a validated numeric kernel cgroup ID in a typed set and is
+/// passed on stdin; no shell or path-string parsing is involved.
 pub fn probe_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
     let target = inspect_process(pid, expected_uid)
         .context("cannot resolve the selected process's cgroup v2 identity")?;
@@ -94,9 +94,9 @@ pub fn probe_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
 fn candidate_ruleset(target: &CgroupV2Target) -> Result<String> {
     target.validate()?;
     Ok(format!(
-        "table inet proxyctl_probe {{\n    chain output {{\n        type route hook output priority mangle; policy accept;\n        socket cgroupv2 level {} \"{}\" meta mark set 0x1\n    }}\n}}\n",
-        target.hierarchy_level,
-        target.nftables_quoted_path()
+        "table inet proxyctl_probe {{\\n    set vpn_apps {{\\n        type cgroupsv2\\n        elements = {{ {} }}\\n    }}\\n    chain output {{\\n        type route hook output priority mangle; policy accept;\\n        socket cgroupv2 level {} @vpn_apps meta mark set 0x1\\n    }}\\n}}\\n",
+        target.cgroup_id,
+        target.hierarchy_level
     ))
 }
 
@@ -178,21 +178,15 @@ mod tests {
     }
 
     #[test]
-    fn candidate_ruleset_uses_exact_scope_and_route_output_chain() {
+    fn candidate_ruleset_uses_numeric_kernel_cgroup_id_set() {
         let target = target("user.slice/app.slice/app.scope", 3);
         let ruleset = candidate_ruleset(&target).unwrap();
+        assert!(ruleset.contains("set vpn_apps"));
+        assert!(ruleset.contains("type cgroupsv2"));
+        assert!(ruleset.contains("elements = { 4242 }"));
         assert!(ruleset.contains("type route hook output priority mangle"));
-        assert!(ruleset.contains(
-            "socket cgroupv2 level 3 \"user.slice/app.slice/app.scope\" meta mark set 0x1"
-        ));
+        assert!(ruleset.contains("socket cgroupv2 level 3 @vpn_apps meta mark set 0x1"));
         assert!(ruleset.starts_with("table inet proxyctl_probe"));
-    }
-
-    #[test]
-    fn candidate_ruleset_preserves_literal_mountinfo_backslash_escaping() {
-        let target = target(r"user.slice/app\x2dscope", 2);
-        let ruleset = candidate_ruleset(&target).unwrap();
-        assert!(ruleset.contains(r#"level 2 "user.slice/app\\x2dscope""#));
     }
 
     #[test]
