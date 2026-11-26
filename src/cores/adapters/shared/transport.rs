@@ -86,8 +86,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
             }
             hosts.extend(values.into_iter().map(str::to_owned));
         }
-    } else if source_host.is_some() {
-        return Err("host is not supported for this transport".into());
+    }
     }
 
     // Some VMess JSON producers encode request headers as an object. Preserve and map
@@ -294,7 +293,7 @@ pub(crate) fn normalize_transport(node: &ProxyNode) -> Result<Transport, String>
         return Err("HTTP Upgrade host and Host header were both supplied".into());
     }
     if matches!(&kind, TransportKind::Tcp)
-        && (path.is_some() || host.is_some() || !headers.is_empty() || !hosts.is_empty())
+        && (path.is_some() || !headers.is_empty() || !hosts.is_empty())
     {
         return Err("path or host/header was supplied for TCP transport".into());
     }
