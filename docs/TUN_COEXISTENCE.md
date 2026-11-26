@@ -33,6 +33,12 @@ The smaller [byway](https://github.com/dannyota/byway) project illustrates the s
 
 The upstream [systemd `NFTSet=` integration](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html) confirms the intended nftables model: a `type cgroupsv2` set populated with numeric cgroup IDs and referenced by `socket cgroupv2 level N @set`. systemd explicitly does not support this integration in per-user service-manager instances, so it is not a solution for the observed desktop application scope.
 
+The [systemd desktop-environment conventions](https://systemd.io/DESKTOP_ENVIRONMENTS/) define application unit names containing an application ID and, for transient scopes, a per-instance suffix. This provides a better user-facing identity than a PID: Proxyctl can display and select an application while resolving the current scope instance internally. The [systemd D-Bus API](https://www.freedesktop.org/software/systemd/man/latest/org.freedesktop.systemd1.html) also exposes `GetUnitByPIDFD`, returning the unit and invocation identity for a pinned process; this is useful metadata when available, not a required backend dependency.
+
+The [cgtproxy development notes](https://github.com/black-desk/cgtproxy/blob/master/docs/development.md) and implementation show a cgroup-filesystem watcher that scans existing cgroups, watches for create/remove/rename events, and reconciles nftables entries. Its README documents the desktop application-scope naming convention and explicitly notes a startup race if rules are installed only after an application starts. Proxyctl can reuse the discovery/reconciliation idea, but must not rely on an asynchronous watcher to guarantee the first packet: a selected scope must be validated and its exemption installed transactionally before the dependent TUN readiness checks.
+
+By contrast, [byway's process monitor](https://github.com/dannyota/byway/blob/main/procmon.go) scans `/proc`, subscribes to process-exec events through the proc connector, matches executable paths, and moves matching PIDs into a dedicated cgroup. Its [cgroup manager](https://github.com/dannyota/byway/blob/main/cgroup.go) creates that cgroup and migrates processes back on shutdown. Proxyctl will not copy this model: it changes third-party process placement, depends on executable-path matching, and runs as a persistent root daemon. The [Linux proc connector](https://github.com/torvalds/linux/blob/master/include/uapi/linux/cn_proc.h) can still be a future discovery hint, but process events alone do not define the selected app's stable cgroup identity.
+
 The Linux kernel's [nftables socket implementation](https://github.com/torvalds/linux/blob/master/net/netfilter/nft_socket.c) extracts `cgroup_id()` as a 64-bit value. Linux man-pages also document that a cgroup ID can be retrieved from the cgroupfs file handle using `name_to_handle_at()` ([`PERF_RECORD_CGROUP`](https://man7.org/linux/man-pages/man2/perf_event_open.2.html)). Proxyctl uses that kernel identifier rather than assuming the directory's `st_ino` is equivalent.
 
 The [google/nftables issue #263](https://github.com/google/nftables/issues/263) independently documents failures with cgroup path strings and recommends numeric `ControlGroupID` values. That matches the failure observed on this host and supports the move to typed numeric sets.
@@ -93,7 +99,7 @@ Important constraints:
 
 The first implementation target is the user's current CachyOS system: Linux `7.3.6-1-cachyos`, nftables `1.1.7`, unified cgroup v2, and a systemd-created per-application scope. The kernel configuration reports `CONFIG_SOCK_CGROUP_DATA=y`, `CONFIG_NF_TABLES=m`, and `CONFIG_NFT_SOCKET=m`. This confirms the relevant features were configured, but the latter two are modules and configuration alone does not prove they are currently loadable, loaded, or usable. Runtime capability detection must verify the nftables socket expression without changing live networking before the feature is enabled.
 
-The initial provider will discover process membership through procfs and resolve the cgroup2 mount from mountinfo. It will not call systemd APIs or assume a fixed scope name. This is sufficient for the current systemd application scope while keeping the discovery interface independent so other Linux cgroup layouts can be added later.
+The initial provider will discover process membership through procfs and resolve the cgroup2 mount from mountinfo. It will not require systemd APIs or assume a fixed scope name. When a user systemd manager is available, an optional systemd metadata provider may enrich candidates with unit names, desktop application IDs, and invocation IDs. Procfs/cgroupfs remains the source of truth for membership and kernel identity. This keeps discovery independent so non-systemd cgroup layouts can be added later.
 
 ## Linux distribution portability
 
@@ -115,7 +121,7 @@ Runtime discovery must account for distro differences in nftables binary locatio
 
 A capability probe must be non-mutating with respect to the active ruleset. Prefer an isolated network namespace for syntax/kernel-expression validation when available; otherwise use an offline parser check plus a safe kernel capability query. Do not create a temporary rule in the host's active output hook merely to test support.
 
-The initial inline path selector was rejected for the selected v2rayN scope's literal escaped name. A set-only syntax check accepted `type cgroupsv2` with `socket cgroupv2 level N @set`. The Proxyctl probe now includes the numeric kernel cgroup ID obtained from the cgroupfs file handle; this complete probe still needs to be run on the host. Even a successful check does **not** prove live socket matching, TCP/UDP behavior, dual-stack routing, or coexistence under a live Proxyctl TUN session.
+The initial inline path selector was rejected for the selected v2rayN scope's literal escaped name. A set-only syntax check accepted `type cgroupsv2` with `socket cgroupv2 level N @set`. The complete numeric-ID probe has now succeeded on the current host for the running v2rayN application scope. It confirms that the kernel/userspace accept the candidate expression in an isolated network namespace. It does **not** yet prove live socket matching, TCP/UDP behavior, dual-stack routing, or coexistence under a live Proxyctl TUN session.
 
 Proxyctl now exposes the same non-mutating check through:
 
@@ -166,31 +172,32 @@ The external bypass belongs to the same TUN activation generation as the interfa
 - If nftables is unavailable, the kernel expression is unsupported, or existing rules make safe hook ordering impossible, refuse to start a TUN session when an external bypass was requested. Do not silently fall back to a broader exemption or continue with a known routing loop.
 - Existing TUN sessions without an external bypass retain their current behavior until the feature is explicitly requested.
 
-## CLI direction (not yet frozen)
+## Application discovery and user-facing selection
 
-The interface should make selection explicit and inspectable. A likely shape is:
+**A PID is an implementation detail, not the long-term user-facing selector.** The current `inspect --pid` and `probe --pid` commands are temporary diagnostics used to validate discovery and the nftables backend against a known running process. They must not become the persisted configuration format or the normal add/remove workflow.
+
+The intended user-facing workflow is application-oriented:
 
 ```text
-proxyctl tun bypass add --pid <pid>
 proxyctl tun bypass list
-proxyctl tun bypass remove <id>
+proxyctl tun bypass add --app <application-id>
+proxyctl tun bypass remove <bypass-id>
 ```
 
-The final command design must account for the fact that a TUN activation is generation-owned and privileged. Adding or removing a bypass while a session is active must go through the same supervisor and journal, not mutate nftables directly from the unprivileged CLI.
+The exact spelling can be refined, but the contract is:
 
-Do not implement these commands until the capability probe, nftables ownership contract, and transaction integration are complete.
+- `list` discovers currently running, eligible application scopes and displays a human-readable application name, stable application ID where available, instance identity, and whether the scope is eligible. It must not require the user to know a PID or cgroup path.
+- `add --app` selects an application identity. If multiple live instances match, Proxyctl must show the instances and require an explicit instance choice; it must never silently exempt every instance or a shared parent cgroup.
+- The selected target is the exact dedicated application cgroup, not the executable name, core family, UID, or a shared ancestor.
+- PID, process start time, pidfd, cgroup path, directory identity, and kernel cgroup ID remain internal runtime evidence. PIDs may be used transiently to discover processes and to pin/revalidate a process instance, but are never the durable app identity.
+- Persist a logical application/instance selector and resolve its current cgroup identity at activation. Never persist a cgroup numeric ID as a permanent identifier; it changes when the scope is recreated.
+- A systemd provider may resolve a pinned process to a unit using `GetUnitByPIDFD` and obtain its invocation identity. A procfs/cgroupfs provider must remain available so systemd is optional and other Linux providers can be added.
+- A cgroupfs watcher may refresh candidate discovery and detect scope deletion/recreation. Its events are hints: reconcile against current filesystem/process state, handle event overflow by rescanning, and never assume a watcher update wins a race with application startup.
+- If an application is not already in a dedicated cgroup, report that it is not safely selectable. A separately reviewed launcher integration may later start it in an owned scope; do not silently move an already-running third-party process.
 
-## First implementation milestone
+The first implementation milestone uses `inspect --pid` and `probe --pid` strictly as developer diagnostics. They validate the process/cgroup and nftables layers independently, without installing a live bypass or changing host networking. The next discovery milestone should add application enumeration and app-ID selection before any live nftables integration.
 
-The first user-facing inspection command is:
-
-```text
-proxyctl tun bypass inspect --pid <PID>
-```
-
-It is read-only. It accepts only a live process owned by the invoking UID, pins and verifies the process instance, resolves its unified cgroup v2 membership and mount, and reports the exact hierarchy path, nftables level, and cgroup directory identity. It does not invoke nftables, move the process, install a bypass, or change routes/firewall state.
-
-This command validates process/cgroup discovery independently. The companion `proxyctl tun bypass probe --pid <PID>` checks the numeric set-based nftables selector without applying rules to the host. Neither command installs the live bypass; transactional TUN integration remains a separate milestone.
+The final add/remove operations must account for the fact that a TUN activation is generation-owned and privileged. They must go through the same supervisor and journal, not mutate nftables directly from the unprivileged CLI.
 
 ## Required validation before enabling
 
