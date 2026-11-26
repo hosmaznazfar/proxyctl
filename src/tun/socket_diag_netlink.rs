@@ -100,11 +100,10 @@ pub fn decode_datagram(bytes: &[u8], expected_sequence: u32) -> Result<SocketDia
         let kind = read_u16(bytes, offset + 4)?;
         let flags = read_u16(bytes, offset + 6)?;
         let sequence = read_u32(bytes, offset + 8)?;
-        let sender_port_id = read_u32(bytes, offset + 12)?;
-        ensure!(
-            sender_port_id == 0,
-            "netlink message was not sent by the kernel"
-        );
+        // Do not interpret nlmsg_pid as the sender identity here. Kernel replies to
+        // request sockets may carry the destination socket's port ID in this header
+        // field. The transport authenticates the actual sender using sockaddr_nl
+        // returned by recvmsg (sender_port_id == 0) before passing the datagram here.
         ensure!(
             length >= NLMSG_HEADER_LEN && length <= bytes.len() - offset,
             "netlink message has an invalid length"
@@ -455,10 +454,12 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_kernel_netlink_sender_port_ids() {
+    fn accepts_kernel_reply_header_with_destination_port_id() {
+        // The authenticated sender port ID comes from recvmsg's sockaddr_nl metadata.
+        // nlmsg_pid in the reply header is not a reliable kernel-sender indicator.
         let mut response = message(NLMSG_DONE, 7, &[]);
         response[12..16].copy_from_slice(&42u32.to_ne_bytes());
-        assert!(decode_datagram(&response, 7).is_err());
+        assert!(decode_datagram(&response, 7).unwrap().complete);
     }
 
     #[test]
