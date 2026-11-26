@@ -346,7 +346,7 @@ mod tests {
                 executable: PathBuf::from("/usr/bin/sleep"),
             },
             owner_uid: 1000,
-            hierarchy_path: r"user.slice/app-dms-v2rayN\x2dbin\"scope".into(),
+            hierarchy_path: r#"user.slice/app-dms-v2rayN\x2dbin"scope"#.into(),
             hierarchy_level: 2,
             mount_point: PathBuf::from("/sys/fs/cgroup"),
             directory_device: 1,
