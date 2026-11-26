@@ -1490,8 +1490,8 @@ mod tests {
         );
         assert_eq!(
             parse_rule_mark(
-                Some(&serde_json::json!(1092836967u64)),
-                Some(&serde_json::json!(2147483647u64))
+                Some(&serde_json::json!(0x41234567u32)),
+                Some(&serde_json::json!(0x7fff_ffffu32))
             ),
             Some((0x41234567, 0x7fffffff))
         );
