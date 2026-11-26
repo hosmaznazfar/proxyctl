@@ -163,6 +163,42 @@ fn tun_activation_configs_apply_outbound_mark_for_each_supported_core() {
 }
 
 #[test]
+fn tun_configs_include_only_the_selected_address_families_for_all_cores() {
+    let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443").unwrap();
+    let mark = crate::cores::adapters::TunOutboundMark::new(0x100, 0xffff).unwrap();
+    for (family, ipv4, ipv6) in [
+        (crate::tun::address_family::ResolvedTunAddressFamily::Ipv4, true, false),
+        (crate::tun::address_family::ResolvedTunAddressFamily::Ipv6, false, true),
+    ] {
+        for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+            let generated = adapter(core)
+                .generate_tun_activation_config_for_family(&node, 43130, mark, family)
+                .unwrap();
+            let document: Value = serde_json::from_slice(&generated.content).unwrap();
+            match core {
+                CoreId::SingBox => {
+                    let addresses = document["inbounds"][1]["address"].as_array().unwrap();
+                    assert_eq!(addresses.len(), 1);
+                    assert_eq!(addresses[0].as_str().unwrap().contains("."), ipv4);
+                    assert_eq!(addresses[0].as_str().unwrap().contains("::"), ipv6);
+                }
+                CoreId::Xray => {
+                    let gateways = document["inbounds"][1]["settings"]["gateway"].as_array().unwrap();
+                    assert_eq!(gateways.len(), 1);
+                    assert_eq!(gateways[0].as_str().unwrap().contains("."), ipv4);
+                    assert_eq!(gateways[0].as_str().unwrap().contains("::"), ipv6);
+                }
+                CoreId::Mihomo => {
+                    assert_eq!(document["tun"]["inet4-address"].as_array().unwrap().len(), usize::from(ipv4));
+                    assert_eq!(document["tun"]["inet6-address"].as_array().unwrap().len(), usize::from(ipv6));
+                    assert_eq!(document["ipv6"], ipv6);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn adapters_reject_unknown_transport_without_dropping_it() {
     let node =
         parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443?type=quic")
