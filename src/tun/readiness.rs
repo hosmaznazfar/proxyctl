@@ -1279,9 +1279,7 @@ pub fn probe_routing_policy(plan: &super::route_policy::RoutingPolicyPlan) -> Re
                             parse_rule_mark(value.get("fwmark"), value.get("fwmask"))
                                 == Some((mark.value, mark.mask))
                         }
-                        None => {
-                            value.get("fwmark").is_none() && value.get("fwmask").is_none()
-                        },
+                        None => value.get("fwmark").is_none() && value.get("fwmask").is_none(),
                     }
                 })
                 .count();
@@ -1314,13 +1312,12 @@ fn parse_rule_mark(
             return u32::try_from(number).ok();
         }
         let text = value.as_str()?;
-        let (radix, digits) = if let Some(hex) =
-            text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"))
-        {
-            (16, hex)
-        } else {
-            (10, text)
-        };
+        let (radix, digits) =
+            if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+                (16, hex)
+            } else {
+                (10, text)
+            };
         if digits.is_empty() {
             return None;
         }
@@ -1330,9 +1327,10 @@ fn parse_rule_mark(
     let value = value?;
     let (mark, embedded_mask) = if let Some(text) = value.as_str() {
         if let Some((mark, mask)) = text.split_once('/') {
-            (parse_part(&serde_json::Value::String(mark.to_owned()))?, Some(
-                parse_part(&serde_json::Value::String(mask.to_owned()))?,
-            ))
+            (
+                parse_part(&serde_json::Value::String(mark.to_owned()))?,
+                Some(parse_part(&serde_json::Value::String(mask.to_owned()))?),
+            )
         } else {
             (parse_part(value)?, None)
         }
