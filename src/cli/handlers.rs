@@ -545,10 +545,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Config { action } => {
             use crate::services::listener_config as settings;
             match action {
-                None => println!(
-                    "Shared HTTP/SOCKS5 listen port: 127.0.0.1:{}",
-                    settings::listen_port()?
-                ),
+                None => {
+                    println!("Shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::listen_port()?);
+                    println!("TUN address-family preference: {}", crate::services::tun_config::address_family()?);
+                },
                 Some(ConfigAction::Set { key, value }) => {
                     anyhow::ensure!(
                         key == "listen-port",
@@ -562,11 +562,13 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         key == "listen-port",
                         "unknown config key '{key}'; expected 'listen-port'"
                     );
-                    settings::reset_listen_port()?;
-                    println!(
-                        "Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}",
-                        settings::DEFAULT_LISTEN_PORT
-                    );
+                    if key == "listen-port" {
+                        settings::reset_listen_port()?;
+                        println!("Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::DEFAULT_LISTEN_PORT);
+                    } else {
+                        crate::services::tun_config::reset()?;
+                        println!("Restored default TUN address-family preference: auto");
+                    }
                 }
                 Some(ConfigAction::TunFamily { family }) => {
                     let settings = crate::services::tun_config::address_family()?;

@@ -115,7 +115,7 @@ enum ConfigAction {
     },
     /// Restore a setting to its built-in default.
     Reset {
-        #[arg(value_parser = ["listen-port"])]
+        #[arg(value_parser = ["listen-port", "tun-family"])]
         key: String,
     },
     /// Configure table profiles used by show and report.
