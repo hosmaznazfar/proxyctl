@@ -42,13 +42,27 @@ This is an exemption for the selected application scope, not for all processes o
 
 ## nftables mechanism and prerequisites
 
-The candidate mechanism is the nftables socket expression:
+The selected mechanism uses a named nftables set of type `cgroupsv2`:
 
 ```nft
-socket cgroupv2 level <scope-level> "<exact-cgroup-path>"
+table inet proxyctl {
+    set external_vpn_cgroups {
+        type cgroupsv2
+        elements = { <kernel-cgroup-id> }
+    }
+
+    chain output {
+        type route hook output priority mangle; policy accept;
+        socket cgroupv2 level <scope-level> @external_vpn_cgroups meta mark set 0x1
+    }
+}
 ```
 
-The quoted value is a cgroup v2 path relative to the mounted hierarchy, not an arbitrary string compared on every packet. The nftables userspace tool resolves the path to the kernel cgroup identity when the rule is installed. The numeric level identifies the exact hierarchy depth; a socket in a descendant cgroup matches when the selected cgroup is its ancestor at that level. This makes the cgroup path and level a coupled selector.
+The socket expression extracts a 64-bit kernel cgroup ID at the requested hierarchy level and looks it up in the typed set. This avoids nftables' inline path-to-ID parser, which fails for the literal escaped systemd scope name on the current host.
+
+The ID must be the kernel cgroup ID (`cgroup_id()` / kernfs node ID), not the directory's `st_ino`. Linux kernel selftests obtain it from the cgroupfs file handle returned by `name_to_handle_at()`; the cgroup v2 file handle is eight bytes. Proxyctl resolves this handle from an opened/pinned cgroup directory using `AT_EMPTY_PATH`, then rechecks process membership, directory device/inode, and kernel cgroup ID before trusting the target.
+
+The numeric ID is dynamic and can change when a cgroup is destroyed and recreated. Proxyctl therefore records the exact ID and pinned directory identity for the selected process instance, revalidates them before installation, and journals the corresponding set element for generation-scoped cleanup. The nftables set is private to Proxyctl; it does not depend on systemd's `NFTSet=` integration, which systemd documents as unsupported for per-user service managers.
 
 The expression belongs in a dedicated Proxyctl-owned `inet` table and an output base chain of type `route`. The matching rule sets only the packet mark bits used by the active Proxyctl bypass RPDB selector. A route-type output chain is required because changing the packet mark must cause the kernel to reconsider the route. See the nftables socket-expression and route-chain semantics in the upstream manual.
 
@@ -89,7 +103,7 @@ Runtime discovery must account for distro differences in nftables binary locatio
 
 A capability probe must be non-mutating with respect to the active ruleset. Prefer an isolated network namespace for syntax/kernel-expression validation when available; otherwise use an offline parser check plus a safe kernel capability query. Do not create a temporary rule in the host's active output hook merely to test support.
 
-The first CachyOS probe has now returned exit status `0` for a candidate `inet` output route chain containing `socket cgroupv2 level 5` and a mark assignment, using `sudo unshare --net -- nft --check --file -`. This confirms that check mode accepted the expression in the isolated network namespace; it does **not** yet prove packet matching, TCP/UDP behavior, IPv4/IPv6 routing, or coexistence under a live Proxyctl TUN session.
+The initial inline path selector was rejected for the selected v2rayN scope's literal `\\x2d` sequence. A follow-up check accepted the named-set form (`type cgroupsv2` with `socket cgroupv2 level N @set`) in an isolated network namespace. This proves parser/kernel acceptance of the set expression, but does **not** yet prove correct kernel-ID resolution, live socket matching, TCP/UDP behavior, dual-stack routing, or coexistence under a live Proxyctl TUN session.
 
 Proxyctl now exposes the same non-mutating check through:
 
@@ -97,7 +111,7 @@ Proxyctl now exposes the same non-mutating check through:
 proxyctl tun bypass probe --pid <PID>
 ```
 
-The command re-inspects the live process and cgroup, locates trusted root-owned `sudo`, `unshare`, and `nft` executables, and invokes them directly without a shell. It uses `nft --check` inside a temporary network namespace and revalidates the process/cgroup identity afterwards. A successful probe changes no host firewall, route, cgroup, or process state.
+The command re-inspects the live process and cgroup, resolves its kernel cgroup ID from the pinned cgroupfs file handle, locates trusted root-owned `sudo`, `unshare`, and `nft` executables, and invokes them directly without a shell. It checks a numeric `cgroupsv2` set element and socket expression inside a temporary network namespace, then revalidates process, directory, and kernel cgroup identities. A successful probe changes no host firewall, route, cgroup, or process state.
 
 ## Ownership and coexistence rules
 
@@ -119,7 +133,8 @@ A PID alone is insufficient because it can be reused. The selected target identi
 - PID and `/proc/<pid>/stat` start time;
 - executable identity obtained from the live process, with a clearly defined policy for deleted/replaced executables;
 - effective UID;
-- canonical cgroup v2 path and cgroup directory identity;
+- canonical cgroup v2 path and cgroup directory device/inode;
+- kernel cgroup ID obtained from the cgroupfs file handle (never substitute `st_ino`);
 - the exact hierarchy level used by nftables.
 
 The privileged supervisor must re-read these values immediately before installation and compare them with the prepared request. It must reject a process that exited, changed cgroup, changed executable identity, or no longer belongs to the expected invoking user. The cgroup path is a selector, not an authorization token.
@@ -167,7 +182,7 @@ This command validates the process/cgroup discovery layer on the current CachyOS
 
 ## Required validation before enabling
 
-1. Read-only capability probe confirms cgroup v2 socket matching is supported by the running kernel and nftables userspace. Use nftables check mode (`nft --check --file -`) with a candidate rule; check mode validates commands without applying them.
+1. Read-only capability probe confirms cgroup v2 socket matching is supported by the running kernel and nftables userspace. Use nftables check mode (`nft --check --file -`) with a candidate typed set and numeric cgroup ID; check mode validates commands without applying them.
 2. A disposable, non-production cgroup scope can be matched exactly without matching its parent or sibling scopes.
 3. A disposable test verifies that TCP and UDP sockets in the selected cgroup receive the bypass mark, while sockets in the same UID but another cgroup do not.
 4. Both IPv4 and IPv6 route lookups use the main table for the selected scope and Proxyctl's TUN table for ordinary applications.
@@ -177,4 +192,4 @@ This command validates the process/cgroup discovery layer on the current CachyOS
 8. Failure injection covers target exit, PID reuse, cgroup deletion, nftables rejection, partial transaction, supervisor termination, and recovery.
 9. The existing dual-stack readiness, process attachment, journal, and cleanup guarantees remain mandatory.
 
-The first implementation milestone adds read-only process/cgroup inspection only. It does not yet install an nftables rule or change host networking. The later capability probe must use nftables check mode and must not apply rules to the host.
+The current milestone adds read-only process/cgroup inspection and a non-mutating check of the numeric set-based selector. It does not install an nftables rule or change host networking.
