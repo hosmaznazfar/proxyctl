@@ -191,7 +191,7 @@ fn tun_configs_include_only_the_selected_address_families_for_all_cores() {
                 CoreId::Mihomo => {
                     assert_eq!(document["tun"]["inet4-address"].as_array().unwrap().len(), usize::from(ipv4 as u8));
                     assert_eq!(document["tun"]["inet6-address"].as_array().unwrap().len(), usize::from(ipv6 as u8));
-                    assert_eq!(document["ipv6"], ipv6);
+                    assert_eq!(document["ipv6"], true);
                 }
             }
         }
