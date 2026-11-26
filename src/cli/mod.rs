@@ -1074,14 +1074,14 @@ mod tests {
         assert!(matches!(
             start.command,
             Some(Command::Tun {
-                command: TunCommand::Start { foreground: false }
+                command: TunCommand::Start { foreground: false, .. }
             })
         ));
         let foreground = Cli::try_parse_from(["proxyctl", "tun", "start", "--foreground"]).unwrap();
         assert!(matches!(
             foreground.command,
             Some(Command::Tun {
-                command: TunCommand::Start { foreground: true }
+                command: TunCommand::Start { foreground: true, .. }
             })
         ));
         let stop = Cli::try_parse_from(["proxyctl", "tun", "stop"]).unwrap();
