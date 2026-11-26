@@ -75,6 +75,28 @@ impl SupervisorReply {
     }
 }
 
+/// Keep diagnostics safe for the single-line acknowledgement protocol.
+fn bounded_reason(reason: &str) -> String {
+    reason
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(1024)
+        .collect()
+}
+
+fn validate_reason(reason: &str) -> Result<()> {
+    ensure!(!reason.is_empty(), "supervisor reply reason is empty");
+    ensure!(
+        reason.chars().count() <= 1024,
+        "supervisor reply reason exceeds size limit"
+    );
+    ensure!(
+        !reason.chars().any(char::is_control),
+        "supervisor reply reason contains control characters"
+    );
+    Ok(())
+}
+
 /// Write exactly one bounded JSON reply and flush the acknowledgement pipe.
 pub fn write_reply<W: Write>(mut writer: W, reply: &SupervisorReply) -> Result<()> {
     reply.validate()?;
