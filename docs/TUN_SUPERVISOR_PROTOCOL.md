@@ -10,7 +10,7 @@ The unprivileged front end sends the bounded versioned launch request to:
 sudo -- <current-proxyctl-executable> __tun-supervisor
 ```
 
-The request remains on stdin so sudo's password prompt stays terminal-driven. Launch protocol version 5 includes the activation UUID, generation, foreground preference, resolved selected-node peer candidates, and bounded dual-stack HTTP readiness targets. The supervisor validates the request again and reuses the exact UUID/generation for the manifest, transaction journal, and session receipt; it does not generate replacement identities. The supervisor's stdout is reserved for one bounded JSON acknowledgement; diagnostics remain on stderr. The pipe is a per-invocation kernel object inherited across sudo, not a pathname that an unprivileged process must access below the root-owned mode-0700 runtime directory.
+The request remains on stdin so sudo's password prompt stays terminal-driven. Launch protocol version 6 includes the activation UUID, generation, foreground preference, resolved selected-node peer candidates, the exact resolved application TUN family, and one bounded numeric HTTP readiness target per selected family. The supervisor validates the request again and reuses the exact UUID/generation for the manifest, transaction journal, and session receipt; it does not generate replacement identities. The supervisor's stdout is reserved for one bounded JSON acknowledgement; diagnostics remain on stderr. The pipe is a per-invocation kernel object inherited across sudo, not a pathname that an unprivileged process must access below the root-owned mode-0700 runtime directory.
 
 The reply schema is versioned and strict:
 
@@ -20,7 +20,7 @@ The reply schema is versioned and strict:
 
 Unknown fields, unsupported versions, empty/trailing data and replies beyond 16 KiB are rejected. The front end must accept success only for `started`, and only after validating the embedded session record. A zero sudo exit status or successful process creation is not a startup acknowledgement.
 
-The supervisor emits `started` only after it has applied the journaled native-device transaction, launched the selected core, verified exact TUN attachment, passed the full dual-stack end-to-end readiness gate, and durably committed the session receipt plus Running manifest. It closes stdout after the one-shot reply and remains alive as the session monitor. The front-end waits up to 60 seconds for this acknowledgement and accepts it only while the supervisor is still alive. Foreground requests remain attached until the supervisor completes cleanup.
+The supervisor emits `started` only after it has applied the journaled native-device transaction, launched the selected core, verified exact TUN attachment, passed end-to-end readiness for every selected application address family, and durably committed the session receipt plus Running manifest. It closes stdout after the one-shot reply and remains alive as the session monitor. The front-end waits up to 60 seconds for this acknowledgement and accepts it only while the supervisor is still alive. Foreground requests remain attached until the supervisor completes cleanup.
 
 ## Durable commit ordering
 
@@ -31,7 +31,7 @@ The Linux lifecycle coordinator now exposes `bind_core_session`, which enforces 
 1. Validate the session record and require its activation ID/generation to match the prepared activation token.
 2. Require the session receipt and lifecycle manifest to share the same runtime directory.
 3. Open a pidfd for the recorded process, verify the process identity remains live, and verify all process UID credentials match the privileged supervisor's effective UID (root in production); the receipt separately binds the invoking UID.
-4. Persist the root-owned session receipt with no-clobber semantics.
+4. Persist the root-owned session receipt with no-clobber semantics (schema version 2 records the resolved TUN family; schema version 1 receipts remain readable for recovery).
 5. Recheck the pinned process, then atomically transition the matching manifest from `Prepared` to `Running` with the identical process identity.
 
 The session receipt is committed first. If the manifest write fails after that point, the receipt is intentionally retained; deleting it would destroy the only durable process-ownership evidence for that partial commit. Recovery must reconcile the receipt and manifest rather than treating either file as an independent instruction.
@@ -148,9 +148,9 @@ If any post-spawn step fails, the direct child is killed and reaped where possib
 The `native_session` primitive is now composed by `native_supervisor`, which owns the staged config and child for the full session, sends the `started` acknowledgement only after commit, monitors child exit, and performs generation-scoped recovery. A parent-death signal terminates the core if the supervisor crashes; explicit `tun stop` remains the recovery path for any kernel resources left by an abrupt supervisor death.
 
 
-## Launch specification version 5: readiness inputs
+## Launch specification version 6: resolved address-family inputs
 
-Version 5 binds the activation generation, foreground preference, and full dual-stack readiness inputs to the unprivileged launch request. The request carries one to eight resolved selected-node peer endpoints, the node protocol's TCP or UDP peer transport, and exactly one numeric IPv4 plus one numeric IPv6 HTTP probe target. Targets retain the original HTTP Host header and path, and each expected response status must be a successful 2xx code. The privileged supervisor validates all fields again before use.
+Version 6 binds the activation generation, foreground preference, resolved TUN application family, and matching readiness inputs to the unprivileged launch request. The request carries one to eight resolved selected-node peer endpoints, the node protocol's TCP or UDP peer transport, and exactly one numeric HTTP probe target for each selected application family. `auto` is resolved before privilege escalation from the usable address families returned for the configured readiness endpoint; explicit single-family and dual-stack selections fail closed if their required target is absent. The resolved value is carried unchanged into native core config generation, journaled application routes, readiness, and the root-owned session receipt. Core-socket bypass rules remain dual-family so the selected core can use either upstream address family independently of the application TUN family. Targets retain the original HTTP Host header and path, and each expected response status must be a successful 2xx code. The privileged supervisor validates all fields again before use.
 
 The supervisor captures its own pre-activation host-network baseline after authenticating the invoking UID; it never accepts a caller-supplied DNS or firewall baseline. Supplied numeric destinations are bounded data, not executable paths or commands. The generation, activation UUID, generated core configuration, peer candidates, and traffic targets are validated together before any privileged network mutation.
 
