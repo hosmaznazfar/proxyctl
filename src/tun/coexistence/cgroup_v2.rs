@@ -34,10 +34,6 @@ pub struct CgroupV2Target {
 impl CgroupV2Target {
     pub fn validate(&self) -> Result<()> {
         self.process.validate()?;
-        ensure!(
-            self.owner_uid > 0 || self.owner_uid == 0,
-            "invalid process owner UID"
-        );
         validate_hierarchy_path(&self.hierarchy_path)?;
         ensure!(
             self.hierarchy_level as usize == self.hierarchy_path.split('/').count(),
@@ -72,7 +68,12 @@ impl CgroupV2Target {
             Ok(metadata) if metadata.is_dir() => metadata,
             _ => return Ok(false),
         };
-        Ok(metadata.dev() == self.directory_device && metadata.ino() == self.directory_inode)
+        if metadata.dev() != self.directory_device || metadata.ino() != self.directory_inode {
+            return Ok(false);
+        }
+        Ok(self.process.verify()? 
+            && read_unified_cgroup_path(self.process.pid)?
+                == format!("/{}", self.hierarchy_path))
     }
 
     /// Return the path syntax accepted by nftables' `socket cgroupv2 level` expression.
@@ -96,6 +97,10 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
     validate_absolute_cgroup_path(&cgroup_path)?;
     let mount_info = read_bounded("/proc/self/mountinfo")?;
     let (mount_point, mount_root) = find_cgroup2_mount(&mount_info)?;
+    ensure!(
+        mount_root == "/",
+        "the initial cgroup v2 backend requires the unified hierarchy root to be mounted"
+    );
     let hierarchy_path = cgroup_path
         .strip_prefix(&mount_root)
         .with_context(|| {
@@ -129,6 +134,10 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
     ensure!(
         !handle.is_exited()?,
         "selected process exited during cgroup discovery"
+    );
+    ensure!(
+        read_unified_cgroup_path(pid)? == cgroup_path,
+        "process cgroup changed before discovery completed"
     );
 
     let target = CgroupV2Target {
