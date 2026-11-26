@@ -658,8 +658,7 @@ mod signal_tests {
     #[test]
     fn startup_termination_is_latched_and_cancels_core_attachment() {
         let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
-        let (child, identity) = live_child();
-        let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
+        let (child, identity, process) = live_child();
         let mut guard = SignalForwardingGuard::install(false).unwrap();
 
         forward_supervisor_signal(libc::SIGTERM);
@@ -676,8 +675,7 @@ mod signal_tests {
     #[test]
     fn supervisor_only_termination_is_forwarded_to_the_pinned_child() {
         let _serial = SIGNAL_TEST_LOCK.lock().unwrap();
-        let (child, identity) = live_child();
-        let process = super::super::process::ProcessHandle::open(identity.clone()).unwrap();
+        let (child, identity, process) = live_child();
         let mut guard = SignalForwardingGuard::install(false).unwrap();
         guard.attach_core(identity).unwrap();
         forward_supervisor_signal(libc::SIGTERM);
