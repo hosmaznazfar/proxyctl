@@ -322,7 +322,9 @@ impl RoutingPolicyPlan {
             "routing plan contains duplicate address-family routes"
         );
         ensure!(
-            self.rules.iter().all(|rule| [AddressFamily::Ipv4, AddressFamily::Ipv6].contains(&rule.family)),
+            self.rules
+                .iter()
+                .all(|rule| [AddressFamily::Ipv4, AddressFamily::Ipv6].contains(&rule.family)),
             "routing plan contains an unsupported address family"
         );
         for family in [AddressFamily::Ipv4, AddressFamily::Ipv6] {
@@ -449,16 +451,39 @@ mod tests {
             (AddressFamily::Ipv6, "::/0"),
         ] {
             let plan = RoutingPolicyPlan::new_for_families(
-                42_420, 42_410, 42_420, 0x42, 0xff, "tun-proxyctl", 77, &[family],
+                42_420,
+                42_410,
+                42_420,
+                0x42,
+                0xff,
+                "tun-proxyctl",
+                77,
+                &[family],
             );
             plan.validate().unwrap();
             assert_eq!(plan.routes.len(), 1);
             assert_eq!(plan.rules.len(), 3);
             assert_eq!(plan.routes[0].family, family);
             assert_eq!(plan.routes[0].destination, expected);
-            assert_eq!(plan.rules.iter().filter(|rule| rule.purpose == RulePurpose::CoreTrafficBypass).count(), 2);
-            assert_eq!(plan.rules.iter().filter(|rule| rule.purpose == RulePurpose::ProxyTraffic).count(), 1);
-            assert!(plan.rules.iter().any(|rule| rule.family == family && rule.purpose == RulePurpose::ProxyTraffic));
+            assert_eq!(
+                plan.rules
+                    .iter()
+                    .filter(|rule| rule.purpose == RulePurpose::CoreTrafficBypass)
+                    .count(),
+                2
+            );
+            assert_eq!(
+                plan.rules
+                    .iter()
+                    .filter(|rule| rule.purpose == RulePurpose::ProxyTraffic)
+                    .count(),
+                1
+            );
+            assert!(
+                plan.rules
+                    .iter()
+                    .any(|rule| rule.family == family && rule.purpose == RulePurpose::ProxyTraffic)
+            );
         }
     }
 

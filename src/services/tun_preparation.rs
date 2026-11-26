@@ -124,8 +124,12 @@ pub fn prepare_launch_spec(
         Some(value) => value,
         None => crate::services::tun_config::address_family()?,
     };
-    let has_ipv4 = available_targets.iter().any(|target| target.destination.is_ipv4());
-    let has_ipv6 = available_targets.iter().any(|target| target.destination.is_ipv6());
+    let has_ipv4 = available_targets
+        .iter()
+        .any(|target| target.destination.is_ipv4());
+    let has_ipv6 = available_targets
+        .iter()
+        .any(|target| target.destination.is_ipv6());
     let resolved_family = preference.resolve(has_ipv4, has_ipv6)?;
     let traffic_targets = available_targets
         .into_iter()
@@ -226,7 +230,10 @@ fn build_probe_targets(
             expected_status,
         });
     }
-    anyhow::ensure!(!targets.is_empty(), "TUN readiness endpoint has no usable IPv4 or IPv6 address");
+    anyhow::ensure!(
+        !targets.is_empty(),
+        "TUN readiness endpoint has no usable IPv4 or IPv6 address"
+    );
     for target in &targets {
         target.validate()?;
     }
@@ -254,11 +261,15 @@ mod tests {
         assert_eq!(targets.len(), 1);
         assert!(targets[0].destination.is_ipv4());
         assert_eq!(
-            crate::tun::address_family::TunAddressFamily::Auto.resolve(true, false).unwrap(),
+            crate::tun::address_family::TunAddressFamily::Auto
+                .resolve(true, false)
+                .unwrap(),
             crate::tun::address_family::ResolvedTunAddressFamily::Ipv4
         );
         assert!(
-            crate::tun::address_family::TunAddressFamily::Ipv6.resolve(true, false).is_err()
+            crate::tun::address_family::TunAddressFamily::Ipv6
+                .resolve(true, false)
+                .is_err()
         );
     }
 }

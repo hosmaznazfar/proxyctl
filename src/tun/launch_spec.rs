@@ -164,7 +164,8 @@ impl LaunchSpec {
             .iter()
             .filter(|target| target.destination.is_ipv6())
             .count();
-        self.resolved_family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
+        self.resolved_family
+            .validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
         ensure!(
             self.traffic_targets.len()
                 == (usize::from(self.resolved_family.includes_ipv4() as u8))

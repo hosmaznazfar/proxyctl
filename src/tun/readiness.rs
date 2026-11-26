@@ -797,7 +797,11 @@ pub fn verify_native_core_end_to_end_readiness(
     target.validate()?;
     plan.validate()?;
     probe_unmarked_route_to_tun(plan, target.destination.ip())?;
-    let family = if target.destination.is_ipv4() { "IPv4" } else { "IPv6" };
+    let family = if target.destination.is_ipv4() {
+        "IPv4"
+    } else {
+        "IPv6"
+    };
     let mut traffic_result = None;
     let mut first_error = None;
     for attempt in 1..=2 {
@@ -916,7 +920,9 @@ pub fn validate_resolved_family_probe_targets(
         .count();
     family.validate_targets(has_ipv4 == 1, has_ipv6 == 1)?;
     ensure!(
-        targets.len() == (usize::from(family.includes_ipv4() as u8)) + (usize::from(family.includes_ipv6() as u8))
+        targets.len()
+            == (usize::from(family.includes_ipv4() as u8))
+                + (usize::from(family.includes_ipv6() as u8))
             && has_ipv4 == (usize::from(family.includes_ipv4() as u8))
             && has_ipv6 == (usize::from(family.includes_ipv6() as u8)),
         "TUN readiness requires exactly one destination for each selected address family"
@@ -959,7 +965,11 @@ pub fn verify_native_core_address_family_end_to_end_readiness(
     let mut combined: Option<ReadinessEvidence> = None;
     let mut failures = Vec::new();
     for target in targets {
-        let family = if target.destination.is_ipv4() { "IPv4" } else { "IPv6" };
+        let family = if target.destination.is_ipv4() {
+            "IPv4"
+        } else {
+            "IPv6"
+        };
         match verify_native_core_end_to_end_readiness(
             runtime_directory,
             process,
@@ -983,7 +993,9 @@ pub fn verify_native_core_address_family_end_to_end_readiness(
             Ok(evidence) => {
                 if let Some(previous) = &combined {
                     if previous != &evidence {
-                        failures.push(format!("{family}: readiness evidence disagrees with the other address family"));
+                        failures.push(format!(
+                            "{family}: readiness evidence disagrees with the other address family"
+                        ));
                     }
                 } else {
                     combined = Some(evidence);

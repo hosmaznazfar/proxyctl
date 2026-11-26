@@ -102,7 +102,14 @@ mod tests {
     #[test]
     fn builds_dual_stack_transaction_with_activation_bound_mark() {
         let activation_id = "12345678-1234-4234-8234-123456789abc";
-        let transaction = build_from_snapshot(activation_id, &snapshot(), 1000, 1000, crate::tun::address_family::ResolvedTunAddressFamily::DualStack).unwrap();
+        let transaction = build_from_snapshot(
+            activation_id,
+            &snapshot(),
+            1000,
+            1000,
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
+        )
+        .unwrap();
 
         assert_eq!(transaction.activation_id, activation_id);
         assert_eq!(transaction.owner_uid, 1000);
@@ -140,16 +147,39 @@ mod tests {
             1000,
             1000,
             crate::tun::address_family::ResolvedTunAddressFamily::Ipv4,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(transaction.policy.routes.len(), 1);
         assert_eq!(transaction.policy.rules.len(), 3);
-        assert!(transaction.policy.routes.iter().all(|route| route.family == AddressFamily::Ipv4));
+        assert!(
+            transaction
+                .policy
+                .routes
+                .iter()
+                .all(|route| route.family == AddressFamily::Ipv4)
+        );
         assert_eq!(
-            transaction.policy.rules.iter().filter(|rule| rule.purpose == crate::tun::route_policy::RulePurpose::CoreTrafficBypass).count(),
+            transaction
+                .policy
+                .rules
+                .iter()
+                .filter(
+                    |rule| rule.purpose == crate::tun::route_policy::RulePurpose::CoreTrafficBypass
+                )
+                .count(),
             2
         );
-        assert!(transaction.policy.rules.iter().any(|rule| rule.family == AddressFamily::Ipv6 && rule.purpose == crate::tun::route_policy::RulePurpose::CoreTrafficBypass));
-        assert!(transaction.policy.rules.iter().all(|rule| rule.purpose != crate::tun::route_policy::RulePurpose::ProxyTraffic || rule.family == AddressFamily::Ipv4));
+        assert!(
+            transaction
+                .policy
+                .rules
+                .iter()
+                .any(|rule| rule.family == AddressFamily::Ipv6
+                    && rule.purpose == crate::tun::route_policy::RulePurpose::CoreTrafficBypass)
+        );
+        assert!(transaction.policy.rules.iter().all(|rule| rule.purpose
+            != crate::tun::route_policy::RulePurpose::ProxyTraffic
+            || rule.family == AddressFamily::Ipv4));
         transaction.validate().unwrap();
     }
 
@@ -165,9 +195,14 @@ mod tests {
         ]);
         let mut current = snapshot();
         current.inventory = inventory;
-        let transaction =
-            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000, crate::tun::address_family::ResolvedTunAddressFamily::DualStack)
-                .unwrap();
+        let transaction = build_from_snapshot(
+            "12345678-1234-4234-8234-123456789abc",
+            &current,
+            1000,
+            1000,
+            crate::tun::address_family::ResolvedTunAddressFamily::DualStack,
+        )
+        .unwrap();
         assert_eq!(transaction.policy.table_id, RT_TABLE_MIN_PROXYCTL + 1);
         assert_eq!(transaction.policy.bypass_priority, 10_002);
         assert_eq!(transaction.policy.proxy_priority, 10_003);
@@ -182,11 +217,24 @@ mod tests {
             is_tun: true,
         });
         assert!(
-            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &current, 1000, 1000, crate::tun::address_family::ResolvedTunAddressFamily::DualStack)
-                .is_err()
+            build_from_snapshot(
+                "12345678-1234-4234-8234-123456789abc",
+                &current,
+                1000,
+                1000,
+                crate::tun::address_family::ResolvedTunAddressFamily::DualStack
+            )
+            .is_err()
         );
         assert!(
-            build_from_snapshot("12345678-1234-4234-8234-123456789abc", &snapshot(), 0, 0, crate::tun::address_family::ResolvedTunAddressFamily::DualStack).is_err()
+            build_from_snapshot(
+                "12345678-1234-4234-8234-123456789abc",
+                &snapshot(),
+                0,
+                0,
+                crate::tun::address_family::ResolvedTunAddressFamily::DualStack
+            )
+            .is_err()
         );
     }
 }

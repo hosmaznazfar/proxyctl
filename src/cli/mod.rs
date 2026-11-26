@@ -622,18 +622,38 @@ mod tests {
     #[test]
     fn tun_family_overrides_are_available_for_both_activation_paths() {
         let use_tun = Cli::try_parse_from([
-            "proxyctl", "use", "7", "--core", "xray", "--tun", "--tun-family", "ipv4",
-        ]).expect("TUN use family override should parse");
-        assert!(matches!(use_tun.command, Some(Command::Use { tun_family: Some(value), .. }) if value == "ipv4"));
+            "proxyctl",
+            "use",
+            "7",
+            "--core",
+            "xray",
+            "--tun",
+            "--tun-family",
+            "ipv4",
+        ])
+        .expect("TUN use family override should parse");
+        assert!(
+            matches!(use_tun.command, Some(Command::Use { tun_family: Some(value), .. }) if value == "ipv4")
+        );
 
-        let start = Cli::try_parse_from([
-            "proxyctl", "tun", "start", "--family", "dual-stack",
-        ]).expect("TUN start family override should parse");
-        assert!(matches!(start.command, Some(Command::Tun { command: TunCommand::Start { family: Some(value), .. } }) if value == "dual-stack"));
+        let start = Cli::try_parse_from(["proxyctl", "tun", "start", "--family", "dual-stack"])
+            .expect("TUN start family override should parse");
+        assert!(
+            matches!(start.command, Some(Command::Tun { command: TunCommand::Start { family: Some(value), .. } }) if value == "dual-stack")
+        );
 
-        assert!(Cli::try_parse_from([
-            "proxyctl", "use", "7", "--core", "xray", "--tun-family", "ipv4",
-        ]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "proxyctl",
+                "use",
+                "7",
+                "--core",
+                "xray",
+                "--tun-family",
+                "ipv4",
+            ])
+            .is_err()
+        );
     }
 
     #[test]
@@ -1074,14 +1094,20 @@ mod tests {
         assert!(matches!(
             start.command,
             Some(Command::Tun {
-                command: TunCommand::Start { foreground: false, .. }
+                command: TunCommand::Start {
+                    foreground: false,
+                    ..
+                }
             })
         ));
         let foreground = Cli::try_parse_from(["proxyctl", "tun", "start", "--foreground"]).unwrap();
         assert!(matches!(
             foreground.command,
             Some(Command::Tun {
-                command: TunCommand::Start { foreground: true, .. }
+                command: TunCommand::Start {
+                    foreground: true,
+                    ..
+                }
             })
         ));
         let stop = Cli::try_parse_from(["proxyctl", "tun", "stop"]).unwrap();

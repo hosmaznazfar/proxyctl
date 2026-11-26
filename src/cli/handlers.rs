@@ -225,7 +225,10 @@ fn start_tun_from_active(foreground: bool, family_override: Option<String>) -> a
 }
 
 #[cfg(not(target_os = "linux"))]
-fn start_tun_from_active(_foreground: bool, _family_override: Option<String>) -> anyhow::Result<()> {
+fn start_tun_from_active(
+    _foreground: bool,
+    _family_override: Option<String>,
+) -> anyhow::Result<()> {
     anyhow::bail!("managed TUN activation is supported only on Linux")
 }
 
@@ -555,9 +558,15 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             use crate::services::listener_config as settings;
             match action {
                 None => {
-                    println!("Shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::listen_port()?);
-                    println!("TUN address-family preference: {}", crate::services::tun_config::address_family()?);
-                },
+                    println!(
+                        "Shared HTTP/SOCKS5 listen port: 127.0.0.1:{}",
+                        settings::listen_port()?
+                    );
+                    println!(
+                        "TUN address-family preference: {}",
+                        crate::services::tun_config::address_family()?
+                    );
+                }
                 Some(ConfigAction::Set { key, value }) => {
                     anyhow::ensure!(
                         key == "listen-port",
@@ -566,23 +575,27 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                     settings::set_listen_port(value)?;
                     println!("Saved shared HTTP/SOCKS5 listen port: 127.0.0.1:{value}");
                 }
-                Some(ConfigAction::Reset { key }) => {
-                    match key.as_str() {
-                        "listen-port" => {
-                            settings::reset_listen_port()?;
-                            println!("Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}", settings::DEFAULT_LISTEN_PORT);
-                        }
-                        "tun-family" => {
-                            crate::services::tun_config::reset()?;
-                            println!("Restored default TUN address-family preference: auto");
-                        }
-                        _ => anyhow::bail!("unknown config key '{key}'; expected 'listen-port' or 'tun-family'"),
+                Some(ConfigAction::Reset { key }) => match key.as_str() {
+                    "listen-port" => {
+                        settings::reset_listen_port()?;
+                        println!(
+                            "Restored default shared HTTP/SOCKS5 listen port: 127.0.0.1:{}",
+                            settings::DEFAULT_LISTEN_PORT
+                        );
                     }
-                }
+                    "tun-family" => {
+                        crate::services::tun_config::reset()?;
+                        println!("Restored default TUN address-family preference: auto");
+                    }
+                    _ => anyhow::bail!(
+                        "unknown config key '{key}'; expected 'listen-port' or 'tun-family'"
+                    ),
+                },
                 Some(ConfigAction::TunFamily { family }) => {
                     let settings = crate::services::tun_config::address_family()?;
                     if let Some(family) = family {
-                        let family = family.parse::<crate::tun::address_family::TunAddressFamily>()?;
+                        let family =
+                            family.parse::<crate::tun::address_family::TunAddressFamily>()?;
                         crate::services::tun_config::set_address_family(family)?;
                         println!("Saved TUN address-family preference: {family}");
                     } else {
