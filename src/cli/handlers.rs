@@ -378,7 +378,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                             println!("Validated scope: /{}", target.hierarchy_path);
                             println!("Validated level: {}", target.hierarchy_level);
                             println!("Validated kernel cgroup ID: {}", target.cgroup_id);
-                            println!("Probe: numeric cgroupsv2 set in nft --check inside an isolated network namespace");
+                            println!(
+                                "Probe: numeric cgroupsv2 set in nft --check inside an isolated network namespace"
+                            );
                             println!(
                                 "No host firewall, routes, cgroups, or processes were changed."
                             );

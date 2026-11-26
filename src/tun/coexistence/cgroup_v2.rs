@@ -84,7 +84,6 @@ impl CgroupV2Target {
         Ok(self.process.verify()?
             && read_unified_cgroup_path(self.process.pid)? == format!("/{}", self.hierarchy_path))
     }
-
 }
 
 /// Capture a process and its exact cgroup v2 scope, requiring it to belong to expected_uid.
@@ -121,8 +120,12 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
         canonical_directory.starts_with(&mount_point),
         "resolved process cgroup escapes the cgroup2 mount"
     );
-    let directory = fs::File::open(&canonical_directory)
-        .with_context(|| format!("cannot pin process cgroup {}", canonical_directory.display()))?;
+    let directory = fs::File::open(&canonical_directory).with_context(|| {
+        format!(
+            "cannot pin process cgroup {}",
+            canonical_directory.display()
+        )
+    })?;
     let metadata = directory.metadata()?;
     ensure!(metadata.is_dir(), "process cgroup is not a directory");
     let cgroup_id = read_cgroup_id(&directory)
@@ -158,7 +161,6 @@ pub fn inspect_process(pid: u32, expected_uid: u32) -> Result<CgroupV2Target> {
     target.validate()?;
     Ok(target)
 }
-
 
 /// The cgroup ID (kernfs node ID) is exposed as an eight-byte cgroupfs file handle.
 /// It is not the directory's `st_ino`; those identifiers are not interchangeable.
@@ -196,7 +198,10 @@ fn read_cgroup_id(directory: &fs::File) -> Result<u64> {
         "name_to_handle_at failed for the pinned cgroup directory: {}",
         std::io::Error::last_os_error()
     );
-    ensure!(handle.handle_bytes == HANDLE_BYTES, "cgroupfs returned an unexpected file-handle size");
+    ensure!(
+        handle.handle_bytes == HANDLE_BYTES,
+        "cgroupfs returned an unexpected file-handle size"
+    );
     const FILEID_KERNFS: i32 = 0xfe;
     ensure!(
         handle.handle_type == FILEID_KERNFS,
