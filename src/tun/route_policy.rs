@@ -176,7 +176,10 @@ impl RoutingPolicyPlan {
     ///
     /// The scalar arguments intentionally mirror the independently allocated kernel policy
     /// identifiers and the concrete TUN device identity.
-    #[expect(clippy::too_many_arguments, reason = "keeps the low-level policy constructor explicit at the kernel boundary")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "keeps the low-level policy constructor explicit at the kernel boundary"
+    )]
     pub fn new_for_families(
         table_id: u32,
         bypass_priority: u32,

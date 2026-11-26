@@ -54,7 +54,10 @@ pub fn validate_native_device_core(core: CoreKind) -> Result<()> {
 ///
 /// The arguments represent the complete activation boundary and are kept explicit so the
 /// privileged mutation inputs remain visible at each call site.
-#[expect(clippy::too_many_arguments, reason = "explicit privileged activation boundary inputs")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit privileged activation boundary inputs"
+)]
 pub fn apply_native_kernel_plan(
     core: CoreKind,
     store: ManifestStore,
