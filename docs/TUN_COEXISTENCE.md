@@ -66,7 +66,7 @@ The numeric ID is dynamic and can change when a cgroup is destroyed and recreate
 
 The expression belongs in a dedicated Proxyctl-owned `inet` table and an output base chain of type `route`. The matching rule sets only the packet mark bits used by the active Proxyctl bypass RPDB selector. A route-type output chain is required because changing the packet mark must cause the kernel to reconsider the route. See the nftables socket-expression and route-chain semantics in the upstream manual.
 
-Because nftables resolves the path to a kernel cgroup identity at rule installation, deleting and recreating a cgroup at the same textual path must not silently transfer the exemption. Proxyctl must compare the current cgroup directory identity and process membership before installation and during lifecycle checks; stale rules must be removed only through the exact journaled ownership record.
+The nftables rule stores a numeric kernel cgroup ID, not a path. If the selected cgroup is deleted and a new cgroup later reuses its textual path, the new cgroup receives a distinct kernel ID and does not inherit the old set membership. Proxyctl still revalidates the pinned directory identity and process membership before installation and during lifecycle checks; stale set elements are removed only through the exact journaled ownership record.
 
 Important constraints:
 
