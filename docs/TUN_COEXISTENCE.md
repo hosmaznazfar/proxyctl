@@ -25,6 +25,16 @@ Throne's Linux documentation describes core privilege options and TUN auto-redir
 
 Throne is therefore not a coexistence implementation to copy. Proxyctl must explicitly solve the second application's upstream-routing problem.
 
+### cgroup-scoped nftables implementations
+
+The open-source [cgtproxy](https://github.com/black-desk/cgtproxy) project is a useful comparison for Linux application-level routing. It uses nftables cgroup-v2 socket expressions and typed cgroup sets/maps, monitors cgroup filesystem events, and keeps applications in their original cgroups instead of moving them. Its design is a long-running TProxy rule manager; Proxyctl will not copy that daemon/event-monitor architecture for this opt-in, single-scope TUN exemption.
+
+The upstream [systemd `NFTSet=` integration](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html) confirms the intended nftables model: a `type cgroupsv2` set populated with numeric cgroup IDs and referenced by `socket cgroupv2 level N @set`. systemd explicitly does not support this integration in per-user service-manager instances, so it is not a solution for the observed desktop application scope.
+
+The Linux kernel's [nftables socket implementation](https://github.com/torvalds/linux/blob/master/net/netfilter/nft_socket.c) extracts `cgroup_id()` as a 64-bit value. Linux man-pages also document that a cgroup ID can be retrieved from the cgroupfs file handle using `name_to_handle_at()` ([`PERF_RECORD_CGROUP`](https://man7.org/linux/man-pages/man2/perf_event_open.2.html)). Proxyctl uses that kernel identifier rather than assuming the directory's `st_ino` is equivalent.
+
+The [google/nftables issue #263](https://github.com/google/nftables/issues/263) independently documents failures with cgroup path strings and recommends numeric `ControlGroupID` values. That matches the failure observed on this host and supports the move to typed numeric sets.
+
 ## Accepted direction
 
 Add an explicitly managed, opt-in external-application bypass, based on a cgroup v2 socket identity rather than process names or UIDs.
