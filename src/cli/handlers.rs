@@ -459,6 +459,7 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             port,
             tun_probe_url,
             tun_probe_status,
+            tun_family,
         } => {
             let core = parse_core(Some(&core))?
                 .ok_or_else(|| anyhow::anyhow!("--core is required for activation"))?;
@@ -490,6 +491,10 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                         &tun_probe_url,
                         tun_probe_status,
                         foreground,
+                        tun_family
+                            .as_deref()
+                            .map(str::parse::<crate::tun::address_family::TunAddressFamily>)
+                            .transpose()?,
                     )?;
                     let handoff_guard = crate::services::activation::begin_tun_session_handoff(
                         &spec.activation_id,
