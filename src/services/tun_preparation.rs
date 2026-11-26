@@ -23,6 +23,7 @@ pub fn prepare_launch_spec(
     probe_url: &str,
     expected_status: u16,
     foreground: bool,
+    family_override: Option<crate::tun::address_family::TunAddressFamily>,
 ) -> anyhow::Result<LaunchSpec> {
     ensure!(node_id != 0, "node ID must be non-zero");
     ensure!(port >= 1024, "listener port must be between 1024 and 65535");
@@ -79,11 +80,6 @@ pub fn prepare_launch_spec(
         adapter.tun_attachment_mode() != adapters::TunAttachmentMode::Unsupported,
         "selected core does not expose a supported TUN attachment contract"
     );
-    let generated = adapter
-        .generate_tun_activation_config(&node, port, outbound_mark)
-        .with_context(|| format!("could not generate {core} TUN configuration"))?;
-    adapters::validation::validate_generated_config(core, &generated, &executable)
-        .with_context(|| format!("{core} rejected the prepared TUN configuration"))?;
 
     let mut unique_peers = std::collections::BTreeSet::new();
     let expected_peers = (node.server.as_str(), node.port)
@@ -123,7 +119,26 @@ pub fn prepare_launch_spec(
             .take(16)
             .collect::<Vec<_>>(),
     };
-    let traffic_targets = build_dual_stack_probe_targets(&probe, probe_addresses, expected_status)?;
+    let available_targets = build_probe_targets(&probe, probe_addresses, expected_status)?;
+    let preference = match family_override {
+        Some(value) => value,
+        None => crate::services::tun_config::address_family()?,
+    };
+    let has_ipv4 = available_targets.iter().any(|target| target.destination.is_ipv4());
+    let has_ipv6 = available_targets.iter().any(|target| target.destination.is_ipv6());
+    let resolved_family = preference.resolve(has_ipv4, has_ipv6)?;
+    let traffic_targets = available_targets
+        .into_iter()
+        .filter(|target| {
+            (target.destination.is_ipv4() && resolved_family.includes_ipv4())
+                || (target.destination.is_ipv6() && resolved_family.includes_ipv6())
+        })
+        .collect::<Vec<_>>();
+    let generated = adapter
+        .generate_tun_activation_config_for_family(&node, port, outbound_mark, resolved_family)
+        .with_context(|| format!("could not generate {core} TUN configuration"))?;
+    adapters::validation::validate_generated_config(core, &generated, &executable)
+        .with_context(|| format!("{core} rejected the prepared TUN configuration"))?;
     let generation = u64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
@@ -139,6 +154,7 @@ pub fn prepare_launch_spec(
     from_generated_config(GeneratedLaunchSpec {
         node_id,
         core: kind,
+        resolved_family,
         listen_port: port,
         foreground,
         peer_transport,
@@ -151,7 +167,7 @@ pub fn prepare_launch_spec(
     })
 }
 
-fn build_dual_stack_probe_targets(
+fn build_probe_targets(
     probe: &url::Url,
     addresses: impl IntoIterator<Item = std::net::SocketAddr>,
     expected_status: u16,
@@ -193,21 +209,27 @@ fn build_dual_stack_probe_targets(
             ipv6 = Some(address);
         }
     }
-    let targets = vec![
-        crate::tun::readiness::HttpProbeTarget {
-            destination: ipv4.context("TUN readiness endpoint must resolve to IPv4")?,
+    let mut targets = Vec::with_capacity(2);
+    if let Some(destination) = ipv4 {
+        targets.push(crate::tun::readiness::HttpProbeTarget {
+            destination,
             host_header: host_header.clone(),
             path: path.clone(),
             expected_status,
-        },
-        crate::tun::readiness::HttpProbeTarget {
-            destination: ipv6.context("TUN readiness endpoint must resolve to IPv6")?,
+        });
+    }
+    if let Some(destination) = ipv6 {
+        targets.push(crate::tun::readiness::HttpProbeTarget {
+            destination,
             host_header,
             path,
             expected_status,
-        },
-    ];
-    crate::tun::readiness::validate_dual_stack_probe_targets(&targets)?;
+        });
+    }
+    anyhow::ensure!(!targets.is_empty(), "TUN readiness endpoint has no usable IPv4 or IPv6 address");
+    for target in &targets {
+        target.validate()?;
+    }
     Ok(targets)
 }
 
