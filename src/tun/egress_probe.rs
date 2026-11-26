@@ -259,27 +259,58 @@ mod tests {
         ]
     }
 
-    fn route_record(family: AddressFamily, table_id: u32, json: &str) -> kernel_inventory::KernelRouteRecord {
-        kernel_inventory::KernelRouteRecord { family, table_id, canonical_attributes: json.into() }
+    fn route_record(
+        family: AddressFamily,
+        table_id: u32,
+        json: &str,
+    ) -> kernel_inventory::KernelRouteRecord {
+        kernel_inventory::KernelRouteRecord {
+            family,
+            table_id,
+            canonical_attributes: json.into(),
+        }
     }
 
     #[test]
     fn detects_only_usable_default_routes_from_the_main_table() {
         let routes = [
-            route_record(AddressFamily::Ipv4, RT_TABLE_MAIN, r#"{"dst":"default","dev":"wlan0"}"#),
-            route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"fe80::/64","dev":"wlan0"}"#),
-            route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"::/0","type":"unreachable","dev":"lo"}"#),
+            route_record(
+                AddressFamily::Ipv4,
+                RT_TABLE_MAIN,
+                r#"{"dst":"default","dev":"wlan0"}"#,
+            ),
+            route_record(
+                AddressFamily::Ipv6,
+                RT_TABLE_MAIN,
+                r#"{"dst":"fe80::/64","dev":"wlan0"}"#,
+            ),
+            route_record(
+                AddressFamily::Ipv6,
+                RT_TABLE_MAIN,
+                r#"{"dst":"::/0","type":"unreachable","dev":"lo"}"#,
+            ),
             route_record(AddressFamily::Ipv6, 42420, r#"{"dst":"::/0","dev":"eth0"}"#),
         ];
         assert!(has_main_default_route(&routes, AddressFamily::Ipv4).unwrap());
         assert!(!has_main_default_route(&routes, AddressFamily::Ipv6).unwrap());
-        let dual_stack = [routes[0].clone(), route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"::/0","dev":"eth0"}"#)];
+        let dual_stack = [
+            routes[0].clone(),
+            route_record(
+                AddressFamily::Ipv6,
+                RT_TABLE_MAIN,
+                r#"{"dst":"::/0","dev":"eth0"}"#,
+            ),
+        ];
         assert!(has_main_default_route(&dual_stack, AddressFamily::Ipv6).unwrap());
     }
 
     #[test]
     fn accepts_default_routes_with_multipath_nexthops() {
-        let routes = [route_record(AddressFamily::Ipv6, RT_TABLE_MAIN, r#"{"dst":"::/0","nexthops":[{"dev":"eth0"},{"dev":"eth1"}]}"#)];
+        let routes = [route_record(
+            AddressFamily::Ipv6,
+            RT_TABLE_MAIN,
+            r#"{"dst":"::/0","nexthops":[{"dev":"eth0"},{"dev":"eth1"}]}"#,
+        )];
         assert!(has_main_default_route(&routes, AddressFamily::Ipv6).unwrap());
     }
 
