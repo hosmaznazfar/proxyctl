@@ -21,7 +21,7 @@ The parser preserves repeated URI query parameters and structured VMess JSON opt
 
 ## Format scope
 
-The next importer increment is a format-aware pipeline with independent decoders and one shared normalized node model:
+The importer uses a format-aware pipeline with independent decoders and one shared normalized node model:
 
 | Input format | Primary source shape | Planned extraction |
 |---|---|---|
@@ -29,7 +29,7 @@ The next importer increment is a format-aware pipeline with independent decoders
 | sing-box JSON | `outbounds[]` | Supported proxy outbound types and their protocol-specific fields |
 | Xray JSON | `outbounds[]` | Supported proxy outbound protocols and `streamSettings` |
 | Mihomo / Clash YAML | `proxies[]` | Supported proxy entries and protocol-specific options (implemented) |
-| Base64 subscription | UTF-8 Base64 payload | Conservative decoding to clearly recognizable URL lists or JSON profiles; other data remains unchanged |
+| Base64 subscription | UTF-8 Base64 payload | Conservative decoding to clearly recognizable URL lists, JSON profiles, or Mihomo YAML profiles; other data remains unchanged |
 
 The initial structured-profile scope is **proxy endpoint extraction**. Routing rules, DNS policy, inbounds, listeners, selectors, groups, health checks, and profile-level policy are not node connection settings. They must be reported as out-of-scope profile data rather than silently presented as imported nodes.
 
