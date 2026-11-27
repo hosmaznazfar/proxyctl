@@ -37,6 +37,61 @@ Consequently, Proxyctl must retain one core-independent lifecycle gate and verif
 
 A real-host Xray TUN activation once passed core startup but failed the first end-to-end HTTP readiness probe; a subsequent manual rerun succeeded. This is evidence that a transient startup/dataplane readiness failure can occur, not proof of a particular root cause or of a general Xray defect. Record the failed stage and its underlying error, recover the failed generation, and verify real application traffic on the next activation. The successful rerun does not justify weakening the readiness gate.
 
+## Reference-client TUN lifecycle comparison
+
+This comparison is based on implementation code inspected in the upstream repositories, not only their user-facing TUN configuration docs. The projects are cross-platform clients, so some paths and privilege mechanisms are platform-specific. Their current development/default branches may change; the links below identify the source locations used for this review.
+
+### Throne (sing-box, with Xray support)
+
+Throne separates profile orchestration from core process supervision. Its `StartCoordinator` serializes start/stop requests, rejects overlapping starts, and coordinates a stop that arrives during startup. The `CoreSupervisor` owns core generations and the local IPC connection lifecycle.
+
+- Core connection deadline: 20 seconds. A spawned core must connect to Throne's local IPC endpoint; otherwise the supervisor kills that generation and treats it as a start failure.
+- Unexpected exits are restarted with exponential backoff: 500 ms initial delay, doubling by failure count, capped at 30 seconds. After five consecutive failures without a successful/stable run, the supervisor enters `GaveUp` rather than restarting forever.
+- An intentional restart uses a short 200 ms delay. A core that remains connected for 60 seconds resets the consecutive-failure counter.
+- TUN interface configuration errors are surfaced separately. For an existing adapter conflict, the UI can offer an explicit user-approved retry; other TUN setup errors can offer a core reset. This is not a blind retry loop around kernel setup.
+- Host-level conflict checks reject an already-live Throne TUN interface, a TUN address already assigned to another interface, and a DNS listener port already in use.
+- The privilege/capability probe has its own 5-second timeout and can be retried twice, 10 seconds apart. This is a separate control-plane check, not proof of proxied application traffic.
+
+Relevant source: [CoreSupervisor.h](https://github.com/throneproj/Throne/blob/dev/include/engine/supervisor/CoreSupervisor.h), [CoreSupervisor.cpp](https://github.com/throneproj/Throne/blob/dev/src/engine/supervisor/CoreSupervisor.cpp), [StartCoordinator.cpp](https://github.com/throneproj/Throne/blob/dev/src/engine/connection/StartCoordinator.cpp), [HostTun.cpp](https://github.com/throneproj/Throne/blob/dev/src/sys/HostTun.cpp).
+
+### v2rayN (Xray plus optional sing-box TUN pre-service)
+
+v2rayN has two relevant patterns, depending on platform/configuration. In the optional TUN-protection/pre-service path, the main proxy core is started first, then v2rayN waits for the local SOCKS endpoint before starting the TUN pre-service.
+
+- The readiness check performs a SOCKS5 greeting/response exchange, not merely a TCP connect or process-alive check.
+- Each attempt has a 50 ms cancellation bound; connection-refused attempts are separated by 50 ms.
+- The overall wait uses `Global.LocalFetch`, currently 5 seconds. On expiry it logs that the proxy port did not become ready and returns; it does not wait indefinitely.
+- The pre-service is started only after that readiness stage. A pre-service config or launch failure is reported and is not counted as successful TUN startup.
+- Core stop explicitly stops and disposes both the main and pre-service processes. On Windows, the manager also removes the old TUN device before relaunch when TUN was enabled in either launch context.
+- On non-Windows systems, the selected core is launched through the elevated admin path for TUN mode.
+
+This is a dependency-readiness design: wait for the local proxy service that the TUN component needs, then start the component that depends on it. It is not a generic proof that all system traffic is successfully traversing the tunnel.
+
+Relevant source: [CoreManager.cs](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Manager/CoreManager.cs), [Global.cs](https://github.com/2dust/v2rayN/blob/master/v2rayN/ServiceLib/Global.cs).
+
+### Clash Verge Rev (Mihomo)
+
+Clash Verge Rev separates the GUI from the privileged service/core owner and tracks the service session.
+
+- TUN mode availability depends on the execution mode and service availability. On startup, if the service is absent and the current run state cannot support TUN, it disables and persists the TUN preference before starting the core in sidecar mode. It does not silently claim TUN is active.
+- Service startup sends an authenticated IPC request containing a runtime bundle and a proposed session token. The successful response supplies session identity/generation data, which the client retains as proof of the active owner session.
+- The client has a bounded service IPC readiness wait: 61 attempts at 500 ms intervals (about 30 seconds). Its service IPC calls use a 1-second default timeout, a 500 ms retry delay, and up to 20 retries.
+- A service owner monitor detects loss/displacement and invokes generation-aware recovery. Recovery includes stopping the guard and clearing system proxy state; some restoration operations are retried.
+- The source contains retry logic for service IPC and runtime-provider synchronization. Those retries are not evidence that Mihomo's TUN dataplane itself is retried after a failed route or traffic probe.
+
+Relevant source: [TUN availability reconciliation](https://github.com/clash-verge-rev/clash-verge-rev/blob/dev/src-tauri/src/feat/tun.rs), [service lifecycle and recovery](https://github.com/clash-verge-rev/clash-verge-rev/blob/dev/src-tauri/src/core/service.rs).
+
+### What Proxyctl should take from these clients
+
+1. **Separate process readiness from dataplane readiness.** Throne's IPC handshake and v2rayN's SOCKS5 greeting are stronger than a process-exists check, but Proxyctl should still retain its independent HTTP application-flow test through the TUN route.
+2. **Wait for dependencies in order.** If one component forwards to another local proxy, prove that local proxy is answering its protocol handshake before starting the dependent TUN component.
+3. **Use bounded retries only for idempotent observations.** Repeating a read-only IPC/SOCKS readiness probe is safe within a deadline. Reapplying routes, recreating interfaces, or rerunning a partially completed activation is not equivalent and must not be blindly retried.
+4. **Keep restart policy distinct from activation rollback.** Throne's backoff supervises a core process lifecycle. Proxyctl's generation-bound TUN activation also owns privileged routes, rules, interfaces, and recovery records; a core restart must not bypass that ownership transaction.
+5. **Treat degraded mode explicitly.** Clash Verge Rev persists TUN-off when its service cannot support TUN. Proxyctl should report whether it is running proxy-only or fully TUN-ready, never imply that a live core means TUN is working.
+6. **Keep cleanup generation-scoped and observable.** The clients coordinate stop and restart with a service/core owner. Proxyctl should continue to preserve its journal/manifest when cleanup is uncertain, and expose the exact recovery state instead of deleting stale state or sweeping routes.
+
+These are design references, not claims that the clients implement the same Linux routing transaction as Proxyctl. In particular, their control-plane handshakes and process restarts should not be described as equivalent to Proxyctl's end-to-end TUN traffic verification.
+
 ## Selected CLI, session, and privilege model
 
 The selected user-facing contract is:

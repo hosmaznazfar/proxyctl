@@ -172,3 +172,13 @@ The native supervisor uses bounded startup stages; the front end allows up to 60
 These bounds are not retries. The HTTP probe is attempted once for each required target. Any startup, attachment, or readiness failure aborts the current generation, stops the exact child, and requests generation-scoped recovery. No `started` acknowledgement is sent until all required checks pass and the Running manifest/session receipt are committed.
 
 A subsequent user-initiated start is a fresh activation only after the previous generation's cleanup is confirmed. Never retry core startup or mutate routes again while the previous generation's ownership state is ambiguous. If cleanup is incomplete, retain its manifest/journal for explicit recovery rather than deleting files or sweeping routes.
+
+## Reference-client patterns and their limits
+
+A source-level comparison with other desktop clients is documented in [TUN_DESIGN.md](TUN_DESIGN.md). The key patterns are:
+
+- Throne serializes start/stop, waits up to 20 seconds for its core IPC connection, restarts unexpected core exits with 500 ms-to-30 s exponential backoff, and gives up after five consecutive failures. Its explicit retry for a leftover TUN adapter is user-approved and distinct from automatic process restart.
+- v2rayN waits for a successful SOCKS5 greeting on the local proxy port before starting its optional sing-box TUN pre-service. Its per-attempt bound and retry interval are 50 ms, with a five-second overall deadline. It stops both main and pre-service processes together.
+- Clash Verge Rev owns Mihomo through a privileged service/session model, waits for service IPC readiness (61 × 500 ms), and uses authenticated session identity plus owner monitoring and generation-aware recovery. Its service IPC retries are not dataplane retries.
+
+These patterns do not replace Proxyctl's own end-to-end traffic gate. Read-only dependency probes may retry within an aggregate deadline; privileged TUN mutations and failed activation generations must not be blindly retried. Proxyctl must only report TUN Running after its generation-bound route, process, socket-mark, and actual application-flow evidence has passed.
