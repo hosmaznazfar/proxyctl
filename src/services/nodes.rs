@@ -369,6 +369,31 @@ mod tests {
     }
 
     #[test]
+    fn decodes_base64_mihomo_yaml_conservatively() {
+        use base64::Engine as _;
+        let yaml = "proxies:\n  - type: vless\n    server: edge.invalid\n    port: 443\n    uuid: synthetic\n";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(yaml);
+        assert_eq!(decode_subscription_text(&encoded), yaml);
+        assert_eq!(decode_subscription_text("ordinary text"), "ordinary text");
+    }
+
+    #[test]
+    fn imports_base64_mihomo_yaml_subscription() {
+        use base64::Engine as _;
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("subscription.txt");
+        let database = directory.path().join("proxyctl.redb");
+        let yaml = "proxies:\n  - type: vless\n    server: edge.invalid\n    port: 443\n    uuid: synthetic\n";
+        let encoded = base64::engine::general_purpose::STANDARD.encode(yaml);
+        fs::write(&source, encoded).unwrap();
+
+        let summary = import_file(&database, &source).unwrap();
+
+        assert_eq!(summary.added, 1);
+        assert_eq!(summary.invalid, 0);
+    }
+
+    #[test]
     fn imports_valid_lines_and_preserves_source_file() {
         let directory = tempdir().unwrap();
         let source = directory.path().join("nodes.txt");
