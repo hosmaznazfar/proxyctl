@@ -385,6 +385,41 @@ mod tests {
     }
 
     #[test]
+    fn imports_mihomo_yaml_and_reports_skipped_entries_without_echoing_credentials() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("profile.yaml");
+        let database = directory.path().join("proxyctl.redb");
+        let contents = concat!(
+            "proxies:\n",
+            "  - name: imported\n",
+            "    type: vless\n",
+            "    server: edge.invalid\n",
+            "    port: 443\n",
+            "    uuid: synthetic-uuid\n",
+            "  - name: unsupported\n",
+            "    type: direct\n",
+            "    password: must-not-appear\n",
+            "  - type: trojan\n",
+            "    server: edge.invalid\n",
+            "    port: 443\n"
+        );
+        fs::write(&source, contents).unwrap();
+
+        let summary = import_file(&database, &source).unwrap();
+
+        assert_eq!(summary.added, 1);
+        assert_eq!(summary.duplicates, 0);
+        assert_eq!(summary.invalid, 2);
+        assert_eq!(summary.failures.len(), 2);
+        assert_eq!(summary.failures[0].line_number, 2);
+        assert_eq!(summary.failures[0].reason, "proxy protocol is not supported");
+        assert_eq!(summary.failures[1].line_number, 3);
+        let diagnostics = format!("{:?}", summary.failures.iter().map(|f| &f.reason).collect::<Vec<_>>());
+        assert!(!diagnostics.contains("must-not-appear"));
+        assert_eq!(list_nodes(&database, false).unwrap().len(), 1);
+    }
+
+    #[test]
     fn batch_remove_and_restore_preserve_records_and_report_missing_ids() {
         let directory = tempdir().unwrap();
         let database = directory.path().join("proxyctl.redb");
