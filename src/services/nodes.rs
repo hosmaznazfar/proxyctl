@@ -45,16 +45,16 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
     let mut summary = ImportSummary::default();
 
     if content.trim_start().starts_with('{') {
-        match crate::parser::structured::parse_profile(&content) {
-            Ok(nodes) if nodes.is_empty() => {
-                summary.invalid = 1;
-                summary.failures.push(ImportFailure {
-                    line_number: 1,
-                    reason: "profile contains no supported proxy outbounds; unsupported or malformed entries were skipped".into(),
-                });
-            }
-            Ok(nodes) => {
-                for node in nodes {
+        match crate::parser::structured::parse_profile_detailed(&content) {
+            Ok(profile) => {
+                for skipped in profile.skipped {
+                    summary.invalid += 1;
+                    summary.failures.push(ImportFailure {
+                        line_number: skipped.index,
+                        reason: skipped.reason.into(),
+                    });
+                }
+                for node in profile.nodes {
                     summary.warnings.extend(
                         super::import_warnings::analyze(&node)
                             .into_iter()
@@ -67,6 +67,13 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
                         AddNodeOutcome::Added(_) => summary.added += 1,
                         AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
                     }
+                }
+                if summary.added + summary.duplicates == 0 && summary.invalid == 0 {
+                    summary.invalid = 1;
+                    summary.failures.push(ImportFailure {
+                        line_number: 1,
+                        reason: "profile contains no outbound entries".into(),
+                    });
                 }
             }
             Err(_) => {

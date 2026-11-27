@@ -9,13 +9,63 @@ pub enum ProfileError {
     MissingOutbounds,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct SkippedOutbound {
+    /// One-based position within the JSON `outbounds` array.
+    pub index: usize,
+    /// Fixed, credential-free explanation.
+    pub reason: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParsedProfile {
+    pub nodes: Vec<ProxyNode>,
+    pub skipped: Vec<SkippedOutbound>,
+}
+
 pub fn parse_profile(input: &str) -> Result<Vec<ProxyNode>, ProfileError> {
+    parse_profile_detailed(input).map(|profile| profile.nodes)
+}
+
+/// Parse recognized outbounds and retain safe diagnostics for every skipped entry.
+pub fn parse_profile_detailed(input: &str) -> Result<ParsedProfile, ProfileError> {
     let root: Value = serde_json::from_str(input).map_err(|_| ProfileError::InvalidJson)?;
     let outbounds = root
         .get("outbounds")
         .and_then(Value::as_array)
         .ok_or(ProfileError::MissingOutbounds)?;
-    Ok(outbounds.iter().filter_map(parse_outbound).collect())
+    let mut nodes = Vec::with_capacity(outbounds.len());
+    let mut skipped = Vec::new();
+    for (index, value) in outbounds.iter().enumerate() {
+        match parse_outbound(value) {
+            Some(node) => nodes.push(node),
+            None => skipped.push(SkippedOutbound {
+                index: index + 1,
+                reason: skip_reason(value),
+            }),
+        }
+    }
+    Ok(ParsedProfile { nodes, skipped })
+}
+
+fn skip_reason(value: &Value) -> &'static str {
+    let Some(object) = value.as_object() else {
+        return "outbound entry is not a JSON object";
+    };
+    let kind = object
+        .get("type")
+        .or_else(|| object.get("protocol"))
+        .and_then(Value::as_str);
+    let Some(kind) = kind else {
+        return "outbound entry has no recognized protocol field";
+    };
+    if !matches!(
+        kind.to_ascii_lowercase().as_str(),
+        "vless" | "vmess" | "trojan" | "shadowsocks" | "hysteria2" | "hy2"
+    ) {
+        return "outbound protocol is not supported";
+    }
+    "outbound entry is missing valid endpoint or credential fields"
 }
 fn parse_outbound(v: &Value) -> Option<ProxyNode> {
     if v.get("type").and_then(Value::as_str).is_some() {
