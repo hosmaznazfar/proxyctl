@@ -439,7 +439,7 @@ mod config_contract_tests {
                 && capabilities.reality_disallows_legacy_transport
         );
         assert!(capabilities.grpc_service_name_required);
-        assert!(!capabilities.xhttp_auto_mode);
+        assert!(capabilities.xhttp_auto_mode);
         let node = parse_proxy_url("vless://11111111-1111-4111-8111-111111111111@example.com:443")
             .unwrap();
         let activation: serde_json::Value = serde_json::from_slice(
