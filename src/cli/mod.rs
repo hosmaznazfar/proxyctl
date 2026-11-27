@@ -167,11 +167,17 @@ enum Command {
     Add {
         /// Proxy URL to parse and store (credentials are masked in normal output).
         url: String,
+        /// Include developer-oriented compatibility details in import warnings.
+        #[arg(long)]
+        developer_details: bool,
     },
     /// Import proxy URLs from a newline-delimited text file.
     Import {
         /// Text file containing one proxy URL per line.
         file: PathBuf,
+        /// Include developer-oriented compatibility details in import warnings.
+        #[arg(long)]
+        developer_details: bool,
     },
     /// List stored nodes, with optional filters and benchmark sorting.
     List {

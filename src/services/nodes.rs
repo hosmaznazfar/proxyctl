@@ -15,6 +15,13 @@ pub struct ImportSummary {
     pub duplicates: usize,
     pub invalid: usize,
     pub failures: Vec<ImportFailure>,
+    pub warnings: Vec<ImportLineWarning>,
+}
+
+#[derive(Debug)]
+pub struct ImportLineWarning {
+    pub line_number: usize,
+    pub warning: super::import_warnings::ImportWarning,
 }
 
 #[derive(Debug)]
@@ -43,9 +50,16 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
         }
 
         match parse_proxy_url(input) {
-            Ok(node) => match database.add_node(&node)? {
+            Ok(node) => {
+                summary.warnings.extend(
+                    super::import_warnings::analyze(&node)
+                        .into_iter()
+                        .map(|warning| ImportLineWarning { line_number: index + 1, warning }),
+                );
+                match database.add_node(&node)? {
                 AddNodeOutcome::Added(_) => summary.added += 1,
                 AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
+                }
             },
             Err(error) => {
                 summary.invalid += 1;
