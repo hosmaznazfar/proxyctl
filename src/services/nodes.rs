@@ -48,11 +48,21 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
         match crate::parser::structured::parse_profile(&content) {
             Ok(nodes) if nodes.is_empty() => {
                 summary.invalid = 1;
-                summary.failures.push(ImportFailure { line_number: 1, reason: "profile contains no supported proxy outbounds".into() });
+                summary.failures.push(ImportFailure {
+                    line_number: 1,
+                    reason: "profile contains no supported proxy outbounds".into(),
+                });
             }
             Ok(nodes) => {
                 for node in nodes {
-                    summary.warnings.extend(super::import_warnings::analyze(&node).into_iter().map(|warning| ImportLineWarning { line_number: 1, warning }));
+                    summary.warnings.extend(
+                        super::import_warnings::analyze(&node)
+                            .into_iter()
+                            .map(|warning| ImportLineWarning {
+                                line_number: 1,
+                                warning,
+                            }),
+                    );
                     match database.add_node(&node)? {
                         AddNodeOutcome::Added(_) => summary.added += 1,
                         AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
@@ -61,7 +71,10 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
             }
             Err(_) => {
                 summary.invalid = 1;
-                summary.failures.push(ImportFailure { line_number: 1, reason: "structured profile could not be parsed".into() });
+                summary.failures.push(ImportFailure {
+                    line_number: 1,
+                    reason: "structured profile could not be parsed".into(),
+                });
             }
         }
         return Ok(summary);
@@ -69,10 +82,21 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
 
     for (index, line) in content.lines().enumerate() {
         let input = line.trim();
-        if input.is_empty() || input.starts_with('#') { continue; }
+        if input.is_empty() || input.starts_with('#') {
+            continue;
+        }
         match parse_proxy_url(input) {
             Ok(node) => {
-                summary.warnings.extend(super::import_warnings::analyze(&node).into_iter().map(|warning| ImportLineWarning { line_number: index + 1, warning }));
+                summary
+                    .warnings
+                    .extend(
+                        super::import_warnings::analyze(&node)
+                            .into_iter()
+                            .map(|warning| ImportLineWarning {
+                                line_number: index + 1,
+                                warning,
+                            }),
+                    );
                 match database.add_node(&node)? {
                     AddNodeOutcome::Added(_) => summary.added += 1,
                     AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
@@ -80,13 +104,15 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
             }
             Err(error) => {
                 summary.invalid += 1;
-                summary.failures.push(ImportFailure { line_number: index + 1, reason: safe_parse_error(error) });
+                summary.failures.push(ImportFailure {
+                    line_number: index + 1,
+                    reason: safe_parse_error(error),
+                });
             }
         }
     }
     Ok(summary)
 }
-
 
 /// Decode common plain-text Base64 subscription payloads conservatively.
 /// Only use the decoded value when it is valid UTF-8 and clearly looks like a
@@ -94,16 +120,29 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
 fn decode_subscription_text(input: &str) -> String {
     use base64::Engine as _;
     let trimmed = input.trim();
-    if trimmed.is_empty() || trimmed.contains("://") || trimmed.starts_with('{') || trimmed.starts_with('#') {
+    if trimmed.is_empty()
+        || trimmed.contains("://")
+        || trimmed.starts_with('{')
+        || trimmed.starts_with('#')
+    {
         return input.to_owned();
     }
-    let compact = trimmed.chars().filter(|c| !c.is_whitespace()).collect::<String>();
-    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&compact) else { return input.to_owned(); };
-    let Ok(decoded) = String::from_utf8(bytes) else { return input.to_owned(); };
+    let compact = trimmed
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>();
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&compact) else {
+        return input.to_owned();
+    };
+    let Ok(decoded) = String::from_utf8(bytes) else {
+        return input.to_owned();
+    };
     let text = decoded.trim();
     if text.starts_with('{') || text.lines().any(|line| line.trim().contains("://")) {
         decoded
-    } else { input.to_owned() }
+    } else {
+        input.to_owned()
+    }
 }
 
 pub fn list_nodes(database_path: &Path, include_deleted: bool) -> anyhow::Result<Vec<NodeRecord>> {
@@ -264,10 +303,17 @@ mod tests {
     #[test]
     fn decodes_base64_share_list_conservatively() {
         use base64::Engine as _;
-        let encoded = base64::engine::general_purpose::STANDARD.encode("vless://synthetic@example.invalid:443\ntrojan://fake@example.invalid:443");
-        assert_eq!(decode_subscription_text(&encoded), "vless://synthetic@example.invalid:443\ntrojan://fake@example.invalid:443");
+        let encoded = base64::engine::general_purpose::STANDARD
+            .encode("vless://synthetic@example.invalid:443\ntrojan://fake@example.invalid:443");
+        assert_eq!(
+            decode_subscription_text(&encoded),
+            "vless://synthetic@example.invalid:443\ntrojan://fake@example.invalid:443"
+        );
         assert_eq!(decode_subscription_text("ordinary text"), "ordinary text");
-        assert_eq!(decode_subscription_text("vless://already-decoded"), "vless://already-decoded");
+        assert_eq!(
+            decode_subscription_text("vless://already-decoded"),
+            "vless://already-decoded"
+        );
     }
 
     #[test]

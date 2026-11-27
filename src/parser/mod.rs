@@ -3,8 +3,6 @@
 mod schemes;
 pub mod structured;
 
-
-
 use thiserror::Error;
 
 use crate::domain::{Protocol, ProxyNode};
