@@ -490,12 +490,32 @@ pub fn probe_tun_routed_http_traffic_with_retry(
     maximum_response_bytes: usize,
 ) -> Result<TunTrafficProbe> {
     target.validate()?;
-    ensure!(!activation_id.is_empty() && generation > 0, "TUN HTTP probe activation identity is invalid");
-    ensure!(!timeout.is_zero() && timeout <= Duration::from_secs(30), "TUN HTTP retry deadline must be between zero and thirty seconds");
-    ensure!(process.verify()?, "managed core identity is not live before TUN traffic retry");
-    run_tun_readiness_probe_with_retry(timeout, || process.verify(), |attempt_timeout| {
-        probe_tun_routed_http_traffic(process, target, activation_id, generation, attempt_timeout, maximum_response_bytes)
-    })
+    ensure!(
+        !activation_id.is_empty() && generation > 0,
+        "TUN HTTP probe activation identity is invalid"
+    );
+    ensure!(
+        !timeout.is_zero() && timeout <= Duration::from_secs(30),
+        "TUN HTTP retry deadline must be between zero and thirty seconds"
+    );
+    ensure!(
+        process.verify()?,
+        "managed core identity is not live before TUN traffic retry"
+    );
+    run_tun_readiness_probe_with_retry(
+        timeout,
+        || process.verify(),
+        |attempt_timeout| {
+            probe_tun_routed_http_traffic(
+                process,
+                target,
+                activation_id,
+                generation,
+                attempt_timeout,
+                maximum_response_bytes,
+            )
+        },
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -512,15 +532,25 @@ where
     const MAX_ATTEMPTS: usize = 2;
     const RETRY_BACKOFF: Duration = Duration::from_millis(250);
     const MAX_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(5);
-    ensure!(!timeout.is_zero(), "TUN readiness retry deadline must be non-zero");
+    ensure!(
+        !timeout.is_zero(),
+        "TUN readiness retry deadline must be non-zero"
+    );
     let deadline = Instant::now() + timeout;
     let mut first_error = None;
     for attempt in 1..=MAX_ATTEMPTS {
         let remaining = deadline.saturating_duration_since(Instant::now());
         ensure!(!remaining.is_zero(), "TUN readiness retry deadline expired");
-        let reserve = if attempt < MAX_ATTEMPTS { RETRY_BACKOFF } else { Duration::ZERO };
+        let reserve = if attempt < MAX_ATTEMPTS {
+            RETRY_BACKOFF
+        } else {
+            Duration::ZERO
+        };
         let attempt_timeout = remaining.saturating_sub(reserve).min(MAX_ATTEMPT_TIMEOUT);
-        ensure!(!attempt_timeout.is_zero(), "no time remains for a TUN readiness attempt");
+        ensure!(
+            !attempt_timeout.is_zero(),
+            "no time remains for a TUN readiness attempt"
+        );
         match probe(attempt_timeout) {
             Ok(value) => return Ok(value),
             Err(error) => {
@@ -530,9 +560,13 @@ where
                     }
                     return Err(error).context("TUN dataplane readiness probe failed");
                 }
-                ensure!(process_is_live()?, "managed core exited after the first transient TUN readiness failure");
+                ensure!(
+                    process_is_live()?,
+                    "managed core exited after the first transient TUN readiness failure"
+                );
                 first_error = Some(error);
-                let sleep_for = RETRY_BACKOFF.min(deadline.saturating_duration_since(Instant::now()));
+                let sleep_for =
+                    RETRY_BACKOFF.min(deadline.saturating_duration_since(Instant::now()));
                 if sleep_for.is_zero() {
                     anyhow::bail!("TUN readiness retry deadline expired before the second attempt");
                 }
@@ -546,22 +580,24 @@ where
 #[cfg(target_os = "linux")]
 fn is_retryable_tun_probe_error(error: &anyhow::Error) -> bool {
     error.chain().any(|cause| {
-        cause.downcast_ref::<std::io::Error>().is_some_and(|io_error| {
-            matches!(
-                io_error.kind(),
-                std::io::ErrorKind::TimedOut
-                    | std::io::ErrorKind::WouldBlock
-                    | std::io::ErrorKind::ConnectionRefused
-                    | std::io::ErrorKind::ConnectionReset
-                    | std::io::ErrorKind::ConnectionAborted
-                    | std::io::ErrorKind::UnexpectedEof
-                    | std::io::ErrorKind::BrokenPipe
-                    | std::io::ErrorKind::NotConnected
-                    | std::io::ErrorKind::AddrNotAvailable
-                    | std::io::ErrorKind::NetworkUnreachable
-                    | std::io::ErrorKind::HostUnreachable
-            )
-        })
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io_error| {
+                matches!(
+                    io_error.kind(),
+                    std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::WouldBlock
+                        | std::io::ErrorKind::ConnectionRefused
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::UnexpectedEof
+                        | std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::NotConnected
+                        | std::io::ErrorKind::AddrNotAvailable
+                        | std::io::ErrorKind::NetworkUnreachable
+                        | std::io::ErrorKind::HostUnreachable
+                )
+            })
     })
 }
 
@@ -902,9 +938,19 @@ pub fn verify_native_core_end_to_end_readiness(
         "IPv6"
     };
     let traffic = probe_tun_routed_http_traffic_with_retry(
-        process, target, activation_id, generation, probe_timeout, maximum_response_bytes,
+        process,
+        target,
+        activation_id,
+        generation,
+        probe_timeout,
+        maximum_response_bytes,
     )
-    .with_context(|| format!("{family} TUN application-flow readiness failed for {}", target.destination))?;
+    .with_context(|| {
+        format!(
+            "{family} TUN application-flow readiness failed for {}",
+            target.destination
+        )
+    })?;
     let mut preflight = collect_managed_preflight_with_response(
         runtime_directory,
         activation_id,
@@ -2132,15 +2178,19 @@ mod http_tun_probe_tests {
         let attempts = Cell::new(0);
         let started = std::time::Instant::now();
         let result = run_tun_readiness_probe_with_retry(
-            Duration::from_secs(2), || Ok(true),
+            Duration::from_secs(2),
+            || Ok(true),
             |_attempt_timeout| {
                 let attempt = attempts.get() + 1;
                 attempts.set(attempt);
                 if attempt == 1 {
                     Err(io::Error::new(io::ErrorKind::TimedOut, "temporary timeout").into())
-                } else { Ok("ready") }
+                } else {
+                    Ok("ready")
+                }
             },
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(result, "ready");
         assert_eq!(attempts.get(), 2);
         assert!(started.elapsed() >= Duration::from_millis(200));
@@ -2152,7 +2202,8 @@ mod http_tun_probe_tests {
         use std::{cell::Cell, io};
         let attempts = Cell::new(0);
         let result = run_tun_readiness_probe_with_retry(
-            Duration::from_secs(1), || Ok(true),
+            Duration::from_secs(1),
+            || Ok(true),
             |_attempt_timeout| {
                 attempts.set(attempts.get() + 1);
                 Err(io::Error::new(io::ErrorKind::InvalidData, "invalid response").into())
@@ -2167,7 +2218,8 @@ mod http_tun_probe_tests {
         use std::{cell::Cell, io};
         let attempts = Cell::new(0);
         let result = run_tun_readiness_probe_with_retry(
-            Duration::from_secs(1), || Ok(false),
+            Duration::from_secs(1),
+            || Ok(false),
             |_attempt_timeout| {
                 attempts.set(attempts.get() + 1);
                 Err(io::Error::new(io::ErrorKind::ConnectionReset, "connection reset").into())
@@ -2176,5 +2228,4 @@ mod http_tun_probe_tests {
         assert!(result.is_err());
         assert_eq!(attempts.get(), 1);
     }
-
 }
