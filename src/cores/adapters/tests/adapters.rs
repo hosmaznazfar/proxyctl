@@ -449,3 +449,54 @@ fn empty_shadowsocks_plugin_value_is_invalid_not_ignored() {
         );
     }
 }
+
+
+#[test]
+fn vless_encryption_is_preserved_in_all_core_native_outbounds() {
+    let encryption = "mlkem768x25519plus.random.0rtt.example-public-key";
+    let node = parse_proxy_url(&format!(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?encryption={encryption}"
+    ))
+    .unwrap();
+
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        let compatibility = adapter(core).compatibility(&node);
+        assert_eq!(
+            compatibility.status,
+            CompatibilityStatus::Supported,
+            "{core}: {:?}",
+            compatibility.reason
+        );
+        let generated = adapter(core).generate_config(&node).unwrap();
+        let document: Value = serde_json::from_slice(&generated.content).unwrap();
+        let mapped = match core {
+            CoreId::SingBox => &document["outbounds"][0]["encryption"],
+            CoreId::Xray => {
+                &document["outbounds"][0]["settings"]["vnext"][0]["users"][0]["encryption"]
+            }
+            CoreId::Mihomo => &document["proxies"][0]["encryption"],
+        };
+        assert_eq!(mapped, encryption, "{core}");
+    }
+}
+
+#[test]
+fn vless_encryption_none_is_preserved_or_uses_native_default() {
+    let node = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?encryption=none",
+    )
+    .unwrap();
+
+    for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
+        let generated = adapter(core).generate_config(&node).unwrap();
+        let document: Value = serde_json::from_slice(&generated.content).unwrap();
+        let mapped = match core {
+            CoreId::SingBox => &document["outbounds"][0]["encryption"],
+            CoreId::Xray => {
+                &document["outbounds"][0]["settings"]["vnext"][0]["users"][0]["encryption"]
+            }
+            CoreId::Mihomo => &document["proxies"][0]["encryption"],
+        };
+        assert_eq!(mapped, "none", "{core}");
+    }
+}

@@ -93,6 +93,9 @@ impl CoreAdapter for MihomoAdapter {
         if let Some(flow) = option_string(node, "flow") {
             proxy["flow"] = json!(flow);
         }
+        if let Some(encryption) = option_string(node, "encryption") {
+            proxy["encryption"] = json!(encryption);
+        }
         if node.protocol == Protocol::Hysteria2
             && let Some(obfs) = option_string(node, "obfs")
         {

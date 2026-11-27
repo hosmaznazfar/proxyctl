@@ -309,9 +309,6 @@ pub(crate) fn validate_common(node: &ProxyNode) -> Result<(), String> {
                 return Err("VLESS TCP header types other than none are not supported yet".into());
             }
         }
-        if option_string(node, "encryption").is_some_and(|value| value != "none") {
-            return Err("only VLESS encryption=none is currently mapped".into());
-        }
         if option_string(node, "flow").is_some_and(|value| value != "xtls-rprx-vision") {
             return Err("only VLESS xtls-rprx-vision flow is currently mapped".into());
         }

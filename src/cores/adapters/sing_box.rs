@@ -96,6 +96,9 @@ impl CoreAdapter for SingBoxAdapter {
         if let Some(flow) = option_string(node, "flow") {
             outbound["flow"] = json!(flow);
         }
+        if let Some(encryption) = option_string(node, "encryption") {
+            outbound["encryption"] = json!(encryption);
+        }
         if node.protocol == Protocol::Hysteria2
             && let Some(obfs) = option_string(node, "obfs")
         {
