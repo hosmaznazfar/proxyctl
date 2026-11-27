@@ -12,12 +12,12 @@ The current bounded stages are:
 
 | Stage | Bound | Meaning |
 | --- | ---: | --- |
-| Native core service startup | 10 s | Wait for the service manager to report an active service and verified MainPID in the legacy launcher path |
+| Native core process creation | No separate boot-ready timeout | The current native supervisor spawns the core directly; process creation alone is not readiness evidence |
 | Native process-to-TUN attachment | 5 s | Poll for the exact core process to attach to the requested TUN interface |
 | TUN HTTP application-flow probe | 10 s per selected address family | One aggregate deadline for TCP connect, request write, and response headers; TCP connect is capped at 5 s |
 | Front-end startup acknowledgement | 60 s | Maximum wait for the supervisor's one-shot `started` response; success is accepted only while the supervisor remains alive |
 
-The native supervisor's readiness path uses a 5-second managed-listener check and a 10-second traffic-probe bound. Dual-stack probes are performed for the selected IPv4 and IPv6 targets. These are stage bounds, not a promise that total startup always completes within the largest individual timeout.
+The current native supervisor's readiness path uses a 5-second managed-listener check and a 10-second traffic-probe bound. Dual-stack probes are performed for the selected IPv4 and IPv6 targets. These are stage bounds, not a promise that total startup always completes within the largest individual timeout.
 
 **There is no automatic retry of the complete TUN activation or of a failed HTTP traffic probe.** A timeout, process-identity change, missing attachment, route mismatch, or failed HTTP response is a readiness failure. Proxyctl terminates the exact child and requests recovery for that activation UUID and generation; it must not keep retrying while partially applied kernel state may exist. The activation is committed as Running only after all readiness checks pass.
 
