@@ -427,6 +427,24 @@ mod tests {
     }
 
     #[test]
+    fn imports_json_profile_and_reports_skipped_outbounds() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("profile.json");
+        let database = directory.path().join("proxyctl.redb");
+        let contents = r#"{"outbounds":[{"type":"vless","server":"edge.invalid","server_port":443,"uuid":"synthetic"},{"type":"direct"},{"type":"trojan","settings":{}}]}"#;
+        fs::write(&source, contents).unwrap();
+
+        let summary = import_file(&database, &source).unwrap();
+
+        assert_eq!(summary.added, 1);
+        assert_eq!(summary.invalid, 2);
+        assert_eq!(summary.failures.len(), 2);
+        assert_eq!(summary.failures[0].line_number, 2);
+        assert_eq!(summary.failures[1].line_number, 3);
+        assert_eq!(list_nodes(&database, false).unwrap().len(), 1);
+    }
+
+    #[test]
     fn batch_remove_and_restore_preserve_records_and_report_missing_ids() {
         let directory = tempdir().unwrap();
         let database = directory.path().join("proxyctl.redb");

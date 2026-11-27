@@ -244,6 +244,23 @@ mod tests {
         assert_eq!(parse_profile(r#"{"outbounds":[{"type":"direct"},{"type":"vless","server":"x.invalid","server_port":1,"uuid":"x"}]}"#).unwrap().len(),1);
     }
     #[test]
+    fn reports_unsupported_and_malformed_outbounds_without_source_values() {
+        let profile = parse_profile_detailed(
+            r#"{"outbounds":[{"type":"direct","password":"must-not-appear"},{"type":"vless","server":"edge.invalid","server_port":70000,"uuid":"private-value"},{"protocol":"trojan","settings":{}}]}"#,
+        )
+        .unwrap();
+        assert!(profile.nodes.is_empty());
+        assert_eq!(profile.skipped.len(), 3);
+        assert_eq!(profile.skipped[0].index, 1);
+        assert_eq!(profile.skipped[0].reason, "outbound protocol is not supported");
+        assert_eq!(profile.skipped[1].index, 2);
+        assert_eq!(profile.skipped[2].index, 3);
+        let diagnostics = format!("{:?}", profile.skipped);
+        assert!(!diagnostics.contains("must-not-appear"));
+        assert!(!diagnostics.contains("private-value"));
+    }
+
+    #[test]
     fn invalid() {
         assert_eq!(parse_profile("no"), Err(ProfileError::InvalidJson));
         assert_eq!(parse_profile("{}"), Err(ProfileError::MissingOutbounds));
