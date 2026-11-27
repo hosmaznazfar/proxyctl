@@ -20,6 +20,7 @@ pub(crate) struct CoreCapabilities {
     pub(crate) reality_vless: bool,
     pub(crate) reality_vmess: bool,
     pub(crate) reality_optional_fields: bool,
+    pub(crate) vless_encryption: bool,
     pub(crate) tcp: bool,
     pub(crate) websocket: bool,
     pub(crate) grpc: bool,
@@ -126,6 +127,15 @@ pub(crate) fn validate_for_core(
             "{core} does not implement Shadowsocks SIP003 plugins"
         )));
     }
+    if node.protocol == Protocol::Vless
+        && option_string(node, "encryption").is_some_and(|value| value != "none")
+        && !capabilities.vless_encryption
+    {
+        return Err(Compatibility::unsupported(format!(
+            "{core} does not support VLESS encryption"
+        )));
+    }
+
     let reality = reality_options(node).map_err(compatibility_failure)?;
     if let Some(reality) = reality.as_ref() {
         let protocol_supported = match node.protocol {

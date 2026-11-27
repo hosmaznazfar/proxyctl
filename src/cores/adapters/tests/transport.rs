@@ -548,7 +548,7 @@ fn vmess_xhttp_headers_map_to_xray_direct_headers_field() {
 }
 
 #[test]
-fn xhttp_auto_mode_is_supported_by_xray_but_not_mihomo() {
+fn xhttp_auto_mode_is_supported_by_xray_and_mihomo_but_not_sing_box() {
     let node = parse_proxy_url(
         "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=xhttp&mode=auto",
     )
@@ -559,6 +559,13 @@ fn xhttp_auto_mode_is_supported_by_xray_but_not_mihomo() {
     );
     assert_eq!(
         adapter(CoreId::Mihomo).compatibility(&node).status,
+        CompatibilityStatus::Supported
+    );
+    let mihomo = adapter(CoreId::Mihomo).generate_config(&node).unwrap();
+    let document: Value = serde_json::from_slice(&mihomo.content).unwrap();
+    assert_eq!(document["proxies"][0]["xhttp-opts"]["mode"], "auto");
+    assert_eq!(
+        adapter(CoreId::SingBox).compatibility(&node).status,
         CompatibilityStatus::Unsupported
     );
 }

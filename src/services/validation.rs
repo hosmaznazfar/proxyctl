@@ -104,7 +104,7 @@ fn check_one_node(
     }
 
     if attempted == 0 {
-        anyhow::bail!("no installed compatible core was available to validate node #{node_id}");
+        anyhow::bail!("no installed compatible core was available to validate node #{display_number}");
     }
     if !failures.is_empty() {
         anyhow::bail!(
