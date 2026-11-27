@@ -17,7 +17,10 @@ fn every_supported_share_link_scheme_imports_and_reaches_a_core_adapter() {
             "vless://11111111-1111-4111-8111-111111111111@vless.example:443?security=tls&sni=vless.example",
         ),
         ("VMess", ""),
-        ("Trojan", "trojan://fixture-password@trojan.example:443?sni=trojan.example"),
+        (
+            "Trojan",
+            "trojan://fixture-password@trojan.example:443?sni=trojan.example",
+        ),
         (
             "Shadowsocks",
             "ss://YWVzLTI1Ni1nY206Zml4dHVyZS1wYXNzd29yZA@ss.example:8388#fixture-ss",
@@ -36,9 +39,8 @@ fn every_supported_share_link_scheme_imports_and_reaches_a_core_adapter() {
         } else {
             fixture
         };
-        let node = parse_proxy_url(url).unwrap_or_else(|error| {
-            panic!("{name} fixture must import successfully: {error}")
-        });
+        let node = parse_proxy_url(url)
+            .unwrap_or_else(|error| panic!("{name} fixture must import successfully: {error}"));
         let mut generated_by_any_core = false;
 
         for core in [CoreId::SingBox, CoreId::Xray, CoreId::Mihomo] {
@@ -47,8 +49,9 @@ fn every_supported_share_link_scheme_imports_and_reaches_a_core_adapter() {
                 let generated = adapter(core)
                     .generate_config(&node)
                     .unwrap_or_else(|error| panic!("{name} must map to {core}: {error}"));
-                serde_json::from_slice::<serde_json::Value>(&generated.content)
-                    .unwrap_or_else(|error| panic!("{name} {core} config must be valid JSON: {error}"));
+                serde_json::from_slice::<serde_json::Value>(&generated.content).unwrap_or_else(
+                    |error| panic!("{name} {core} config must be valid JSON: {error}"),
+                );
                 generated_by_any_core = true;
             }
         }
