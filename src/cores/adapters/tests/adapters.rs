@@ -450,7 +450,6 @@ fn empty_shadowsocks_plugin_value_is_invalid_not_ignored() {
     }
 }
 
-
 #[test]
 fn vless_encryption_is_preserved_in_all_core_native_outbounds() {
     let encryption = "mlkem768x25519plus.random.0rtt.example-public-key";
