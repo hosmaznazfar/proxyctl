@@ -87,7 +87,7 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
         return Ok(summary);
     }
 
-    if content.trim_start().starts_with("proxies:") {
+    if looks_like_mihomo_yaml(&content) {
         match crate::parser::mihomo::parse_profile_detailed(&content) {
             Ok(profile) => {
                 for skipped in profile.skipped {
@@ -188,13 +188,32 @@ fn decode_subscription_text(input: &str) -> String {
     };
     let text = decoded.trim();
     if text.starts_with('{')
-        || text.starts_with("proxies:")
+        || looks_like_mihomo_yaml(text)
         || text.lines().any(|line| line.trim().contains("://"))
     {
         decoded
     } else {
         input.to_owned()
     }
+}
+
+/// Recognize Mihomo YAML despite a UTF-8 BOM, document marker, or preamble.
+fn looks_like_mihomo_yaml(input: &str) -> bool {
+    input
+        .trim_start_matches('\\u{feff}')
+        .lines()
+        .map(str::trim)
+        .find(|line| {
+            !line.is_empty()
+                && !line.starts_with('#')
+                && !line.starts_with("---")
+                && !line.starts_with("...")
+        })
+        .is_some_and(|line| {
+            line == "proxies:"
+                || line.starts_with("proxies: ")
+                || line.starts_with("proxies:\\t")
+        })
 }
 
 pub fn list_nodes(database_path: &Path, include_deleted: bool) -> anyhow::Result<Vec<NodeRecord>> {
@@ -375,6 +394,28 @@ mod tests {
         let encoded = base64::engine::general_purpose::STANDARD.encode(yaml);
         assert_eq!(decode_subscription_text(&encoded), yaml);
         assert_eq!(decode_subscription_text("ordinary text"), "ordinary text");
+    }
+
+    #[test]
+    fn recognizes_mihomo_yaml_after_comments_and_document_markers() {
+        let yaml = "# generated profile\\n---\\nproxies:\\n  - type: vless\\n    server: edge.invalid\\n    port: 443\\n    uuid: synthetic\\n";
+        assert!(looks_like_mihomo_yaml(yaml));
+        assert!(looks_like_mihomo_yaml("\\u{feff}# header\\nproxies:\\n"));
+        assert!(!looks_like_mihomo_yaml("ordinary text\\n"));
+    }
+
+    #[test]
+    fn imports_mihomo_yaml_with_comments_and_document_marker() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("profile.yaml");
+        let database = directory.path().join("proxyctl.redb");
+        let contents = "# generated profile\\n---\\nproxies:\\n  - type: vless\\n    server: edge.invalid\\n    port: 443\\n    uuid: synthetic\\n";
+        fs::write(&source, contents).unwrap();
+
+        let summary = import_file(&database, &source).unwrap();
+
+        assert_eq!(summary.added, 1);
+        assert_eq!(summary.invalid, 0);
     }
 
     #[test]
