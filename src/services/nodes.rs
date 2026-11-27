@@ -146,7 +146,7 @@ fn decode_subscription_text(input: &str) -> String {
         return input.to_owned();
     };
     let text = decoded.trim();
-    if text.starts_with('{') || text.lines().any(|line| line.trim().contains("://")) {
+    if text.starts_with('{') || text.starts_with("proxies:") || text.lines().any(|line| line.trim().contains("://")) {
         decoded
     } else {
         input.to_owned()
