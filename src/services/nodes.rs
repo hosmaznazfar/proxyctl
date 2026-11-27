@@ -50,7 +50,7 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
                 summary.invalid = 1;
                 summary.failures.push(ImportFailure {
                     line_number: 1,
-                    reason: "profile contains no supported proxy outbounds".into(),
+                    reason: "profile contains no supported proxy outbounds; unsupported or malformed entries were skipped".into(),
                 });
             }
             Ok(nodes) => {
