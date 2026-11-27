@@ -262,6 +262,15 @@ mod tests {
     }
 
     #[test]
+    fn decodes_base64_share_list_conservatively() {
+        use base64::Engine as _;
+        let encoded = base64::engine::general_purpose::STANDARD.encode("vless://synthetic@example.invalid:443\ntrojan://fake@example.invalid:443");
+        assert_eq!(decode_subscription_text(&encoded), "vless://synthetic@example.invalid:443\ntrojan://fake@example.invalid:443");
+        assert_eq!(decode_subscription_text("ordinary text"), "ordinary text");
+        assert_eq!(decode_subscription_text("vless://already-decoded"), "vless://already-decoded");
+    }
+
+    #[test]
     fn imports_valid_lines_and_preserves_source_file() {
         let directory = tempdir().unwrap();
         let source = directory.path().join("nodes.txt");
