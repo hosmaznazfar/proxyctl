@@ -717,7 +717,6 @@ fn vless_reality_tcp_ignores_unused_host_metadata_for_all_cores() {
     }
 }
 
-
 #[test]
 fn sing_box_omits_disabled_vless_encryption_and_rejects_enabled_encryption() {
     let disabled = parse_proxy_url(
@@ -737,5 +736,9 @@ fn sing_box_omits_disabled_vless_encryption_and_rejects_enabled_encryption() {
         CompatibilityStatus::Unsupported
     );
     assert!(adapter(CoreId::Xray).compatibility(&enabled).is_supported());
-    assert!(adapter(CoreId::Mihomo).compatibility(&enabled).is_supported());
+    assert!(
+        adapter(CoreId::Mihomo)
+            .compatibility(&enabled)
+            .is_supported()
+    );
 }
