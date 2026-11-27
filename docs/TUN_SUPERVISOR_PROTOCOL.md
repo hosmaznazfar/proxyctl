@@ -163,3 +163,12 @@ The native persistent-device readiness path collects `INET_DIAG_MARK` data direc
 ## Loopback restoration around TUN mode
 
 When `proxyctl tun start` transitions an active loopback session, the unprivileged activation runtime records a private 0600 restoration marker containing only the prior node ID, core kind, and listener port before stopping the exact verified loopback process. If TUN preparation/start fails, the foreground TUN session ends, or `proxyctl tun stop` completes journal recovery, Proxyctl restores that prior loopback session through the ordinary unprivileged activation path. Restoration is idle-only under the activation lock; it refuses to replace a concurrently started session. Direct `proxyctl use --tun` starts do not create a previous-loopback restoration marker. Every TUN handoff also writes a private user-owned session hint before sudo starts; `proxyctl stop` consults that hint and requests root recovery only when a TUN handoff/session is pending, then discards any saved loopback restoration marker as a full stop. `proxyctl tun stop` instead restores the prior loopback session when one was saved. Ordinary loopback stop remains unprivileged. Pending markers are visible through `proxyctl status`, and another TUN start is refused until the previous transition is recovered/restored.
+
+
+## Timeout and retry contract
+
+The native supervisor uses bounded startup stages; the front end allows up to 60 seconds for the one-shot acknowledgement. Process-to-TUN attachment is bounded to five seconds. The native readiness path bounds the managed-listener probe to five seconds and the end-to-end HTTP traffic probe to ten seconds per selected address family; the probe's TCP connect portion is capped at five seconds. Each HTTP probe has one aggregate deadline covering connection, request transmission, and response-header receipt.
+
+These bounds are not retries. The HTTP probe is attempted once for each required target. Any startup, attachment, or readiness failure aborts the current generation, stops the exact child, and requests generation-scoped recovery. No `started` acknowledgement is sent until all required checks pass and the Running manifest/session receipt are committed.
+
+A subsequent user-initiated start is a fresh activation only after the previous generation's cleanup is confirmed. Never retry core startup or mutate routes again while the previous generation's ownership state is ambiguous. If cleanup is incomplete, retain its manifest/journal for explicit recovery rather than deleting files or sweeping routes.

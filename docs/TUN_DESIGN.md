@@ -4,6 +4,39 @@
 > Scope: Linux kernel networking and a detached session owner. The old systemd/helper backend is retained only for exact recovery of pre-existing legacy generations, not for new TUN sessions.
 > Goal: keep ordinary proxy sessions unprivileged and elevate only explicitly requested TUN sessions, with one installed Proxyctl executable owning the privileged supervisor and selected core.
 
+## TUN startup timeouts, readiness, and retry policy
+
+Proxyctl owns the TUN activation lifecycle and must not rely on a core process merely staying alive as proof that traffic is flowing. The native supervisor starts the selected core, verifies that the exact process is attached to the generation-owned TUN device, runs the required end-to-end application-flow probe for every selected address family, and only then commits the session as Running and acknowledges startup.
+
+The current bounded stages are:
+
+| Stage | Bound | Meaning |
+| --- | ---: | --- |
+| Native core service startup | 10 s | Wait for the service manager to report an active service and verified MainPID in the legacy launcher path |
+| Native process-to-TUN attachment | 5 s | Poll for the exact core process to attach to the requested TUN interface |
+| TUN HTTP application-flow probe | 10 s per selected address family | One aggregate deadline for TCP connect, request write, and response headers; TCP connect is capped at 5 s |
+| Front-end startup acknowledgement | 60 s | Maximum wait for the supervisor's one-shot `started` response; success is accepted only while the supervisor remains alive |
+
+The native supervisor's readiness path uses a 5-second managed-listener check and a 10-second traffic-probe bound. Dual-stack probes are performed for the selected IPv4 and IPv6 targets. These are stage bounds, not a promise that total startup always completes within the largest individual timeout.
+
+**There is no automatic retry of the complete TUN activation or of a failed HTTP traffic probe.** A timeout, process-identity change, missing attachment, route mismatch, or failed HTTP response is a readiness failure. Proxyctl terminates the exact child and requests recovery for that activation UUID and generation; it must not keep retrying while partially applied kernel state may exist. The activation is committed as Running only after all readiness checks pass.
+
+A user-initiated rerun after the failed generation has been fully recovered is a new activation with a new generation. This is intentionally different from blindly restarting the core inside an uncertain TUN transaction. If recovery cannot be confirmed, preserve the durable manifest/journal and require explicit recovery; do not advise deleting runtime state or manually flushing routes.
+
+### Core behavior comparison
+
+The upstream core documentation describes native TUN setup and routing controls, but does not define a shared startup-retry contract that Proxyctl can depend on:
+
+- **Xray:** its Linux TUN inbound can create/manage a TUN interface and optionally configure system routing. Startup errors can prevent Xray from starting; its TUN documentation does not promise a generic retry/backoff policy for interface creation or application traffic readiness.
+- **Mihomo:** its TUN configuration exposes interface/device, stack, auto-route, auto-redirect, and interface-detection controls. The core logs TUN listener startup, but the documented configuration does not provide a general TUN startup retry count or readiness timeout for an external application flow.
+- **sing-box:** its TUN inbound exposes interface, address, stack, auto-route, auto-redirect, and routing-table/rule controls. These configure the inbound and routing behavior; they are not a Proxyctl-compatible startup retry/readiness API.
+
+Consequently, Proxyctl must retain one core-independent lifecycle gate and verify actual proxied traffic itself. Do not infer success from process creation, a TUN interface existing, a listener accepting a local connection, or a route being installed. Do not add automatic retries merely to hide transient failures: first guarantee exact-generation rollback, then consider a narrowly bounded retry only if it starts from a demonstrably clean state and cannot duplicate or overlap kernel mutations.
+
+### Operational observation
+
+A real-host Xray TUN activation once passed core startup but failed the first end-to-end HTTP readiness probe; a subsequent manual rerun succeeded. This is evidence that a transient startup/dataplane readiness failure can occur, not proof of a particular root cause or of a general Xray defect. Record the failed stage and its underlying error, recover the failed generation, and verify real application traffic on the next activation. The successful rerun does not justify weakening the readiness gate.
+
 ## Selected CLI, session, and privilege model
 
 The selected user-facing contract is:
