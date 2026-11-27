@@ -51,16 +51,21 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
 
         match parse_proxy_url(input) {
             Ok(node) => {
-                summary.warnings.extend(
-                    super::import_warnings::analyze(&node)
-                        .into_iter()
-                        .map(|warning| ImportLineWarning { line_number: index + 1, warning }),
-                );
+                summary
+                    .warnings
+                    .extend(
+                        super::import_warnings::analyze(&node)
+                            .into_iter()
+                            .map(|warning| ImportLineWarning {
+                                line_number: index + 1,
+                                warning,
+                            }),
+                    );
                 match database.add_node(&node)? {
-                AddNodeOutcome::Added(_) => summary.added += 1,
-                AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
+                    AddNodeOutcome::Added(_) => summary.added += 1,
+                    AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
                 }
-            },
+            }
             Err(error) => {
                 summary.invalid += 1;
                 summary.failures.push(ImportFailure {

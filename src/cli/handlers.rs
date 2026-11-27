@@ -711,13 +711,18 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
         Command::Completions { .. } => {
             unreachable!("completion command returned before database access")
         }
-        Command::Add { url, developer_details } => {
+        Command::Add {
+            url,
+            developer_details,
+        } => {
             let parsed = crate::parser::parse_proxy_url(&url)?;
             let warnings = crate::services::import_warnings::analyze(&parsed);
             match nodes::add_url(&database_path, &url)? {
                 AddNodeOutcome::Added(id) => {
-                    let number = nodes::active_display_number(&database_path, id)?
-                        .ok_or_else(|| anyhow::anyhow!("new node was not visible after insertion"))?;
+                    let number =
+                        nodes::active_display_number(&database_path, id)?.ok_or_else(|| {
+                            anyhow::anyhow!("new node was not visible after insertion")
+                        })?;
                     println!("Added node #{number}.");
                 }
                 AddNodeOutcome::Duplicate(id) => {
@@ -741,14 +746,20 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
                 }
             }
         }
-        Command::Import { file, developer_details } => {
+        Command::Import {
+            file,
+            developer_details,
+        } => {
             let summary = nodes::import_file(&database_path, &file)?;
             println!(
                 "Import complete: {} added, {} duplicates, {} invalid.",
                 summary.added, summary.duplicates, summary.invalid
             );
             for item in summary.warnings {
-                eprintln!("Line {}: Warning: {}", item.line_number, item.warning.message);
+                eprintln!(
+                    "Line {}: Warning: {}",
+                    item.line_number, item.warning.message
+                );
                 if developer_details {
                     eprintln!("  Detail: {}", item.warning.developer_detail);
                 }
