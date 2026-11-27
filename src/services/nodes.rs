@@ -40,6 +40,7 @@ pub fn add_url(database_path: &Path, input: &str) -> anyhow::Result<AddNodeOutco
 pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<ImportSummary> {
     let content = std::fs::read_to_string(source_path)
         .with_context(|| format!("could not read import file {}", source_path.display()))?;
+    let content = decode_subscription_text(&content);
     let database = NodeDatabase::open(database_path)?;
     let mut summary = ImportSummary::default();
 
@@ -84,6 +85,25 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
         }
     }
     Ok(summary)
+}
+
+
+/// Decode common plain-text Base64 subscription payloads conservatively.
+/// Only use the decoded value when it is valid UTF-8 and clearly looks like a
+/// supported URL list or JSON profile; otherwise retain the original content.
+fn decode_subscription_text(input: &str) -> String {
+    use base64::Engine as _;
+    let trimmed = input.trim();
+    if trimmed.is_empty() || trimmed.contains("://") || trimmed.starts_with('{') || trimmed.starts_with('#') {
+        return input.to_owned();
+    }
+    let compact = trimmed.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&compact) else { return input.to_owned(); };
+    let Ok(decoded) = String::from_utf8(bytes) else { return input.to_owned(); };
+    let text = decoded.trim();
+    if text.starts_with('{') || text.lines().any(|line| line.trim().contains("://")) {
+        decoded
+    } else { input.to_owned() }
 }
 
 pub fn list_nodes(database_path: &Path, include_deleted: bool) -> anyhow::Result<Vec<NodeRecord>> {
