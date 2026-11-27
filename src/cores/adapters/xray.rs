@@ -29,6 +29,7 @@ const CAPABILITIES: CoreCapabilities = CoreCapabilities {
     reality_vless: true,
     reality_vmess: true,
     reality_optional_fields: true,
+    vless_encryption: true,
     tcp: true,
     websocket: true,
     grpc: true,

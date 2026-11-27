@@ -716,3 +716,26 @@ fn vless_reality_tcp_ignores_unused_host_metadata_for_all_cores() {
         let _: Value = serde_json::from_slice(&generated.content).unwrap();
     }
 }
+
+
+#[test]
+fn sing_box_omits_disabled_vless_encryption_and_rejects_enabled_encryption() {
+    let disabled = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?encryption=none",
+    )
+    .unwrap();
+    let generated = adapter(CoreId::SingBox).generate_config(&disabled).unwrap();
+    let document: Value = serde_json::from_slice(&generated.content).unwrap();
+    assert!(document["outbounds"][0].get("encryption").is_none());
+
+    let enabled = parse_proxy_url(
+        "vless://11111111-1111-4111-8111-111111111111@example.com:443?encryption=mlkem768x25519plus.native.1rtt.key",
+    )
+    .unwrap();
+    assert_eq!(
+        adapter(CoreId::SingBox).compatibility(&enabled).status,
+        CompatibilityStatus::Unsupported
+    );
+    assert!(adapter(CoreId::Xray).compatibility(&enabled).is_supported());
+    assert!(adapter(CoreId::Mihomo).compatibility(&enabled).is_supported());
+}
