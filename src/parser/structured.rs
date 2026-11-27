@@ -1,51 +1,13 @@
 //! Structured JSON profile parsing for sing-box and Xray outbound collections.
 use std::collections::BTreeMap;
-use serde_json::{Value};
+use serde_json::Value;
 use crate::domain::{OptionEntry, Protocol, ProxyNode, SecretString};
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ProfileError { InvalidJson, MissingOutbounds, UnsupportedOutbound(String), InvalidNode }
-
-pub fn parse_profile(input: &str) -> Result<Vec<ProxyNode>, ProfileError> {
- let root: Value=serde_json::from_str(input).map_err(|_|ProfileError::InvalidJson)?;
- let outbounds=root.get("outbounds").and_then(Value::as_array).ok_or(ProfileError::MissingOutbounds)?;
- let mut nodes=Vec::new();
- for outbound in outbounds {
-  if outbound.get("type").and_then(Value::as_str).is_some() { // sing-box shape
-    if let Some(node)=parse_singbox(outbound) { nodes.push(node); }
-  } else if outbound.get("protocol").and_then(Value::as_str).is_some() { // Xray shape
-    if let Some(node)=parse_xray(outbound) { nodes.push(node); }
-  }
- }
- Ok(nodes)
-}
-fn parse_singbox(v:&Value)->Option<ProxyNode>{
- let kind=v.get("type")?.as_str()?;
- let protocol=match kind { "vless"=>Protocol::Vless,"vmess"=>Protocol::Vmess,"trojan"=>Protocol::Trojan,"shadowsocks"=>Protocol::Shadowsocks,"hysteria2"=>Protocol::Hysteria2,_=>return None};
- let server=v.get("server")?.as_str()?.to_owned(); let port=v.get("server_port")?.as_u64()?.try_into().ok()?;
- let name=v.get("tag").and_then(Value::as_str).map(str::to_owned);
- let credentials=match protocol {Protocol::Vless|Protocol::Vmess=>v.get("uuid"),Protocol::Shadowsocks=>v.get("method"),_=>v.get("password")}.and_then(Value::as_str).map(SecretString::new);
- let mut entries=Vec::new();
- for (key,val) in v.as_object()? { if !matches!(key.as_str(),"type"|"tag"|"server"|"server_port"|"uuid"|"password"|"method") {entries.push(OptionEntry{key:key.clone(),value:val.clone()});}}
- let opts=entries.iter().filter_map(|e|e.value.as_str().map(|s|(e.key.clone(),s.to_owned()))).collect::<BTreeMap<_,_>>();
- Some(ProxyNode::new(protocol,server,port,name,credentials.clone(),credentials,opts,SecretString::new("[structured profile]")).with_option_entries(entries))
-}
-fn parse_xray(v:&Value)->Option<ProxyNode>{
- let kind=v.get("protocol")?.as_str()?;
- let protocol=match kind {"vless"=>Protocol::Vless,"vmess"=>Protocol::Vmess,"trojan"=>Protocol::Trojan,"shadowsocks"=>Protocol::Shadowsocks,"socks"=>return None,_=>return None};
- let settings=v.get("settings")?.get("servers").and_then(Value::as_array).and_then(|a|a.first()).cloned().unwrap_or_else(||v.get("settings").cloned().unwrap_or(Value::Null));
- let server=settings.get("address")?.as_str()?.to_owned(); let port=settings.get("port")?.as_u64()?.try_into().ok()?;
- let credential=match protocol {Protocol::Vless|Protocol::Vmess=>settings.get("users").and_then(Value::as_array).and_then(|a|a.first()).and_then(|u|u.get("id")).and_then(Value::as_str),_=>settings.get("password").and_then(Value::as_str)}.map(SecretString::new);
- let name=v.get("tag").and_then(Value::as_str).map(str::to_owned);
- let mut entries=Vec::new(); if let Some(ss)=v.get("streamSettings"){entries.push(OptionEntry{key:"streamSettings".into(),value:ss.clone()});}
- if let Some(settings)=v.get("settings"){entries.push(OptionEntry{key:"settings".into(),value:settings.clone()});}
- let opts=BTreeMap::new();
- Some(ProxyNode::new(protocol,server,port,name,credential.clone(),credential,opts,SecretString::new("[structured profile]")).with_option_entries(entries))
-}
-#[cfg(test)]
-mod tests{
- use super::*;
- #[test] fn extracts_singbox_vless_synthetic(){let s=r#"{"outbounds":[{"type":"vless","tag":"fixture","server":"edge.invalid","server_port":443,"uuid":"00000000-0000-4000-8000-000000000000","tls":{"enabled":true,"server_name":"tls.invalid"}}]}"#;let n=parse_profile(s).unwrap();assert_eq!(n.len(),1);assert_eq!(n[0].protocol,Protocol::Vless);assert_eq!(n[0].server,"edge.invalid");assert_eq!(n[0].option("tls").unwrap()["server_name"],"tls.invalid");}
- #[test] fn skips_non_proxy_outbound(){let s=r#"{"outbounds":[{"type":"direct"},{"type":"vless","server":"edge.invalid","server_port":443,"uuid":"fixture"}]}"#;assert_eq!(parse_profile(s).unwrap().len(),1);}
- #[test] fn rejects_non_json(){assert_eq!(parse_profile("nope"),Err(ProfileError::InvalidJson));}
-}
+#[derive(Debug, Clone, Eq, PartialEq)] pub enum ProfileError { InvalidJson, MissingOutbounds }
+pub fn parse_profile(input:&str)->Result<Vec<ProxyNode>,ProfileError>{let root:Value=serde_json::from_str(input).map_err(|_|ProfileError::InvalidJson)?;let a=root.get("outbounds").and_then(Value::as_array).ok_or(ProfileError::MissingOutbounds)?;Ok(a.iter().filter_map(parse_outbound).collect())}
+fn parse_outbound(v:&Value)->Option<ProxyNode>{if v.get("type").and_then(Value::as_str).is_some(){parse_singbox(v)}else if v.get("protocol").and_then(Value::as_str).is_some(){parse_xray(v)}else{None}}
+fn proto(s:&str)->Option<Protocol>{match s.to_ascii_lowercase().as_str(){"vless"=>Some(Protocol::Vless),"vmess"=>Some(Protocol::Vmess),"trojan"=>Some(Protocol::Trojan),"shadowsocks"=>Some(Protocol::Shadowsocks),"hysteria2"|"hy2"=>Some(Protocol::Hysteria2),_=>None}}
+fn entries(v:&Value,exclude:&[&str])->Vec<OptionEntry>{v.as_object().map(|o|o.iter().filter(|(k,_)|!exclude.contains(&k.as_str())).map(|(k,x)|OptionEntry{key:k.clone(),value:x.clone()}).collect()).unwrap_or_default()}
+fn map(e:&[OptionEntry])->BTreeMap<String,String>{e.iter().filter_map(|x|x.value.as_str().map(|s|(x.key.clone(),s.to_owned()))).collect()}
+fn parse_singbox(v:&Value)->Option<ProxyNode>{let p=proto(v.get("type")?.as_str()?)?;let server=v.get("server")?.as_str()?.to_owned();let port:u16=v.get("server_port")?.as_u64()?.try_into().ok()?;let name=v.get("tag").and_then(Value::as_str).map(str::to_owned);let c=match p{Protocol::Vless|Protocol::Vmess=>v.get("uuid"),Protocol::Shadowsocks=>v.get("method"),_=>v.get("password")}.and_then(Value::as_str).map(SecretString::new);let e=entries(v,&["type","tag","server","server_port","uuid","password","method"]);Some(ProxyNode::new(p,server,port,name,c.clone(),c,map(&e),SecretString::new("[structured profile]")).with_option_entries(e))}
+fn parse_xray(v:&Value)->Option<ProxyNode>{let p=proto(v.get("protocol")?.as_str()?)?;let settings=v.get("settings")?;let s=settings.get("vnext").and_then(Value::as_array).and_then(|a|a.first()).or_else(||settings.get("servers").and_then(Value::as_array).and_then(|a|a.first())).unwrap_or(settings);let server=s.get("address")?.as_str()?.to_owned();let port:u16=s.get("port")?.as_u64()?.try_into().ok()?;let user=s.get("users").and_then(Value::as_array).and_then(|a|a.first());let c=match p{Protocol::Vless|Protocol::Vmess=>user.and_then(|u|u.get("id")).and_then(Value::as_str),Protocol::Trojan|Protocol::Hysteria2=>s.get("password").and_then(Value::as_str),Protocol::Shadowsocks=>s.get("method").and_then(Value::as_str)}.map(SecretString::new);let name=v.get("tag").and_then(Value::as_str).map(str::to_owned);let mut e=Vec::new();for key in ["settings","streamSettings"]{if let Some(x)=v.get(key){e.push(OptionEntry{key:key.into(),value:x.clone()});}}if let Some(x)=user.and_then(|u|u.get("flow")){e.push(OptionEntry{key:"flow".into(),value:x.clone()});}Some(ProxyNode::new(p,server,port,name,c.clone(),c,map(&e),SecretString::new("[structured profile]")).with_option_entries(e))}
+#[cfg(test)]mod tests{use super::*;#[test]fn singbox_fixture(){let s=r#"{"outbounds":[{"type":"vless","server":"edge.invalid","server_port":443,"uuid":"fixture","tls":{"enabled":true,"server_name":"tls.invalid"}}]}"#;let n=parse_profile(s).unwrap();assert_eq!(n.len(),1);assert_eq!(n[0].option("tls").unwrap()["server_name"],"tls.invalid");}#[test]fn xray_vnext_fixture(){let s=r#"{"outbounds":[{"protocol":"vless","tag":"fixture","settings":{"vnext":[{"address":"vnext.invalid","port":443,"users":[{"id":"synthetic","flow":"xtls-rprx-vision"}]}]},"streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"reality.invalid"}}}]}"#;let n=parse_profile(s).unwrap();assert_eq!(n[0].server,"vnext.invalid");assert_eq!(n[0].option("flow").unwrap(),"xtls-rprx-vision");assert_eq!(n[0].option("streamSettings").unwrap()["security"],"reality");}#[test]fn skips_direct(){assert_eq!(parse_profile(r#"{"outbounds":[{"type":"direct"},{"type":"vless","server":"x.invalid","server_port":1,"uuid":"x"}]}"#).unwrap().len(),1);}#[test]fn invalid(){assert_eq!(parse_profile("no"),Err(ProfileError::InvalidJson));assert_eq!(parse_profile("{}"),Err(ProfileError::MissingOutbounds));}}
