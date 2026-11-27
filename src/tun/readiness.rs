@@ -2201,7 +2201,7 @@ mod http_tun_probe_tests {
     fn tun_readiness_does_not_retry_non_transient_probe_failures() {
         use std::{cell::Cell, io};
         let attempts = Cell::new(0);
-        let result = run_tun_readiness_probe_with_retry(
+        let result = run_tun_readiness_probe_with_retry::<(), _, _>(
             Duration::from_secs(1),
             || Ok(true),
             |_attempt_timeout| {
@@ -2217,7 +2217,7 @@ mod http_tun_probe_tests {
     fn tun_readiness_does_not_retry_after_core_exit() {
         use std::{cell::Cell, io};
         let attempts = Cell::new(0);
-        let result = run_tun_readiness_probe_with_retry(
+        let result = run_tun_readiness_probe_with_retry::<(), _, _>(
             Duration::from_secs(1),
             || Ok(false),
             |_attempt_timeout| {
