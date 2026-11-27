@@ -252,7 +252,10 @@ mod tests {
         assert!(profile.nodes.is_empty());
         assert_eq!(profile.skipped.len(), 3);
         assert_eq!(profile.skipped[0].index, 1);
-        assert_eq!(profile.skipped[0].reason, "outbound protocol is not supported");
+        assert_eq!(
+            profile.skipped[0].reason,
+            "outbound protocol is not supported"
+        );
         assert_eq!(profile.skipped[1].index, 2);
         assert_eq!(profile.skipped[2].index, 3);
         let diagnostics = format!("{:?}", profile.skipped);

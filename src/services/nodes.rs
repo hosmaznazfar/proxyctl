@@ -444,9 +444,19 @@ mod tests {
         assert_eq!(summary.invalid, 2);
         assert_eq!(summary.failures.len(), 2);
         assert_eq!(summary.failures[0].line_number, 2);
-        assert_eq!(summary.failures[0].reason, "proxy protocol is not supported");
+        assert_eq!(
+            summary.failures[0].reason,
+            "proxy protocol is not supported"
+        );
         assert_eq!(summary.failures[1].line_number, 3);
-        let diagnostics = format!("{:?}", summary.failures.iter().map(|f| &f.reason).collect::<Vec<_>>());
+        let diagnostics = format!(
+            "{:?}",
+            summary
+                .failures
+                .iter()
+                .map(|f| &f.reason)
+                .collect::<Vec<_>>()
+        );
         assert!(!diagnostics.contains("must-not-appear"));
         assert_eq!(list_nodes(&database, false).unwrap().len(), 1);
     }

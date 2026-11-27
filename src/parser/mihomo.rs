@@ -199,7 +199,10 @@ mod tests {
     #[test]
     fn skips_non_mapping_and_missing_proxies() {
         let profile = parse_profile_detailed("proxies:\n - just-a-string\n").unwrap();
-        assert_eq!(profile.skipped[0].reason, "proxy entry is not a YAML mapping");
+        assert_eq!(
+            profile.skipped[0].reason,
+            "proxy entry is not a YAML mapping"
+        );
         assert_eq!(
             parse_profile("proxy-groups: []").unwrap_err(),
             ProfileError::MissingProxies
