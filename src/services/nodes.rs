@@ -36,31 +36,42 @@ pub fn add_url(database_path: &Path, input: &str) -> anyhow::Result<AddNodeOutco
     database.add_node(&node)
 }
 
-/// Import a text file without modifying it. Blank lines and lines beginning with # are ignored.
+/// Import URL lists or supported structured JSON profiles without modifying the source file.
 pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<ImportSummary> {
     let content = std::fs::read_to_string(source_path)
         .with_context(|| format!("could not read import file {}", source_path.display()))?;
     let database = NodeDatabase::open(database_path)?;
     let mut summary = ImportSummary::default();
 
+    if content.trim_start().starts_with('{') {
+        match crate::parser::structured::parse_profile(&content) {
+            Ok(nodes) if nodes.is_empty() => {
+                summary.invalid = 1;
+                summary.failures.push(ImportFailure { line_number: 1, reason: "profile contains no supported proxy outbounds".into() });
+            }
+            Ok(nodes) => {
+                for node in nodes {
+                    summary.warnings.extend(super::import_warnings::analyze(&node).into_iter().map(|warning| ImportLineWarning { line_number: 1, warning }));
+                    match database.add_node(&node)? {
+                        AddNodeOutcome::Added(_) => summary.added += 1,
+                        AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
+                    }
+                }
+            }
+            Err(_) => {
+                summary.invalid = 1;
+                summary.failures.push(ImportFailure { line_number: 1, reason: "structured profile could not be parsed".into() });
+            }
+        }
+        return Ok(summary);
+    }
+
     for (index, line) in content.lines().enumerate() {
         let input = line.trim();
-        if input.is_empty() || input.starts_with('#') {
-            continue;
-        }
-
+        if input.is_empty() || input.starts_with('#') { continue; }
         match parse_proxy_url(input) {
             Ok(node) => {
-                summary
-                    .warnings
-                    .extend(
-                        super::import_warnings::analyze(&node)
-                            .into_iter()
-                            .map(|warning| ImportLineWarning {
-                                line_number: index + 1,
-                                warning,
-                            }),
-                    );
+                summary.warnings.extend(super::import_warnings::analyze(&node).into_iter().map(|warning| ImportLineWarning { line_number: index + 1, warning }));
                 match database.add_node(&node)? {
                     AddNodeOutcome::Added(_) => summary.added += 1,
                     AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
@@ -68,14 +79,10 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
             }
             Err(error) => {
                 summary.invalid += 1;
-                summary.failures.push(ImportFailure {
-                    line_number: index + 1,
-                    reason: safe_parse_error(error),
-                });
+                summary.failures.push(ImportFailure { line_number: index + 1, reason: safe_parse_error(error) });
             }
         }
     }
-
     Ok(summary)
 }
 

@@ -17,7 +17,7 @@ The current `proxyctl import FILE` implementation reads a newline-delimited list
 
 The parser preserves repeated URI query parameters and structured VMess JSON option values. The adapters then decide whether each retained setting can be represented by sing-box, Xray, or Mihomo. A successful parse does not imply compatibility with every core.
 
-**Structured sing-box JSON, Xray JSON, and Mihomo/Clash YAML profiles are not currently imported by the newline-delimited URL importer.** Do not describe the current importer as subscription/profile compatible.
+**sing-box and Xray JSON outbound profiles are now accepted by `import FILE`.** The current increment extracts recognized outbound types and preserves native settings in option entries. YAML and Base64 subscription decoding are not yet wired in. Import diagnostics and complete protocol-field compatibility are still being expanded.
 
 ## Format scope
 
