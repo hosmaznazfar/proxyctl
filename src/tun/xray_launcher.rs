@@ -763,7 +763,7 @@ pub(crate) fn verify_xray_end_to_end_readiness(
     super::readiness::probe_unmarked_route_to_tun(plan, target.destination.ip()).context(
         "kernel does not route the unmarked application probe through the owned TUN table",
     )?;
-    let traffic_probe = super::readiness::probe_tun_routed_http_traffic(
+    let traffic_probe = super::readiness::probe_tun_routed_http_traffic_with_retry(
         process,
         target,
         activation_id,
