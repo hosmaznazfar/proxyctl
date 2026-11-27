@@ -1,9 +1,9 @@
-//! Protocol URL parsing and normalization.
-//!
-//! Protocol parsers produce core-independent domain values. Core-specific serialization belongs
-//! in the corresponding adapter, not in this module.
+//! Protocol URL and structured-profile parsing.
 
 mod schemes;
+pub mod structured;
+
+
 
 use thiserror::Error;
 
