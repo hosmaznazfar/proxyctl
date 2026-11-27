@@ -200,7 +200,7 @@ fn decode_subscription_text(input: &str) -> String {
 /// Recognize Mihomo YAML despite a UTF-8 BOM, document marker, or preamble.
 fn looks_like_mihomo_yaml(input: &str) -> bool {
     input
-        .trim_start_matches('\\u{feff}')
+        .trim_start_matches('\u{feff}')
         .lines()
         .map(str::trim)
         .find(|line| {
@@ -212,7 +212,7 @@ fn looks_like_mihomo_yaml(input: &str) -> bool {
         .is_some_and(|line| {
             line == "proxies:"
                 || line.starts_with("proxies: ")
-                || line.starts_with("proxies:\\t")
+                || line.starts_with("proxies:\t")
         })
 }
 
@@ -398,10 +398,10 @@ mod tests {
 
     #[test]
     fn recognizes_mihomo_yaml_after_comments_and_document_markers() {
-        let yaml = "# generated profile\\n---\\nproxies:\\n  - type: vless\\n    server: edge.invalid\\n    port: 443\\n    uuid: synthetic\\n";
+        let yaml = "# generated profile\n---\nproxies:\n  - type: vless\n    server: edge.invalid\n    port: 443\n    uuid: synthetic\n";
         assert!(looks_like_mihomo_yaml(yaml));
-        assert!(looks_like_mihomo_yaml("\\u{feff}# header\\nproxies:\\n"));
-        assert!(!looks_like_mihomo_yaml("ordinary text\\n"));
+        assert!(looks_like_mihomo_yaml("\u{feff}# header\nproxies:\n"));
+        assert!(!looks_like_mihomo_yaml("ordinary text\n"));
     }
 
     #[test]
@@ -409,7 +409,7 @@ mod tests {
         let directory = tempdir().unwrap();
         let source = directory.path().join("profile.yaml");
         let database = directory.path().join("proxyctl.redb");
-        let contents = "# generated profile\\n---\\nproxies:\\n  - type: vless\\n    server: edge.invalid\\n    port: 443\\n    uuid: synthetic\\n";
+        let contents = "# generated profile\n---\nproxies:\n  - type: vless\n    server: edge.invalid\n    port: 443\n    uuid: synthetic\n";
         fs::write(&source, contents).unwrap();
 
         let summary = import_file(&database, &source).unwrap();
