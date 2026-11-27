@@ -715,30 +715,32 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             let parsed = crate::parser::parse_proxy_url(&url)?;
             let warnings = crate::services::import_warnings::analyze(&parsed);
             match nodes::add_url(&database_path, &url)? {
-            AddNodeOutcome::Added(id) => {
-                let number = nodes::active_display_number(&database_path, id)?
-                    .ok_or_else(|| anyhow::anyhow!("new node was not visible after insertion"))?;
-                println!("Added node #{number}.");
-            }
-            AddNodeOutcome::Duplicate(id) => {
-                if let Some(number) = nodes::active_display_number(&database_path, id)? {
-                    println!("This URL is already stored as node #{number}.");
-                } else {
-                    let deleted_number = deleted_display_numbers(&database_path)?
-                        .get(&id)
-                        .copied()
-                        .unwrap_or_default();
-                    println!(
-                        "This URL is already stored as deleted node D{deleted_number}; use 'restore {deleted_number}'."
-                    );
+                AddNodeOutcome::Added(id) => {
+                    let number = nodes::active_display_number(&database_path, id)?
+                        .ok_or_else(|| anyhow::anyhow!("new node was not visible after insertion"))?;
+                    println!("Added node #{number}.");
+                }
+                AddNodeOutcome::Duplicate(id) => {
+                    if let Some(number) = nodes::active_display_number(&database_path, id)? {
+                        println!("This URL is already stored as node #{number}.");
+                    } else {
+                        let deleted_number = deleted_display_numbers(&database_path)?
+                            .get(&id)
+                            .copied()
+                            .unwrap_or_default();
+                        println!(
+                            "This URL is already stored as deleted node D{deleted_number}; use 'restore {deleted_number}'."
+                        );
+                    }
                 }
             }
             for warning in warnings {
                 eprintln!("Warning: {}", warning.message);
-                if developer_details { eprintln!("  Detail: {}", warning.developer_detail); }
+                if developer_details {
+                    eprintln!("  Detail: {}", warning.developer_detail);
+                }
             }
         }
-        },
         Command::Import { file, developer_details } => {
             let summary = nodes::import_file(&database_path, &file)?;
             println!(
@@ -747,7 +749,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
             );
             for item in summary.warnings {
                 eprintln!("Line {}: Warning: {}", item.line_number, item.warning.message);
-                if developer_details { eprintln!("  Detail: {}", item.warning.developer_detail); }
+                if developer_details {
+                    eprintln!("  Detail: {}", item.warning.developer_detail);
+                }
             }
             for failure in summary.failures {
                 eprintln!("Line {}: {}", failure.line_number, failure.reason);

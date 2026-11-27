@@ -15,9 +15,17 @@ pub struct ImportWarning {
 /// Analyze security posture and per-core compatibility without exposing imported secrets.
 pub fn analyze(node: &ProxyNode) -> Vec<ImportWarning> {
     let mut warnings = Vec::new();
-    let tls_enabled = node.option("security").and_then(serde_json::Value::as_str)
-        .or_else(|| node.option("tls").and_then(serde_json::Value::as_str))
-        .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "tls" | "true" | "1" | "reality"));
+    let tls_enabled = ["security", "tls"].iter().any(|key| {
+        node.option(key).is_some_and(|value| match value {
+            serde_json::Value::Bool(value) => *value,
+            serde_json::Value::Number(value) => value.as_i64() == Some(1),
+            serde_json::Value::String(value) => matches!(
+                value.to_ascii_lowercase().as_str(),
+                "tls" | "true" | "1" | "reality"
+            ),
+            _ => false,
+        })
+    });
     let insecure = ["insecure", "allowInsecure"].iter().any(|key| {
         node.option(key).is_some_and(|value| match value {
             serde_json::Value::Bool(value) => *value,
