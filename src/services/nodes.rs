@@ -41,6 +41,7 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
     let content = std::fs::read_to_string(source_path)
         .with_context(|| format!("could not read import file {}", source_path.display()))?;
     let content = decode_subscription_text(&content);
+    let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
     let database = NodeDatabase::open(database_path)?;
     let mut summary = ImportSummary::default();
 
@@ -409,7 +410,7 @@ mod tests {
         let directory = tempdir().unwrap();
         let source = directory.path().join("profile.yaml");
         let database = directory.path().join("proxyctl.redb");
-        let contents = "# generated profile\n---\nproxies:\n  - type: vless\n    server: edge.invalid\n    port: 443\n    uuid: synthetic\n";
+        let contents = "\u{feff}# generated profile\n---\nproxies:\n  - type: vless\n    server: edge.invalid\n    port: 443\n    uuid: synthetic\n";
         fs::write(&source, contents).unwrap();
 
         let summary = import_file(&database, &source).unwrap();
