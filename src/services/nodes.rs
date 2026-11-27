@@ -82,9 +82,36 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
 
     if content.trim_start().starts_with("proxies:") {
         match crate::parser::mihomo::parse_profile(&content) {
-            Ok(nodes) if nodes.is_empty() => { summary.invalid=1; summary.failures.push(ImportFailure { line_number:1, reason:"YAML profile contains no supported proxy entries".into() }); }
-            Ok(nodes) => for node in nodes { summary.warnings.extend(super::import_warnings::analyze(&node).into_iter().map(|warning|ImportLineWarning{line_number:1,warning})); match database.add_node(&node)? { AddNodeOutcome::Added(_) => summary.added+=1, AddNodeOutcome::Duplicate(_) => summary.duplicates+=1 } },
-            Err(_) => { summary.invalid=1; summary.failures.push(ImportFailure{line_number:1,reason:"Mihomo YAML profile could not be parsed".into()}); }
+            Ok(nodes) if nodes.is_empty() => {
+                summary.invalid = 1;
+                summary.failures.push(ImportFailure {
+                    line_number: 1,
+                    reason: "YAML profile contains no supported proxy entries".into(),
+                });
+            }
+            Ok(nodes) => {
+                for node in nodes {
+                    summary.warnings.extend(
+                        super::import_warnings::analyze(&node)
+                            .into_iter()
+                            .map(|warning| ImportLineWarning {
+                                line_number: 1,
+                                warning,
+                            }),
+                    );
+                    match database.add_node(&node)? {
+                        AddNodeOutcome::Added(_) => summary.added += 1,
+                        AddNodeOutcome::Duplicate(_) => summary.duplicates += 1,
+                    }
+                }
+            }
+            Err(_) => {
+                summary.invalid = 1;
+                summary.failures.push(ImportFailure {
+                    line_number: 1,
+                    reason: "Mihomo YAML profile could not be parsed".into(),
+                });
+            }
         }
         return Ok(summary);
     }
@@ -146,7 +173,10 @@ fn decode_subscription_text(input: &str) -> String {
         return input.to_owned();
     };
     let text = decoded.trim();
-    if text.starts_with('{') || text.starts_with("proxies:") || text.lines().any(|line| line.trim().contains("://")) {
+    if text.starts_with('{')
+        || text.starts_with("proxies:")
+        || text.lines().any(|line| line.trim().contains("://"))
+    {
         decoded
     } else {
         input.to_owned()

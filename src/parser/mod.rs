@@ -1,8 +1,8 @@
 //! Protocol URL and structured-profile parsing.
 
+pub mod mihomo;
 mod schemes;
 pub mod structured;
-pub mod mihomo;
 
 use thiserror::Error;
 
