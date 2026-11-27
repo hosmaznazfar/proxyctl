@@ -80,6 +80,14 @@ pub fn import_file(database_path: &Path, source_path: &Path) -> anyhow::Result<I
         return Ok(summary);
     }
 
+    if content.trim_start().starts_with("proxies:") {
+        match crate::parser::mihomo::parse_profile(&content) {
+            Ok(nodes) if nodes.is_empty() => { summary.invalid=1; summary.failures.push(ImportFailure { line_number:1, reason:"YAML profile contains no supported proxy entries".into() }); }
+            Ok(nodes) => for node in nodes { summary.warnings.extend(super::import_warnings::analyze(&node).into_iter().map(|warning|ImportLineWarning{line_number:1,warning})); match database.add_node(&node)? { AddNodeOutcome::Added(_) => summary.added+=1, AddNodeOutcome::Duplicate(_) => summary.duplicates+=1 } },
+            Err(_) => { summary.invalid=1; summary.failures.push(ImportFailure{line_number:1,reason:"Mihomo YAML profile could not be parsed".into()}); }
+        }
+        return Ok(summary);
+    }
     for (index, line) in content.lines().enumerate() {
         let input = line.trim();
         if input.is_empty() || input.starts_with('#') {

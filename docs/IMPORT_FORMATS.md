@@ -17,7 +17,7 @@ The current `proxyctl import FILE` implementation reads a newline-delimited list
 
 The parser preserves repeated URI query parameters and structured VMess JSON option values. The adapters then decide whether each retained setting can be represented by sing-box, Xray, or Mihomo. A successful parse does not imply compatibility with every core.
 
-**sing-box and Xray JSON outbound profiles are now accepted by `import FILE`.** The current increment extracts recognized outbound types and preserves native settings in option entries. Mihomo/Clash YAML is not yet wired in. Plain-text Base64 subscription payloads are decoded conservatively when the decoded text is clearly a URL list or JSON profile. Import diagnostics and complete protocol-field compatibility are still being expanded.
+**sing-box and Xray JSON outbound profiles are now accepted by `import FILE`.** The current increment extracts recognized outbound types and preserves native settings in option entries. Mihomo/Clash YAML proxy-list import (`proxies:`) is now supported. Plain-text Base64 subscription payloads are decoded conservatively when the decoded text is clearly a URL list or JSON profile. Import diagnostics and complete protocol-field compatibility are still being expanded.
 
 ## Format scope
 
@@ -28,7 +28,7 @@ The next importer increment is a format-aware pipeline with independent decoders
 | Share-link list | One URI per line | Existing URI parser |
 | sing-box JSON | `outbounds[]` | Supported proxy outbound types and their protocol-specific fields |
 | Xray JSON | `outbounds[]` | Supported proxy outbound protocols and `streamSettings` |
-| Mihomo / Clash YAML | `proxies[]` | Supported proxy entries and protocol-specific options |
+| Mihomo / Clash YAML | `proxies[]` | Supported proxy entries and protocol-specific options (implemented) |
 | Base64 subscription | UTF-8 Base64 payload | Conservative decoding to clearly recognizable URL lists or JSON profiles; other data remains unchanged |
 
 The initial structured-profile scope is **proxy endpoint extraction**. Routing rules, DNS policy, inbounds, listeners, selectors, groups, health checks, and profile-level policy are not node connection settings. They must be reported as out-of-scope profile data rather than silently presented as imported nodes.

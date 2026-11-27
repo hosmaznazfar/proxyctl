@@ -2,6 +2,7 @@
 
 mod schemes;
 pub mod structured;
+pub mod mihomo;
 
 use thiserror::Error;
 
