@@ -211,9 +211,7 @@ fn looks_like_mihomo_yaml(input: &str) -> bool {
                 && !line.starts_with("...")
         })
         .is_some_and(|line| {
-            line == "proxies:"
-                || line.starts_with("proxies: ")
-                || line.starts_with("proxies:\t")
+            line == "proxies:" || line.starts_with("proxies: ") || line.starts_with("proxies:\t")
         })
 }
 
